@@ -1,3 +1,14 @@
+## [1.10.0](https://github.com/ExaDev/agent-comms/compare/v1.9.1...v1.10.0) (2026-05-21)
+
+### Features
+
+* add changelog generation to release pipeline ([76038ac](https://github.com/ExaDev/agent-comms/commit/76038acad1cefcf417e4054bd98ff6f437348373))
+* add changelog generation to release pipeline ([ea43920](https://github.com/ExaDev/agent-comms/commit/ea439200c38fbd5966472ac256030689a8aff4e9))
+
+### Chores
+
+* update pnpm-lock.yaml after adding @semantic-release/changelog ([c7bcb2c](https://github.com/ExaDev/agent-comms/commit/c7bcb2cc4d87dc6b7eb6f745abc67fe4c30fac57))
+
 # Changelog
 
 ## v1.0.0 (2026-04-27)
