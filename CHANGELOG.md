@@ -1,3 +1,9 @@
+## [1.10.2](https://github.com/ExaDev/agent-comms/compare/v1.10.1...v1.10.2) (2026-05-21)
+
+### Chores
+
+* filter release commits from CHANGELOG.md ([6513495](https://github.com/ExaDev/agent-comms/commit/6513495bde7f1a6d29abf8bf24fbad2979ab2fd6))
+
 ## [1.0.0](https://github.com/ExaDev/agent-comms/releases/tag/v1.0.0) (2026-04-27)
 
 ### Features
