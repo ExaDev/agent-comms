@@ -42,6 +42,7 @@ const config: GlobalConfig = {
         },
       },
     ],
+    "@semantic-release/changelog",
     "@semantic-release/npm",
     [
       "@semantic-release/exec",
@@ -58,6 +59,7 @@ const config: GlobalConfig = {
           "pnpm-lock.yaml",
           ".claude-plugin/plugin.json",
           "server.json",
+          "CHANGELOG.md",
         ],
         message: "chore(release): v${nextRelease.version} [skip ci]",
       },
