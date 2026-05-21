@@ -34,6 +34,7 @@ const root = process.cwd();
 const packagePath = path.join(root, "package.json");
 const pluginPath = path.join(root, ".claude-plugin/plugin.json");
 const serverPath = path.join(root, "server.json");
+const readmePath = path.join(root, "README.md");
 
 const packageObject = parseJsonObject(
   await readFile(packagePath, "utf8"),
@@ -103,7 +104,27 @@ serverObject.version = packageVersion;
 packageEntryValue.version = packageVersion;
 pluginObject.version = packageVersion;
 
-if (serverVersion !== packageVersion || pluginVersion !== packageVersion) {
+const readmeContent = await readFile(readmePath, "utf8");
+const updatedReadme = readmeContent
+  .replaceAll(
+    /version-(\d+\.\d+\.\d+)-blue/g,
+    `version-${packageVersion}-blue`,
+  )
+  .replaceAll(
+    /releases\/tag\/v\d+\.\d+\.\d+/g,
+    `releases/tag/v${packageVersion}`,
+  );
+
+const needsServerWrite = serverVersion !== packageVersion;
+const needsPluginWrite = pluginVersion !== packageVersion;
+const needsReadmeWrite = readmeContent !== updatedReadme;
+
+if (needsServerWrite) {
   await writeFile(serverPath, stringifyJson(serverObject));
+}
+if (needsPluginWrite) {
   await writeFile(pluginPath, stringifyJson(pluginObject));
+}
+if (needsReadmeWrite) {
+  await writeFile(readmePath, updatedReadme);
 }
