@@ -106,10 +106,7 @@ pluginObject.version = packageVersion;
 
 const readmeContent = await readFile(readmePath, "utf8");
 const updatedReadme = readmeContent
-  .replaceAll(
-    /version-(\d+\.\d+\.\d+)-blue/g,
-    `version-${packageVersion}-blue`,
-  )
+  .replaceAll(/version-(\d+\.\d+\.\d+)-blue/g, `version-${packageVersion}-blue`)
   .replaceAll(
     /releases\/tag\/v\d+\.\d+\.\d+/g,
     `releases/tag/v${packageVersion}`,
