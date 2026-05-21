@@ -1,3 +1,17 @@
+## [1.11.0](https://github.com/ExaDev/agent-comms/compare/v1.10.2...v1.11.0) (2026-05-21)
+
+### Features
+
+* bump README version badge on release ([73bea55](https://github.com/ExaDev/agent-comms/commit/73bea55d18b6e4cd7eb26d5b823e73bb247cde30))
+
+### Documentation
+
+* add badges to README ([4d640f9](https://github.com/ExaDev/agent-comms/commit/4d640f9f7f41788c7200d32b00622f9c4941b538))
+
+### Styles
+
+* fix prettier formatting in sync-release-metadata ([33140fd](https://github.com/ExaDev/agent-comms/commit/33140fde2ebffc129b864c19b96a380888343da3))
+
 ## [1.10.2](https://github.com/ExaDev/agent-comms/compare/v1.10.1...v1.10.2) (2026-05-21)
 
 ### Chores
