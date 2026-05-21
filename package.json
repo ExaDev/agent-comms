@@ -9,6 +9,7 @@
     "url": "git+https://github.com/ExaDev/agent-comms.git"
   },
   "homepage": "https://github.com/ExaDev/agent-comms#readme",
+  "mcpName": "io.github.exadev/agent-comms",
   "bugs": "https://github.com/ExaDev/agent-comms/issues",
   "license": "MIT",
   "keywords": [
@@ -45,6 +46,8 @@
   "scripts": {
     "prepare": "husky",
     "build": "tsc && printf '#!/usr/bin/env node\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js",
+    "generate:server-json": "tsx scripts/sync-release-metadata.ts",
+    "publish:mcp-registry": "tsx scripts/publish-mcp-registry.ts",
     "lint": "eslint .",
     "test": "node --test dist/test/**/*.test.js",
     "typecheck": "tsc --noEmit"

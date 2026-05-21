@@ -101,6 +101,8 @@ Add to your MCP server configuration:
 
 The generic MCP bridge works with any MCP client. Incoming messages are included in every tool response.
 
+This server is also published to the MCP Registry as `io.github.exadev/agent-comms`.
+
 ### Other harnesses
 
 ```bash

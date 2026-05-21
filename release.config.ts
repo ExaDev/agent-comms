@@ -46,8 +46,8 @@ const config: GlobalConfig = {
     [
       "@semantic-release/exec",
       {
-        prepareCmd:
-          "node -e \"const fs=require('fs');const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));const p=JSON.parse(fs.readFileSync('.claude-plugin/plugin.json','utf8'));p.version=pkg.version;fs.writeFileSync('.claude-plugin/plugin.json',JSON.stringify(p,null,2)+'\\n')\"",
+        prepareCmd: "tsx scripts/sync-release-metadata.ts",
+        publishCmd: "tsx scripts/publish-mcp-registry.ts",
       },
     ],
     [
@@ -57,6 +57,7 @@ const config: GlobalConfig = {
           "package.json",
           "pnpm-lock.yaml",
           ".claude-plugin/plugin.json",
+          "server.json",
         ],
         message: "chore(release): v${nextRelease.version} [skip ci]",
       },
