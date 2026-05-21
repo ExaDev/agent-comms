@@ -20,7 +20,7 @@ const TEST_PORT = 19879;
  * .on("data") but no .on("error"), so an ECONNRESET became an unhandled
  * error event on the socket → uncaught exception → process crash.
  */
-test("coordinator survives ECONNRESET on accepted socket", async () => {
+void test("coordinator survives ECONNRESET on accepted socket", async () => {
   const store = new MeshStore(TEST_PORT);
   await store.init();
 
