@@ -70,6 +70,8 @@ export default defineConfig(
           allowDefaultProject: [
             "eslint.config.ts",
             "release.config.ts",
+            "commitlint.config.ts",
+            "lint-staged.config.ts",
             "scripts/*.ts",
           ],
         },
