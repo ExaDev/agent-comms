@@ -1,9 +1,3 @@
-## [1.10.1](https://github.com/ExaDev/agent-comms/compare/v1.10.0...v1.10.1) (2026-05-21)
-
-### Chores
-
-* rewrite CHANGELOG.md to match semantic-release format ([f030208](https://github.com/ExaDev/agent-comms/commit/f0302089d00e7e8a37646f587b0a9497d31034a0))
-
 ## [1.0.0](https://github.com/ExaDev/agent-comms/releases/tag/v1.0.0) (2026-04-27)
 
 ### Features
@@ -57,7 +51,6 @@
 
 ### Chores
 
-* v1.0.0 [skip ci] ([ee63d8e](https://github.com/ExaDev/agent-comms/commit/ee63d8e9a1049cb3f38f3fbaf91e653db2eb8716))
 * add *.tgz to gitignore ([f44e9a5](https://github.com/ExaDev/agent-comms/commit/f44e9a5ba34e35974452222d6c8207b3cb1636b3))
 * clean up stale .mcp.json from local testing ([61b9e08](https://github.com/ExaDev/agent-comms/commit/61b9e08b3abb5b8ea17a779518ad730b60acb23a))
 * switch from npm to pnpm ([59849ec](https://github.com/ExaDev/agent-comms/commit/59849ec7d4686aa7094a664e5ed5ae658ec3f0df))
@@ -72,29 +65,17 @@
 
 * remove registry-url from setup-node to allow OIDC trusted publishing ([8f13fc9](https://github.com/ExaDev/agent-comms/commit/8f13fc919aa2074f412465ce66b823bd22967229))
 
-### Chores
-
-* v1.0.1 [skip ci] ([eed3341](https://github.com/ExaDev/agent-comms/commit/eed334117c1ab4382b8c04a25432086b2bdc3aa6))
-
 ## [1.0.2](https://github.com/ExaDev/agent-comms/compare/v1.0.1...v1.0.2) (2026-04-27)
 
 ### CI
 
 * bump actions to latest — checkout@v5, pnpm@v5, setup-node@v6 ([c284a35](https://github.com/ExaDev/agent-comms/commit/c284a35903f9ce8c859ce343109fe565340e2d3d))
 
-### Chores
-
-* v1.0.2 [skip ci] ([60522ef](https://github.com/ExaDev/agent-comms/commit/60522eff489fc06f75f4fef7581fd5fe0bbf940c))
-
 ## [1.0.3](https://github.com/ExaDev/agent-comms/compare/v1.0.2...v1.0.3) (2026-04-27)
 
 ### CI
 
 * configure dependabot for npm and github-actions weekly updates ([72fb7ce](https://github.com/ExaDev/agent-comms/commit/72fb7ce8d3cc409e7beeb6ee584cbd27c51dddf5))
-
-### Chores
-
-* v1.0.3 [skip ci] ([4af728b](https://github.com/ExaDev/agent-comms/commit/4af728b818950285c54b1dc89c0f918b1f6fcb6a))
 
 ## [1.0.4](https://github.com/ExaDev/agent-comms/compare/v1.0.3...v1.0.4) (2026-04-27)
 
@@ -112,7 +93,6 @@
 
 ### Chores
 
-* v1.0.4 [skip ci] ([4895ea6](https://github.com/ExaDev/agent-comms/commit/4895ea68f0179d96c3d66f848618c464f7e8af33))
 * set 7-day minimum release age in project .npmrc ([600f2cb](https://github.com/ExaDev/agent-comms/commit/600f2cbd854a565e82ed544bee52b821789d6950))
 
 ## [1.0.5](https://github.com/ExaDev/agent-comms/compare/v1.0.4...v1.0.5) (2026-04-27)
@@ -121,19 +101,11 @@
 
 * update README install instructions for npm registry ([1231709](https://github.com/ExaDev/agent-comms/commit/1231709ab5b0591c40650c2f51e23eb4a678b087))
 
-### Chores
-
-* v1.0.5 [skip ci] ([b3bc3f5](https://github.com/ExaDev/agent-comms/commit/b3bc3f56d2762321a8b5c6006eac66ccf8022916))
-
 ## [1.0.6](https://github.com/ExaDev/agent-comms/compare/v1.0.5...v1.0.6) (2026-04-27)
 
 ### Refactoring
 
 * remove bin.js shim, use compiled dist/cli.js directly ([3ba1752](https://github.com/ExaDev/agent-comms/commit/3ba17522b6fcee9e63fb25c32af4cd60f15015e3))
-
-### Chores
-
-* v1.0.6 [skip ci] ([cccae6d](https://github.com/ExaDev/agent-comms/commit/cccae6d6e18c07d78c1d9039627a7d6d1fc20372))
 
 ## [1.0.7](https://github.com/ExaDev/agent-comms/compare/v1.0.6...v1.0.7) (2026-04-27)
 
@@ -141,19 +113,11 @@
 
 * add shebang to dist/cli.js via build step ([22b99d9](https://github.com/ExaDev/agent-comms/commit/22b99d99fe933231f2c9e3025b203873696c7c2b))
 
-### Chores
-
-* v1.0.7 [skip ci] ([8bdfe3d](https://github.com/ExaDev/agent-comms/commit/8bdfe3dea399dbd02d25bb013daa9589f8e67bbe))
-
 ## [1.0.8](https://github.com/ExaDev/agent-comms/compare/v1.0.7...v1.0.8) (2026-04-27)
 
 ### Bug Fixes
 
 * handle missing .mcp.json when configuring Claude Code bridge ([4dc967c](https://github.com/ExaDev/agent-comms/commit/4dc967c6be0f9548ab39a3ae88dbfdea8ab4e5a3))
-
-### Chores
-
-* v1.0.8 [skip ci] ([d093610](https://github.com/ExaDev/agent-comms/commit/d0936101b07de57a8bceca50d638c5db6bee05ff))
 
 ## [1.0.9](https://github.com/ExaDev/agent-comms/compare/v1.0.8...v1.0.9) (2026-04-27)
 
@@ -161,19 +125,11 @@
 
 * replace bridge child process spawns with in-process static imports ([c4bfa9f](https://github.com/ExaDev/agent-comms/commit/c4bfa9f820534755d9954597bfc68527f963c0d8))
 
-### Chores
-
-* v1.0.9 [skip ci] ([3b9731e](https://github.com/ExaDev/agent-comms/commit/3b9731e4737319c5f28700181bdcbe9bed46c4c3))
-
 ## [1.0.10](https://github.com/ExaDev/agent-comms/compare/v1.0.9...v1.0.10) (2026-04-27)
 
 ### Bug Fixes
 
 * move @modelcontextprotocol/sdk to production dependencies ([0a018db](https://github.com/ExaDev/agent-comms/commit/0a018db32ad0c0b40bbcc693b2fc3a48fe3a8b9c))
-
-### Chores
-
-* v1.0.10 [skip ci] ([7838ea7](https://github.com/ExaDev/agent-comms/commit/7838ea79936a5ef168935a6c314c36954af78155))
 
 ## [1.0.11](https://github.com/ExaDev/agent-comms/compare/v1.0.10...v1.0.11) (2026-04-27)
 
@@ -181,19 +137,11 @@
 
 * remove all stale agent-comms/agent-bus pi extension paths ([a81bd7a](https://github.com/ExaDev/agent-comms/commit/a81bd7a84e6eedb26bac45678c33745e8d7a8a2e))
 
-### Chores
-
-* v1.0.11 [skip ci] ([551d10d](https://github.com/ExaDev/agent-comms/commit/551d10d5f878f24866c76d38d285c3dfead5916b))
-
 ## [1.0.12](https://github.com/ExaDev/agent-comms/compare/v1.0.11...v1.0.12) (2026-04-27)
 
 ### Bug Fixes
 
 * isolate agent identity per harness ([fbded01](https://github.com/ExaDev/agent-comms/commit/fbded01f161e04c3a76db622a7c2f2554127cf16))
-
-### Chores
-
-* v1.0.12 [skip ci] ([8078469](https://github.com/ExaDev/agent-comms/commit/80784698b46dd70970709a9a36184323eacfdcb8))
 
 ## [1.0.13](https://github.com/ExaDev/agent-comms/compare/v1.0.12...v1.0.13) (2026-04-27)
 
@@ -201,29 +149,17 @@
 
 * isolate agent identity per harness and working directory ([15585f8](https://github.com/ExaDev/agent-comms/commit/15585f8f0500d7e0625a9b49f21f4d18b486942d))
 
-### Chores
-
-* v1.0.13 [skip ci] ([f07c4e1](https://github.com/ExaDev/agent-comms/commit/f07c4e1a4be75f606350ca38a69d9af76f520021))
-
 ## [1.0.14](https://github.com/ExaDev/agent-comms/compare/v1.0.13...v1.0.14) (2026-04-27)
 
 ### Bug Fixes
 
 * deliver incoming messages as steering messages ([465416c](https://github.com/ExaDev/agent-comms/commit/465416c54e9ca9b053761e9e4bcc1fbdcfc42124))
 
-### Chores
-
-* v1.0.14 [skip ci] ([f4819e8](https://github.com/ExaDev/agent-comms/commit/f4819e897207287938dfdd9d5002fac3c4b915ec))
-
 ## [1.1.0](https://github.com/ExaDev/agent-comms/compare/v1.0.14...v1.1.0) (2026-04-27)
 
 ### Features
 
 * add Codex PostToolUse hook for mid-turn message delivery ([378805e](https://github.com/ExaDev/agent-comms/commit/378805e90eb57e5b667bd54a125978a08188d32d))
-
-### Chores
-
-* v1.1.0 [skip ci] ([683a6fa](https://github.com/ExaDev/agent-comms/commit/683a6fa8eab9442d3c94ba1137ebcc4617bbafac))
 
 ## [1.2.0](https://github.com/ExaDev/agent-comms/compare/v1.1.0...v1.2.0) (2026-04-28)
 
@@ -263,7 +199,6 @@
 
 ### Chores
 
-* v1.2.0 [skip ci] ([67ef65d](https://github.com/ExaDev/agent-comms/commit/67ef65d2594bbb7ff30c391a1f060a3062d8f658))
 * update lockfile after dependency resolution ([a253ae9](https://github.com/ExaDev/agent-comms/commit/a253ae9a6c6905d2a21c027b0fe793c6bab72582))
 
 ## [1.3.0](https://github.com/ExaDev/agent-comms/compare/v1.2.0...v1.3.0) (2026-04-28)
@@ -272,19 +207,11 @@
 
 * room member awareness — join roster and status change notifications ([2399f89](https://github.com/ExaDev/agent-comms/commit/2399f89408d361cb46eace37d7c4ca72676262e8))
 
-### Chores
-
-* v1.3.0 [skip ci] ([72fffe0](https://github.com/ExaDev/agent-comms/commit/72fffe0de02a604882c0d22af0693b96315cb589))
-
 ## [1.3.1](https://github.com/ExaDev/agent-comms/compare/v1.3.0...v1.3.1) (2026-04-28)
 
 ### Documentation
 
 * add motivation section, fix broken install path, improve punctuation ([a57b465](https://github.com/ExaDev/agent-comms/commit/a57b4658a2828b8a7889da908b2199368883038c))
-
-### Chores
-
-* v1.3.1 [skip ci] ([af1eaa8](https://github.com/ExaDev/agent-comms/commit/af1eaa8d389f2fdbfb941e99d4cf75c05fd1124a))
 
 ## [1.4.0](https://github.com/ExaDev/agent-comms/compare/v1.3.1...v1.4.0) (2026-04-28)
 
@@ -292,29 +219,17 @@
 
 * automatic delivery status and read receipts ([b61e995](https://github.com/ExaDev/agent-comms/commit/b61e995a641e67117ea690d58f489dc3e51162c5))
 
-### Chores
-
-* v1.4.0 [skip ci] ([260ab93](https://github.com/ExaDev/agent-comms/commit/260ab9345c125ffe5c26bd4d09e045944ce47be5))
-
 ## [1.4.1](https://github.com/ExaDev/agent-comms/compare/v1.4.0...v1.4.1) (2026-04-28)
 
 ### Documentation
 
 * add delivery status, read receipts, member awareness to README ([d55928f](https://github.com/ExaDev/agent-comms/commit/d55928fd2fb4fb3d37d4e0eaf5c690c608f76fa5))
 
-### Chores
-
-* v1.4.1 [skip ci] ([cdf6345](https://github.com/ExaDev/agent-comms/commit/cdf6345e3e34f1cb12d47710a720f85985ba73de))
-
 ## [1.4.2](https://github.com/ExaDev/agent-comms/compare/v1.4.1...v1.4.2) (2026-04-28)
 
 ### Documentation
 
 * replace ASCII diagrams with Mermaid in README ([97ecf78](https://github.com/ExaDev/agent-comms/commit/97ecf78f9761d020a7f64ce4e10daf161036887a))
-
-### Chores
-
-* v1.4.2 [skip ci] ([47a26d4](https://github.com/ExaDev/agent-comms/commit/47a26d42090a6aada3e32e57d15b2244a55884af))
 
 ## [1.4.3](https://github.com/ExaDev/agent-comms/compare/v1.4.2...v1.4.3) (2026-04-28)
 
@@ -326,29 +241,17 @@
 * rename "bus" to "mesh" in plugin marketplace manifest ([7e03c89](https://github.com/ExaDev/agent-comms/commit/7e03c89aed1ca39227c885cac10a4232243a2fe6))
 * rename "bus" to "mesh" in bridge tool descriptions ([5c0807e](https://github.com/ExaDev/agent-comms/commit/5c0807ec4d19794f9aee4a64fa43cafe4e521f97))
 
-### Chores
-
-* v1.4.3 [skip ci] ([ea78d75](https://github.com/ExaDev/agent-comms/commit/ea78d75747e021efa8d3a33e307a70e1e9bb3697))
-
 ## [1.5.0](https://github.com/ExaDev/agent-comms/compare/v1.4.3...v1.5.0) (2026-04-28)
 
 ### Features
 
 * add user bridge — TUI, web UI, and non-interactive CLI ([97ef406](https://github.com/ExaDev/agent-comms/commit/97ef4067c8f43d7996396cacd5d04178fb0a3379))
 
-### Chores
-
-* v1.5.0 [skip ci] ([630c735](https://github.com/ExaDev/agent-comms/commit/630c735343b56c06786c4f08f8bf5754d65559cf))
-
 ## [1.6.0](https://github.com/ExaDev/agent-comms/compare/v1.5.0...v1.6.0) (2026-04-28)
 
 ### Features
 
 * auto-start web UI from every bridge ([5c1af03](https://github.com/ExaDev/agent-comms/commit/5c1af036228b277539b18eb3cb8986d5ab20eeb7))
-
-### Chores
-
-* v1.6.0 [skip ci] ([3ff22db](https://github.com/ExaDev/agent-comms/commit/3ff22db5b82e85d347954ca586e964644aaf1c95))
 
 ## [1.7.0](https://github.com/ExaDev/agent-comms/compare/v1.6.0...v1.7.0) (2026-04-29)
 
@@ -364,10 +267,6 @@
 
 * fix prettier and eslint violations from pre-push hook ([d6eabd1](https://github.com/ExaDev/agent-comms/commit/d6eabd1926b17ec43d26173485de45950180d7a5))
 
-### Chores
-
-* v1.7.0 [skip ci] ([8d8d7e1](https://github.com/ExaDev/agent-comms/commit/8d8d7e1e9acbbe5ca4199025a707424b1205cd8c))
-
 ## [1.8.0](https://github.com/ExaDev/agent-comms/compare/v1.7.0...v1.8.0) (2026-05-08)
 
 ### Features
@@ -379,10 +278,6 @@
 * shut down web server before bridge store on session end ([a664b4b](https://github.com/ExaDev/agent-comms/commit/a664b4bfad75a834ff9b3fdf0b9deff48364ab66))
 * track and destroy all TCP sockets on shutdown ([4199447](https://github.com/ExaDev/agent-comms/commit/419944705e9bd4badceaa5781dcdc8c754f644bd))
 
-### Chores
-
-* v1.8.0 [skip ci] ([a42905a](https://github.com/ExaDev/agent-comms/commit/a42905aebb77e39cb4984e9ea9640ad0f3fa191e))
-
 ## [1.8.1](https://github.com/ExaDev/agent-comms/compare/v1.8.0...v1.8.1) (2026-05-21)
 
 ### Refactoring
@@ -391,7 +286,6 @@
 
 ### Chores
 
-* v1.8.1 [skip ci] ([48c4dbc](https://github.com/ExaDev/agent-comms/commit/48c4dbc0ebd59a80e5f406dc9e22029166b0d33d))
 * add .pi/ to gitignore ([1ca0e0d](https://github.com/ExaDev/agent-comms/commit/1ca0e0d56e9f9b40ac4f7dd127c8e12220736bbe))
 
 ## [1.8.2](https://github.com/ExaDev/agent-comms/compare/v1.8.1...v1.8.2) (2026-05-21)
@@ -405,10 +299,6 @@
 * coordinator survives ECONNRESET on accepted socket ([2d8c34e](https://github.com/ExaDev/agent-comms/commit/2d8c34eaec14c1e400a83f9dc991a6d02781d32f))
 * coordinator survives ECONNRESET on accepted socket ([567a896](https://github.com/ExaDev/agent-comms/commit/567a8961c4f8dc8fd87475d7aee5b97dd3135182))
 
-### Chores
-
-* v1.8.2 [skip ci] ([2943174](https://github.com/ExaDev/agent-comms/commit/29431740377ce89ba185540193baa0caf93e688d))
-
 ## [1.9.0](https://github.com/ExaDev/agent-comms/compare/v1.8.2...v1.9.0) (2026-05-21)
 
 ### Features
@@ -419,19 +309,11 @@
 
 * rename release config to TypeScript ([a8c6eb7](https://github.com/ExaDev/agent-comms/commit/a8c6eb711d39cbc61ab06b8f424c2b8fc2598c19))
 
-### Chores
-
-* v1.9.0 [skip ci] ([27b436a](https://github.com/ExaDev/agent-comms/commit/27b436a73b3cea30a61ca7400be94967e95d8e9b))
-
 ## [1.9.1](https://github.com/ExaDev/agent-comms/compare/v1.9.0...v1.9.1) (2026-05-21)
 
 ### Bug Fixes
 
 * correct MCP Registry name casing to io.github.ExaDev ([d788fe0](https://github.com/ExaDev/agent-comms/commit/d788fe05fc84c70f486fc6975e58e8493edf20c2))
-
-### Chores
-
-* v1.9.1 [skip ci] ([ef7f93d](https://github.com/ExaDev/agent-comms/commit/ef7f93d78c0a4693bc026e9908ada10106b896d8))
 
 ## [1.10.0](https://github.com/ExaDev/agent-comms/compare/v1.9.1...v1.10.0) (2026-05-21)
 
@@ -442,5 +324,10 @@
 
 ### Chores
 
-* v1.10.0 [skip ci] ([66d8491](https://github.com/ExaDev/agent-comms/commit/66d8491046041fecf524e2e225ab6154194b0395))
 * update pnpm-lock.yaml after adding @semantic-release/changelog ([c7bcb2c](https://github.com/ExaDev/agent-comms/commit/c7bcb2cc4d87dc6b7eb6f745abc67fe4c30fac57))
+
+## [1.10.1](https://github.com/ExaDev/agent-comms/compare/v1.10.0...v1.10.1) (2026-05-21)
+
+### Chores
+
+* rewrite CHANGELOG.md to match semantic-release format ([f030208](https://github.com/ExaDev/agent-comms/commit/f0302089d00e7e8a37646f587b0a9497d31034a0))
