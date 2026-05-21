@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/agent-comms)
 [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/agent-comms)
-[![version](https://img.shields.io/badge/version-1.11.0-blue)](https://github.com/ExaDev/agent-comms/releases/tag/v1.11.0)
+[![version](https://img.shields.io/badge/version-1.12.0-blue)](https://github.com/ExaDev/agent-comms/releases/tag/v1.12.0)
 [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/agent-comms/ci.yml?branch=main)](https://github.com/ExaDev/agent-comms/actions)
 
 Cross-harness communication mesh for LLM agents: rooms, DMs, presence, and visibility over TCP with zero filesystem dependencies.

@@ -1,3 +1,9 @@
+## [1.12.0](https://github.com/ExaDev/agent-comms/compare/v1.11.0...v1.12.0) (2026-05-21)
+
+### Features
+
+* add commitlint and lint-staged ([020fbdf](https://github.com/ExaDev/agent-comms/commit/020fbdf46115b99ff8e5b2c711f5156229e0446d))
+
 ## [1.11.0](https://github.com/ExaDev/agent-comms/compare/v1.10.2...v1.11.0) (2026-05-21)
 
 ### Features
