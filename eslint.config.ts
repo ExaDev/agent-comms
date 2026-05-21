@@ -12,37 +12,6 @@ const tsconfigRootDir = dirname(fileURLToPath(import.meta.url));
 
 // ─── Custom rules ────────────────────────────────────────────────────────────
 
-const banEslintDisableRule: Rule.RuleModule = {
-  meta: {
-    type: "problem",
-    docs: {
-      description: "Bans eslint-disable comments — fix the underlying issue",
-    },
-  },
-  create(context) {
-    return {
-      Program() {
-        const comments = context.sourceCode.getAllComments();
-        for (const comment of comments) {
-          const text = comment.value.trimStart();
-          if (
-            text.startsWith("eslint-disable") ||
-            text.startsWith("eslint-enable")
-          ) {
-            context.report({
-              loc: comment.loc ?? { line: 1, column: 0 },
-              message:
-                "eslint-disable comments are forbidden — fix the underlying issue instead",
-            });
-          }
-        }
-      },
-    };
-  },
-};
-
-// ─── Custom plugin ───────────────────────────────────────────────────────────
-
 const noPointlessReassignments: Rule.RuleModule = {
   meta: {
     type: "problem",
@@ -75,7 +44,6 @@ const noPointlessReassignments: Rule.RuleModule = {
 
 const customPlugin = {
   rules: {
-    banEslintDisable: banEslintDisableRule,
     "no-pointless-reassignments": noPointlessReassignments,
   },
 };
@@ -93,6 +61,9 @@ export default defineConfig(
       ...tseslint.configs.strictTypeChecked,
       ...tseslint.configs.stylisticTypeChecked,
     ],
+    linterOptions: {
+      noInlineConfig: true,
+    },
     languageOptions: {
       parserOptions: {
         projectService: {
@@ -114,7 +85,6 @@ export default defineConfig(
         "error",
         { assertionStyle: "never" },
       ],
-      "custom/banEslintDisable": "error",
       "custom/no-pointless-reassignments": "error",
       "no-restricted-syntax": [
         "error",
