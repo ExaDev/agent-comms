@@ -304,6 +304,9 @@ export class MeshStore implements CommsStore {
   private handleCoordinatorConnection(socket: net.Socket): void {
     this.coordinatorServerSockets.add(socket);
     socket.on("close", () => this.coordinatorServerSockets.delete(socket));
+    socket.on("error", () => {
+      this.coordinatorServerSockets.delete(socket);
+    });
 
     const buffer = new MessageBuffer();
     socket.on("data", (data) => {
