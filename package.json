@@ -9,7 +9,7 @@
     "url": "git+https://github.com/ExaDev/agent-comms.git"
   },
   "homepage": "https://github.com/ExaDev/agent-comms#readme",
-  "mcpName": "io.github.exadev/agent-comms",
+  "mcpName": "io.github.ExaDev/agent-comms",
   "bugs": "https://github.com/ExaDev/agent-comms/issues",
   "license": "MIT",
   "keywords": [

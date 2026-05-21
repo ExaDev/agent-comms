@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.exadev/agent-comms",
+  "name": "io.github.ExaDev/agent-comms",
   "title": "Agent Comms",
   "description": "Cross-harness communication mesh for LLM agents — rooms, DMs, presence, and visibility over TCP",
   "repository": {
