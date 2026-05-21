@@ -1,3 +1,9 @@
+## [1.10.1](https://github.com/ExaDev/agent-comms/compare/v1.10.0...v1.10.1) (2026-05-21)
+
+### Chores
+
+* rewrite CHANGELOG.md to match semantic-release format ([f030208](https://github.com/ExaDev/agent-comms/commit/f0302089d00e7e8a37646f587b0a9497d31034a0))
+
 ## [1.0.0](https://github.com/ExaDev/agent-comms/releases/tag/v1.0.0) (2026-04-27)
 
 ### Features
