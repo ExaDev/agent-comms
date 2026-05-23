@@ -14,12 +14,28 @@ describe("input", () => {
       assert.deepStrictEqual(parseInput("   ", undefined), { kind: "ignored" });
     });
 
-    it("returns error for message with no current room", () => {
-      const result = parseInput("hello", undefined);
+    it("returns error for message with no current room or DM target", () => {
+      const result = parseInput("hello", undefined, undefined);
       assert.strictEqual(result.kind, "local");
       if (result.kind === "local") {
         assert.strictEqual(result.result.type, "error");
       }
+    });
+
+    it("returns DM action when DM target is set and no current room", () => {
+      const result = parseInput("hello there", undefined, "agent-42");
+      assert.deepStrictEqual(result, {
+        kind: "action",
+        action: { action: "dm", target: "agent-42", content: "hello there" },
+      });
+    });
+
+    it("prefers current room over DM target for plain text", () => {
+      const result = parseInput("hello", "room-1", "agent-42");
+      assert.deepStrictEqual(result, {
+        kind: "action",
+        action: { action: "send", target: "room-1", content: "hello" },
+      });
     });
 
     it("returns send action for message in current room", () => {

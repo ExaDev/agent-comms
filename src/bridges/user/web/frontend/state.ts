@@ -11,6 +11,7 @@ export type StateChangeListener = (state: Readonly<ClientState>) => void;
 
 export interface ClientState {
   currentRoom: string | undefined;
+  dmTarget: string | undefined;
   agents: Agent[];
   rooms: Room[];
   connected: boolean;
@@ -18,6 +19,7 @@ export interface ClientState {
 
 const INITIAL_STATE: ClientState = {
   currentRoom: undefined,
+  dmTarget: undefined,
   agents: [],
   rooms: [],
   connected: false,
@@ -46,6 +48,11 @@ export class State {
 
   setCurrentRoom(roomId: string | undefined): void {
     this.state = { ...this.state, currentRoom: roomId };
+    this.notify();
+  }
+
+  setDmTarget(agentId: string | undefined): void {
+    this.state = { ...this.state, dmTarget: agentId };
     this.notify();
   }
 

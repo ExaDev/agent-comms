@@ -142,14 +142,3 @@ export interface ActionResult {
 export type AgentsResponse = Agent[];
 export type RoomsResponse = Room[];
 export type MessagesResponse = RoomMessage[];
-
-// ---------------------------------------------------------------------------
-// Client state
-// ---------------------------------------------------------------------------
-
-export interface ClientState {
-  currentRoom: string | undefined;
-  agents: Agent[];
-  rooms: Room[];
-  connected: boolean;
-}

@@ -28,6 +28,7 @@ export type InputResult =
 export function parseInput(
   text: string,
   currentRoom: string | undefined,
+  dmTarget: string | undefined,
 ): InputResult {
   const trimmed = text.trim();
   if (trimmed.length === 0) return { kind: "ignored" };
@@ -43,11 +44,18 @@ export function parseInput(
     };
   }
 
+  if (dmTarget) {
+    return {
+      kind: "action",
+      action: { action: "dm", target: dmTarget, content: trimmed },
+    };
+  }
+
   return {
     kind: "local",
     result: {
       type: "error",
-      text: "Join a room first (click one in the sidebar)",
+      text: "Join a room or select an agent first",
     },
   };
 }

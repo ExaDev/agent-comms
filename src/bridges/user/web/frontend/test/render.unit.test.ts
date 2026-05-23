@@ -235,6 +235,41 @@ describe("render", () => {
         cleanup();
       }
     });
+
+    it("calls onSelect with agent ID when agent is clicked", () => {
+      const { doc, roomListEl, agentListEl, cleanup } = createDoc();
+      try {
+        const agents: Agent[] = [
+          {
+            id: "a1",
+            name: "Agent 1",
+            harness: "pi",
+            cwd: "/t",
+            pid: 1,
+            startedAt: "",
+            visibility: "visible",
+            status: "active",
+            tags: [],
+            subscribedRooms: [],
+          },
+        ];
+        let selectedId: string | undefined;
+        renderAgentList(
+          doc,
+          { roomListEl, agentListEl },
+          agents,
+          (id) => {
+            selectedId = id;
+          },
+        );
+
+        const item = agentListEl.children[0] as HTMLElement;
+        item.click();
+        assert.strictEqual(selectedId, "a1");
+      } finally {
+        cleanup();
+      }
+    });
   });
 
   describe("renderDeliveryEvent", () => {

@@ -37,6 +37,7 @@ describe("state", () => {
     const state = new State();
     const s = state.get();
     assert.strictEqual(s.currentRoom, undefined);
+    assert.strictEqual(s.dmTarget, undefined);
     assert.deepStrictEqual(s.agents, []);
     assert.deepStrictEqual(s.rooms, []);
     assert.strictEqual(s.connected, false);
@@ -80,6 +81,17 @@ describe("state", () => {
     assert.deepStrictEqual(state.get().agents, [MOCK_AGENT]);
     assert.deepStrictEqual(state.get().rooms, [MOCK_ROOM]);
     assert.strictEqual(notified.length, 1);
+  });
+
+  it("sets dmTarget and notifies", () => {
+    const state = new State();
+    const notified: ReturnType<State["get"]>[] = [];
+    state.subscribe((s) => notified.push(s));
+
+    state.setDmTarget("agent-42");
+    assert.strictEqual(state.get().dmTarget, "agent-42");
+    assert.strictEqual(notified.length, 1);
+    assert.strictEqual(notified[0]?.dmTarget, "agent-42");
   });
 
   it("reset returns to initial state", () => {

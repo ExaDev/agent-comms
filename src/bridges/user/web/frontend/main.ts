@@ -44,7 +44,7 @@ const state = new State();
 // Re-render sidebar on state changes
 state.subscribe((s) => {
   renderRoomList(document, sidebarTarget, s.rooms, s.currentRoom, onJoinRoom);
-  renderAgentList(document, sidebarTarget, s.agents);
+  renderAgentList(document, sidebarTarget, s.agents, onSelectAgent);
 });
 
 // ---------------------------------------------------------------------------
@@ -119,6 +119,7 @@ async function refreshState(): Promise<void> {
 }
 
 async function onJoinRoom(roomId: string): Promise<void> {
+  state.setDmTarget(undefined);
   state.setCurrentRoom(roomId);
   renderHeader({ headerEl }, roomId);
   clearMessages(messageTarget);
@@ -132,6 +133,14 @@ async function onJoinRoom(roomId: string): Promise<void> {
   inputRaw.focus();
 }
 
+function onSelectAgent(agentId: string): void {
+  state.setCurrentRoom(undefined);
+  state.setDmTarget(agentId);
+  clearMessages(messageTarget);
+  renderHeader({ headerEl }, `DM with ${agentId}`);
+  inputRaw.focus();
+}
+
 // ---------------------------------------------------------------------------
 // Input handling
 // ---------------------------------------------------------------------------
@@ -140,7 +149,11 @@ function handleInput(): void {
   const text = inputRaw.value;
   inputRaw.value = "";
 
-  const result = parseInput(text, state.get().currentRoom);
+  const result = parseInput(
+    text,
+    state.get().currentRoom,
+    state.get().dmTarget,
+  );
 
   switch (result.kind) {
     case "action":

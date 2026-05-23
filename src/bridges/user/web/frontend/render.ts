@@ -195,10 +195,13 @@ export function renderRoomList(
   }
 }
 
+export type AgentSelectAction = (agentId: string) => void;
+
 export function renderAgentList(
   doc: Document,
   target: SidebarTarget,
   agents: Agent[],
+  onSelect?: AgentSelectAction,
 ): void {
   clearChildren(target.agentListEl);
 
@@ -213,6 +216,11 @@ export function renderAgentList(
     const name = doc.createTextNode(` ${agent.name}`);
     div.appendChild(dot);
     div.appendChild(name);
+    if (onSelect) {
+      div.onclick = () => {
+        onSelect(agent.id);
+      };
+    }
     target.agentListEl.appendChild(div);
   }
 }
