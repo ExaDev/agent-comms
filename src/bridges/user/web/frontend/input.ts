@@ -28,7 +28,7 @@ export type InputResult =
 export function parseInput(
   text: string,
   currentRoom: string | undefined,
-  dmTarget: string | undefined,
+  dmTarget?: string,
 ): InputResult {
   const trimmed = text.trim();
   if (trimmed.length === 0) return { kind: "ignored" };

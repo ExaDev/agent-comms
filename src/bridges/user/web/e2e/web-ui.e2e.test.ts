@@ -8,6 +8,7 @@
  */
 
 import { test, expect } from "./fixtures.js";
+import WS from "ws";
 
 let testCounter = 0;
 function uniqueName(prefix: string): string {
@@ -143,5 +144,178 @@ test.describe("Web UI", () => {
     await expect(page.locator("#messages")).toContainText(
       "Unknown command: /foobar",
     );
+  });
+
+  test("can join a room via /join command", async ({ page, port }) => {
+    const roomName = uniqueName("join-room");
+
+    // Create room via API
+    await fetch(`http://127.0.0.1:${port}/api/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create_room",
+        name: roomName,
+        type: "public",
+      }),
+    });
+
+    await page.goto(`http://127.0.0.1:${port}`);
+    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+
+    await page.locator("#input").fill(`/join ${roomName}`);
+    await page.locator("#send-btn").click();
+
+    await expect(page.locator("#header")).toContainText(roomName, {
+      timeout: 5000,
+    });
+    await expect(page.locator("#messages")).toContainText("Switched to");
+  });
+
+  test("can leave a room via /leave command", async ({ page, port }) => {
+    const roomName = uniqueName("leave-room");
+
+    // Create and join room via API
+    await fetch(`http://127.0.0.1:${port}/api/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create_room",
+        name: roomName,
+        type: "public",
+      }),
+    });
+
+    await page.goto(`http://127.0.0.1:${port}`);
+    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+
+    // Join via sidebar click first
+    const roomItem = page.locator("#room-list .room-item", {
+      hasText: roomName,
+    });
+    await roomItem.click();
+    await expect(page.locator("#header")).toContainText(roomName);
+
+    // Leave
+    await page.locator("#input").fill("/leave");
+    await page.locator("#send-btn").click();
+
+    await expect(page.locator("#messages")).toContainText(`Left room "${roomName}"`, {
+      timeout: 5000,
+    });
+  });
+
+  test("GET /api/rooms/:id/messages returns messages", async ({ port }) => {
+    const roomName = uniqueName("msgs-room");
+
+    // Create room
+    const createRes = await fetch(`http://127.0.0.1:${port}/api/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create_room",
+        name: roomName,
+        type: "public",
+      }),
+    });
+    const createResult = await createRes.json();
+    expect(createResult.isError).toBeFalsy();
+
+    // Send a message via API
+    await fetch(`http://127.0.0.1:${port}/api/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "send",
+        target: roomName,
+        content: "Test message for history",
+      }),
+    });
+
+    // Fetch messages
+    const res = await fetch(
+      `http://127.0.0.1:${port}/api/rooms/${roomName}/messages`,
+    );
+    const messages = await res.json();
+    expect(Array.isArray(messages)).toBeTruthy();
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages[0].content).toBe("Test message for history");
+  });
+
+  test("sidebar updates member count after room creation", async ({
+    page,
+    port,
+  }) => {
+    const roomName = uniqueName("count-room");
+
+    await page.goto(`http://127.0.0.1:${port}`);
+    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+
+    await page.locator("#input").fill(`/create ${roomName}`);
+    await page.locator("#send-btn").click();
+
+    // Room appears in sidebar with (1) member count
+    const roomItem = page.locator("#room-list .room-item", {
+      hasText: roomName,
+    });
+    await expect(roomItem).toBeVisible({ timeout: 5000 });
+    await expect(roomItem).toContainText("(1)");
+  });
+
+  test("sending a message returns confirmation via WebSocket", async ({
+    port,
+  }) => {
+    const roomName = uniqueName("ws-send-room");
+
+    // Create room
+    await fetch(`http://127.0.0.1:${port}/api/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create_room",
+        name: roomName,
+        type: "public",
+      }),
+    });
+
+    // Connect WebSocket and collect frames
+    const ws = await new Promise<WS>((resolve) => {
+      const ws = new WS(`ws://127.0.0.1:${port}`);
+      ws.on("open", () => resolve(ws));
+    });
+
+    const frames: Record<string, unknown>[] = [];
+    ws.on("message", (raw) => {
+      frames.push(JSON.parse(raw.toString()) as Record<string, unknown>);
+    });
+
+    // Join and send
+    ws.send(JSON.stringify({ action: "join_room", room: roomName }));
+    ws.send(
+      JSON.stringify({
+        action: "send",
+        target: roomName,
+        content: "Hello via WebSocket!",
+      }),
+    );
+
+    // Wait for frames to accumulate
+    await new Promise((r) => setTimeout(r, 500));
+
+    const results = frames.filter(
+      (f) =>
+        f.type === "result" &&
+        typeof (f.result as Record<string, unknown>)?.content === "string",
+    );
+
+    // Should see join result and send result
+    const sendResult = results.find((f) =>
+      ((f.result as Record<string, unknown>)?.content as string)?.includes(
+        "Sent to",
+      ),
+    );
+    expect(sendResult).toBeTruthy();
+
+    ws.close();
   });
 });

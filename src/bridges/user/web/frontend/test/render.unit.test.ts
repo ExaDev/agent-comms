@@ -194,6 +194,16 @@ describe("render", () => {
   });
 
   describe("renderAgentList", () => {
+    it("renders empty list when no agents", () => {
+      const { doc, roomListEl, agentListEl, cleanup } = createDoc();
+      try {
+        renderAgentList(doc, { roomListEl, agentListEl }, []);
+        assert.strictEqual(agentListEl.children.length, 0);
+      } finally {
+        cleanup();
+      }
+    });
+
     it("renders agents with status dots", () => {
       const { doc, roomListEl, agentListEl, cleanup } = createDoc();
       try {
@@ -339,6 +349,147 @@ describe("render", () => {
           (messagesEl.children[0] as HTMLElement).textContent,
           "a1 joined r1",
         );
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("renders member_left as system message", () => {
+      const { doc, messagesEl, cleanup } = createDoc();
+      try {
+        const event: DeliveryEvent = {
+          type: "member_left",
+          room: "r1",
+          agent: "a1",
+        };
+        renderDeliveryEvent(doc, { messagesEl }, event, "r1");
+        assert.strictEqual(
+          (messagesEl.children[0] as HTMLElement).textContent,
+          "a1 left r1",
+        );
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("renders member_status as status message", () => {
+      const { doc, messagesEl, cleanup } = createDoc();
+      try {
+        const event: DeliveryEvent = {
+          type: "member_status",
+          room: "r1",
+          agent: "a1",
+          status: "busy",
+        };
+        renderDeliveryEvent(doc, { messagesEl }, event, "r1");
+        assert.strictEqual(
+          (messagesEl.children[0] as HTMLElement).className,
+          "msg status",
+        );
+        assert.ok(
+          (messagesEl.children[0] as HTMLElement).textContent?.includes(
+            "a1 is now busy",
+          ),
+        );
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("renders delivery_status as status message", () => {
+      const { doc, messagesEl, cleanup } = createDoc();
+      try {
+        const event: DeliveryEvent = {
+          type: "delivery_status",
+          messageId: "msg-1",
+          agent: "a1",
+          status: "delivered",
+        };
+        renderDeliveryEvent(doc, { messagesEl }, event, undefined);
+        assert.strictEqual(
+          (messagesEl.children[0] as HTMLElement).className,
+          "msg status",
+        );
+        assert.ok(
+          (messagesEl.children[0] as HTMLElement).textContent?.includes(
+            "delivered",
+          ),
+        );
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("renders room_members for current room", () => {
+      const { doc, messagesEl, cleanup } = createDoc();
+      try {
+        const event: DeliveryEvent = {
+          type: "room_members",
+          room: "r1",
+          members: [
+            { id: "a1", name: "Alice", status: "active" },
+            { id: "a2", name: "Bob", status: "idle" },
+          ],
+        };
+        renderDeliveryEvent(doc, { messagesEl }, event, "r1");
+        const text = (messagesEl.children[0] as HTMLElement).textContent ?? "";
+        assert.ok(text.includes("Alice"));
+        assert.ok(text.includes("Bob"));
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("skips room_members for other room", () => {
+      const { doc, messagesEl, cleanup } = createDoc();
+      try {
+        const event: DeliveryEvent = {
+          type: "room_members",
+          room: "r1",
+          members: [{ id: "a1", name: "Alice", status: "active" }],
+        };
+        renderDeliveryEvent(doc, { messagesEl }, event, "other-room");
+        assert.strictEqual(messagesEl.children.length, 0);
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("renders room_invite with description", () => {
+      const { doc, messagesEl, cleanup } = createDoc();
+      try {
+        const event: DeliveryEvent = {
+          type: "room_invite",
+          room: "r1",
+          roomDescription: "A cool room",
+          from: "a1",
+          fromName: "Alice",
+          fromCwd: "/home",
+        };
+        renderDeliveryEvent(doc, { messagesEl }, event, undefined);
+        const text = (messagesEl.children[0] as HTMLElement).textContent ?? "";
+        assert.ok(text.includes("Alice"));
+        assert.ok(text.includes("r1"));
+        assert.ok(text.includes("A cool room"));
+      } finally {
+        cleanup();
+      }
+    });
+
+    it("renders invite_declined with reason", () => {
+      const { doc, messagesEl, cleanup } = createDoc();
+      try {
+        const event: DeliveryEvent = {
+          type: "invite_declined",
+          room: "r1",
+          agent: "a1",
+          agentName: "Alice",
+          reason: "Too busy",
+        };
+        renderDeliveryEvent(doc, { messagesEl }, event, undefined);
+        const text = (messagesEl.children[0] as HTMLElement).textContent ?? "";
+        assert.ok(text.includes("Alice"));
+        assert.ok(text.includes("Too busy"));
       } finally {
         cleanup();
       }

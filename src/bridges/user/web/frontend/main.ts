@@ -88,10 +88,17 @@ function handleFrame(frame: WsFrame): void {
 
     case "result":
       renderSystemMessage(document, messageTarget, frame.result.content);
-      // Refresh sidebar after successful mutations (create, join, leave, etc.)
       if (!frame.result.isError) {
+        // Auto-switch current room after successful join_room via command
+        if (pendingAction?.action === "join_room" && !state.get().currentRoom) {
+          const roomId = pendingAction.room;
+          state.setDmTarget(undefined);
+          state.setCurrentRoom(roomId);
+          renderHeader({ headerEl }, roomId);
+        }
         void refreshState();
       }
+      pendingAction = undefined;
       break;
 
     case "error":
@@ -108,7 +115,10 @@ function handleFrame(frame: WsFrame): void {
 // Actions
 // ---------------------------------------------------------------------------
 
+let pendingAction: Action | undefined;
+
 function sendAction(action: Action): void {
+  pendingAction = action;
   ws.sendAction(action);
 }
 
