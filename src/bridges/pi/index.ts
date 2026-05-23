@@ -18,8 +18,17 @@ import {
   ensureRegistered,
   formatDeliveryEvent,
 } from "../../core/index.js";
-import { tryStartWebServer, type WebServerHandle } from "../user/web/server.js";
+import {
+  tryStartWebServer,
+  type WebServerHandle,
+} from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
+
+/** Resolve the listening port from a running web server handle. */
+function getWebPort(handle: WebServerHandle): number | undefined {
+  const addr = handle.server.address();
+  return typeof addr === "object" && addr ? addr.port : undefined;
+}
 
 /** Resolve the listening port from a running web server handle. */
 function getWebPort(handle: WebServerHandle): number | undefined {

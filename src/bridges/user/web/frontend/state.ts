@@ -27,7 +27,7 @@ const INITIAL_STATE: ClientState = {
 
 export class State {
   private state: ClientState = { ...INITIAL_STATE };
-  private readonly listeners = new Set<StateChangeListener>();
+  private readonly listeners: Set<StateChangeListener> = new Set();
 
   /** Subscribe to state changes. Returns an unsubscribe function. */
   subscribe(listener: StateChangeListener): () => void {

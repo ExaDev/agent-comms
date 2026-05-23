@@ -6,15 +6,20 @@
  */
 
 import type { Agent, DeliveryEvent, Room, RoomMessage } from "./types.js";
-import { clearChildren, createElement, escapeHtml, formatTime } from "./dom.js";
+import {
+  clearChildren,
+  createElement,
+  escapeHtml,
+  formatTime,
+} from "./dom.js";
 
 // ---------------------------------------------------------------------------
 // Message rendering
 // ---------------------------------------------------------------------------
 
-export interface MessageTarget {
+export type MessageTarget = {
   messagesEl: HTMLElement;
-}
+};
 
 export function renderChatMessage(
   doc: Document,
@@ -26,7 +31,7 @@ export function renderChatMessage(
   const time = formatTime(timestamp);
   const div = doc.createElement("div");
   div.className = "msg";
-  div.innerHTML = `<span class="sender">${escapeHtml(doc, sender)}</span><span class="time">${time}</span>: ${escapeHtml(doc, content)}`;
+  div.innerHTML = `<span class="sender">${escapeHtml(sender)}</span><span class="time">${time}</span>: ${escapeHtml(content)}`;
   target.messagesEl.appendChild(div);
   target.messagesEl.scrollTop = target.messagesEl.scrollHeight;
 }
@@ -41,7 +46,7 @@ export function renderDmMessage(
   const time = formatTime(timestamp);
   const div = doc.createElement("div");
   div.className = "msg dm";
-  div.innerHTML = `<span class="dm-badge">DM</span> <span class="sender">${escapeHtml(doc, sender)}</span><span class="time">${time}</span>: ${escapeHtml(doc, content)}`;
+  div.innerHTML = `<span class="dm-badge">DM</span> <span class="sender">${escapeHtml(sender)}</span><span class="time">${time}</span>: ${escapeHtml(content)}`;
   target.messagesEl.appendChild(div);
   target.messagesEl.scrollTop = target.messagesEl.scrollHeight;
 }
@@ -141,7 +146,9 @@ export function renderDeliveryEvent(
       break;
 
     case "room_invite": {
-      const desc = event.roomDescription ? ` — ${event.roomDescription}` : "";
+      const desc = event.roomDescription
+        ? ` — ${event.roomDescription}`
+        : "";
       renderSystemMessage(
         doc,
         target,
@@ -164,10 +171,10 @@ export function renderDeliveryEvent(
 // Sidebar rendering
 // ---------------------------------------------------------------------------
 
-export interface SidebarTarget {
+export type SidebarTarget = {
   roomListEl: HTMLElement;
   agentListEl: HTMLElement;
-}
+};
 
 export type RoomAction = (roomId: string) => void | Promise<void>;
 
@@ -187,10 +194,8 @@ export function renderRoomList(
 
     const div = doc.createElement("div");
     div.className = `room-item${isActive ? " active" : ""}`;
-    div.innerHTML = `${typeIndicator} ${escapeHtml(doc, room.name)} <span style="color:var(--dim)">(${String(memberCount)})</span>`;
-    div.onclick = () => {
-      void onJoin(room.id);
-    };
+    div.innerHTML = `${typeIndicator} ${escapeHtml(room.name)} <span style="color:var(--dim)">(${memberCount})</span>`;
+    div.onclick = () => onJoin(room.id);
     target.roomListEl.appendChild(div);
   }
 }
@@ -229,9 +234,9 @@ export function renderAgentList(
 // Header
 // ---------------------------------------------------------------------------
 
-export interface HeaderTarget {
+export type HeaderTarget = {
   headerEl: HTMLElement;
-}
+};
 
 export function renderHeader(target: HeaderTarget, text: string): void {
   target.headerEl.textContent = text;

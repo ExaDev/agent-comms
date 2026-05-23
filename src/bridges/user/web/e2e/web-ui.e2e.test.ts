@@ -9,6 +9,7 @@
 
 import { test, expect } from "./fixtures.js";
 import WS from "ws";
+import WS from "ws";
 
 let testCounter = 0;
 function uniqueName(prefix: string): string {

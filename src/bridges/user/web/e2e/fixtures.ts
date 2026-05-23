@@ -6,12 +6,15 @@
  */
 
 import { test as base, expect } from "@playwright/test";
-import { createWebServer, type WebServerHandle } from "../server.js";
+import {
+  createWebServer,
+  type WebServerHandle,
+} from "../server.js";
 
-interface Fixtures {
+type Fixtures = {
   server: WebServerHandle;
   port: number;
-}
+};
 
 export const test = base.extend<Fixtures>({
   server: async ({}, use: (handle: WebServerHandle) => Promise<void>) => {

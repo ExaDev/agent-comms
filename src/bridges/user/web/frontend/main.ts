@@ -58,11 +58,7 @@ const ws = new CommsWs({
   },
   onClose: () => {
     state.setConnected(false);
-    renderSystemMessage(
-      document,
-      messageTarget,
-      "Disconnected — reconnecting...",
-    );
+    renderSystemMessage(document, messageTarget, "Disconnected — reconnecting...");
   },
   onFrame: handleFrame,
 });
@@ -90,7 +86,10 @@ function handleFrame(frame: WsFrame): void {
       renderSystemMessage(document, messageTarget, frame.result.content);
       if (!frame.result.isError) {
         // Auto-switch current room after successful join_room via command
-        if (pendingAction?.action === "join_room" && !state.get().currentRoom) {
+        if (
+          pendingAction?.action === "join_room" &&
+          !state.get().currentRoom
+        ) {
           const roomId = pendingAction.room;
           state.setDmTarget(undefined);
           state.setCurrentRoom(roomId);
@@ -123,13 +122,15 @@ function sendAction(action: Action): void {
 }
 
 async function refreshState(): Promise<void> {
-  const [agents, rooms] = await Promise.all([fetchAgents(), fetchRooms()]);
+  const [agents, rooms] = await Promise.all([
+    fetchAgents(),
+    fetchRooms(),
+  ]);
   state.setAgents(agents);
   state.setRooms(rooms);
 }
 
 async function onJoinRoom(roomId: string): Promise<void> {
-  state.setDmTarget(undefined);
   state.setCurrentRoom(roomId);
   renderHeader({ headerEl }, roomId);
   clearMessages(messageTarget);
@@ -140,15 +141,7 @@ async function onJoinRoom(roomId: string): Promise<void> {
   const messages = await fetchRoomMessages(roomId);
   renderMessageHistory(document, messageTarget, messages);
   renderSystemMessage(document, messageTarget, `Joined ${roomId}`);
-  inputRaw.focus();
-}
-
-function onSelectAgent(agentId: string): void {
-  state.setCurrentRoom(undefined);
-  state.setDmTarget(agentId);
-  clearMessages(messageTarget);
-  renderHeader({ headerEl }, `DM with ${agentId}`);
-  inputRaw.focus();
+  inputEl.focus();
 }
 
 // ---------------------------------------------------------------------------
@@ -156,14 +149,10 @@ function onSelectAgent(agentId: string): void {
 // ---------------------------------------------------------------------------
 
 function handleInput(): void {
-  const text = inputRaw.value;
-  inputRaw.value = "";
+  const text = inputEl.value;
+  inputEl.value = "";
 
-  const result = parseInput(
-    text,
-    state.get().currentRoom,
-    state.get().dmTarget,
-  );
+  const result = parseInput(text, state.get().currentRoom, state.get().dmTarget);
 
   switch (result.kind) {
     case "action":
@@ -179,7 +168,7 @@ function handleInput(): void {
 
 const sendBtn = requireElement(document, "#send-btn");
 sendBtn.onclick = handleInput;
-inputRaw.addEventListener("keydown", (e: KeyboardEvent) => {
+inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key === "Enter") handleInput();
 });
 
@@ -189,4 +178,4 @@ inputRaw.addEventListener("keydown", (e: KeyboardEvent) => {
 
 ws.connect();
 void refreshState();
-inputRaw.focus();
+inputEl.focus();

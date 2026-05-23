@@ -93,6 +93,17 @@ describe("state", () => {
     assert.strictEqual(notified[0]?.dmTarget, "agent-42");
   });
 
+  it("sets dmTarget and notifies", () => {
+    const state = new State();
+    const notified: ReturnType<State["get"]>[] = [];
+    state.subscribe((s) => notified.push(s));
+
+    state.setDmTarget("agent-42");
+    assert.strictEqual(state.get().dmTarget, "agent-42");
+    assert.strictEqual(notified.length, 1);
+    assert.strictEqual(notified[0]?.dmTarget, "agent-42");
+  });
+
   it("reset returns to initial state", () => {
     const state = new State();
     state.setCurrentRoom("room-1");
