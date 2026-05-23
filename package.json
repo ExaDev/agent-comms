@@ -45,11 +45,13 @@
   },
   "scripts": {
     "prepare": "husky",
-    "build": "tsc && printf '#!/usr/bin/env node\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js",
+    "build:frontend": "tsx src/bridges/user/web/build.ts",
+    "build": "pnpm build:frontend && tsc && printf '#!/usr/bin/env node\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js",
     "generate:server-json": "tsx scripts/sync-release-metadata.ts",
     "publish:mcp-registry": "tsx scripts/publish-mcp-registry.ts",
     "lint": "eslint .",
     "test": "node --test dist/test/**/*.test.js",
+    "test:frontend": "tsx --test src/bridges/user/web/frontend/test/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -70,9 +72,11 @@
     "@types/node": "^25.6.0",
     "@types/ws": "8.18.1",
     "conventional-changelog-conventionalcommits": "9.3.1",
+    "esbuild": "0.28.0",
     "eslint": "10.2.1",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-prettier": "5.5.5",
+    "happy-dom": "20.9.0",
     "husky": "9.1.7",
     "lint-staged": "17.0.4",
     "prettier": "3.8.3",

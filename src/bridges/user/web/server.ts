@@ -19,7 +19,7 @@
 import * as http from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { ChatController } from "../controller.js";
-import { FRONTEND_HTML } from "./index.html.js";
+import { FRONTEND_HTML } from "./generated-html.js";
 
 const WEB_HOST = "127.0.0.1";
 
