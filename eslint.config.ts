@@ -112,6 +112,19 @@ export default defineConfig(
   },
   eslintConfigPrettier,
   {
+    files: ["**/*.test.ts", "**/*.e2e.test.ts", "**/*.spec.ts"],
+    rules: {
+      "@typescript-eslint/no-floating-promises": "off",
+      "@typescript-eslint/consistent-type-assertions": "off",
+      "@typescript-eslint/no-unnecessary-condition": "off",
+      "@typescript-eslint/restrict-template-expressions": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-confusing-void-expression": "off",
+      "@typescript-eslint/no-base-to-string": "off",
+    },
+  },
+  {
     files: ["**/*.json"],
     language: "json/json",
     plugins: { json },

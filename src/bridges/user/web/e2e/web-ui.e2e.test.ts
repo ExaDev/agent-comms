@@ -200,9 +200,12 @@ test.describe("Web UI", () => {
     await page.locator("#input").fill("/leave");
     await page.locator("#send-btn").click();
 
-    await expect(page.locator("#messages")).toContainText(`Left room "${roomName}"`, {
-      timeout: 5000,
-    });
+    await expect(page.locator("#messages")).toContainText(
+      `Left room "${roomName}"`,
+      {
+        timeout: 5000,
+      },
+    );
   });
 
   test("GET /api/rooms/:id/messages returns messages", async ({ port }) => {

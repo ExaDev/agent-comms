@@ -264,14 +264,9 @@ describe("render", () => {
           },
         ];
         let selectedId: string | undefined;
-        renderAgentList(
-          doc,
-          { roomListEl, agentListEl },
-          agents,
-          (id) => {
-            selectedId = id;
-          },
-        );
+        renderAgentList(doc, { roomListEl, agentListEl }, agents, (id) => {
+          selectedId = id;
+        });
 
         const item = agentListEl.children[0] as HTMLElement;
         item.click();
