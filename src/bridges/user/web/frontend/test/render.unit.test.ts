@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-floating-promises, @typescript-eslint/no-non-null-assertion, @typescript-eslint/consistent-type-assertions */
 /**
  * Unit tests for render.ts — DOM rendering functions.
  */

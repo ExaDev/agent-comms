@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-floating-promises */
 /**
  * Unit tests for dom.ts — DOM helper functions.
  */

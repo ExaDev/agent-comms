@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-floating-promises, @typescript-eslint/no-unnecessary-condition */
 /**
  * Unit tests for input.ts — command parsing.
  */

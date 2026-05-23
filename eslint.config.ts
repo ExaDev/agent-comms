@@ -76,6 +76,7 @@ export default defineConfig(
             "scripts/*.ts",
             "src/bridges/user/web/e2e/*.ts",
           ],
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 15,
         },
         tsconfigRootDir,
       },

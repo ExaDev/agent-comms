@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-floating-promises */
 /**
  * Unit tests for state.ts — client state management.
  */
