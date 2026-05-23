@@ -21,6 +21,12 @@ import {
 import { tryStartWebServer, type WebServerHandle } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
+/** Resolve the listening port from a running web server handle. */
+function getWebPort(handle: WebServerHandle): number | undefined {
+  const addr = handle.server.address();
+  return typeof addr === "object" && addr ? addr.port : undefined;
+}
+
 export default function (pi: ExtensionAPI) {
   const store = new MeshStore();
   const tool = new CommsTool(store);
@@ -82,7 +88,7 @@ export default function (pi: ExtensionAPI) {
     description: [
       "Cross-harness agent communication mesh. Send messages to rooms and DM other agents.",
       "Actions: register, update, whoami, create_room, list_rooms, join_room, leave_room,",
-      "send, dm, list_agents, read_room, invite, decline_invite, kick, destroy_room.",
+      "send, dm, list_agents, read_room, invite, decline_invite, kick, destroy_room, web_url.",
       "Register first, then join or create rooms to communicate.",
     ].join(" "),
     promptSnippet: "Communicate with other LLM agents via rooms and DMs",
@@ -107,6 +113,7 @@ export default function (pi: ExtensionAPI) {
           "decline_invite",
           "kick",
           "destroy_room",
+          "web_url",
         ],
         { description: "Action to perform" },
       ),
@@ -160,6 +167,29 @@ export default function (pi: ExtensionAPI) {
     }),
 
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      if (params.action === "web_url") {
+        if (!webHandle) {
+          return {
+            content: [{ type: "text", text: "Web UI is not running." }],
+            details: { action: "web_url" },
+            isError: true,
+          };
+        }
+        const port = getWebPort(webHandle);
+        if (!port) {
+          return {
+            content: [{ type: "text", text: "Web UI port not yet assigned." }],
+            details: { action: "web_url" },
+            isError: true,
+          };
+        }
+        return {
+          content: [{ type: "text", text: `http://127.0.0.1:${String(port)}` }],
+          details: { action: "web_url" },
+          isError: false,
+        };
+      }
+
       if (!agentId) {
         return {
           content: [{ type: "text", text: "Error: not registered" }],
