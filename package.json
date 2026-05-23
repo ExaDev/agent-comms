@@ -52,6 +52,7 @@
     "lint": "eslint .",
     "test": "node --test dist/test/**/*.test.js",
     "test:frontend": "tsx --test src/bridges/user/web/frontend/test/**/*.test.ts",
+    "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -62,6 +63,7 @@
     "@eslint/markdown": "8.0.1",
     "@mariozechner/pi-ai": "0.70.2",
     "@mariozechner/pi-coding-agent": "0.70.2",
+    "@playwright/test": "1.60.0",
     "@semantic-release/changelog": "6.0.3",
     "@semantic-release/commit-analyzer": "13.0.1",
     "@semantic-release/exec": "6.0.3",

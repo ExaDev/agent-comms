@@ -5,3 +5,6 @@ dist/
 .env
 *.tgz
 .pi/
+test-results/
+
+.eslintcache
