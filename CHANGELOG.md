@@ -1,3 +1,25 @@
+## [1.13.0](https://github.com/ExaDev/agent-comms/compare/v1.12.0...v1.13.0) (2026-05-23)
+
+### Features
+
+* **bridge:** add web_url action to agent_comms tool ([db3d73e](https://github.com/ExaDev/agent-comms/commit/db3d73ed2a86abf69ac93680de030f4dae8439e6))
+* **bridge:** enable DM by clicking agent in sidebar ([5d6cb33](https://github.com/ExaDev/agent-comms/commit/5d6cb33db5b0c08471eb5e2545a8cee443632d2d))
+
+### Refactoring
+
+* **bridge:** extract inline HTML frontend into TypeScript modules ([196dc6b](https://github.com/ExaDev/agent-comms/commit/196dc6bbc4071db77ffd5281b6e9395d93bb001a))
+
+### Tests
+
+* **bridge:** add Playwright e2e tests for web UI ([a263eeb](https://github.com/ExaDev/agent-comms/commit/a263eeb53e4a3836bb519641d134dd17875650c1))
+* **bridge:** expand unit and e2e test coverage ([ee9c0d4](https://github.com/ExaDev/agent-comms/commit/ee9c0d4b70668e37fabc155c6d8308c5d80fbc5a))
+
+### Chores
+
+* **build:** adopt typed test file suffix convention ([b46dc4b](https://github.com/ExaDev/agent-comms/commit/b46dc4b8ffe2657f6e43e935fb1fa9ce290fe289))
+* **build:** fix pre-push ESLint errors ([ffc1408](https://github.com/ExaDev/agent-comms/commit/ffc1408273518921c52a9d813cc7ad95ee38c877))
+* **build:** relax ESLint rules for test files ([d15fe76](https://github.com/ExaDev/agent-comms/commit/d15fe76d7c581e5d114f66484b8dfaf1094df5b8))
+
 ## [1.12.0](https://github.com/ExaDev/agent-comms/compare/v1.11.0...v1.12.0) (2026-05-21)
 
 ### Features
