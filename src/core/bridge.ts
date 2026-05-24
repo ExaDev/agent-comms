@@ -10,6 +10,7 @@
  * push mechanism and tool registration.
  */
 
+import * as path from "node:path";
 import type { CommsStore } from "./comms-store.js";
 import type { CommsAction, DeliveryEvent, Visibility } from "./types.js";
 import { z } from "zod";
@@ -215,6 +216,37 @@ export function formatDeliveryEvent(event: DeliveryEvent): string {
       return `Message ${event.messageId} ${event.status} by ${event.agent}${event.room ? ` in ${event.room}` : ""}`;
     case "invite_declined":
       return `${event.agentName} declined invite to ${event.room}: "${event.reason}"`;
+    case "name_changed":
+      return `${event.oldName} is now known as ${event.newName}`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Event classification — actionable vs informational
+// ---------------------------------------------------------------------------
+
+/**
+ * Classify a delivery event as actionable (requires model attention)
+ * or informational (can be buffered and returned with next tool call).
+ *
+ * Actionable: DMs, room messages, room invites — the model may need to respond.
+ * Informational: status changes, joins/leaves, renames, read receipts —
+ *   the model may need to know eventually but never needs to act immediately.
+ */
+export function isActionableEvent(event: DeliveryEvent): boolean {
+  switch (event.type) {
+    case "dm":
+    case "room_message":
+    case "room_invite":
+      return true;
+    case "member_joined":
+    case "member_left":
+    case "room_members":
+    case "member_status":
+    case "delivery_status":
+    case "invite_declined":
+    case "name_changed":
+      return false;
   }
 }
 
@@ -248,6 +280,7 @@ export async function ensureRegistered(opts: {
       status: "active",
       pid: process.pid,
     });
+    await ensureProjectRoom(opts.store, identity.id, opts.cwd);
     return { agentId: identity.id, store: opts.store, isNew: false };
   }
 
@@ -259,7 +292,45 @@ export async function ensureRegistered(opts: {
     visibility: opts.visibility ?? "visible",
     tags: opts.tags ?? [],
   });
+  await ensureProjectRoom(opts.store, agent.id, opts.cwd);
   return { agentId: agent.id, store: opts.store, isNew: true };
+}
+
+// ---------------------------------------------------------------------------
+// ensureProjectRoom — auto-create a room for the agent's working directory
+// ---------------------------------------------------------------------------
+
+/**
+ * Ensure a project room exists for the given cwd and the agent is a member.
+ * Creates the room if needed and joins the agent. No-op if already a member.
+ * Returns the room ID.
+ */
+export async function ensureProjectRoom(
+  store: CommsStore,
+  agentId: string,
+  cwd: string,
+): Promise<string> {
+  const basename = path.basename(cwd);
+
+  // Check if the room already exists
+  const existing = await store.getRoom(basename);
+  if (existing) {
+    // Room exists — verify it's a project room (description matches pattern)
+    if (!existing.members.includes(agentId)) {
+      await store.joinRoom(basename, agentId);
+    }
+    return basename;
+  }
+
+  // Create — createRoom auto-joins the owner
+  await store.createRoom({
+    name: basename,
+    type: "public",
+    owner: agentId,
+    description: `Project room for ${cwd}`,
+  });
+
+  return basename;
 }
 
 // ---------------------------------------------------------------------------

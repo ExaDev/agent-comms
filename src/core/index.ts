@@ -13,7 +13,9 @@ export type { CommsContext, CommsResult } from "./tool.js";
 export {
   buildAction,
   formatDeliveryEvent,
+  isActionableEvent,
   ensureRegistered,
+  ensureProjectRoom,
   drainAndFormat,
   MCP_TOOL_PARAMS,
 } from "./bridge.js";
