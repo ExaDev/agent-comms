@@ -161,6 +161,8 @@ export class MeshStore implements CommsStore {
   onDelivery:
     | ((agentId: string, event: DeliveryEvent) => void | Promise<void>)
     | undefined;
+  private lastLocalDeliveryKey: string | undefined;
+  private localDeliveryKeys = new Set<string>();
 
   constructor(coordinatorPort: number = DEFAULT_COORDINATOR_PORT) {
     this.peerId = nanoid(8);
@@ -407,9 +409,21 @@ export class MeshStore implements CommsStore {
 
   private async applyPatch(patch: MeshStatePatch): Promise<void> {
     switch (patch.type) {
-      case "agent_upsert":
-        this.agents.set(patch.agent.id, patch.agent);
+      case "agent_upsert": {
+        // Merge subscribedRooms to avoid losing local room memberships.
+        const existingAgent = this.agents.get(patch.agent.id);
+        if (existingAgent) {
+          const merged = patch.agent;
+          for (const r of existingAgent.subscribedRooms) {
+            if (!merged.subscribedRooms.includes(r))
+              merged.subscribedRooms.push(r);
+          }
+          this.agents.set(merged.id, merged);
+        } else {
+          this.agents.set(patch.agent.id, patch.agent);
+        }
         break;
+      }
       case "agent_offline": {
         const agent = this.agents.get(patch.agentId);
         if (agent) {
@@ -418,9 +432,21 @@ export class MeshStore implements CommsStore {
         }
         break;
       }
-      case "room_upsert":
-        this.rooms.set(patch.room.id, patch.room);
+      case "room_upsert": {
+        // Merge members rather than overwriting — last-write-wins can lose
+        // members added locally when a remote patch arrives with a stale list.
+        const existing = this.rooms.get(patch.room.id);
+        if (existing) {
+          const merged = patch.room;
+          for (const m of existing.members) {
+            if (!merged.members.includes(m)) merged.members.push(m);
+          }
+          this.rooms.set(merged.id, merged);
+        } else {
+          this.rooms.set(patch.room.id, patch.room);
+        }
         break;
+      }
       case "room_delete":
         this.rooms.delete(patch.roomId);
         break;
@@ -441,6 +467,14 @@ export class MeshStore implements CommsStore {
         arr.push(patch.event);
         this.deliveryQueues.set(patch.agentId, arr);
         if (patch.agentId === this.peerId && this.onDelivery) {
+          // Deduplicate against local deliveries
+          const eventKey = JSON.stringify(patch.event);
+          if (this.localDeliveryKeys.has(eventKey)) break;
+          this.localDeliveryKeys.add(eventKey);
+          if (this.localDeliveryKeys.size > 50) {
+            const oldest = this.localDeliveryKeys.values().next().value;
+            if (oldest !== undefined) this.localDeliveryKeys.delete(oldest);
+          }
           void this.onDelivery(patch.agentId, patch.event);
           // Auto-mark read — push bridges consume immediately
           if (patch.event.type === "room_message") {
@@ -554,6 +588,17 @@ export class MeshStore implements CommsStore {
     }
 
     if (agentId === this.peerId && this.onDelivery) {
+      // Deduplicate: skip if this exact event was already delivered locally.
+      // The mesh can echo delivery patches through multiple peer paths,
+      // causing applyPatch to fire onDelivery for the same event.
+      const eventKey = JSON.stringify(event);
+      if (this.localDeliveryKeys.has(eventKey)) return;
+      this.localDeliveryKeys.add(eventKey);
+      // Prevent unbounded growth — evict oldest when cap reached
+      if (this.localDeliveryKeys.size > 50) {
+        const oldest = this.localDeliveryKeys.values().next().value;
+        if (oldest !== undefined) this.localDeliveryKeys.delete(oldest);
+      }
       void this.onDelivery(agentId, event);
       // Auto-mark read — push bridges consume immediately
       if (event.type === "room_message") {
@@ -595,6 +640,26 @@ export class MeshStore implements CommsStore {
         status,
       });
     }
+  }
+
+  private async notifyRoomsOfNameChange(
+    agentId: string,
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    const agent = this.agents.get(agentId);
+    if (!agent) return;
+    const event: DeliveryEvent = {
+      type: "name_changed",
+      agent: agentId,
+      oldName,
+      newName,
+    };
+    for (const roomId of agent.subscribedRooms) {
+      await this.deliverToRoom(roomId, event, agentId);
+    }
+    // Also deliver to the agent itself so it sees confirmation
+    await this.deliverLocallyAndBroadcast(agentId, event);
   }
 
   private async emitDeliveryStatus(
@@ -768,9 +833,14 @@ export class MeshStore implements CommsStore {
       throw new CommsError(`Agent ${id} not found`, "AGENT_NOT_FOUND");
 
     const oldStatus = agent.status;
+    const oldName = agent.name;
     Object.assign(agent, patch);
     this.agents.set(id, agent);
     await this.broadcastPatch({ type: "agent_upsert", agent });
+
+    if (patch.name !== undefined && patch.name !== oldName) {
+      await this.notifyRoomsOfNameChange(id, oldName, patch.name);
+    }
 
     if (patch.status && patch.status !== oldStatus) {
       await this.notifyRoomsOfStatus(id, patch.status);
@@ -791,9 +861,16 @@ export class MeshStore implements CommsStore {
 
   async setAgentOffline(id: string): Promise<void> {
     const agent = this.agents.get(id);
-    if (agent) {
-      agent.status = "offline";
-      this.agents.set(id, agent);
+    if (!agent) return;
+    if (agent.status === "offline") return;
+
+    // Only the owning store should broadcast the status change.
+    // Other stores learn about it via the agent_offline mesh patch.
+    const isOwner = id === this.peerId;
+    agent.status = "offline";
+    this.agents.set(id, agent);
+
+    if (isOwner) {
       await this.notifyRoomsOfStatus(id, "offline");
       await this.broadcastPatch({ type: "agent_offline", agentId: id });
     }
@@ -1186,6 +1263,27 @@ export class MeshStore implements CommsStore {
         await this.notifyRoomsOfStatus(id, "offline");
       }
       await this.broadcastPatch({ type: "agent_offline", agentId: id });
+      // Clean up stale peer from coordinator's registry
+      this.peerInfo.delete(id);
+      this.peerConnections.delete(id);
+    }
+
+    // Also purge long-offline agents to prevent indefinite accumulation
+    const offlineThreshold = Date.now() - 30 * 60 * 1000; // 30 minutes
+    const purgeIds: string[] = [];
+    for (const [id, agent] of this.agents) {
+      if (agent.status !== "offline") continue;
+      const startedAt = new Date(agent.startedAt).getTime();
+      // If the agent went offline long ago, purge it
+      if (startedAt < offlineThreshold) {
+        purgeIds.push(id);
+      }
+    }
+    for (const id of purgeIds) {
+      this.agents.delete(id);
+      this.peerInfo.delete(id);
+      this.peerConnections.delete(id);
+      this.identityCache.delete(id);
     }
   }
 

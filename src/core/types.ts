@@ -192,6 +192,12 @@ export const DeliveryEventSchema = defineSchema(
       agentName: z.string(),
       reason: z.string(),
     }),
+    z.object({
+      type: z.literal("name_changed"),
+      agent: z.string(),
+      oldName: z.string(),
+      newName: z.string(),
+    }),
   ]),
 );
 export type DeliveryEvent = z.infer<typeof DeliveryEventSchema>;

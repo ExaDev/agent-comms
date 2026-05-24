@@ -181,6 +181,19 @@ export class ChatController extends EventEmitter {
     });
   }
 
+  async renameAgent(agentId: string, newName: string): Promise<CommsResult> {
+    const agent = await this.store.getAgent(agentId);
+    if (!agent) {
+      return { content: `Agent ${agentId} not found.`, isError: true };
+    }
+    const oldName = agent.name;
+    await this.store.updateAgent(agentId, { name: newName });
+    return {
+      content: `Renamed ${oldName} to ${newName}.`,
+      isError: false,
+    };
+  }
+
   async destroyRoom(roomId: string): Promise<CommsResult> {
     const result = await this.tool.handle(this.ctx, {
       action: "destroy_room",
