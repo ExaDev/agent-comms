@@ -10,7 +10,7 @@ import "./styles.css";
 import { App } from "./components/App.js";
 import { CommsWs, fetchAgents, fetchRoomMessages, fetchRooms } from "./api.js";
 import { requireElement } from "./dom.js";
-import { parseInput, routeAction } from "./input.js";
+import { parseInput } from "./input.js";
 import { State } from "./state.js";
 import type {
   Action,
@@ -71,8 +71,7 @@ function handleFrame(frame: WsFrame): void {
       if (
         frame.event.type === "member_joined" ||
         frame.event.type === "member_left" ||
-        frame.event.type === "member_status" ||
-        frame.event.type === "name_changed"
+        frame.event.type === "member_status"
       ) {
         void refreshState();
       }
@@ -153,19 +152,6 @@ function handleSendAction(text: string): void {
   const s = state.get();
   const result = parseInput(text, s.currentRoom, s.dmTarget);
 
-  // Check if this action needs local client-side handling
-  const localRoute = routeAction(result);
-  if (localRoute) {
-    switch (localRoute.kind) {
-      case "join_room":
-        void onJoinRoom(localRoute.room);
-        return;
-      case "leave_room":
-        onLeaveRoom();
-        return;
-    }
-  }
-
   switch (result.kind) {
     case "action":
       sendAction(result.action);
@@ -200,10 +186,6 @@ function onJoinRoomInput(roomName: string): void {
 // Render loop
 // ---------------------------------------------------------------------------
 
-function onRenameAgent(agentId: string, newName: string): void {
-  sendAction({ action: "rename_agent", agent: agentId, name: newName });
-}
-
 function rerender(): void {
   const s = state.get();
   render(
@@ -218,7 +200,6 @@ function rerender(): void {
         void onJoinRoom(roomId);
       }}
       onSelectAgent={onSelectAgent}
-      onRenameAgent={onRenameAgent}
       onLeaveRoom={onLeaveRoom}
       onSendAction={handleSendAction}
       onCreateRoom={onCreateRoom}

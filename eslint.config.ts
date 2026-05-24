@@ -95,7 +95,6 @@ export default defineConfig(
         "error",
         { assertionStyle: "never" },
       ],
-      "@typescript-eslint/require-await": "warn",
       "custom/no-pointless-reassignments": "error",
       "no-restricted-syntax": [
         "error",

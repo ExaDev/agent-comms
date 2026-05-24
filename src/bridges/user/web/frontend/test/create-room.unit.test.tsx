@@ -94,9 +94,6 @@ describe("CreateRoomForm", () => {
 
       const options = container.querySelectorAll("select option");
       assert.strictEqual(options.length, 3);
-      assert.ok(options[0]);
-      assert.ok(options[1]);
-      assert.ok(options[2]);
       assert.strictEqual(options[0].getAttribute("value"), "public");
       assert.strictEqual(options[1].getAttribute("value"), "private");
       assert.strictEqual(options[2].getAttribute("value"), "secret");

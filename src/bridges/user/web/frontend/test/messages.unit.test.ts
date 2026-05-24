@@ -210,22 +210,6 @@ describe("deliveryEventToMessage", () => {
       assert.ok(result?.text?.includes("Too busy"));
     });
   });
-
-  describe("name_changed", () => {
-    it("converts to system message with old and new name", () => {
-      const event: DeliveryEvent = {
-        type: "name_changed",
-        agent: "a1",
-        oldName: "Alice",
-        newName: "Bob",
-      };
-      const result = deliveryEventToMessage(event, undefined);
-      assert.deepStrictEqual(result, {
-        type: "system",
-        text: "Alice is now known as Bob",
-      });
-    });
-  });
 });
 
 describe("roomMessageToDisplay", () => {

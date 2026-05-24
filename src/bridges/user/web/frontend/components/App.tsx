@@ -18,7 +18,6 @@ export interface AppProps {
   connected: boolean;
   onJoinRoom: (roomId: string) => void;
   onSelectAgent: (agentId: string) => void;
-  onRenameAgent: (agentId: string, newName: string) => void;
   onLeaveRoom: () => void;
   onSendAction: (text: string) => void;
   onCreateRoom: (name: string, type: "public" | "private" | "secret", description: string) => void;
@@ -36,7 +35,6 @@ export function App(props: AppProps) {
         onSelectAgent={props.onSelectAgent}
         onCreateRoom={props.onCreateRoom}
         onJoinRoomInput={props.onJoinRoomInput}
-        onRenameAgent={props.onRenameAgent}
       />
       <ChatArea
         messages={props.messages}
