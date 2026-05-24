@@ -16,12 +16,30 @@
  *   Client sends action objects.
  */
 
+import * as fs from "node:fs";
 import * as http from "node:http";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { ChatController } from "../controller.js";
-import { FRONTEND_HTML } from "./generated-html.js";
 
 const WEB_HOST = "127.0.0.1";
+
+// ---------------------------------------------------------------------------
+// Static assets — loaded into memory at module load
+// ---------------------------------------------------------------------------
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const INDEX_HTML = fs.readFileSync(
+  path.join(__dirname, "frontend", "index.html"),
+  "utf-8",
+);
+
+const BUNDLE_JS = fs.readFileSync(
+  path.join(__dirname, "dist", "bundle.js"),
+  "utf-8",
+);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -127,10 +145,19 @@ function handleRequest(
     return;
   }
 
-  // Frontend
+  // Frontend HTML
   if (url.pathname === "/" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(FRONTEND_HTML);
+    res.end(INDEX_HTML);
+    return;
+  }
+
+  // Frontend JS bundle
+  if (url.pathname === "/bundle.js" && req.method === "GET") {
+    res.writeHead(200, {
+      "Content-Type": "application/javascript; charset=utf-8",
+    });
+    res.end(BUNDLE_JS);
     return;
   }
 
@@ -327,6 +354,13 @@ async function executeAction(
       if (!room || !agent)
         return { content: "Missing room or agent", isError: true };
       return controller.kick(room, agent);
+    }
+    case "rename_agent": {
+      const agent = getString(params, "agent");
+      const name = getString(params, "name");
+      if (!agent || !name)
+        return { content: "Missing agent or name", isError: true };
+      return controller.renameAgent(agent, name);
     }
     default:
       return { content: `Unknown action: ${String(action)}`, isError: true };
