@@ -16,7 +16,10 @@ body {
   background: var(--bg);
   color: var(--text);
   height: 100vh;
+}
+#root {
   display: flex;
+  height: 100vh;
 }
 #sidebar {
   width: 260px;
@@ -31,6 +34,16 @@ body {
   font-size: 14px;
   color: var(--accent);
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#sidebar h2 .icon-btn {
+  font-size: 12px;
+}
+#toggle-offline-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 .sidebar-section {
   flex: 1;
