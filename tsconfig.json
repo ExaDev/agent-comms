@@ -19,5 +19,5 @@
     "jsxImportSource": "preact"
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "src/bridges/user/web/e2e"]
+  "exclude": ["node_modules", "dist", "src/bridges/user/web/e2e", "src/bridges/user/web/frontend/test"]
 }
