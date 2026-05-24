@@ -22,6 +22,34 @@ export type InputResult =
   | { kind: "ignored" };
 
 // ---------------------------------------------------------------------------
+// Action routing — determines if an action needs local client-side handling
+// ---------------------------------------------------------------------------
+
+export type LocalRoute =
+  | { kind: "join_room"; room: string }
+  | { kind: "leave_room" };
+
+/**
+ * Classify an InputResult to determine if it should be handled locally
+ * (e.g. join_room needs to set client state and fetch history) or sent
+ * directly to the server via sendAction.
+ *
+ * Returns null for actions that should go through sendAction directly,
+ * and for non-action results (local, ignored).
+ */
+export function routeAction(result: InputResult): LocalRoute | null {
+  if (result.kind !== "action") return null;
+  const action = result.action;
+  if (action.action === "join_room") {
+    return { kind: "join_room", room: action.room };
+  }
+  if (action.action === "leave_room") {
+    return { kind: "leave_room" };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Parser
 // ---------------------------------------------------------------------------
 
@@ -146,6 +174,21 @@ function parseCommand(
       return {
         kind: "action",
         action: { action: "destroy_room", room: parts[1] },
+      };
+
+    case "rename":
+      if (!parts[1] || !parts[2]) {
+        return {
+          kind: "local",
+          result: {
+            type: "error",
+            text: "Usage: /rename <agent> <new-name>",
+          },
+        };
+      }
+      return {
+        kind: "action",
+        action: { action: "rename_agent", agent: parts[1], name: parts.slice(2).join(" ") },
       };
 
     case "help":

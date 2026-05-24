@@ -4,7 +4,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseInput } from "../input.js";
+import { parseInput, routeAction } from "../input.js";
 
 describe("input", () => {
   describe("parseInput", () => {
@@ -143,6 +143,79 @@ describe("input", () => {
         assert.strictEqual(result.result.type, "unknown");
         assert.ok(result.result.text.includes("/foobar"));
       }
+    });
+
+    it("parses /rename command", () => {
+      const result = parseInput("/rename agent-1 New Name", undefined);
+      assert.deepStrictEqual(result, {
+        kind: "action",
+        action: {
+          action: "rename_agent",
+          agent: "agent-1",
+          name: "New Name",
+        },
+      });
+    });
+
+    it("returns error for /rename without agent or name", () => {
+      const result = parseInput("/rename", undefined);
+      assert.strictEqual(result.kind, "local");
+      if (result.kind === "local") {
+        assert.strictEqual(result.result.type, "error");
+        assert.ok(result.result.text.includes("Usage"));
+      }
+    });
+
+    it("includes /rename in help text", () => {
+      const result = parseInput("/help", undefined);
+      assert.strictEqual(result.kind, "local");
+      if (result.kind === "local") {
+        assert.strictEqual(result.result.type, "help");
+        assert.ok(result.result.text.includes("/rename"));
+      }
+    });
+  });
+
+  describe("routeAction", () => {
+    it("routes join_room through local handler", () => {
+      const result = parseInput("/join my-room", undefined);
+      const route = routeAction(result);
+      assert.deepStrictEqual(route, {
+        kind: "join_room",
+        room: "my-room",
+      });
+    });
+
+    it("routes leave_room through local handler", () => {
+      const result = parseInput("/leave", "current-room");
+      const route = routeAction(result);
+      assert.deepStrictEqual(route, { kind: "leave_room" });
+    });
+
+    it("routes leave_room with explicit room through local handler", () => {
+      const result = parseInput("/leave other-room", "current-room");
+      const route = routeAction(result);
+      assert.deepStrictEqual(route, { kind: "leave_room" });
+    });
+
+    it("returns null for send action", () => {
+      const result = parseInput("hello", "room-1");
+      assert.strictEqual(routeAction(result), null);
+    });
+
+    it("returns null for DM action", () => {
+      const result = parseInput("hello", undefined, "agent-1");
+      assert.strictEqual(routeAction(result), null);
+    });
+
+    it("returns null for local results", () => {
+      const result = parseInput("/help", undefined);
+      assert.strictEqual(routeAction(result), null);
+    });
+
+    it("returns null for ignored input", () => {
+      const result = parseInput("", undefined);
+      assert.strictEqual(routeAction(result), null);
     });
   });
 });
