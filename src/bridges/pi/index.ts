@@ -44,7 +44,14 @@ export default function (pi: ExtensionAPI) {
   let webHandle: WebServerHandle | undefined;
 
   // Incoming messages arrive via TCP mesh — push immediately
+  // Deduplicate by event content to avoid duplicate steer messages
+  const recentDeliveries = new Set<string>();
+  setInterval(() => recentDeliveries.clear(), 2000).unref();
+
   store.onDelivery = (_targetId: string, event) => {
+    const key = `${event.type}:${formatDeliveryEvent(event)}`;
+    if (recentDeliveries.has(key)) return;
+    recentDeliveries.add(key);
     const line = formatDeliveryEvent(event);
     pi.sendUserMessage(`📬 ${line}`, { deliverAs: "steer" });
   };
@@ -93,7 +100,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("comms-url", {
     description: "Show the Agent Comms web UI URL",
-    handler: (_args, ctx) => {
+    handler: async (_args, ctx) => {
       if (!webHandle) {
         ctx.ui.notify("Web UI is not running.", "error");
         return;
