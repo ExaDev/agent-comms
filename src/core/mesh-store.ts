@@ -837,12 +837,12 @@ export class MeshStore implements CommsStore {
 
   async setAgentOffline(id: string): Promise<void> {
     const agent = this.agents.get(id);
-    if (agent) {
-      agent.status = "offline";
-      this.agents.set(id, agent);
-      await this.notifyRoomsOfStatus(id, "offline");
-      await this.broadcastPatch({ type: "agent_offline", agentId: id });
-    }
+    if (!agent) return;
+    if (agent.status === "offline") return;
+    agent.status = "offline";
+    this.agents.set(id, agent);
+    await this.notifyRoomsOfStatus(id, "offline");
+    await this.broadcastPatch({ type: "agent_offline", agentId: id });
 
     if (this.isCoordinator) {
       await this.handoverCoordinator();
