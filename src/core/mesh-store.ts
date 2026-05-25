@@ -161,6 +161,8 @@ export class MeshStore implements CommsStore {
   onDelivery:
     | ((agentId: string, event: DeliveryEvent) => void | Promise<void>)
     | undefined;
+  private lastLocalDeliveryKey: string | undefined;
+  private localDeliveryKeys = new Set<string>();
 
   constructor(coordinatorPort: number = DEFAULT_COORDINATOR_PORT) {
     this.peerId = nanoid(8);
@@ -441,6 +443,14 @@ export class MeshStore implements CommsStore {
         arr.push(patch.event);
         this.deliveryQueues.set(patch.agentId, arr);
         if (patch.agentId === this.peerId && this.onDelivery) {
+          // Deduplicate against local deliveries
+          const eventKey = JSON.stringify(patch.event);
+          if (this.localDeliveryKeys.has(eventKey)) break;
+          this.localDeliveryKeys.add(eventKey);
+          if (this.localDeliveryKeys.size > 50) {
+            const oldest = this.localDeliveryKeys.values().next().value;
+            if (oldest !== undefined) this.localDeliveryKeys.delete(oldest);
+          }
           void this.onDelivery(patch.agentId, patch.event);
           // Auto-mark read — push bridges consume immediately
           if (patch.event.type === "room_message") {
@@ -554,6 +564,17 @@ export class MeshStore implements CommsStore {
     }
 
     if (agentId === this.peerId && this.onDelivery) {
+      // Deduplicate: skip if this exact event was already delivered locally.
+      // The mesh can echo delivery patches through multiple peer paths,
+      // causing applyPatch to fire onDelivery for the same event.
+      const eventKey = JSON.stringify(event);
+      if (this.localDeliveryKeys.has(eventKey)) return;
+      this.localDeliveryKeys.add(eventKey);
+      // Prevent unbounded growth — evict oldest when cap reached
+      if (this.localDeliveryKeys.size > 50) {
+        const oldest = this.localDeliveryKeys.values().next().value;
+        if (oldest !== undefined) this.localDeliveryKeys.delete(oldest);
+      }
       void this.onDelivery(agentId, event);
       // Auto-mark read — push bridges consume immediately
       if (event.type === "room_message") {
