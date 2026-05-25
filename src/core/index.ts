@@ -14,7 +14,6 @@ export {
   buildAction,
   formatDeliveryEvent,
   isActionableEvent,
-  isActionableEvent,
   ensureRegistered,
   ensureProjectRoom,
   drainAndFormat,

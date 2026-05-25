@@ -5,7 +5,7 @@
  * Project rooms (auto-created per cwd) are embedded in their directory nodes.
  */
 
-import type { Agent, DirectoryNode, ProjectTree, Room, TreeNode } from "./types.js";
+import type { Agent, ProjectTree, Room, TreeNode } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // buildProjectTree
@@ -22,13 +22,24 @@ function insertIntoTrie(node: Branch, segments: string[], agent: Agent): void {
     node.agents.push(agent);
     return;
   }
-  const child = node.children.get(seg);
-  const target = child ?? (() => {
-    const newChild: Branch = { children: new Map(), agents: [] };
-    node.children.set(seg, newChild);
-    return newChild;
-  })();
+  let target = node.children.get(seg);
+  if (!target) {
+    target = { children: new Map(), agents: [] };
+    node.children.set(seg, target);
+  }
   insertIntoTrie(target, rest, agent);
+}
+
+/** Ensure a branch path exists in the trie (creates intermediate nodes). */
+function ensureBranch(node: Branch, segments: string[]): void {
+  const [seg, ...rest] = segments;
+  if (seg === undefined) return;
+  let child = node.children.get(seg);
+  if (!child) {
+    child = { children: new Map(), agents: [] };
+    node.children.set(seg, child);
+  }
+  ensureBranch(child, rest);
 }
 
 /**
@@ -95,7 +106,7 @@ export function buildProjectTree(agents: Agent[], rooms: Room[]): ProjectTree {
   }
 
   // Convert branch tree to TreeNode tree, embedding project rooms
-  const roots = branchToNodes(root, prefix, "", projectRoomsByPath);
+  const roots = branchToNodesWithRooms(root, prefix, "", projectRoomsByPath);
 
   return { roots: sortChildren(roots), manualRooms };
 }
@@ -106,8 +117,7 @@ export function buildProjectTree(agents: Agent[], rooms: Room[]): ProjectTree {
 
 function splitPath(p: string): string[] {
   // "/Users/joe/Developer" → ["Users", "joe", "Developer"]
-  const parts = p.split("/").filter((s) => s.length > 0);
-  return parts;
+  return p.split("/").filter((s) => s.length > 0);
 }
 
 function joinPath(...segments: string[]): string {
@@ -144,13 +154,13 @@ function commonPathPrefix(paths: string[]): string {
 }
 
 /**
- * Convert the internal branch tree into TreeNode[].
- * The branch root may have agents (agents in the prefix directory itself).
+ * Convert the internal branch tree into TreeNode[], embedding project rooms.
  */
-function branchToNodes(
-  branch: { children: Map<string, { children: Map<string, Branch>; agents: Agent[] }>; agents: Agent[] },
+function branchToNodesWithRooms(
+  branch: Branch,
   prefix: string,
   currentPath: string,
+  projectRoomsByPath: Map<string, Room>,
 ): TreeNode[] {
   const nodes: TreeNode[] = [];
 
@@ -163,12 +173,15 @@ function branchToNodes(
           ? prefix + "/" + name
           : currentPath + "/" + name;
 
-    const childNodes = branchToNodes(child, prefix, childPath);
+    const childNodes = branchToNodesWithRooms(child, prefix, childPath, projectRoomsByPath);
     if (childNodes.length > 0) {
+      // Check if this directory has a project room
+      const room = projectRoomsByPath.get(childPath);
       nodes.push({
         type: "directory",
         name,
         path: childPath,
+        ...(room ? { roomId: room.id } : {}),
         children: sortChildren(childNodes),
       });
     }
