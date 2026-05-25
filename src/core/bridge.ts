@@ -251,35 +251,6 @@ export function isActionableEvent(event: DeliveryEvent): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Event classification — actionable vs informational
-// ---------------------------------------------------------------------------
-
-/**
- * Classify a delivery event as actionable (requires model attention)
- * or informational (can be buffered and returned with next tool call).
- *
- * Actionable: DMs, room messages, room invites — the model may need to respond.
- * Informational: status changes, joins/leaves, renames, read receipts —
- *   the model may need to know eventually but never needs to act immediately.
- */
-export function isActionableEvent(event: DeliveryEvent): boolean {
-  switch (event.type) {
-    case "dm":
-    case "room_message":
-    case "room_invite":
-      return true;
-    case "member_joined":
-    case "member_left":
-    case "room_members":
-    case "member_status":
-    case "delivery_status":
-    case "invite_declined":
-    case "name_changed":
-      return false;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // ensureRegistered — recover or create an agent identity
 // ---------------------------------------------------------------------------
 
