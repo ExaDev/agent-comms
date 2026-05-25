@@ -6,7 +6,8 @@
  * wake the model via sendMessage() with a custom type; informational
  * events are buffered and drained on the next tool call.
  *
- * Install: add bridge path to ~/.pi/agent/settings.json extensions array
+ * Install: symlink into ~/.pi/agent/extensions/ with pi.extensions
+ * pointing to this file.
  */
 
 import type {
@@ -21,6 +22,7 @@ import {
   MeshStore,
   CommsTool,
   buildAction,
+  ensureProjectRoom,
   ensureRegistered,
   formatDeliveryEvent,
   isActionableEvent,
@@ -37,30 +39,65 @@ function getWebPort(handle: WebServerHandle): number | undefined {
   return typeof addr === "object" && addr ? addr.port : undefined;
 }
 
-/** Resolve the listening port from a running web server handle. */
-function getWebPort(handle: WebServerHandle): number | undefined {
-  const addr = handle.server.address();
-  return typeof addr === "object" && addr ? addr.port : undefined;
-}
-
 export default function (pi: ExtensionAPI) {
   const store = new MeshStore();
   const tool = new CommsTool(store);
 
   let agentId: string | undefined;
   let webHandle: WebServerHandle | undefined;
+  let uiCtx: ExtensionUIContext | undefined;
+  let projectRoom: string | undefined;
+  const informationalBuffer: string[] = [];
 
-  // Incoming messages arrive via TCP mesh — push immediately
-  // Deduplicate by event content to avoid duplicate steer messages
+  // LRU-style dedup for delivery events
   const recentDeliveries = new Set<string>();
-  setInterval(() => recentDeliveries.clear(), 2000).unref();
+  const MAX_DEDUP_ENTRIES = 100;
+
+  function refreshStatus(): void {
+    if (!uiCtx) return;
+    const parts: string[] = [];
+    if (projectRoom) parts.push(`💬 ${projectRoom}`);
+    if (webHandle) {
+      const port = getWebPort(webHandle);
+      if (port) parts.push(`http://127.0.0.1:${String(port)}`);
+    }
+    if (informationalBuffer.length > 0) {
+      parts.push(`📬 ${String(informationalBuffer.length)}`);
+    }
+    uiCtx.setStatus("comms", parts.length > 0 ? parts.join("  ") : undefined);
+  }
 
   store.onDelivery = (_targetId: string, event) => {
     const key = `${event.type}:${formatDeliveryEvent(event)}`;
     if (recentDeliveries.has(key)) return;
     recentDeliveries.add(key);
+    if (recentDeliveries.size > MAX_DEDUP_ENTRIES) {
+      // Evict oldest entries (simple approach: clear half)
+      const entries = Array.from(recentDeliveries);
+      for (let i = 0; i < entries.length / 2; i++) {
+        recentDeliveries.delete(entries[i]!);
+      }
+    }
+
     const line = formatDeliveryEvent(event);
-    pi.sendUserMessage(`📬 ${line}`, { deliverAs: "steer" });
+
+    if (isActionableEvent(event)) {
+      // Actionable events wake the model via sendMessage (not sendUserMessage)
+      pi.sendMessage(
+        {
+          role: "user",
+          content: `📬 ${line}`,
+          customType: "comms-delivery",
+        },
+        { triggerTurn: true, deliverAs: "steer" },
+      );
+    } else {
+      // Informational events buffer for next tool call
+      informationalBuffer.push(line);
+    }
+
+    uiCtx?.notify(`📬 ${line}`, "info");
+    refreshStatus();
   };
 
   // -----------------------------------------------------------------------
@@ -81,6 +118,9 @@ export default function (pi: ExtensionAPI) {
       defaultName: `pi-${nanoid(4)}`,
     });
     agentId = reg.agentId;
+
+    // Auto-create and join a project room for the working directory
+    await ensureProjectRoom(store, agentId, process.cwd());
     projectRoom = path.basename(process.cwd());
 
     refreshStatus();
@@ -114,46 +154,6 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("comms-url", {
     description: "Show the Agent Comms web UI URL",
     handler: async (_args, ctx) => {
-      if (!webHandle) {
-        ctx.ui.notify("Web UI is not running.", "error");
-        return;
-      }
-      const port = getWebPort(webHandle);
-      if (!port) {
-        ctx.ui.notify("Web UI port not yet assigned.", "error");
-        return;
-      }
-      ctx.ui.notify(`http://127.0.0.1:${String(port)}`, "info");
-    },
-  });
-
-  // -----------------------------------------------------------------------
-  // Commands
-  // -----------------------------------------------------------------------
-
-  pi.registerCommand("comms-url", {
-    description: "Show the Agent Comms web UI URL",
-    handler: async (_args, ctx) => {
-      if (!webHandle) {
-        ctx.ui.notify("Web UI is not running.", "error");
-        return;
-      }
-      const port = getWebPort(webHandle);
-      if (!port) {
-        ctx.ui.notify("Web UI port not yet assigned.", "error");
-        return;
-      }
-      ctx.ui.notify(`http://127.0.0.1:${String(port)}`, "info");
-    },
-  });
-
-  // -----------------------------------------------------------------------
-  // Commands
-  // -----------------------------------------------------------------------
-
-  pi.registerCommand("comms-url", {
-    description: "Show the Agent Comms web UI URL",
-    handler: (_args, ctx) => {
       if (!webHandle) {
         ctx.ui.notify("Web UI is not running.", "error");
         return;
@@ -298,7 +298,7 @@ export default function (pi: ExtensionAPI) {
       refreshStatus();
       const prefix =
         pending.length > 0
-          ? `[comms] Pending events:\n${pending.map((l) => `  📬 ${l}`).join("\n")}\n\n`
+          ? `[comms] Pending events:\n${pending.map((l: string) => `  📬 ${l}`).join("\n")}\n\n`
           : "";
 
       return {
