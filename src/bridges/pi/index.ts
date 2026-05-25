@@ -2,12 +2,17 @@
  * Agent Comms — pi bridge extension.
  *
  * Provides the `agent_comms` tool and receives incoming messages
- * via TCP mesh push, forwarding them to the LLM via sendUserMessage().
+ * via TCP mesh push. Actionable events (DMs, room messages, invites)
+ * wake the model via sendMessage() with a custom type; informational
+ * events are buffered and drained on the next tool call.
  *
  * Install: add bridge path to ~/.pi/agent/settings.json extensions array
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionUIContext,
+} from "@mariozechner/pi-coding-agent";
 import { Type } from "typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 
@@ -17,6 +22,7 @@ import {
   buildAction,
   ensureRegistered,
   formatDeliveryEvent,
+  isActionableEvent,
 } from "../../core/index.js";
 import {
   tryStartWebServer,
@@ -61,6 +67,7 @@ export default function (pi: ExtensionAPI) {
   // -----------------------------------------------------------------------
 
   pi.on("session_start", async (_event, ctx) => {
+    uiCtx = ctx.ui;
     await store.init();
 
     // Auto-start web UI on a dynamic port
@@ -80,6 +87,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", async () => {
+    uiCtx = undefined;
     // Shut down the web server before the bridge store so the web
     // controller's coordinator connection can close cleanly.
     if (webHandle) {
@@ -280,8 +288,15 @@ export default function (pi: ExtensionAPI) {
         action,
       );
 
+      // Drain buffered informational events and prepend to the response
+      const pending = informationalBuffer.splice(0);
+      const prefix =
+        pending.length > 0
+          ? `[comms] Pending events:\n${pending.map((l) => `  📬 ${l}`).join("\n")}\n\n`
+          : "";
+
       return {
-        content: [{ type: "text", text: result.content }],
+        content: [{ type: "text", text: `${prefix}${result.content}` }],
         details: { action: params.action },
         isError: result.isError,
       };
