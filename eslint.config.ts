@@ -79,7 +79,7 @@ export default defineConfig(
             "src/bridges/user/web/frontend/test/*.tsx",
             "src/bridges/user/web/test/*.ts",
           ],
-          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 20,
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 50,
         },
         tsconfigRootDir,
       },
