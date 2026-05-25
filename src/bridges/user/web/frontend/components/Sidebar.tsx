@@ -50,7 +50,9 @@ export function Sidebar({
           id="toggle-offline-btn"
           class={`icon-btn${showOffline ? " active" : ""}`}
           title={`${showOffline ? "Hide" : "Show"} offline agents`}
-          onClick={() => setShowOffline((v) => !v)}
+          onClick={() => {
+            setShowOffline((v) => !v);
+          }}
         >
           {showOffline ? "◉" : "◎"}
         </button>

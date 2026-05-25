@@ -1,1 +1,4 @@
-pnpm exec lint-staged
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' | grep -v '\.d\.ts$' || true)
+if [ -n "$STAGED" ]; then
+  node node_modules/.bin/eslint --fix $STAGED 2>&1
+fi

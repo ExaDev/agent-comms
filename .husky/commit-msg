@@ -1,1 +1,1 @@
-pnpm exec commitlint --edit "$1"
+node node_modules/.bin/commitlint --edit "$1"
