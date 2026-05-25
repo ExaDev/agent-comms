@@ -12,7 +12,10 @@ import WS from "ws";
 
 let handle: WebServerHandle | undefined;
 
-async function setup(): Promise<{ port: number; cleanup: () => Promise<void> }> {
+async function setup(): Promise<{
+  port: number;
+  cleanup: () => Promise<void>;
+}> {
   handle = await createWebServer(0);
 
   // Wait for the server to actually be listening
@@ -25,8 +28,7 @@ async function setup(): Promise<{ port: number; cleanup: () => Promise<void> }> 
   });
 
   const addr = handle.server.address();
-  const port =
-    typeof addr === "object" && addr ? addr.port : 0;
+  const port = typeof addr === "object" && addr ? addr.port : 0;
   return {
     port,
     cleanup: async () => {

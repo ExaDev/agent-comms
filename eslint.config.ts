@@ -111,6 +111,7 @@ export default defineConfig(
         },
       ],
       "prettier/prettier": "error",
+      "@typescript-eslint/require-await": "warn",
     },
   },
   eslintConfigPrettier,
