@@ -409,9 +409,21 @@ export class MeshStore implements CommsStore {
 
   private async applyPatch(patch: MeshStatePatch): Promise<void> {
     switch (patch.type) {
-      case "agent_upsert":
-        this.agents.set(patch.agent.id, patch.agent);
+      case "agent_upsert": {
+        // Merge subscribedRooms to avoid losing local room memberships.
+        const existingAgent = this.agents.get(patch.agent.id);
+        if (existingAgent) {
+          const merged = patch.agent;
+          for (const r of existingAgent.subscribedRooms) {
+            if (!merged.subscribedRooms.includes(r))
+              merged.subscribedRooms.push(r);
+          }
+          this.agents.set(merged.id, merged);
+        } else {
+          this.agents.set(patch.agent.id, patch.agent);
+        }
         break;
+      }
       case "agent_offline": {
         const agent = this.agents.get(patch.agentId);
         if (agent) {
@@ -420,9 +432,21 @@ export class MeshStore implements CommsStore {
         }
         break;
       }
-      case "room_upsert":
-        this.rooms.set(patch.room.id, patch.room);
+      case "room_upsert": {
+        // Merge members rather than overwriting — last-write-wins can lose
+        // members added locally when a remote patch arrives with a stale list.
+        const existing = this.rooms.get(patch.room.id);
+        if (existing) {
+          const merged = patch.room;
+          for (const m of existing.members) {
+            if (!merged.members.includes(m)) merged.members.push(m);
+          }
+          this.rooms.set(merged.id, merged);
+        } else {
+          this.rooms.set(patch.room.id, patch.room);
+        }
         break;
+      }
       case "room_delete":
         this.rooms.delete(patch.roomId);
         break;
