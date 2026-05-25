@@ -77,7 +77,6 @@ export default defineConfig(
             "src/bridges/user/web/e2e/*.ts",
             "src/bridges/user/web/frontend/test/*.ts",
             "src/bridges/user/web/frontend/test/*.tsx",
-            "src/bridges/user/web/test/*.ts",
           ],
           maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 50,
         },
@@ -137,6 +136,7 @@ export default defineConfig(
       "@typescript-eslint/no-unsafe-return": "off",
       "@typescript-eslint/require-await": "off",
       "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/non-nullable-type-assertion-style": "off",
     },
   },
   {

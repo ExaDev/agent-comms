@@ -152,7 +152,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("comms-url", {
     description: "Show the Agent Comms web UI URL",
-    handler: (_args, ctx) => {
+    handler: async (_args, ctx) => {
       if (!webHandle) {
         ctx.ui.notify("Web UI is not running.", "error");
         return;

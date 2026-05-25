@@ -10,11 +10,7 @@ import { Message } from "../components/Message.js";
 import { MessageList } from "../components/MessageList.js";
 import { ChatArea } from "../components/ChatArea.js";
 import { Sidebar } from "../components/Sidebar.js";
-import type {
-  Agent,
-  DisplayMessage,
-  Room,
-} from "../types.js";
+import type { Agent, DisplayMessage, Room } from "../types.js";
 
 let windowRef: Window | undefined;
 
@@ -357,9 +353,7 @@ describe("Sidebar component", () => {
         />,
         container,
       );
-      const btn = container.querySelector(
-        "#create-room-toggle",
-      ) as HTMLElement;
+      const btn = container.querySelector("#create-room-toggle") as HTMLElement;
       assert.ok(btn);
       assert.strictEqual(btn.textContent, "+");
     } finally {
@@ -382,9 +376,7 @@ describe("Sidebar component", () => {
         />,
         container,
       );
-      const btn = container.querySelector(
-        "#join-toggle-btn",
-      ) as HTMLElement;
+      const btn = container.querySelector("#join-toggle-btn") as HTMLElement;
       assert.ok(btn);
     } finally {
       cleanup();
