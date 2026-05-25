@@ -5,7 +5,7 @@
  * Consumers subscribe to changes and re-render as needed.
  */
 
-import type { Agent, Room } from "./types.js";
+import type { Agent, DisplayMessage, Room } from "./types.js";
 
 export type StateChangeListener = (state: Readonly<ClientState>) => void;
 
@@ -14,6 +14,7 @@ export interface ClientState {
   dmTarget: string | undefined;
   agents: Agent[];
   rooms: Room[];
+  messages: DisplayMessage[];
   connected: boolean;
 }
 
@@ -22,12 +23,13 @@ const INITIAL_STATE: ClientState = {
   dmTarget: undefined,
   agents: [],
   rooms: [],
+  messages: [],
   connected: false,
 };
 
 export class State {
   private state: ClientState = { ...INITIAL_STATE };
-  private readonly listeners: Set<StateChangeListener> = new Set();
+  private readonly listeners = new Set<StateChangeListener>();
 
   /** Subscribe to state changes. Returns an unsubscribe function. */
   subscribe(listener: StateChangeListener): () => void {
@@ -71,6 +73,24 @@ export class State {
     this.notify();
   }
 
+  /** Add a display message to the message list. */
+  addMessage(message: DisplayMessage): void {
+    this.state = { ...this.state, messages: [...this.state.messages, message] };
+    this.notify();
+  }
+
+  /** Replace all messages (e.g. when loading history). */
+  setMessages(messages: DisplayMessage[]): void {
+    this.state = { ...this.state, messages };
+    this.notify();
+  }
+
+  /** Clear all messages. */
+  clearMessages(): void {
+    this.state = { ...this.state, messages: [] };
+    this.notify();
+  }
+
   /** Bulk update from a state frame (initial WS connection). */
   applyState(agents: Agent[], rooms: Room[]): void {
     this.state = { ...this.state, agents, rooms };
@@ -79,7 +99,7 @@ export class State {
 
   /** Reset to initial state. */
   reset(): void {
-    this.state = { ...INITIAL_STATE };
+    this.state = { ...INITIAL_STATE, messages: [] };
     this.notify();
   }
 

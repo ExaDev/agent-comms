@@ -90,6 +90,12 @@ export type DeliveryEvent =
       agent: string;
       agentName: string;
       reason: string;
+    }
+  | {
+      type: "name_changed";
+      agent: string;
+      oldName: string;
+      newName: string;
     };
 
 // ---------------------------------------------------------------------------
@@ -118,12 +124,23 @@ export type Action =
   | { action: "destroy_room"; room: string }
   | { action: "invite"; room: string; agent: string }
   | { action: "decline_invite"; room: string; reason: string }
-  | { action: "kick"; room: string; agent: string };
+  | { action: "kick"; room: string; agent: string }
+  | { action: "rename_agent"; agent: string; name: string };
 
 export interface ActionResult {
   content: string;
   isError: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Display messages (client-side message store)
+// ---------------------------------------------------------------------------
+
+export type DisplayMessage =
+  | { type: "chat"; sender: string; content: string; timestamp: string }
+  | { type: "dm"; sender: string; content: string; timestamp: string }
+  | { type: "system"; text: string }
+  | { type: "status"; text: string };
 
 // ---------------------------------------------------------------------------
 // REST API responses
@@ -132,4 +149,38 @@ export interface ActionResult {
 export type AgentsResponse = Agent[];
 export type RoomsResponse = Room[];
 export type MessagesResponse = RoomMessage[];
+
+// ---------------------------------------------------------------------------
+// Project tree (sidebar directory tree)
+// ---------------------------------------------------------------------------
+
+/** A directory node in the project tree. Contains child directories and agents. */
+export interface DirectoryNode {
+  type: "directory";
+  /** Directory basename (e.g. "agent-comms") */
+  name: string;
+  /** Full absolute path */
+  path: string;
+  /** Project room ID if a room exists for this directory */
+  roomId?: string;
+  children: TreeNode[];
+}
+
+/** An agent leaf node in the project tree. */
+export interface AgentNode {
+  type: "agent";
+  name: string;
+  agentId: string;
+  status: Agent["status"];
+  cwd: string;
+}
+
+export type TreeNode = DirectoryNode | AgentNode;
+
+/** The full project tree with manually-created rooms separated out. */
+export interface ProjectTree {
+  roots: TreeNode[];
+  /** Rooms not auto-created per cwd */
+  manualRooms: Room[];
+}
 

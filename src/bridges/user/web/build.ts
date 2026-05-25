@@ -1,10 +1,8 @@
 /**
- * Build script — bundles the frontend into a single HTML string.
+ * Build script — bundles the Preact frontend into web/dist/bundle.js.
  *
- * Reads index.html, bundles main.ts with esbuild (inlining CSS),
- * then generates a TypeScript file exporting FRONTEND_HTML.
- *
- * Output: src/bridges/user/web/generated-html.ts (committed, rebuilt on pnpm build)
+ * esbuild compiles main.tsx (with inlined CSS) into a single JS bundle.
+ * The server loads bundle.js and index.html into memory at startup.
  *
  * Usage: pnpm build:frontend
  */
@@ -16,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIR = path.join(__dirname, "frontend");
-const OUT_PATH = path.join(__dirname, "generated-html.ts");
+const DIST_DIR = path.join(__dirname, "dist");
 
 /**
  * esbuild plugin to inline CSS as a side-effect import.
@@ -44,51 +42,21 @@ const inlineCssPlugin: esbuild.Plugin = {
 };
 
 async function main(): Promise<void> {
-  // Bundle JS + CSS
-  const result = await esbuild.build({
-    entryPoints: [path.join(FRONTEND_DIR, "main.ts")],
+  fs.mkdirSync(DIST_DIR, { recursive: true });
+
+  await esbuild.build({
+    entryPoints: [path.join(FRONTEND_DIR, "main.tsx")],
     bundle: true,
     minify: true,
     target: "es2020",
     format: "iife",
-    write: false,
+    outfile: path.join(DIST_DIR, "bundle.js"),
     plugins: [inlineCssPlugin],
+    jsx: "automatic",
+    jsxImportSource: "preact",
   });
 
-  const files = result.outputFiles;
-  const first = files[0];
-  if (!first) {
-    throw new Error("esbuild produced no output");
-  }
-  const jsBundle = first.text;
-
-  // Read HTML shell
-  const htmlPath = path.join(FRONTEND_DIR, "index.html");
-  const html = fs.readFileSync(htmlPath, "utf-8");
-
-  // Inject JS into HTML
-  const fullHtml = html.replace(
-    "</body>",
-    `  <script>\n${jsBundle}\n  </script>\n</body>`,
-  );
-
-  // Escape for TypeScript string literal
-  const escaped = fullHtml
-    .replace(/\\/g, "\\\\")
-    .replace(/`/g, "\\`")
-    .replace(/\$/g, "\\$");
-
-  // Generate TypeScript file
-  const output = `/**
- * GENERATED FILE — do not edit.
- * Rebuild with: pnpm build:frontend
- */
-
-export const FRONTEND_HTML = \`${escaped}\`;
-`;
-
-  fs.writeFileSync(OUT_PATH, output, "utf-8");
-  console.log(`Built frontend: ${OUT_PATH}`);
+  console.log(`Built frontend: ${DIST_DIR}`);
 }
 
 main().catch((err: unknown) => {

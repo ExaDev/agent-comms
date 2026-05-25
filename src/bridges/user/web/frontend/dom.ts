@@ -1,21 +1,9 @@
 /**
- * Minimal DOM helpers — no framework, just typed wrappers.
+ * DOM utilities for the web UI.
  *
- * All functions take a Document parameter for testability (jsdom/happy-dom).
- * In the browser, pass the global `document`.
+ * escapeHtml and formatTime are used by message rendering.
+ * requireElement is used by the entry point to grab the root mount point.
  */
-
-/**
- * Query selector scoped to a root element.
- * Returns `undefined` if not found (not null).
- */
-export function querySelector(
-  root: ParentNode,
-  selector: string,
-): HTMLElement | undefined {
-  const el = root.querySelector<HTMLElement>(selector);
-  return el ?? undefined;
-}
 
 /**
  * Query selector that throws if the element is missing.
@@ -43,52 +31,16 @@ export function requireElement(
 }
 
 /**
- * HTML-escape a string for safe insertion via textContent→innerHTML round-trip.
+ * HTML-escape a string for safe insertion.
+ * With Preact JSX, text content is auto-escaped — this is only needed
+ * when constructing raw HTML strings.
  */
-export function escapeHtml(doc: Document, text: string): string {
-  const div = doc.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-/**
- * Create an HTML element with optional attributes and children.
- */
-export function createElement<K extends keyof HTMLElementTagNameMap>(
-  doc: Document,
-  tag: K,
-  attrs?: Record<string, string>,
-  ...children: (string | Node)[]
-): HTMLElementTagNameMap[K] {
-  const el = doc.createElement(tag);
-  if (attrs) {
-    for (const [key, value] of Object.entries(attrs)) {
-      el.setAttribute(key, value);
-    }
-  }
-  for (const child of children) {
-    if (typeof child === "string") {
-      el.appendChild(doc.createTextNode(child));
-    } else {
-      el.appendChild(child);
-    }
-  }
-  return el;
-}
-
-/**
- * Remove all children from an element.
- */
-export function clearChildren(el: HTMLElement): void {
-  el.innerHTML = "";
-}
-
-/**
- * Append a child and return the parent for chaining.
- */
-export function appendTo(parent: HTMLElement, child: Node): HTMLElement {
-  parent.appendChild(child);
-  return parent;
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 /**
@@ -96,4 +48,21 @@ export function appendTo(parent: HTMLElement, child: Node): HTMLElement {
  */
 export function formatTime(timestamp: string): string {
   return timestamp.slice(11, 19);
+}
+
+/**
+ * Get an input or select element from an event target.
+ * Avoids type assertions by using instanceof narrowing.
+ */
+export function inputFromEvent(
+  e: Event,
+): HTMLInputElement | HTMLSelectElement {
+  const target = e.target;
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLSelectElement
+  ) {
+    return target;
+  }
+  throw new Error("Event target is not an input element");
 }

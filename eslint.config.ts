@@ -95,6 +95,7 @@ export default defineConfig(
         "error",
         { assertionStyle: "never" },
       ],
+      "@typescript-eslint/require-await": "warn",
       "custom/no-pointless-reassignments": "error",
       "no-restricted-syntax": [
         "error",
@@ -128,10 +129,14 @@ export default defineConfig(
       "@typescript-eslint/no-unsafe-member-access": "off",
       "@typescript-eslint/no-confusing-void-expression": "off",
       "@typescript-eslint/no-base-to-string": "off",
+      "@typescript-eslint/no-empty-function": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
     },
   },
   {
-    files: ["**/*.test.ts", "**/*.e2e.test.ts", "**/*.spec.ts"],
+    files: ["**/*.test.ts", "**/*.test.tsx", "**/*.e2e.test.ts", "**/*.spec.ts"],
     rules: {
       "@typescript-eslint/no-floating-promises": "off",
       "@typescript-eslint/consistent-type-assertions": "off",

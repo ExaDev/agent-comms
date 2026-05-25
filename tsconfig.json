@@ -14,7 +14,9 @@
     "declarationMap": true,
     "sourceMap": true,
     "skipLibCheck": true,
-    "types": ["bun"]
+    "types": ["bun"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist", "src/bridges/user/web/e2e"]
