@@ -85,7 +85,6 @@ export default function (pi: ExtensionAPI) {
       // Actionable events wake the model via sendMessage (not sendUserMessage)
       pi.sendMessage(
         {
-          role: "user",
           content: `📬 ${line}`,
           customType: "comms-delivery",
         },

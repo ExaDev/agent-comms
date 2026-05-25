@@ -278,5 +278,7 @@ function formatForTerminal(event: DeliveryEvent): string {
         .join(", ");
       return `${DIM}Members of ${event.room}: ${names}${RESET}`;
     }
+    case "name_changed":
+      return `${CYAN}✎ ${event.oldName} is now ${event.newName}${RESET}`;
   }
 }
