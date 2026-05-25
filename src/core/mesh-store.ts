@@ -839,10 +839,17 @@ export class MeshStore implements CommsStore {
     const agent = this.agents.get(id);
     if (!agent) return;
     if (agent.status === "offline") return;
+
+    // Only the owning store should broadcast the status change.
+    // Other stores learn about it via the agent_offline mesh patch.
+    const isOwner = id === this.peerId;
     agent.status = "offline";
     this.agents.set(id, agent);
-    await this.notifyRoomsOfStatus(id, "offline");
-    await this.broadcastPatch({ type: "agent_offline", agentId: id });
+
+    if (isOwner) {
+      await this.notifyRoomsOfStatus(id, "offline");
+      await this.broadcastPatch({ type: "agent_offline", agentId: id });
+    }
 
     if (this.isCoordinator) {
       await this.handoverCoordinator();
