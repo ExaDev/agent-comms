@@ -1,3 +1,52 @@
+## [1.14.0](https://github.com/ExaDev/agent-comms/compare/v1.13.0...v1.14.0) (2026-05-25)
+
+### Features
+
+* **bridge:** add buildProjectTree function with unit tests ([86d0250](https://github.com/ExaDev/agent-comms/commit/86d02500983c6de343345dc5fd0d43923f812875))
+* **bridge:** add footer status line with project room, web URL, and unread count ([9ce0811](https://github.com/ExaDev/agent-comms/commit/9ce08117356372fc9ec18d4b34ab47266f27dd9d))
+* **bridge:** add ProjectTree component and rebuild sidebar ([2c38d16](https://github.com/ExaDev/agent-comms/commit/2c38d16eff892cba1d046d3a5e02b6d9c19c0d34))
+* **bridge:** categorise delivery events as actionable vs informational ([bffbedb](https://github.com/ExaDev/agent-comms/commit/bffbedb1cc11654f5afdb63d8c5da4fe8fea7359))
+* **cli:** add /comms-url slash command ([0877b98](https://github.com/ExaDev/agent-comms/commit/0877b986a36fc0bc94c2258a6641816e6f55bc27))
+* **core:** add agent renaming via name_changed event and rename_agent action ([1740a1a](https://github.com/ExaDev/agent-comms/commit/1740a1ad978ab71f23fd59bcf596e5f5b6047a72))
+* **core:** add isActionableEvent for delivery event classification ([12cc749](https://github.com/ExaDev/agent-comms/commit/12cc7499170843183841e0333a0458dad1529d6d))
+* **core:** auto-create project rooms per working directory ([a44a52a](https://github.com/ExaDev/agent-comms/commit/a44a52a172afb909a3939fbe6c27ec03b85e12cc))
+
+### Bug Fixes
+
+* **bridge:** add required display field to sendMessage call ([5721170](https://github.com/ExaDev/agent-comms/commit/5721170e48068af722291a81b7ba2567b8813434))
+* **bridge:** correct sendMessage API usage and add name_changed to TUI ([40fd3e4](https://github.com/ExaDev/agent-comms/commit/40fd3e47113d155805d8473c69d1fb26934916b3))
+* **bridge:** fix handler return type and exclude frontend tests from tsc ([f962966](https://github.com/ExaDev/agent-comms/commit/f962966f6eb55ef49776e22591a39b6a71be0087))
+* **bridge:** fix TypeScript errors in tests and command handler ([d7aef53](https://github.com/ExaDev/agent-comms/commit/d7aef53b2e1410927fdb31049150b0ee12711d29))
+* **bridge:** resolve ESLint errors in web UI components and tests ([ddce4b9](https://github.com/ExaDev/agent-comms/commit/ddce4b9854a28ab6af2b27a0fb52bb9ac5e8f68f))
+* **bridge:** rewrite garbled pi bridge index from reconstruction ([4efcdff](https://github.com/ExaDev/agent-comms/commit/4efcdff1d4d2f1500b112e9c8b63ac5e3056ad0e))
+* **bridge:** use requireElement with tag for join form inputs ([fc7019a](https://github.com/ExaDev/agent-comms/commit/fc7019a96d3d89b2815c47bc1ea479eab9f1331c))
+* **build:** deduplicate package.json keys and add missing preact dependency ([8a10193](https://github.com/ExaDev/agent-comms/commit/8a1019372131fc99dec59abbf374404bcb437664))
+* **build:** exclude hanging multi-process integration tests from pnpm test ([c43cca3](https://github.com/ExaDev/agent-comms/commit/c43cca3b470da431d59abfd8668453105c8b67e2))
+* **build:** remove stale imperative files and fix project-tree.ts ([642dcac](https://github.com/ExaDev/agent-comms/commit/642dcacd99571c68dcd839e54dedc01c48a6a5c1))
+* **core:** remove duplicate isActionableEvent export ([8a50ae8](https://github.com/ExaDev/agent-comms/commit/8a50ae847bd7b52826d8b3349d815ac35a686133))
+* **lint:** add test files to allowDefaultProject and fix prettier formatting ([35a831f](https://github.com/ExaDev/agent-comms/commit/35a831ffaa71c1ca2b37d7734ce882ce64b9c238))
+* **lint:** downgrade require-await to warning and fix prettier formatting ([9d751a8](https://github.com/ExaDev/agent-comms/commit/9d751a857dc0b88d70943655ef0eb41f3acfb6bc))
+* **lint:** rename JSX test files to .tsx and delete stale duplicates ([5d16af2](https://github.com/ExaDev/agent-comms/commit/5d16af2698ebef3719215875ef42cdae8e8d1835))
+* **lint:** resolve all ESLint errors flagged by CI ([4bcf690](https://github.com/ExaDev/agent-comms/commit/4bcf6905c52c794d697e2afc22c3a1cbac03f300))
+* **lint:** restore async handler, add non-nullable-type-assertion-style to test overrides ([0eeb670](https://github.com/ExaDev/agent-comms/commit/0eeb670d54a6acbb25459c4aa38b5f0d0715c1d3))
+* **mesh:** deduplicate delivery events and clean up stale peers ([f78ba74](https://github.com/ExaDev/agent-comms/commit/f78ba7442a4cece22ea272290e72c69a169fffcc))
+* **mesh:** deduplicate delivery events at the MeshStore level ([d7d67c5](https://github.com/ExaDev/agent-comms/commit/d7d67c557a36c4be66c9e9965a69744fd34af93d))
+* **mesh:** merge members and subscribedRooms on patch receive ([3406c4e](https://github.com/ExaDev/agent-comms/commit/3406c4ec66389c775628e0a46b0ef0fb0fa3001f))
+* **mesh:** only owning store broadcasts agent offline status ([d84e227](https://github.com/ExaDev/agent-comms/commit/d84e22780221ac317cfee20ead9a3e5f10a3dd43))
+* **mesh:** prevent duplicate name_changed delivery to agent in room ([469dce3](https://github.com/ExaDev/agent-comms/commit/469dce35bd42bf985ab7fede87ed9478ce2a9e48))
+* **mesh:** skip setAgentOffline if agent is already offline ([0175a55](https://github.com/ExaDev/agent-comms/commit/0175a55db874c54fa784cfb404e6747e494f8030))
+* **tool:** route /join and /leave through local handlers for correct state ([7a8eb36](https://github.com/ExaDev/agent-comms/commit/7a8eb3668def6369ef8b82e95954443a1c20c9fc))
+
+### Refactoring
+
+* **bridge:** replace imperative DOM with Preact components ([e0699d6](https://github.com/ExaDev/agent-comms/commit/e0699d6f68ae7bd0782a4e2cc0b31c7331e03c4b))
+* **bridge:** serve frontend as static assets instead of generated TS ([c700219](https://github.com/ExaDev/agent-comms/commit/c700219085faabddc743d5b3e95f0a703a60f34e))
+* **web:** extract inline HTML frontend into TypeScript modules ([c272bd0](https://github.com/ExaDev/agent-comms/commit/c272bd09849e0f08531f3f20252d0eddface57da))
+
+### Tests
+
+* **bridge:** add message conversion unit tests, component tests, and web server integration tests ([9449ce5](https://github.com/ExaDev/agent-comms/commit/9449ce5f2327c48d74c0d33943978085035819e4))
+
 ## [1.13.0](https://github.com/ExaDev/agent-comms/compare/v1.12.0...v1.13.0) (2026-05-23)
 
 ### Features
