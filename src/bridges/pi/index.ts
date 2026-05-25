@@ -87,6 +87,7 @@ export default function (pi: ExtensionAPI) {
         {
           content: `📬 ${line}`,
           customType: "comms-delivery",
+          display: false,
         },
         { triggerTurn: true, deliverAs: "steer" },
       );
