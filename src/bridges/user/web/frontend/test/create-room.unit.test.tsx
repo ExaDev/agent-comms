@@ -56,24 +56,20 @@ describe("CreateRoomForm", () => {
         container,
       );
 
-      const nameInput = container.querySelector(
-        "input[name='room-name']",
-      ) as HTMLInputElement;
+      const nameInput = container.querySelector("input[name='room-name']")!;
       assert.ok(nameInput, "room name input should exist");
       assert.strictEqual(
         nameInput.getAttribute("placeholder"),
         "e.g. project-alpha",
       );
 
-      const typeSelect = container.querySelector(
-        "select[name='room-type']",
-      ) as HTMLSelectElement;
+      const typeSelect = container.querySelector("select[name='room-type']")!;
       assert.ok(typeSelect, "room type select should exist");
       assert.strictEqual(typeSelect.value, "public");
 
       const descInput = container.querySelector(
         "input[name='room-description']",
-      ) as HTMLInputElement;
+      )!;
       assert.ok(descInput, "description input should exist");
     } finally {
       cleanup();
@@ -114,15 +110,11 @@ describe("CreateRoomForm", () => {
         container,
       );
 
-      const submitBtn = container.querySelector(
-        "button.create-room-submit",
-      ) as HTMLElement;
+      const submitBtn = container.querySelector("button.create-room-submit")!;
       assert.ok(submitBtn);
       assert.strictEqual(submitBtn.textContent, "Create");
 
-      const cancelBtn = container.querySelector(
-        "button.create-room-cancel",
-      ) as HTMLElement;
+      const cancelBtn = container.querySelector("button.create-room-cancel")!;
       assert.ok(cancelBtn);
       assert.strictEqual(cancelBtn.textContent, "Cancel");
     } finally {

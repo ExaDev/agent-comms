@@ -7,13 +7,23 @@ import { inputFromEvent } from "../dom.js";
 
 interface CreateRoomFormProps {
   visible: boolean;
-  onSubmit: (name: string, type: "public" | "private" | "secret", description: string) => void;
+  onSubmit: (
+    name: string,
+    type: "public" | "private" | "secret",
+    description: string,
+  ) => void;
   onCancel: () => void;
 }
 
-export function CreateRoomForm({ visible, onSubmit, onCancel }: CreateRoomFormProps) {
+export function CreateRoomForm({
+  visible,
+  onSubmit,
+  onCancel,
+}: CreateRoomFormProps) {
   const [name, setName] = useState("");
-  const [roomType, setRoomType] = useState<"public" | "private" | "secret">("public");
+  const [roomType, setRoomType] = useState<"public" | "private" | "secret">(
+    "public",
+  );
   const [description, setDescription] = useState("");
 
   if (!visible) return null;
@@ -38,7 +48,9 @@ export function CreateRoomForm({ visible, onSubmit, onCancel }: CreateRoomFormPr
             required
             placeholder="e.g. project-alpha"
             value={name}
-            onInput={(e) => setName((e.target as HTMLInputElement).value)}
+            onInput={(e) => {
+              setName((e.target as HTMLInputElement).value);
+            }}
           />
         </label>
         <label>
@@ -46,9 +58,14 @@ export function CreateRoomForm({ visible, onSubmit, onCancel }: CreateRoomFormPr
           <select
             name="room-type"
             value={roomType}
-            onChange={(e) =>
-              setRoomType((e.target as HTMLSelectElement).value as "public" | "private" | "secret")
-            }
+            onChange={(e) => {
+              setRoomType(
+                (e.target as HTMLSelectElement).value as
+                  | "public"
+                  | "private"
+                  | "secret",
+              );
+            }}
           >
             <option value="public">Public</option>
             <option value="private">Private</option>
@@ -62,7 +79,9 @@ export function CreateRoomForm({ visible, onSubmit, onCancel }: CreateRoomFormPr
             name="room-description"
             placeholder="What is this room about?"
             value={description}
-            onInput={(e) => setDescription((e.target as HTMLInputElement).value)}
+            onInput={(e) => {
+              setDescription((e.target as HTMLInputElement).value);
+            }}
           />
         </label>
         <div class="create-room-btns">

@@ -60,9 +60,7 @@ describe("buildProjectTree", () => {
   });
 
   it("returns empty roots when no agents but has manual rooms", () => {
-    const rooms = [
-      makeRoom({ id: "general", description: "General chat" }),
-    ];
+    const rooms = [makeRoom({ id: "general", description: "General chat" })];
     const result = buildProjectTree([], rooms);
     assert.deepStrictEqual(result.roots, []);
     assert.strictEqual(result.manualRooms.length, 1);
@@ -139,8 +137,16 @@ describe("buildProjectTree", () => {
 
   it("sorts directories before agents, both alphabetically", () => {
     const agents = [
-      makeAgent({ id: "z-agent", name: "z-agent", cwd: "/Users/joe/Developer" }),
-      makeAgent({ id: "a-agent", name: "a-agent", cwd: "/Users/joe/Developer" }),
+      makeAgent({
+        id: "z-agent",
+        name: "z-agent",
+        cwd: "/Users/joe/Developer",
+      }),
+      makeAgent({
+        id: "a-agent",
+        name: "a-agent",
+        cwd: "/Users/joe/Developer",
+      }),
       makeAgent({ id: "a3", cwd: "/Users/joe/Developer/z-project" }),
       makeAgent({ id: "a4", cwd: "/Users/joe/Developer/a-project" }),
     ];
@@ -254,9 +260,7 @@ describe("buildProjectTree", () => {
   });
 
   it("handles deeply nested paths", () => {
-    const agents = [
-      makeAgent({ id: "a1", cwd: "/a/b/c/d" }),
-    ];
+    const agents = [makeAgent({ id: "a1", cwd: "/a/b/c/d" })];
     const result = buildProjectTree(agents, []);
 
     // Single agent: prefix trimmed to /a/b/c, tree starts at "d"

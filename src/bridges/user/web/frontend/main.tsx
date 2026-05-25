@@ -12,15 +12,8 @@ import { CommsWs, fetchAgents, fetchRoomMessages, fetchRooms } from "./api.js";
 import { requireElement } from "./dom.js";
 import { parseInput } from "./input.js";
 import { State } from "./state.js";
-import type {
-  Action,
-  DisplayMessage,
-  WsFrame,
-} from "./types.js";
-import {
-  deliveryEventToMessage,
-  roomMessageToDisplay,
-} from "./messages.js";
+import type { Action, DisplayMessage, WsFrame } from "./types.js";
+import { deliveryEventToMessage, roomMessageToDisplay } from "./messages.js";
 
 // ---------------------------------------------------------------------------
 // Mount point
@@ -81,10 +74,7 @@ function handleFrame(frame: WsFrame): void {
     case "result":
       addMessage({ type: "system", text: frame.result.content });
       if (!frame.result.isError) {
-        if (
-          pendingAction?.action === "join_room" &&
-          !state.get().currentRoom
-        ) {
+        if (pendingAction?.action === "join_room" && !state.get().currentRoom) {
           const roomId = pendingAction.room;
           state.setDmTarget(undefined);
           state.setCurrentRoom(roomId);

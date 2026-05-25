@@ -54,9 +54,7 @@ export function formatTime(timestamp: string): string {
  * Get an input or select element from an event target.
  * Avoids type assertions by using instanceof narrowing.
  */
-export function inputFromEvent(
-  e: Event,
-): HTMLInputElement | HTMLSelectElement {
+export function inputFromEvent(e: Event): HTMLInputElement | HTMLSelectElement {
   const target = e.target;
   if (
     target instanceof HTMLInputElement ||

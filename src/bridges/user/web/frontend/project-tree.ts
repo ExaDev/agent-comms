@@ -173,7 +173,12 @@ function branchToNodesWithRooms(
           ? prefix + "/" + name
           : currentPath + "/" + name;
 
-    const childNodes = branchToNodesWithRooms(child, prefix, childPath, projectRoomsByPath);
+    const childNodes = branchToNodesWithRooms(
+      child,
+      prefix,
+      childPath,
+      projectRoomsByPath,
+    );
     if (childNodes.length > 0) {
       // Check if this directory has a project room
       const room = projectRoomsByPath.get(childPath);

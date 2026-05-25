@@ -46,10 +46,10 @@ export function ProjectTree({
           {tree.manualRooms.map((room) => (
             <div
               key={room.id}
-              class={
-                "room-item" + (currentRoom === room.id ? " active" : "")
-              }
-              onClick={() => onJoinRoom(room.id)}
+              class={"room-item" + (currentRoom === room.id ? " active" : "")}
+              onClick={() => {
+                onJoinRoom(room.id);
+              }}
             >
               <span>{room.name}</span>
               <span>({String(room.members.length)})</span>
@@ -127,17 +127,19 @@ function DirectoryView({
       <div class="tree-directory-name">
         <span
           class="tree-folder-toggle"
-          onClick={() => setExpanded(!expanded)}
+          onClick={() => {
+            setExpanded(!expanded);
+          }}
         >
-          <span class="tree-folder-icon">
-            {expanded ? "📂" : "📁"}
-          </span>
+          <span class="tree-folder-icon">{expanded ? "📂" : "📁"}</span>
           <span>{node.name}</span>
         </span>
         {node.roomId && (
           <span
             class={`tree-room-join${currentRoom === node.roomId ? " active" : ""}`}
-            onClick={() => onJoinRoom(node.roomId!)}
+            onClick={() => {
+              onJoinRoom(node.roomId!);
+            }}
           >
             💬
           </span>
@@ -202,7 +204,9 @@ function AgentView({ node, onSelectAgent, onRenameAgent }: AgentViewProps) {
           type="text"
           value={editName}
           autofocus
-          onInput={(e) => setEditName(inputFromEvent(e).value)}
+          onInput={(e) => {
+            setEditName(inputFromEvent(e).value);
+          }}
           onKeyDown={handleKeyDown}
           onBlur={handleSubmit}
         />
@@ -213,7 +217,9 @@ function AgentView({ node, onSelectAgent, onRenameAgent }: AgentViewProps) {
   return (
     <div
       class="tree-agent agent-item"
-      onClick={() => onSelectAgent(node.agentId)}
+      onClick={() => {
+        onSelectAgent(node.agentId);
+      }}
       onDblClick={handleDoubleClick}
     >
       <span class={`status-dot ${node.status}`} />

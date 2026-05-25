@@ -31,14 +31,10 @@ describe("JoinForm interactions", () => {
     const { container, cleanup } = setup();
     try {
       preactRender(
-        <JoinForm
-          visible={false}
-          onSubmit={() => {}}
-          onCancel={() => {}}
-        />,
+        <JoinForm visible={false} onSubmit={() => {}} onCancel={() => {}} />,
         container,
       );
-      const form = container.querySelector("#join-form") as HTMLElement;
+      const form = container.querySelector("#join-form")!;
       assert.ok(form.classList.contains("hidden"));
     } finally {
       cleanup();
@@ -59,9 +55,7 @@ describe("JoinForm interactions", () => {
         />,
         container,
       );
-      const btn = container.querySelector(
-        ".join-submit",
-      ) as HTMLElement;
+      const btn = container.querySelector(".join-submit")!;
       btn.click();
       assert.strictEqual(submitted, false);
     } finally {
@@ -73,22 +67,14 @@ describe("JoinForm interactions", () => {
     const { container, cleanup } = setup();
     try {
       preactRender(
-        <JoinForm
-          visible={true}
-          onSubmit={() => {}}
-          onCancel={() => {}}
-        />,
+        <JoinForm visible={true} onSubmit={() => {}} onCancel={() => {}} />,
         container,
       );
-      const input = container.querySelector(
-        "input.join-input",
-      ) as HTMLInputElement;
+      const input = container.querySelector("input.join-input")!;
       assert.ok(input);
       assert.strictEqual(input.getAttribute("placeholder"), "Room name...");
 
-      const btn = container.querySelector(
-        "button.join-submit",
-      ) as HTMLElement;
+      const btn = container.querySelector("button.join-submit")!;
       assert.ok(btn);
       assert.strictEqual(btn.textContent, "Join");
     } finally {

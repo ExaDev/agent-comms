@@ -43,7 +43,7 @@ describe("ChatArea interactions", () => {
         />,
         container,
       );
-      const btn = container.querySelector(".leave-btn") as HTMLElement;
+      const btn = container.querySelector(".leave-btn")!;
       assert.ok(btn);
       btn.click();
       assert.strictEqual(leftCalled, true);
@@ -84,7 +84,7 @@ describe("ChatArea interactions", () => {
         />,
         container,
       );
-      const btn = container.querySelector("#send-btn") as HTMLElement;
+      const btn = container.querySelector("#send-btn")!;
       assert.ok(btn);
       assert.strictEqual(btn.textContent, "Send");
     } finally {
@@ -94,7 +94,12 @@ describe("ChatArea interactions", () => {
 
   it("renders messages", () => {
     const messages: DisplayMessage[] = [
-      { type: "chat", sender: "A", content: "Hi", timestamp: "2025-05-23T14:30:45Z" },
+      {
+        type: "chat",
+        sender: "A",
+        content: "Hi",
+        timestamp: "2025-05-23T14:30:45Z",
+      },
       { type: "system", text: "Joined" },
     ];
     const { container, cleanup } = setup();

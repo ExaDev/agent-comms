@@ -76,7 +76,12 @@ export type DeliveryEvent =
   | { type: "member_joined"; room: string; agent: string }
   | { type: "member_left"; room: string; agent: string }
   | { type: "room_members"; room: string; members: RoomMember[] }
-  | { type: "member_status"; room: string; agent: string; status: Agent["status"] }
+  | {
+      type: "member_status";
+      room: string;
+      agent: string;
+      status: Agent["status"];
+    }
   | {
       type: "delivery_status";
       messageId: string;
@@ -117,7 +122,12 @@ export type Action =
   | { action: "dm"; target: string; content: string }
   | { action: "join_room"; room: string }
   | { action: "leave_room"; room: string }
-  | { action: "create_room"; name: string; type: "public" | "private" | "secret"; description?: string }
+  | {
+      action: "create_room";
+      name: string;
+      type: "public" | "private" | "secret";
+      description?: string;
+    }
   | { action: "list_rooms" }
   | { action: "list_agents" }
   | { action: "read_room"; room: string }
@@ -183,4 +193,3 @@ export interface ProjectTree {
   /** Rooms not auto-created per cwd */
   manualRooms: Room[];
 }
-

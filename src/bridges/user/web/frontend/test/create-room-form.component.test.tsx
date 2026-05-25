@@ -41,9 +41,7 @@ describe("CreateRoomForm interactions", () => {
         />,
         container,
       );
-      const btn = container.querySelector(
-        ".create-room-cancel",
-      ) as HTMLElement;
+      const btn = container.querySelector(".create-room-cancel")!;
       btn.click();
       assert.strictEqual(cancelled, true);
     } finally {
@@ -54,11 +52,13 @@ describe("CreateRoomForm interactions", () => {
   it("calls onSubmit with form values when submitted", () => {
     const { container, cleanup } = setup();
     try {
-      let submitted: {
-        name: string;
-        type: "public" | "private" | "secret";
-        description: string;
-      } | undefined;
+      let submitted:
+        | {
+            name: string;
+            type: "public" | "private" | "secret";
+            description: string;
+          }
+        | undefined;
       preactRender(
         <CreateRoomForm
           visible={true}
@@ -71,9 +71,7 @@ describe("CreateRoomForm interactions", () => {
       );
 
       // Fill in name via direct input simulation
-      const nameInput = container.querySelector(
-        "input[name='room-name']",
-      ) as HTMLInputElement;
+      const nameInput = container.querySelector("input[name='room-name']")!;
       nameInput.value = "test-room";
       // Trigger Preact's onInput by dispatching the right event
       nameInput.dispatchEvent(
@@ -83,9 +81,7 @@ describe("CreateRoomForm interactions", () => {
       );
 
       // Select private type
-      const select = container.querySelector(
-        "select[name='room-type']",
-      ) as HTMLSelectElement;
+      const select = container.querySelector("select[name='room-type']")!;
       select.value = "private";
       select.dispatchEvent(
         new (windowRef as unknown as { Event: typeof Event }).Event("change", {
@@ -96,7 +92,7 @@ describe("CreateRoomForm interactions", () => {
       // Fill description
       const descInput = container.querySelector(
         "input[name='room-description']",
-      ) as HTMLInputElement;
+      )!;
       descInput.value = "A test room";
       descInput.dispatchEvent(
         new (windowRef as unknown as { Event: typeof Event }).Event("input", {
@@ -106,7 +102,7 @@ describe("CreateRoomForm interactions", () => {
 
       // Submit via form
       act(() => {
-        const form = container.querySelector("form") as HTMLFormElement;
+        const form = container.querySelector("form")!;
         form.dispatchEvent(
           new (windowRef as unknown as { Event: typeof Event }).Event("submit"),
         );

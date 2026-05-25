@@ -25,9 +25,8 @@ export function ChatArea({
 }: ChatAreaProps) {
   const [inputText, setInputText] = useState("");
 
-  const headerText = currentRoom ?? (dmTarget
-    ? `DM with ${dmTarget}`
-    : "Select a room");
+  const headerText =
+    currentRoom ?? (dmTarget ? `DM with ${dmTarget}` : "Select a room");
 
   const handleSend = () => {
     const trimmed = inputText.trim();
@@ -69,9 +68,9 @@ export function ChatArea({
           placeholder="Type a message or /command..."
           autocomplete="off"
           value={inputText}
-          onInput={(e) =>
-            setInputText((e.target as HTMLInputElement).value)
-          }
+          onInput={(e) => {
+            setInputText((e.target as HTMLInputElement).value);
+          }}
           onKeyDown={handleKeyDown}
         />
         <button id="send-btn" onClick={handleSend}>

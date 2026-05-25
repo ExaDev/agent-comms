@@ -37,7 +37,9 @@ export function JoinForm({ visible, onSubmit, onCancel }: JoinFormProps) {
         placeholder="Room name..."
         autocomplete="off"
         value={roomName}
-        onInput={(e) => setRoomName((e.target as HTMLInputElement).value)}
+        onInput={(e) => {
+          setRoomName((e.target as HTMLInputElement).value);
+        }}
         onKeyDown={handleKeyDown}
       />
       <button class="join-submit" onClick={handleSubmit}>

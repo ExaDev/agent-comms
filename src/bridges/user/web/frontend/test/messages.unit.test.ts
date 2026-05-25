@@ -4,10 +4,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  deliveryEventToMessage,
-  roomMessageToDisplay,
-} from "../messages.js";
+import { deliveryEventToMessage, roomMessageToDisplay } from "../messages.js";
 import type { DeliveryEvent, RoomMessage } from "../types.js";
 
 const MOCK_MESSAGE: RoomMessage = {

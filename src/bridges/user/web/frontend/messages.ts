@@ -63,9 +63,7 @@ export function deliveryEventToMessage(
       return undefined;
 
     case "room_invite": {
-      const desc = event.roomDescription
-        ? ` — ${event.roomDescription}`
-        : "";
+      const desc = event.roomDescription ? ` — ${event.roomDescription}` : "";
       return {
         type: "system",
         text: `${event.fromName} invited you to "${event.room}"${desc}`,

@@ -20,7 +20,11 @@ export interface AppProps {
   onSelectAgent: (agentId: string) => void;
   onLeaveRoom: () => void;
   onSendAction: (text: string) => void;
-  onCreateRoom: (name: string, type: "public" | "private" | "secret", description: string) => void;
+  onCreateRoom: (
+    name: string,
+    type: "public" | "private" | "secret",
+    description: string,
+  ) => void;
   onJoinRoomInput: (roomName: string) => void;
 }
 

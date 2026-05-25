@@ -56,7 +56,7 @@ export function routeAction(result: InputResult): LocalRoute | null {
 export function parseInput(
   text: string,
   currentRoom: string | undefined,
-  dmTarget: string | undefined = undefined,
+  dmTarget?: string,
 ): InputResult {
   const trimmed = text.trim();
   if (trimmed.length === 0) return { kind: "ignored" };
@@ -188,7 +188,11 @@ function parseCommand(
       }
       return {
         kind: "action",
-        action: { action: "rename_agent", agent: parts[1], name: parts.slice(2).join(" ") },
+        action: {
+          action: "rename_agent",
+          agent: parts[1],
+          name: parts.slice(2).join(" "),
+        },
       };
 
     case "help":

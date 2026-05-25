@@ -13,7 +13,11 @@ interface SidebarProps {
   currentRoom: string | undefined;
   onJoinRoom: (roomId: string) => void;
   onSelectAgent: (agentId: string) => void;
-  onCreateRoom: (name: string, type: "public" | "private" | "secret", description: string) => void;
+  onCreateRoom: (
+    name: string,
+    type: "public" | "private" | "secret",
+    description: string,
+  ) => void;
   onJoinRoomInput: (roomName: string) => void;
 }
 
@@ -39,7 +43,9 @@ export function Sidebar({
             id="create-room-toggle"
             class="icon-btn"
             title="Create room"
-            onClick={() => setCreateFormVisible((v) => !v)}
+            onClick={() => {
+              setCreateFormVisible((v) => !v);
+            }}
           >
             +
           </button>
@@ -50,24 +56,32 @@ export function Sidebar({
             onCreateRoom(name, type, desc);
             setCreateFormVisible(false);
           }}
-          onCancel={() => setCreateFormVisible(false)}
+          onCancel={() => {
+            setCreateFormVisible(false);
+          }}
         />
         <div id="room-list">
           {rooms.map((room) => (
             <div
               key={room.id}
               class={`room-item${currentRoom === room.id ? " active" : ""}`}
-              onClick={() => onJoinRoom(room.id)}
+              onClick={() => {
+                onJoinRoom(room.id);
+              }}
             >
               {room.type.charAt(0).toUpperCase()} {room.name}{" "}
-              <span style="color:var(--dim)">({String(room.members.length)})</span>
+              <span style="color:var(--dim)">
+                ({String(room.members.length)})
+              </span>
             </div>
           ))}
         </div>
         <button
           id="join-toggle-btn"
           class="join-toggle-btn"
-          onClick={() => setJoinFormVisible((v) => !v)}
+          onClick={() => {
+            setJoinFormVisible((v) => !v);
+          }}
         >
           + Join Room
         </button>
@@ -77,7 +91,9 @@ export function Sidebar({
             onJoinRoomInput(name);
             setJoinFormVisible(false);
           }}
-          onCancel={() => setJoinFormVisible(false)}
+          onCancel={() => {
+            setJoinFormVisible(false);
+          }}
         />
         <h3>Agents</h3>
         <div id="agent-list">
@@ -85,7 +101,9 @@ export function Sidebar({
             <div
               key={agent.id}
               class="agent-item"
-              onClick={() => onSelectAgent(agent.id)}
+              onClick={() => {
+                onSelectAgent(agent.id);
+              }}
             >
               <span class={`status-dot ${agent.status}`} />
               {` ${agent.name}`}

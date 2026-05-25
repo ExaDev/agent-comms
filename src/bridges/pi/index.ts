@@ -27,10 +27,7 @@ import {
   formatDeliveryEvent,
   isActionableEvent,
 } from "../../core/index.js";
-import {
-  tryStartWebServer,
-  type WebServerHandle,
-} from "../user/web/server.js";
+import { tryStartWebServer, type WebServerHandle } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
 /** Resolve the listening port from a running web server handle. */
