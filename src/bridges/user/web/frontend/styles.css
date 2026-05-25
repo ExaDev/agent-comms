@@ -288,7 +288,6 @@ body {
 .tree-directory-name {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 4px 8px;
   font-size: 13px;
   color: var(--dim);
@@ -297,21 +296,25 @@ body {
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 4px;
+  padding: 2px;
+  flex-shrink: 0;
 }
 .tree-folder-icon {
   font-size: 12px;
 }
-.tree-room-join {
-  cursor: pointer;
-  font-size: 12px;
+.tree-directory-label {
   padding: 2px 6px;
   border-radius: 4px;
+  margin-left: 2px;
 }
-.tree-room-join:hover {
+.tree-directory-label.clickable {
+  cursor: pointer;
+}
+.tree-directory-label.clickable:hover {
   background: rgba(255,255,255,0.08);
+  color: var(--text);
 }
-.tree-room-join.active {
+.tree-directory-label.active {
   color: var(--accent);
 }
 .tree-children {

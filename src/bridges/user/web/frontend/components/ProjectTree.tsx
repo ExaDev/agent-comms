@@ -122,28 +122,30 @@ function DirectoryView({
 }: DirectoryViewProps) {
   const [expanded, setExpanded] = useState(true);
 
+  const hasRoom = node.roomId !== undefined;
+  const isCurrentRoom = currentRoom === node.roomId;
+
   return (
     <div class="tree-directory">
       <div class="tree-directory-name">
         <span
           class="tree-folder-toggle"
-          onClick={() => {
+          title="Expand/collapse"
+          onClick={(e) => {
+            e.stopPropagation();
             setExpanded(!expanded);
           }}
         >
           <span class="tree-folder-icon">{expanded ? "📂" : "📁"}</span>
-          <span>{node.name}</span>
         </span>
-        {node.roomId && (
-          <span
-            class={`tree-room-join${currentRoom === node.roomId ? " active" : ""}`}
-            onClick={() => {
-              if (node.roomId) onJoinRoom(node.roomId);
-            }}
-          >
-            💬
-          </span>
-        )}
+        <span
+          class={`tree-directory-label${isCurrentRoom ? " active" : ""}${hasRoom ? " clickable" : ""}`}
+          onClick={() => {
+            if (node.roomId) onJoinRoom(node.roomId);
+          }}
+        >
+          {node.name}
+        </span>
       </div>
       {expanded && (
         <div class="tree-children">
