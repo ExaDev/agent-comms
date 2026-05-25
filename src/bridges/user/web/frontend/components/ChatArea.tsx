@@ -69,7 +69,7 @@ export function ChatArea({
           autocomplete="off"
           value={inputText}
           onInput={(e) => {
-            setInputText((e.target as HTMLInputElement).value);
+            setInputText(inputFromEvent(e).value);
           }}
           onKeyDown={handleKeyDown}
         />

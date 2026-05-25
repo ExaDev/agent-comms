@@ -49,7 +49,7 @@ export function CreateRoomForm({
             placeholder="e.g. project-alpha"
             value={name}
             onInput={(e) => {
-              setName((e.target as HTMLInputElement).value);
+              setName(inputFromEvent(e).value);
             }}
           />
         </label>
@@ -59,12 +59,10 @@ export function CreateRoomForm({
             name="room-type"
             value={roomType}
             onChange={(e) => {
-              setRoomType(
-                (e.target as HTMLSelectElement).value as
-                  | "public"
-                  | "private"
-                  | "secret",
-              );
+              const val = inputFromEvent(e).value;
+              if (val === "public" || val === "private" || val === "secret") {
+                setRoomType(val);
+              }
             }}
           >
             <option value="public">Public</option>
@@ -80,7 +78,7 @@ export function CreateRoomForm({
             placeholder="What is this room about?"
             value={description}
             onInput={(e) => {
-              setDescription((e.target as HTMLInputElement).value);
+              setDescription(inputFromEvent(e).value);
             }}
           />
         </label>

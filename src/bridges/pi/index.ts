@@ -71,8 +71,10 @@ export default function (pi: ExtensionAPI) {
     if (recentDeliveries.size > MAX_DEDUP_ENTRIES) {
       // Evict oldest entries (simple approach: clear half)
       const entries = Array.from(recentDeliveries);
-      for (let i = 0; i < entries.length / 2; i++) {
-        recentDeliveries.delete(entries[i]!);
+      const half = Math.floor(entries.length / 2);
+      for (let i = 0; i < half; i++) {
+        const entry = entries[i];
+        if (entry !== undefined) recentDeliveries.delete(entry);
       }
     }
 
@@ -150,7 +152,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("comms-url", {
     description: "Show the Agent Comms web UI URL",
-    handler: async (_args, ctx) => {
+    handler: (_args, ctx) => {
       if (!webHandle) {
         ctx.ui.notify("Web UI is not running.", "error");
         return;

@@ -138,7 +138,7 @@ function DirectoryView({
           <span
             class={`tree-room-join${currentRoom === node.roomId ? " active" : ""}`}
             onClick={() => {
-              onJoinRoom(node.roomId!);
+              if (node.roomId) onJoinRoom(node.roomId);
             }}
           >
             💬

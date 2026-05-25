@@ -38,7 +38,7 @@ export function JoinForm({ visible, onSubmit, onCancel }: JoinFormProps) {
         autocomplete="off"
         value={roomName}
         onInput={(e) => {
-          setRoomName((e.target as HTMLInputElement).value);
+          setRoomName(inputFromEvent(e).value);
         }}
         onKeyDown={handleKeyDown}
       />
