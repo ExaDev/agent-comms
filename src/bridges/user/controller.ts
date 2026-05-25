@@ -46,6 +46,30 @@ export class ChatController extends EventEmitter {
     };
   }
 
+  /**
+   * Create a ChatController wrapping an existing MeshStore and identity.
+   *
+   * Used by bridges that already have a store and agent registration
+   * (e.g. pi, Claude Code) so the web UI shares the same mesh peer
+   * instead of creating a redundant one.
+   */
+  static fromExisting(store: MeshStore, ctx: CommsContext): ChatController {
+    const ctrl = Object.create(ChatController.prototype) as ChatController;
+    EventEmitter.call(ctrl);
+    ctrl.store = store;
+    ctrl.tool = new CommsTool(store);
+    ctrl.ctx = ctx;
+    ctrl.currentRoom = undefined;
+    ctrl.userName = "";
+
+    // Push delivery events to UIs
+    store.onDelivery = (_agentId: string, event: DeliveryEvent) => {
+      ctrl.emit("message", event);
+    };
+
+    return ctrl;
+  }
+
   async init(): Promise<void> {
     await this.store.init();
 
@@ -253,7 +277,9 @@ export class ChatController extends EventEmitter {
   // -----------------------------------------------------------------------
 
   async shutdown(): Promise<void> {
-    await this.store.setAgentOffline(this.ctx.agentId);
+    if (this.ctx) {
+      await this.store.setAgentOffline(this.ctx.agentId);
+    }
     await this.store.shutdown();
   }
 }

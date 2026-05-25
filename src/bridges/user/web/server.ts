@@ -59,19 +59,29 @@ export interface WebServerHandle {
  * Start the web UI server on an OS-assigned port.
  * Returns the server handle, or undefined if port discovery fails.
  */
-export async function tryStartWebServer(): Promise<
-  WebServerHandle | undefined
-> {
-  return createWebServer();
+export async function tryStartWebServer(
+  controller?: ChatController,
+): Promise<WebServerHandle | undefined> {
+  return createWebServer(0, controller);
 }
 
 /**
  * Create and start the web server on a dynamic port.
- * Used by tryStartWebServer (auto-start) and runWeb (standalone mode).
+ *
+ * Accepts an optional ChatController for reuse — bridges that already
+ * have a MeshStore and agent identity pass theirs in so the web UI
+ * shares the same mesh peer instead of creating a redundant one.
+ * When no controller is provided (standalone runWeb mode), a fresh
+ * Dashboard controller is created.
  */
-export async function createWebServer(port = 0): Promise<WebServerHandle> {
-  const controller = new ChatController("Dashboard");
-  await controller.init();
+export async function createWebServer(
+  port = 0,
+  existingController?: ChatController,
+): Promise<WebServerHandle> {
+  const controller = existingController ?? new ChatController("Dashboard");
+  if (!existingController) {
+    await controller.init();
+  }
 
   const server = http.createServer((req, res) => {
     handleRequest(req, res, controller);

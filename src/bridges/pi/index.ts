@@ -28,6 +28,7 @@ import {
   isActionableEvent,
 } from "../../core/index.js";
 import { tryStartWebServer, type WebServerHandle } from "../user/web/server.js";
+import { ChatController } from "../user/controller.js";
 import { nanoid } from "../../core/nanoid.js";
 
 /** Resolve the listening port from a running web server handle. */
@@ -107,9 +108,6 @@ export default function (pi: ExtensionAPI) {
     uiCtx = ctx.ui;
     await store.init();
 
-    // Auto-start web UI on a dynamic port
-    webHandle = await tryStartWebServer();
-
     const reg = await ensureRegistered({
       store,
       cwd: process.cwd(),
@@ -121,6 +119,15 @@ export default function (pi: ExtensionAPI) {
     // Auto-create and join a project room for the working directory
     await ensureProjectRoom(store, agentId, process.cwd());
     projectRoom = path.basename(process.cwd());
+
+    // Start web UI sharing the same mesh peer and agent identity
+    const webCtrl = ChatController.fromExisting(store, {
+      agentId,
+      harness: "pi",
+      cwd: process.cwd(),
+      pid: process.pid,
+    });
+    webHandle = await tryStartWebServer(webCtrl);
 
     refreshStatus();
 
@@ -137,7 +144,6 @@ export default function (pi: ExtensionAPI) {
     if (webHandle) {
       webHandle.wss.close();
       webHandle.server.close();
-      await webHandle.controller.shutdown();
       webHandle = undefined;
     }
     if (agentId) {
