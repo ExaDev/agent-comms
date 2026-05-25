@@ -13,6 +13,7 @@ import type {
   ExtensionAPI,
   ExtensionUIContext,
 } from "@mariozechner/pi-coding-agent";
+import * as path from "node:path";
 import { Type } from "typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 
@@ -80,6 +81,9 @@ export default function (pi: ExtensionAPI) {
       defaultName: `pi-${nanoid(4)}`,
     });
     agentId = reg.agentId;
+    projectRoom = path.basename(process.cwd());
+
+    refreshStatus();
 
     if (!reg.isNew) {
       ctx.ui.notify(`Agent Comms: resumed as ${reg.agentId}`, "info");
@@ -87,6 +91,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", async () => {
+    uiCtx?.setStatus("comms", undefined);
     uiCtx = undefined;
     // Shut down the web server before the bridge store so the web
     // controller's coordinator connection can close cleanly.
@@ -290,6 +295,7 @@ export default function (pi: ExtensionAPI) {
 
       // Drain buffered informational events and prepend to the response
       const pending = informationalBuffer.splice(0);
+      refreshStatus();
       const prefix =
         pending.length > 0
           ? `[comms] Pending events:\n${pending.map((l) => `  📬 ${l}`).join("\n")}\n\n`
