@@ -10,10 +10,11 @@ import "./styles.css";
 import { App } from "./components/App.js";
 import { CommsWs, fetchAgents, fetchRoomMessages, fetchRooms } from "./api.js";
 import { requireElement } from "./dom.js";
-import { parseInput } from "./input.js";
+import { parseInput, routeAction } from "./input.js";
 import { State } from "./state.js";
 import type { Action, DisplayMessage, WsFrame } from "./types.js";
 import { deliveryEventToMessage, roomMessageToDisplay } from "./messages.js";
+import { parseDeepLink, resolveDeepLink, syncUrl } from "./url-sync.js";
 
 // ---------------------------------------------------------------------------
 // Mount point
@@ -64,7 +65,8 @@ function handleFrame(frame: WsFrame): void {
       if (
         frame.event.type === "member_joined" ||
         frame.event.type === "member_left" ||
-        frame.event.type === "member_status"
+        frame.event.type === "member_status" ||
+        frame.event.type === "name_changed"
       ) {
         void refreshState();
       }
@@ -142,6 +144,19 @@ function handleSendAction(text: string): void {
   const s = state.get();
   const result = parseInput(text, s.currentRoom, s.dmTarget);
 
+  // Check if this action needs local client-side handling
+  const localRoute = routeAction(result);
+  if (localRoute) {
+    switch (localRoute.kind) {
+      case "join_room":
+        void onJoinRoom(localRoute.room);
+        return;
+      case "leave_room":
+        onLeaveRoom();
+        return;
+    }
+  }
+
   switch (result.kind) {
     case "action":
       sendAction(result.action);
@@ -172,12 +187,20 @@ function onJoinRoomInput(roomName: string): void {
   void onJoinRoom(roomName);
 }
 
+function onRenameAgent(agentId: string, newName: string): void {
+  sendAction({ action: "rename_agent", agent: agentId, name: newName });
+}
+
 // ---------------------------------------------------------------------------
 // Render loop
 // ---------------------------------------------------------------------------
 
 function rerender(): void {
   const s = state.get();
+
+  // Keep the URL in sync with the current view
+  syncUrl({ currentRoom: s.currentRoom, dmTarget: s.dmTarget });
+
   render(
     <App
       rooms={s.rooms}
@@ -190,6 +213,7 @@ function rerender(): void {
         void onJoinRoom(roomId);
       }}
       onSelectAgent={onSelectAgent}
+      onRenameAgent={onRenameAgent}
       onLeaveRoom={onLeaveRoom}
       onSendAction={handleSendAction}
       onCreateRoom={onCreateRoom}
@@ -205,5 +229,23 @@ state.subscribe(rerender);
 // Boot
 // ---------------------------------------------------------------------------
 
+const deepLink = parseDeepLink(location.search);
+
 ws.connect();
-void refreshState();
+
+// Initial state fetch, then resolve any deep link from the URL
+void refreshState().then(() => {
+  if (!deepLink) return;
+  const s = state.get();
+  const resolved = resolveDeepLink(deepLink, s.rooms);
+  if (!resolved) return;
+
+  switch (resolved.kind) {
+    case "room":
+      void onJoinRoom(resolved.targetId);
+      break;
+    case "dm":
+      onSelectAgent(resolved.targetId);
+      break;
+  }
+});

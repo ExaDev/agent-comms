@@ -200,7 +200,7 @@ function parseCommand(
         kind: "local",
         result: {
           type: "help",
-          text: "Commands: /join, /leave, /rooms, /agents, /dm, /create, /destroy, /help",
+          text: "Commands: /join, /leave, /rooms, /agents, /dm, /create, /destroy, /rename, /help",
         },
       };
 

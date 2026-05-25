@@ -38,12 +38,47 @@ body {
   align-items: center;
   justify-content: space-between;
 }
-#sidebar h2 .icon-btn {
+.icon-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--dim);
+  cursor: pointer;
   font-size: 12px;
+  padding: 2px 8px;
+  line-height: 1;
+}
+.icon-btn:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
 }
 #toggle-offline-btn.active {
   color: var(--accent);
   border-color: var(--accent);
+}
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 4px;
+}
+.section-heading h3 {
+  margin: 0;
+}
+.join-toggle-btn {
+  width: 100%;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px;
+  text-align: center;
+}
+.join-toggle-btn:hover {
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
 }
 .sidebar-section {
   flex: 1;
@@ -142,6 +177,100 @@ body {
   cursor: pointer;
 }
 #send-btn:hover { opacity: 0.9; }
+.leave-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.leave-btn:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+}
+.create-room-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.create-room-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--dim);
+}
+.create-room-form input,
+.create-room-form select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 4px 8px;
+  outline: none;
+}
+.create-room-form input:focus,
+.create-room-form select:focus {
+  border-color: var(--accent);
+}
+.create-room-btns {
+  display: flex;
+  gap: 6px;
+}
+.create-room-submit,
+.create-room-cancel,
+.join-submit {
+  flex: 1;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px;
+}
+.create-room-submit,
+.join-submit {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.create-room-submit:hover,
+.join-submit:hover {
+  opacity: 0.9;
+}
+.create-room-cancel {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--dim);
+}
+.create-room-cancel:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.05);
+}
+.join-form {
+  display: flex;
+  gap: 6px;
+  padding: 4px 0;
+}
+.join-form.hidden {
+  display: none;
+}
+.join-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 4px 8px;
+  outline: none;
+}
+.join-input:focus {
+  border-color: var(--accent);
+}
 #empty-state {
   flex: 1;
   display: flex;
@@ -149,4 +278,67 @@ body {
   justify-content: center;
   color: var(--dim);
   font-size: 14px;
+}
+.project-tree {
+  margin-bottom: 8px;
+}
+.tree-directory {
+  margin-left: 4px;
+}
+.tree-directory-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.tree-folder-toggle {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tree-folder-icon {
+  font-size: 12px;
+}
+.tree-room-join {
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.tree-room-join:hover {
+  background: rgba(255,255,255,0.08);
+}
+.tree-room-join.active {
+  color: var(--accent);
+}
+.tree-children {
+  margin-left: 12px;
+}
+.tree-agent {
+  margin-left: 8px;
+}
+.tree-section {
+  padding: 4px 0;
+}
+.tree-section-heading {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--dim);
+  padding: 4px 8px;
+}
+.agent-rename-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 2px 6px;
+  outline: none;
+  width: 100%;
+}
+.agent-rename-input:focus {
+  border-color: var(--accent);
 }

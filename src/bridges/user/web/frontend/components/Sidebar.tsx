@@ -1,11 +1,13 @@
 /**
- * Sidebar — rooms list, agents list, create/join room controls.
+ * Sidebar — project tree, manual rooms, create/join room controls.
  */
 
 import { useState } from "preact/hooks";
 import type { Agent, Room } from "../types.js";
+import { buildProjectTree } from "../project-tree.js";
 import { CreateRoomForm } from "./CreateRoomForm.js";
 import { JoinForm } from "./JoinForm.js";
+import { ProjectTree } from "./ProjectTree.js";
 
 interface SidebarProps {
   rooms: Room[];
@@ -13,6 +15,7 @@ interface SidebarProps {
   currentRoom: string | undefined;
   onJoinRoom: (roomId: string) => void;
   onSelectAgent: (agentId: string) => void;
+  onRenameAgent: (agentId: string, newName: string) => void;
   onCreateRoom: (
     name: string,
     type: "public" | "private" | "secret",
@@ -27,18 +30,41 @@ export function Sidebar({
   currentRoom,
   onJoinRoom,
   onSelectAgent,
+  onRenameAgent,
   onCreateRoom,
   onJoinRoomInput,
 }: SidebarProps) {
   const [createFormVisible, setCreateFormVisible] = useState(false);
   const [joinFormVisible, setJoinFormVisible] = useState(false);
+  const [showOffline, setShowOffline] = useState(false);
+  const visibleAgents = showOffline
+    ? agents
+    : agents.filter((a) => a.status !== "offline");
+  const tree = buildProjectTree(visibleAgents, rooms);
 
   return (
     <div id="sidebar">
-      <h2>Agent Comms</h2>
+      <h2>
+        Agent Comms
+        <button
+          id="toggle-offline-btn"
+          class={`icon-btn${showOffline ? " active" : ""}`}
+          title={`${showOffline ? "Hide" : "Show"} offline agents`}
+          onClick={() => setShowOffline((v) => !v)}
+        >
+          {showOffline ? "◉" : "◎"}
+        </button>
+      </h2>
       <div class="sidebar-section">
+        <ProjectTree
+          tree={tree}
+          onJoinRoom={onJoinRoom}
+          onSelectAgent={onSelectAgent}
+          onRenameAgent={onRenameAgent}
+          currentRoom={currentRoom}
+        />
         <div class="section-heading">
-          <h3>Rooms</h3>
+          <h3>Create</h3>
           <button
             id="create-room-toggle"
             class="icon-btn"
@@ -60,22 +86,6 @@ export function Sidebar({
             setCreateFormVisible(false);
           }}
         />
-        <div id="room-list">
-          {rooms.map((room) => (
-            <div
-              key={room.id}
-              class={`room-item${currentRoom === room.id ? " active" : ""}`}
-              onClick={() => {
-                onJoinRoom(room.id);
-              }}
-            >
-              {room.type.charAt(0).toUpperCase()} {room.name}{" "}
-              <span style="color:var(--dim)">
-                ({String(room.members.length)})
-              </span>
-            </div>
-          ))}
-        </div>
         <button
           id="join-toggle-btn"
           class="join-toggle-btn"
@@ -95,21 +105,6 @@ export function Sidebar({
             setJoinFormVisible(false);
           }}
         />
-        <h3>Agents</h3>
-        <div id="agent-list">
-          {agents.map((agent) => (
-            <div
-              key={agent.id}
-              class="agent-item"
-              onClick={() => {
-                onSelectAgent(agent.id);
-              }}
-            >
-              <span class={`status-dot ${agent.status}`} />
-              {` ${agent.name}`}
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ export interface AppProps {
   connected: boolean;
   onJoinRoom: (roomId: string) => void;
   onSelectAgent: (agentId: string) => void;
+  onRenameAgent: (agentId: string, newName: string) => void;
   onLeaveRoom: () => void;
   onSendAction: (text: string) => void;
   onCreateRoom: (
@@ -37,6 +38,7 @@ export function App(props: AppProps) {
         currentRoom={props.currentRoom}
         onJoinRoom={props.onJoinRoom}
         onSelectAgent={props.onSelectAgent}
+        onRenameAgent={props.onRenameAgent}
         onCreateRoom={props.onCreateRoom}
         onJoinRoomInput={props.onJoinRoomInput}
       />
