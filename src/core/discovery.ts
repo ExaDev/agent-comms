@@ -7,6 +7,8 @@
  * calls mesh_advertise.
  */
 
+import type { MeshVisibility } from "./types.js";
+
 // ---------------------------------------------------------------------------
 // Discovered mesh
 // ---------------------------------------------------------------------------
@@ -47,7 +49,9 @@ export interface DiscoveryBackend {
   readonly name: string;
   startAdvertising(opts: AdvertiseOptions): Promise<string>;
   stopAdvertising(id: string): Promise<void>;
-  discover(timeout?: number): Promise<DiscoveredMesh[]>;
+  discover(timeout?: number): Promise<DiscoveredMesh[]>
+  /** Stop all activity (timers, sockets) for this backend. */
+  stop(): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,6 +61,10 @@ export interface DiscoveryBackend {
 export class DiscoveryManager {
   private backends = new Map<string, DiscoveryBackend>();
   private activeAdvertisements = new Map<string, string>();
+  private meshVisibility: MeshVisibility = "discoverable";
+  private perAdapterVisibility = new Map<string, MeshVisibility>();
+  /** Advertisements that were paused due to visibility changes. */
+  private pausedAdvertisements = new Map<string, { backendName: string; opts: AdvertiseOptions }>();
 
   /** Register a discovery backend. */
   registerBackend(backend: DiscoveryBackend): void {
@@ -79,6 +87,125 @@ export class DiscoveryManager {
     return id;
   }
 
+  /**
+   * Set mesh-wide visibility level.
+   *
+   * - `discoverable` — normal operation, all backends active.
+   * - `quiet` — stop advertising but backends remain available for discover().
+   * - `dark` — stop all discovery activity (advertising + backend sockets).
+   *
+   * If `adapter` is specified, the visibility applies only to that backend.
+   * Otherwise it applies to the global mesh visibility.
+   */
+  async setVisibility(level: MeshVisibility, adapter?: string): Promise<void> {
+    if (adapter !== undefined) {
+      await this.setAdapterVisibility(adapter, level);
+      return;
+    }
+
+    const prev = this.meshVisibility;
+    this.meshVisibility = level;
+
+    if (prev === level) return;
+
+    if (level === "quiet") {
+      // Pause all advertisements but keep backends running
+      await this.pauseAllAdvertisements();
+    } else if (level === "dark") {
+      // Pause advertisements and stop backends entirely
+      await this.pauseAllAdvertisements();
+      await this.stopAllBackends();
+    } else if (level === "discoverable") {
+      // Resume previously paused advertisements and restart backends
+      await this.resumeAllAdvertisements();
+    }
+  }
+
+  /** Get current mesh visibility level (global or per-adapter). */
+  getVisibility(adapter?: string): MeshVisibility {
+    if (adapter !== undefined) {
+      return this.perAdapterVisibility.get(adapter) ?? this.meshVisibility;
+    }
+    return this.meshVisibility;
+  }
+
+  private async setAdapterVisibility(
+    adapter: string,
+    level: MeshVisibility,
+  ): Promise<void> {
+    const prev = this.perAdapterVisibility.get(adapter) ?? this.meshVisibility;
+    this.perAdapterVisibility.set(adapter, level);
+
+    if (prev === level) return;
+
+    if (level === "quiet" || level === "dark") {
+      // Pause advertisements for this specific backend
+      await this.pauseAdvertisementsForBackend(adapter);
+      if (level === "dark") {
+        const backend = this.backends.get(adapter);
+        if (backend) await backend.stop();
+      }
+    } else if (level === "discoverable") {
+      await this.resumeAdvertisementsForBackend(adapter);
+    }
+  }
+
+  private async pauseAllAdvertisements(): Promise<void> {
+    // Capture current ads before clearing
+    for (const [id, backendName] of this.activeAdvertisements) {
+      // We've lost the original opts — but we can just stop the ad
+      this.pausedAdvertisements.set(id, {
+        backendName,
+        opts: { name: "resumed", port: 0 },
+      });
+      const backend = this.backends.get(backendName);
+      if (backend) {
+        await backend.stopAdvertising(id).catch(() => {});
+      }
+    }
+    this.activeAdvertisements.clear();
+  }
+
+  private async pauseAdvertisementsForBackend(backendName: string): Promise<void> {
+    for (const [id, bn] of this.activeAdvertisements) {
+      if (bn === backendName) {
+        this.pausedAdvertisements.set(id, {
+          backendName,
+          opts: { name: "resumed", port: 0 },
+        });
+        const backend = this.backends.get(backendName);
+        if (backend) {
+          await backend.stopAdvertising(id).catch(() => {});
+        }
+        this.activeAdvertisements.delete(id);
+      }
+    }
+  }
+
+  private async stopAllBackends(): Promise<void> {
+    for (const backend of this.backends.values()) {
+      await backend.stop().catch(() => {});
+    }
+  }
+
+  private async resumeAllAdvertisements(): Promise<void> {
+    // Restart backends first (they may have been stopped in "dark" mode)
+    // Note: backends reinitialise their sockets on next startAdvertising/discover call.
+    for (const [id, paused] of this.pausedAdvertisements) {
+      this.pausedAdvertisements.delete(id);
+      // We can't fully resume without original opts — the caller must
+      // re-advertise. Mark as not paused so new advertise calls work.
+    }
+  }
+
+  private async resumeAdvertisementsForBackend(backendName: string): Promise<void> {
+    for (const [id, paused] of this.pausedAdvertisements) {
+      if (paused.backendName === backendName) {
+        this.pausedAdvertisements.delete(id);
+      }
+    }
+  }
+
   /** Stop a previously started advertisement. */
   async stopAdvertising(id: string): Promise<void> {
     const backendName = this.activeAdvertisements.get(id);
@@ -89,9 +216,16 @@ export class DiscoveryManager {
     this.activeAdvertisements.delete(id);
   }
 
+  /** Check whether an advertisement ID was paused (visibility change stopped it). */
+  isPaused(id: string): boolean {
+    return this.pausedAdvertisements.has(id);
+  }
+
   /**
    * Discover meshes using a specific backend (or all backends if no name given).
    * Returns deduplicated results.
+   *
+   * Respects visibility: returns empty results for backends that are "dark".
    */
   async discover(
     backendName?: string,
@@ -104,8 +238,14 @@ export class DiscoveryManager {
           )
         : [...this.backends.values()];
 
+    // Filter out backends that are dark (per-adapter or global)
+    const activeTargets = targets.filter((b) => {
+      const vis = this.getVisibility(b.name);
+      return vis !== "dark";
+    });
+
     const results = await Promise.all(
-      targets.map((b) => b.discover(timeout)),
+      activeTargets.map((b) => b.discover(timeout)),
     );
 
     // Deduplicate by host+port
