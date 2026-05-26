@@ -56,6 +56,12 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
     void id;
   }
 
+  /** Stop discovery — no-op since Tailscale has no persistent state to clean up. */
+  async stop(): Promise<void> {
+    // Tailscale discovery is stateless — each discover() call probes peers fresh.
+    // No persistent connections or timers to tear down.
+  }
+
   /**
    * Discover meshes on the tailnet by probing peers.
    * Returns peers that respond to a TCP connection on port 19876.

@@ -34,6 +34,15 @@ export type RoomId = string;
 // Enums
 // ---------------------------------------------------------------------------
 
+export const MeshVisibility = defineSchema(
+  z.union([
+    z.literal("discoverable"),
+    z.literal("quiet"),
+    z.literal("dark"),
+  ]),
+);
+export type MeshVisibility = z.infer<typeof MeshVisibility>;
+
 export const Visibility = defineSchema(
   z.union([z.literal("visible"), z.literal("hidden"), z.literal("ghost")]),
 );
@@ -335,6 +344,12 @@ export const CommsActionSchema = defineSchema(
       id: z.string(),
     }),
     z.object({ action: z.literal("mesh_listeners") }),
+    z.object({
+      action: z.literal("mesh_set_visibility"),
+      visibility: MeshVisibility,
+      adapter: z.string().optional(),
+    }),
+    z.object({ action: z.literal("mesh_get_visibility") }),
   ]),
 );
 export type CommsAction = z.infer<typeof CommsActionSchema>;

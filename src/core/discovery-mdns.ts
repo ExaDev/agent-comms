@@ -78,6 +78,22 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
     }
   }
 
+  /** Stop all beacon activity and close the socket. */
+  async stop(): Promise<void> {
+    if (this.beaconTimer !== undefined) {
+      clearInterval(this.beaconTimer);
+      this.beaconTimer = undefined;
+    }
+
+    this.currentPayload = undefined;
+
+    if (this.socket) {
+      this.socket.close();
+      this.socket = undefined;
+      this.isListening = false;
+    }
+  }
+
   async discover(
     timeout: number = DEFAULT_DISCOVER_TIMEOUT_MS,
   ): Promise<DiscoveredMesh[]> {
