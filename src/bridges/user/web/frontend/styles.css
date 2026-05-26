@@ -345,3 +345,165 @@ body {
 .agent-rename-input:focus {
   border-color: var(--accent);
 }
+
+/* Relay panel */
+.relay-panel {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.relay-collapsed {
+  border: none;
+}
+.relay-toggle-btn {
+  width: 100%;
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.relay-toggle-btn:hover {
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+}
+.relay-badge {
+  font-size: 10px;
+}
+.relay-badge-green { color: var(--green); }
+.relay-badge-yellow { color: var(--yellow); }
+.relay-count {
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+.relay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border);
+}
+.relay-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.relay-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+}
+.relay-collapse-btn:hover {
+  color: var(--text);
+}
+.relay-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.relay-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--dim);
+  position: relative;
+}
+.relay-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 8px;
+  outline: none;
+  font-family: monospace;
+}
+.relay-input:focus {
+  border-color: var(--accent);
+}
+.relay-input:disabled {
+  opacity: 0.5;
+}
+.relay-status-dot {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(25%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+.relay-status-dot.active {
+  background: var(--green);
+}
+.relay-actions {
+  display: flex;
+  gap: 6px;
+}
+.relay-connect-btn,
+.relay-disconnect-btn {
+  flex: 1;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px;
+  font-weight: 600;
+}
+.relay-connect-btn {
+  background: var(--accent);
+  color: #fff;
+}
+.relay-connect-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.relay-connect-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.relay-disconnect-btn {
+  background: var(--red);
+  color: #fff;
+}
+.relay-disconnect-btn:hover {
+  opacity: 0.9;
+}
+.relay-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+}
+.relay-stat {
+  font-size: 10px;
+  color: var(--dim);
+}
+.relay-errors {
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+}
+.relay-error {
+  font-size: 10px;
+  color: var(--red);
+  line-height: 1.4;
+}
