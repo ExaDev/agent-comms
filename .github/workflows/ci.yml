@@ -50,6 +50,39 @@ jobs:
       - run: pnpm run build
       - run: pnpm test
 
+  pages:
+    name: GitHub Pages
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .tool-versions
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:frontend
+      - name: Assemble static site
+        run: |
+          mkdir -p github-pages
+          cp src/bridges/user/web/frontend/index.html github-pages/
+          cp -r src/bridges/user/web/dist/* github-pages/
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: github-pages
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - uses: actions/deploy-pages@v4
+        id: deployment
+
   release:
     name: Release
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
