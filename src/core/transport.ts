@@ -28,9 +28,22 @@ import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
  * these and passes them to MeshStore via callbacks. MeshStore uses them
  * as keys for send() and to identify message sources.
  */
+export type ListenerPolicy = "full" | "observe" | "rooms-only" | "gateway";
+
+export interface ListenerInfo {
+  id: string;
+  host: string;
+  port: number;
+  policy: ListenerPolicy;
+  /** Whether this is the default localhost listener (cannot be removed). */
+  isDefault: boolean;
+}
+
 export interface ConnectionHandle {
   /** Stable identifier for this connection (used as peer ID once identified). */
   id: string;
+  /** Policy inherited from the listener that accepted this connection. */
+  policy?: ListenerPolicy;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +170,21 @@ export interface MeshTransport {
    * Broadcast a wire message to all connected peer data connections.
    */
   broadcast(message: MeshMessage): Promise<void>;
+
+  /**
+   * Add a coordinator listener on a specific adapter.
+   * Only valid when this instance is the coordinator.
+   * Returns listener ID.
+   */
+  addListener(host: string, port: number, policy: ListenerPolicy): Promise<string>;
+
+  /**
+   * Remove a listener by ID. Cannot remove the default localhost listener.
+   */
+  removeListener(id: string): Promise<void>;
+
+  /** List all active listeners. */
+  listListeners(): ListenerInfo[];
 
   /**
    * Gracefully shut down all servers and connections.

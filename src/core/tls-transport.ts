@@ -25,8 +25,9 @@ import {
   MessageBuffer,
 } from "./wire-protocol.js";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
-import type { ConnectionHandle, TransportEvents } from "./transport.js";
+import type { ConnectionHandle, ListenerInfo, ListenerPolicy, TransportEvents } from "./transport.js";
 import type { PeerIdentity } from "./identity.js";
+import { nanoid } from "./nanoid.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -61,8 +62,13 @@ export class TlsTransport {
   private dataServer: tls.Server | undefined;
   private _dataPort = 0;
 
-  // -- Coordinator server (accepts introductions over TLS) --
-  private coordinatorServer: tls.Server | undefined;
+  // -- Coordinator listeners (multiple adapters) --
+  private coordinatorListeners = new Map<
+    string,
+    { server: tls.Server; policy: ListenerPolicy; host: string; port: number; isDefault: boolean }
+  >();
+  /** The default localhost listener ID (set once during becomeCoordinator). */
+  private defaultListenerId: string | undefined;
   private _isCoordinator = false;
 
   // -- Coordinator client socket (TLS connection to the coordinator) --
@@ -209,20 +215,92 @@ export class TlsTransport {
   // -----------------------------------------------------------------------
 
   async becomeCoordinator(host: string, port: number): Promise<void> {
+    const id = nanoid(8);
     await new Promise<void>((resolve, reject) => {
-      this.coordinatorServer = tls.createServer(this.tlsOptions, (socket) => {
-        this.handleCoordinatorServerConnection(socket);
+      const server = tls.createServer(this.tlsOptions, (socket) => {
+        this.handleCoordinatorServerConnection(socket, "full");
       });
 
-      this.coordinatorServer.listen(port, host, () => {
+      server.listen(port, host, () => {
         this._isCoordinator = true;
+        this.coordinatorListeners.set(id, {
+          server,
+          policy: "full",
+          host,
+          port,
+          isDefault: true,
+        });
+        this.defaultListenerId = id;
         resolve();
       });
 
-      this.coordinatorServer.on("error", (err: unknown) => {
+      server.on("error", (err: unknown) => {
         reject(err instanceof Error ? err : new Error(String(err)));
       });
     });
+  }
+
+  // -----------------------------------------------------------------------
+  // MeshTransport — Multi-listener management
+  // -----------------------------------------------------------------------
+
+  async addListener(host: string, port: number, policy: ListenerPolicy): Promise<string> {
+    if (!this._isCoordinator) {
+      throw new Error("Only the coordinator can add listeners");
+    }
+
+    const id = nanoid(8);
+    await new Promise<void>((resolve, reject) => {
+      const server = tls.createServer(this.tlsOptions, (socket) => {
+        this.handleCoordinatorServerConnection(socket, policy);
+      });
+
+      server.listen(port, host, () => {
+        const addr = server.address();
+        const actualPort = typeof addr === "object" && addr !== null ? addr.port : port;
+        this.coordinatorListeners.set(id, {
+          server,
+          policy,
+          host,
+          port: actualPort,
+          isDefault: false,
+        });
+        resolve();
+      });
+
+      server.on("error", (err: unknown) => {
+        reject(err instanceof Error ? err : new Error(String(err)));
+      });
+    });
+    return id;
+  }
+
+  async removeListener(id: string): Promise<void> {
+    const listener = this.coordinatorListeners.get(id);
+    if (!listener) {
+      throw new Error(`Listener ${id} not found`);
+    }
+    if (listener.isDefault) {
+      throw new Error("Cannot remove the default localhost listener");
+    }
+
+    listener.server.unref();
+    listener.server.close();
+    this.coordinatorListeners.delete(id);
+  }
+
+  listListeners(): ListenerInfo[] {
+    const result: ListenerInfo[] = [];
+    for (const [id, listener] of this.coordinatorListeners) {
+      result.push({
+        id,
+        host: listener.host,
+        port: listener.port,
+        policy: listener.policy,
+        isDefault: listener.isDefault,
+      });
+    }
+    return result;
   }
 
   // -----------------------------------------------------------------------
@@ -351,20 +429,27 @@ export class TlsTransport {
     // Clear introduction connection tracking
     this.introConnections.clear();
 
-    // Close servers — stop accepting new connections
+    // Close data server
     this.dataServer?.unref();
     this.dataServer?.close();
     this.dataServer = undefined;
-    this.coordinatorServer?.unref();
-    this.coordinatorServer?.close();
-    this.coordinatorServer = undefined;
+
+    // Close coordinator listener servers
+    for (const [, listener] of this.coordinatorListeners) {
+      listener.server.unref();
+      listener.close();
+    }
+    this.coordinatorListeners.clear();
+    this.defaultListenerId = undefined;
 
     this._isCoordinator = false;
   }
 
   unref(): void {
     this.dataServer?.unref();
-    this.coordinatorServer?.unref();
+    for (const [, listener] of this.coordinatorListeners) {
+      listener.server.unref();
+    }
     this.coordinatorSocket?.unref();
   }
 
@@ -405,7 +490,16 @@ export class TlsTransport {
   // Internal — Coordinator server connection handling
   // -----------------------------------------------------------------------
 
-  private handleCoordinatorServerConnection(socket: tls.TLSSocket): void {
+  /**
+   * Accepts a new connection on a coordinator server. Reads
+   * introduce messages and fires onIntroduction so MeshStore can
+   * respond with the peer list and broadcast the arrival.
+   * The connection is tagged with the listener's policy.
+   */
+  private handleCoordinatorServerConnection(
+    socket: tls.TLSSocket,
+    policy: ListenerPolicy,
+  ): void {
     if (this.shutDown) {
       socket.destroy();
       return;
@@ -420,7 +514,7 @@ export class TlsTransport {
       const items = buffer.append(data.toString());
       for (const item of items) {
         if (isMeshMessage(item) && item.method === "introduce") {
-          const handle: ConnectionHandle = { id: item.peerId };
+          const handle: ConnectionHandle = { id: item.peerId, policy };
           this.introConnections.set(handle.id, socket);
           this.events.onIntroduction(handle, {
             peerId: item.peerId,
