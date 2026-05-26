@@ -79,6 +79,12 @@ export class MeshStore implements CommsStore {
   onDelivery:
     | ((agentId: string, event: DeliveryEvent) => void | Promise<void>)
     | undefined;
+
+  /** Fires for every state patch — both locally generated and remote. */
+  onPatch:
+    | ((patch: MeshStatePatch) => void | Promise<void>)
+    | undefined;
+
   private lastLocalDeliveryKey: string | undefined;
   private localDeliveryKeys = new Set<string>();
 
@@ -427,6 +433,10 @@ export class MeshStore implements CommsStore {
         break;
       }
     }
+
+    if (this.onPatch) {
+      await this.onPatch(patch);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -435,6 +445,9 @@ export class MeshStore implements CommsStore {
 
   private async broadcastPatch(patch: MeshStatePatch): Promise<void> {
     await this.transport.broadcast({ method: "state_update", patch });
+    if (this.onPatch) {
+      await this.onPatch(patch);
+    }
   }
 
   private async deliverLocallyAndBroadcast(
