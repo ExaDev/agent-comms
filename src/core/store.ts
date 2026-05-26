@@ -646,4 +646,32 @@ export class FileStore implements CommsStore {
   fedLinks(): import("./federation.js").FedLink[] {
     return [];
   }
+  // Connection approval — not supported by FileStore
+  // -----------------------------------------------------------------------
+
+  async acceptConnection(): Promise<void> {
+    throw new CommsError("FileStore does not support connection approval", "NOT_SUPPORTED");
+  }
+
+  async rejectConnection(): Promise<void> {
+    throw new CommsError("FileStore does not support connection approval", "NOT_SUPPORTED");
+  }
+
+  listPendingConnections(): Array<{
+    connectionId: string;
+    peerId: string;
+    dataPort: number;
+    name: string;
+    fingerprint: string;
+  }> {
+    return [];
+  }
+
+  async connectToRemote(): Promise<void> {
+    throw new CommsError("FileStore does not support remote connections", "NOT_SUPPORTED");
+  }
+
+  async startDataServerOnly(): Promise<void> {
+    throw new CommsError("FileStore does not support network operations", "NOT_SUPPORTED");
+  }
 }

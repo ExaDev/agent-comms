@@ -76,6 +76,14 @@ export class CommsTool {
           return await this.kick(ctx, action);
         case "destroy_room":
           return await this.destroyRoom(ctx, action);
+        case "mesh_connect":
+          return await this.meshConnect(ctx, action);
+        case "mesh_accept":
+          return await this.meshAccept(ctx, action);
+        case "mesh_reject":
+          return await this.meshReject(ctx, action);
+        case "mesh_pending":
+          return await this.meshPending(ctx);
         case "mesh_discover":
           return await this.meshDiscover(action);
         case "mesh_advertise":
@@ -516,6 +524,24 @@ export class CommsTool {
     }
   }
 
+  private async meshConnect(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "mesh_connect" },
+  ): Promise<CommsResult> {
+    try {
+      await this.store.connectToRemote(action.host, action.port);
+      return {
+        content: `Connection request sent to ${action.host}:${String(action.port)}.`,
+        isError: false,
+      };
+    } catch (err) {
+      return {
+        content: `Failed to connect: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
   private async meshFedDisconnect(
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_fed_disconnect" },
@@ -526,6 +552,24 @@ export class CommsTool {
     } catch (err) {
       return {
         content: `Failed to close federation link: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  private async meshAccept(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "mesh_accept" },
+  ): Promise<CommsResult> {
+    try {
+      await this.store.acceptConnection(action.connectionId);
+      return {
+        content: `Accepted connection ${action.connectionId}.`,
+        isError: false,
+      };
+    } catch (err) {
+      return {
+        content: `Failed to accept: ${err instanceof Error ? err.message : String(err)}`,
         isError: true,
       };
     }
@@ -542,6 +586,39 @@ export class CommsTool {
     });
     return {
       content: `Federation links:\n${lines.map((l) => `  ${l}`).join("\n")}`,
+      isError: false,
+    };
+  }
+
+  private async meshReject(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "mesh_reject" },
+  ): Promise<CommsResult> {
+    try {
+      await this.store.rejectConnection(action.connectionId, action.reason);
+      return {
+        content: `Rejected connection ${action.connectionId}: ${action.reason}`,
+        isError: false,
+      };
+    } catch (err) {
+      return {
+        content: `Failed to reject: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  private async meshPending(_ctx: CommsContext): Promise<CommsResult> {
+    const pending = this.store.listPendingConnections();
+    if (pending.length === 0)
+      return { content: "No pending connections.", isError: false };
+
+    const lines = pending.map(
+      (p) =>
+        `${p.connectionId}  ${p.peerId}  ${p.name}  port:${String(p.dataPort)}  fp:${p.fingerprint}`,
+    );
+    return {
+      content: `Pending connections:\n${lines.join("\n")}`,
       isError: false,
     };
   }

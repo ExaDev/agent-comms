@@ -70,8 +70,23 @@ export class WebSocketTransport implements MeshTransport {
   // MeshStore can send the peer_list response via transport.send().
   private introConnections = new Map<string, WebSocket>();
 
+  // -- Pending connections awaiting approval (handle ID → WS + request info) --
+  private pendingConnections = new Map<
+    string,
+    {
+      ws: WebSocket;
+      peerId: string;
+      dataPort: number;
+      name: string;
+      fingerprint: string;
+    }
+  >();
+
   // -- Shutdown sentinel — prevents callbacks after shutdown() --
   private shutDown = false;
+
+  // -- This peer's ID (set during connectToCoordinator or becomeCoordinator) --
+  private _peerId = "";
 
   private readonly events: TransportEvents;
 
@@ -125,6 +140,7 @@ export class WebSocketTransport implements MeshTransport {
     peerId: string,
     localDataPort: number,
   ): Promise<void> {
+    this._peerId = peerId;
     await new Promise<void>((resolve, reject) => {
       const url = `ws://${host}:${port}`;
       const ws = new WebSocket(url);
@@ -164,6 +180,81 @@ export class WebSocketTransport implements MeshTransport {
 
         clearTimeout(timer);
         resolve();
+      });
+
+      ws.on("error", (err) => {
+        clearTimeout(timer);
+        ws.terminate();
+        reject(err);
+      });
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // MeshTransport — Connect to remote coordinator with approval
+  // -----------------------------------------------------------------------
+
+  async connectToRemote(
+    host: string,
+    port: number,
+    peerId: string,
+    _localDataPort: number,
+    name: string,
+    fingerprint: string,
+  ): Promise<void> {
+    this._peerId = peerId;
+    await new Promise<void>((resolve, reject) => {
+      const url = `ws://${host}:${port}`;
+      const ws = new WebSocket(url);
+
+      const timer = setTimeout(() => {
+        ws.terminate();
+        reject(new Error("Remote connection timeout"));
+      }, CONNECT_TIMEOUT_MS);
+
+      ws.on("unexpected-response", () => {
+        clearTimeout(timer);
+        ws.terminate();
+        reject(new Error("Remote connection rejected"));
+      });
+
+      ws.on("open", () => {
+        this.coordinatorWs = ws;
+
+        // Send connect_request instead of introduce
+        const req: MeshMessage = {
+          method: "connect_request",
+          peerId,
+          dataPort: _localDataPort,
+          name,
+          fingerprint,
+        };
+        ws.send(JSON.stringify(req));
+
+        // Wait for connect_accepted or connect_rejected
+        let approved = false;
+        ws.on("message", (raw) => {
+          const msg = parseMessage(raw);
+          if (msg === undefined) return;
+
+          if (!approved) {
+            if (msg.method === "connect_accepted") {
+              approved = true;
+              clearTimeout(timer);
+              resolve();
+            } else if (msg.method === "connect_rejected") {
+              clearTimeout(timer);
+              ws.terminate();
+              reject(new Error(`Connection rejected: ${msg.reason}`));
+              return;
+            }
+          } else {
+            this.dispatchCoordinatorClientMessage(msg);
+          }
+        });
+        ws.on("error", () => {
+          /* ignore late errors on coordinator connection */
+        });
       });
 
       ws.on("error", (err) => {
@@ -273,12 +364,50 @@ export class WebSocketTransport implements MeshTransport {
     throw new Error(`No connection for handle ${handle.id}`);
   }
 
-  async acceptConnection(_handle: ConnectionHandle): Promise<void> {
-    throw new Error("Bidirectional approval not yet implemented");
+  async acceptConnection(handle: ConnectionHandle): Promise<void> {
+    const pending = this.pendingConnections.get(handle.id);
+    if (!pending) {
+      throw new Error(`No pending connection for handle ${handle.id}`);
+    }
+    this.pendingConnections.delete(handle.id);
+
+    const { ws, peerId, dataPort, name, fingerprint } = pending;
+
+    // Move to introConnections so send() can reach this peer
+    this.introConnections.set(peerId, ws);
+
+    // Send acceptance to the connecting peer
+    const accepted: MeshMessage = {
+      method: "connect_accepted",
+      peerId: this._peerId,
+      dataPort: this._dataPort,
+    };
+    await sendAsync(ws, JSON.stringify(accepted));
+
+    // Fire onIntroduction so MeshStore processes the new peer normally
+    const connHandle: ConnectionHandle = { id: peerId };
+    this.events.onIntroduction(connHandle, { peerId, dataPort });
+
+    void name;
+    void fingerprint;
   }
 
-  async rejectConnection(_handle: ConnectionHandle, _reason: string): Promise<void> {
-    throw new Error("Bidirectional approval not yet implemented");
+  async rejectConnection(handle: ConnectionHandle, reason: string): Promise<void> {
+    const pending = this.pendingConnections.get(handle.id);
+    if (!pending) {
+      throw new Error(`No pending connection for handle ${handle.id}`);
+    }
+    this.pendingConnections.delete(handle.id);
+
+    const { ws } = pending;
+
+    const rejected: MeshMessage = {
+      method: "connect_rejected",
+      peerId: handle.id,
+      reason,
+    };
+    await sendAsync(ws, JSON.stringify(rejected));
+    ws.terminate();
   }
 
   async broadcast(message: MeshMessage): Promise<void> {
@@ -341,6 +470,12 @@ export class WebSocketTransport implements MeshTransport {
 
     // Clear introduction connection tracking
     this.introConnections.clear();
+
+    // Clear pending connections
+    for (const [, pending] of this.pendingConnections) {
+      pending.ws.terminate();
+    }
+    this.pendingConnections.clear();
 
     // Close servers — stop accepting new connections
     this.dataServer?.close();
@@ -421,12 +556,29 @@ export class WebSocketTransport implements MeshTransport {
 
     ws.on("message", (raw) => {
       const msg = parseMessage(raw);
-      if (msg !== undefined && msg.method === "introduce") {
+      if (msg === undefined) return;
+
+      if (msg.method === "introduce") {
         const handle: ConnectionHandle = { id: msg.peerId };
         this.introConnections.set(handle.id, ws);
         this.events.onIntroduction(handle, {
           peerId: msg.peerId,
           dataPort: msg.dataPort,
+        });
+      } else if (msg.method === "connect_request") {
+        const handle: ConnectionHandle = { id: msg.peerId };
+        this.pendingConnections.set(handle.id, {
+          ws,
+          peerId: msg.peerId,
+          dataPort: msg.dataPort,
+          name: msg.name,
+          fingerprint: msg.fingerprint,
+        });
+        this.events.onConnectionRequest(handle, {
+          peerId: msg.peerId,
+          dataPort: msg.dataPort,
+          name: msg.name,
+          fingerprint: msg.fingerprint,
         });
       }
     });

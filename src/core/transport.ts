@@ -167,6 +167,20 @@ export interface MeshTransport {
   rejectConnection(handle: ConnectionHandle, reason: string): Promise<void>;
 
   /**
+   * Initiate an outbound connection that requires approval.
+   * Sends connect_request instead of introduce and waits for
+   * connect_accepted or connect_rejected from the remote coordinator.
+   */
+  connectToRemote(
+    host: string,
+    port: number,
+    peerId: string,
+    dataPort: number,
+    name: string,
+    fingerprint: string,
+  ): Promise<void>;
+
+  /**
    * Broadcast a wire message to all connected peer data connections.
    */
   broadcast(message: MeshMessage): Promise<void>;

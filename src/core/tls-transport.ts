@@ -89,8 +89,24 @@ export class TlsTransport {
   // -- Coordinator introduction connections (handle ID → socket) --
   private introConnections = new Map<string, tls.TLSSocket>();
 
+  // -- Pending connections awaiting approval (handle ID → socket + request info) --
+  private pendingConnections = new Map<
+    string,
+    {
+      socket: tls.TLSSocket;
+      peerId: string;
+      dataPort: number;
+      name: string;
+      fingerprint: string;
+      policy: ListenerPolicy;
+    }
+  >();
+
   // -- Shutdown sentinel — prevents callbacks after shutdown() --
   private shutDown = false;
+
+  // -- This peer's ID (set during connectToCoordinator or becomeCoordinator) --
+  private _peerId = "";
 
   private readonly events: TransportEvents;
   private readonly identity: PeerIdentity;
@@ -164,6 +180,7 @@ export class TlsTransport {
     peerId: string,
     localDataPort: number,
   ): Promise<void> {
+    this._peerId = peerId;
     await new Promise<void>((resolve, reject) => {
       const socket = tls.connect(
         { ...this.connectOptions, host, port },
@@ -200,6 +217,78 @@ export class TlsTransport {
       const timer = setTimeout(() => {
         socket.destroy();
         reject(new Error("Coordinator connection timeout"));
+      }, CONNECT_TIMEOUT_MS);
+
+      socket.on("error", (err) => {
+        clearTimeout(timer);
+        socket.destroy();
+        reject(err);
+      });
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // MeshTransport — Connect to remote coordinator with approval
+  // -----------------------------------------------------------------------
+
+  async connectToRemote(
+    host: string,
+    port: number,
+    peerId: string,
+    localDataPort: number,
+    name: string,
+    fingerprint: string,
+  ): Promise<void> {
+    this._peerId = peerId;
+    await new Promise<void>((resolve, reject) => {
+      const socket = tls.connect(
+        { ...this.connectOptions, host, port },
+        () => {
+          this.coordinatorSocket = socket;
+
+          // Send connect_request instead of introduce
+          const req: MeshMessage = {
+            method: "connect_request",
+            peerId,
+            dataPort: localDataPort,
+            name,
+            fingerprint,
+          };
+          socket.write(encode(req));
+
+          clearTimeout(timer);
+
+          // Wire up coordinator message handling
+          const buffer = new MessageBuffer();
+          let approved = false;
+          socket.on("data", (data) => {
+            const items = buffer.append(data.toString());
+            for (const item of items) {
+              if (!isMeshMessage(item)) continue;
+
+              if (!approved) {
+                if (item.method === "connect_accepted") {
+                  approved = true;
+                  resolve();
+                } else if (item.method === "connect_rejected") {
+                  socket.destroy();
+                  reject(new Error(`Connection rejected: ${item.reason}`));
+                  return;
+                }
+              } else {
+                this.dispatchCoordinatorClientMessage(item);
+              }
+            }
+          });
+          socket.on("error", () => {
+            /* ignore late errors on coordinator connection */
+          });
+        },
+      );
+
+      const timer = setTimeout(() => {
+        socket.destroy();
+        reject(new Error("Remote connection timeout"));
       }, CONNECT_TIMEOUT_MS);
 
       socket.on("error", (err) => {
@@ -380,12 +469,50 @@ export class TlsTransport {
     throw new Error(`No connection for handle ${handle.id}`);
   }
 
-  async acceptConnection(_handle: ConnectionHandle): Promise<void> {
-    throw new Error("Bidirectional approval not yet implemented");
+  async acceptConnection(handle: ConnectionHandle): Promise<void> {
+    const pending = this.pendingConnections.get(handle.id);
+    if (!pending) {
+      throw new Error(`No pending connection for handle ${handle.id}`);
+    }
+    this.pendingConnections.delete(handle.id);
+
+    const { socket, peerId, dataPort, name, fingerprint, policy } = pending;
+
+    // Move to introConnections so send() can reach this peer
+    this.introConnections.set(peerId, socket);
+
+    // Send acceptance to the connecting peer
+    const accepted: MeshMessage = {
+      method: "connect_accepted",
+      peerId: this._peerId,
+      dataPort: this._dataPort,
+    };
+    await writeAsync(socket, encode(accepted));
+
+    // Fire onIntroduction so MeshStore processes the new peer normally
+    const connHandle: ConnectionHandle = { id: peerId, policy };
+    this.events.onIntroduction(connHandle, { peerId, dataPort });
+
+    void name;
+    void fingerprint;
   }
 
-  async rejectConnection(_handle: ConnectionHandle, _reason: string): Promise<void> {
-    throw new Error("Bidirectional approval not yet implemented");
+  async rejectConnection(handle: ConnectionHandle, reason: string): Promise<void> {
+    const pending = this.pendingConnections.get(handle.id);
+    if (!pending) {
+      throw new Error(`No pending connection for handle ${handle.id}`);
+    }
+    this.pendingConnections.delete(handle.id);
+
+    const { socket } = pending;
+
+    const rejected: MeshMessage = {
+      method: "connect_rejected",
+      peerId: handle.id,
+      reason,
+    };
+    await writeAsync(socket, encode(rejected));
+    socket.destroy();
   }
 
   async broadcast(message: MeshMessage): Promise<void> {
@@ -436,6 +563,13 @@ export class TlsTransport {
 
     // Clear introduction connection tracking
     this.introConnections.clear();
+
+    // Clear pending connections
+    for (const [, pending] of this.pendingConnections) {
+      pending.socket.unref();
+      pending.socket.destroy();
+    }
+    this.pendingConnections.clear();
 
     // Close data server
     this.dataServer?.unref();
@@ -521,12 +655,30 @@ export class TlsTransport {
     socket.on("data", (data) => {
       const items = buffer.append(data.toString());
       for (const item of items) {
-        if (isMeshMessage(item) && item.method === "introduce") {
+        if (!isMeshMessage(item)) continue;
+
+        if (item.method === "introduce") {
           const handle: ConnectionHandle = { id: item.peerId, policy };
           this.introConnections.set(handle.id, socket);
           this.events.onIntroduction(handle, {
             peerId: item.peerId,
             dataPort: item.dataPort,
+          });
+        } else if (item.method === "connect_request") {
+          const handle: ConnectionHandle = { id: item.peerId, policy };
+          this.pendingConnections.set(handle.id, {
+            socket,
+            peerId: item.peerId,
+            dataPort: item.dataPort,
+            name: item.name,
+            fingerprint: item.fingerprint,
+            policy,
+          });
+          this.events.onConnectionRequest(handle, {
+            peerId: item.peerId,
+            dataPort: item.dataPort,
+            name: item.name,
+            fingerprint: item.fingerprint,
           });
         }
       }

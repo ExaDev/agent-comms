@@ -76,6 +76,12 @@ export class MeshStore implements CommsStore {
   private isShutDown = false;
   private pendingMarkReadTimers: ReturnType<typeof setTimeout>[] = [];
 
+  // -- Pending inbound connections awaiting approval --
+  private pendingInboundConnections = new Map<
+    string,
+    { peerId: string; dataPort: number; name: string; fingerprint: string }
+  >();
+
   onDelivery:
     | ((agentId: string, event: DeliveryEvent) => void | Promise<void>)
     | undefined;
@@ -304,6 +310,108 @@ export class MeshStore implements CommsStore {
   }
 
   // -----------------------------------------------------------------------
+  // Connection approval
+  // -----------------------------------------------------------------------
+
+  private handleConnectionRequest(
+    handle: ConnectionHandle,
+    request: { peerId: string; dataPort: number; name: string; fingerprint: string },
+  ): void {
+    this.pendingInboundConnections.set(handle.id, {
+      peerId: request.peerId,
+      dataPort: request.dataPort,
+      name: request.name,
+      fingerprint: request.fingerprint,
+    });
+
+    // Deliver connection_request event to the owning agent
+    const connectionId = handle.id;
+    const event: DeliveryEvent = {
+      type: "connection_request",
+      connectionId,
+      peerId: request.peerId,
+      dataPort: request.dataPort,
+      name: request.name,
+      fingerprint: request.fingerprint,
+    };
+    const arr = this.deliveryQueues.get(this.peerId) ?? [];
+    arr.push(event);
+    this.deliveryQueues.set(this.peerId, arr);
+    if (this.onDelivery) {
+      void this.onDelivery(this.peerId, event);
+    }
+  }
+
+  /** Accept a pending inbound connection. */
+  async acceptConnection(connectionId: string): Promise<void> {
+    const pending = this.pendingInboundConnections.get(connectionId);
+    if (!pending) {
+      throw new Error(`No pending connection ${connectionId}`);
+    }
+    this.pendingInboundConnections.delete(connectionId);
+    const handle: ConnectionHandle = { id: connectionId };
+    await this.transport.acceptConnection(handle);
+  }
+
+  /** Reject a pending inbound connection. */
+  async rejectConnection(connectionId: string, reason: string): Promise<void> {
+    const pending = this.pendingInboundConnections.get(connectionId);
+    if (!pending) {
+      throw new Error(`No pending connection ${connectionId}`);
+    }
+    this.pendingInboundConnections.delete(connectionId);
+    const handle: ConnectionHandle = { id: connectionId };
+    await this.transport.rejectConnection(handle, reason);
+  }
+
+  /** List all pending inbound connections awaiting approval. */
+  listPendingConnections(): Array<{
+    connectionId: string;
+    peerId: string;
+    dataPort: number;
+    name: string;
+    fingerprint: string;
+  }> {
+    return [...this.pendingInboundConnections.entries()].map(
+      ([id, info]) => ({ connectionId: id, ...info }),
+    );
+  }
+
+  /** Initiate an outbound connection to a remote coordinator requiring approval.
+   *  Fires the connect_request and returns immediately. The connection
+   *  completes asynchronously when the coordinator accepts or rejects. */
+  async connectToRemote(host: string, port: number): Promise<void> {
+    const agent = this.agents.get(this.peerId);
+    // Fire-and-forget: don't await the full approval handshake.
+    // The coordinator will either accept (triggering normal introduction flow)
+    // or reject (closing the socket). Handle rejection to avoid unhandled rejection.
+    this.transport.connectToRemote(
+      host,
+      port,
+      this.peerId,
+      this.transport.dataPort,
+      agent?.name ?? "",
+      "",
+    ).catch((err: unknown) => {
+      // Rejection is expected when the coordinator denies the connection.
+      // Log silently — the calling tool already returned success.
+      void err;
+    });
+  }
+
+  /** Start only the data server without connecting to a coordinator.
+   *  Used for testing scenarios where the peer connects via connectToRemote. */
+  async startDataServerOnly(): Promise<void> {
+    await this.transport.startDataServer();
+    this.peerInfo.set(this.peerId, {
+      id: this.peerId,
+      port: this.transport.dataPort,
+      startedAt: this.startedAt,
+    });
+    this.transport.unref();
+  }
+
+  // -----------------------------------------------------------------------
   // Transport events accessor (for bridges to wire up)
   // -----------------------------------------------------------------------
 
@@ -331,8 +439,8 @@ export class MeshStore implements CommsStore {
       onBecomeCoordinator: (peerList) => {
         void this.handleBecomeCoordinator(peerList);
       },
-      onConnectionRequest: (_handle, _request) => {
-        // Bidirectional approval not yet implemented — auto-accept all connections
+      onConnectionRequest: (handle, request) => {
+        this.handleConnectionRequest(handle, request);
       },
     };
   }

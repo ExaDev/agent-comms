@@ -42,6 +42,10 @@ export const MCP_TOOL_PARAMS = z.object({
     "decline_invite",
     "kick",
     "destroy_room",
+    "mesh_connect",
+    "mesh_accept",
+    "mesh_reject",
+    "mesh_pending",
     "mesh_discover",
     "mesh_advertise",
     "mesh_unadvertise",
@@ -75,6 +79,7 @@ export const MCP_TOOL_PARAMS = z.object({
   adapter: z.string().optional(),
   id: z.string().optional(),
   meshVisibility: MeshVisibilityEnum.optional(),
+  connectionId: z.string().optional(),
 });
 
 export type ToolParams = z.infer<typeof MCP_TOOL_PARAMS>;
@@ -201,6 +206,36 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       if (p.room === undefined)
         throw new BuildActionError("destroy_room", "room");
       return { action: "destroy_room", room: p.room };
+    case "mesh_connect": {
+      if (p.host === undefined)
+        throw new BuildActionError("mesh_connect", "host");
+      if (p.port === undefined)
+        throw new BuildActionError("mesh_connect", "port");
+      return {
+        action: "mesh_connect",
+        host: p.host,
+        port: p.port,
+        ...(p.policy !== undefined && { policy: p.policy }),
+      };
+    }
+    case "mesh_accept": {
+      if (p.connectionId === undefined)
+        throw new BuildActionError("mesh_accept", "connectionId");
+      return { action: "mesh_accept", connectionId: p.connectionId };
+    }
+    case "mesh_reject": {
+      if (p.connectionId === undefined)
+        throw new BuildActionError("mesh_reject", "connectionId");
+      if (p.reason === undefined)
+        throw new BuildActionError("mesh_reject", "reason");
+      return {
+        action: "mesh_reject",
+        connectionId: p.connectionId,
+        reason: p.reason,
+      };
+    }
+    case "mesh_pending":
+      return { action: "mesh_pending" };
     case "mesh_discover": {
       const discover: CommsAction & { action: "mesh_discover" } = {
         action: "mesh_discover",

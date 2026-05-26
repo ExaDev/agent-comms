@@ -97,6 +97,20 @@ export interface CommsStore {
   fedConnect(host: string, port: number, name?: string): Promise<string>;
   fedDisconnect(linkId: string): Promise<void>;
   fedLinks(): import("./federation.js").FedLink[];
+  // -- Connection approval --
+  acceptConnection(connectionId: string): Promise<void>;
+  rejectConnection(connectionId: string, reason: string): Promise<void>;
+  listPendingConnections(): Array<{
+    connectionId: string;
+    peerId: string;
+    dataPort: number;
+    name: string;
+    fingerprint: string;
+  }>;
+  connectToRemote(host: string, port: number): Promise<void>;
+
+  /** Start only the data server without connecting to a coordinator. */
+  startDataServerOnly(): Promise<void>;
 
   // -- Lifecycle --
   init(): Promise<void>;
