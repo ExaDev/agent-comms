@@ -1,29 +1,31 @@
 /**
- * MeshStore — TCP localhost peer mesh for agent communication.
+ * MeshStore — transport-agnostic peer mesh for agent communication.
  *
  * Each bridge instance is a peer in the mesh. Peers discover each other
  * via a coordinator (the first instance to bind the well-known port).
  * All state is held in memory and synchronised between peers.
- * Delivery events are pushed directly over TCP — no polling, no filesystem.
+ * Delivery events are pushed directly over the transport — no polling,
+ * no filesystem.
  *
- * Falls back to FileStore if the mesh is unavailable.
+ * Transport is injected via the constructor. TcpTransport for localhost
+ * TCP, TlsTransport for encrypted connections, etc.
  */
 
-import * as net from "node:net";
 import { nanoid } from "./nanoid.js";
 import { CommsError } from "./store.js";
-import {
-  encode,
-  isMeshMessage,
-  MessageBuffer,
-  dmKey,
-} from "./wire-protocol.js";
+import { TcpTransport } from "./tcp-transport.js";
+import { dmKey } from "./wire-protocol.js";
 import type {
   MeshMessage,
   MeshStatePatch,
   PeerInfo,
   SerialisedState,
 } from "./wire-protocol.js";
+import type {
+  ConnectionHandle,
+  MeshTransport,
+  TransportEvents,
+} from "./transport.js";
 import type { CommsStore } from "./comms-store.js";
 import type {
   AgentIdentity,
@@ -45,27 +47,6 @@ const DEFAULT_COORDINATOR_PORT = 19876;
 const COORDINATOR_HOST = "127.0.0.1";
 
 // ---------------------------------------------------------------------------
-// Async socket write (TCP-specific — will move to TcpTransport)
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Async socket write
-// ---------------------------------------------------------------------------
-
-function writeAsync(socket: net.Socket, data: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (socket.destroyed) {
-      resolve();
-      return;
-    }
-    socket.write(data, "utf-8", (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-// ---------------------------------------------------------------------------
 // MeshStore
 // ---------------------------------------------------------------------------
 
@@ -81,20 +62,7 @@ export class MeshStore implements CommsStore {
   private deliveryQueues = new Map<string, DeliveryEvent[]>();
   private identityCache = new Map<string, { id: string }>();
 
-  private dataServer: net.Server | undefined;
-  private dataPort = 0;
-  private coordinatorServer: net.Server | undefined;
-  private isCoordinator = false;
-  private peerConnections = new Map<
-    string,
-    { socket: net.Socket; buffer: MessageBuffer }
-  >();
-  /** All sockets accepted by the data server — destroyed on shutdown. */
-  private dataServerSockets = new Set<net.Socket>();
-  /** All sockets accepted by the coordinator server — destroyed on shutdown. */
-  private coordinatorServerSockets = new Set<net.Socket>();
-  /** Socket connected to the coordinator (client side) — destroyed on shutdown. */
-  private coordinatorSocket: net.Socket | undefined;
+  private transport: MeshTransport;
   private peerInfo = new Map<string, PeerInfo>();
   private staleCheckTimer: ReturnType<typeof setInterval> | undefined;
   private isShutDown = false;
@@ -110,6 +78,14 @@ export class MeshStore implements CommsStore {
     this.peerId = nanoid(8);
     this.startedAt = new Date().toISOString();
     this.coordinatorPort = coordinatorPort;
+    // Wire up transport with this store's event handlers.
+    // TcpTransport is the default; callers can replace via setTransport().
+    this.transport = new TcpTransport(this.events);
+  }
+
+  /** Replace the transport (e.g. with TlsTransport for encrypted connections). */
+  setTransport(transport: MeshTransport): void {
+    this.transport = transport;
   }
 
   // -----------------------------------------------------------------------
@@ -117,155 +93,53 @@ export class MeshStore implements CommsStore {
   // -----------------------------------------------------------------------
 
   async init(): Promise<void> {
-    await this.startDataServer();
-    await this.tryJoinMesh();
-    // Unref all root handles so the event loop can exit when pi shuts down.
-    // Sockets/servers still function normally for I/O but don't keep the
-    // process alive. shutdown() will destroy them explicitly.
-    this.dataServer?.unref();
-    this.coordinatorServer?.unref();
-    this.coordinatorSocket?.unref();
-  }
+    await this.transport.startDataServer();
 
-  private startDataServer(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.dataServer = net.createServer((socket) => {
-        this.handleDataConnection(socket);
-      });
-      this.dataServer.listen(0, COORDINATOR_HOST, () => {
-        const addr = this.dataServer?.address();
-        if (addr && typeof addr === "object") {
-          this.dataPort = addr.port;
-        }
-        resolve();
-      });
-      this.dataServer.on("error", reject);
+    // Register our own peer info
+    this.peerInfo.set(this.peerId, {
+      id: this.peerId,
+      port: this.transport.dataPort,
+      startedAt: this.startedAt,
     });
-  }
 
-  private async tryJoinMesh(): Promise<void> {
+    // Try joining an existing mesh; fall back to becoming coordinator
     try {
-      await this.connectToCoordinator();
-    } catch {
-      await this.becomeCoordinator();
-    }
-  }
-
-  private connectToCoordinator(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const socket = net.createConnection(
-        { port: this.coordinatorPort, host: COORDINATOR_HOST },
-        () => {
-          this.coordinatorSocket = socket;
-          const intro: MeshMessage = {
-            method: "introduce",
-            peerId: this.peerId,
-            dataPort: this.dataPort,
-          };
-          socket.write(encode(intro));
-
-          // Read the peer_list response
-          const buf = new MessageBuffer();
-          socket.on("data", (data) => {
-            const items = buf.append(data.toString());
-            for (const item of items) {
-              if (isMeshMessage(item)) {
-                this.handleCoordinatorResponse(item);
-              }
-            }
-          });
-          socket.on("error", () => {
-            /* ignore late errors */
-          });
-          clearTimeout(timer);
-          resolve();
-        },
-      );
-
-      const timer = setTimeout(() => {
-        socket.destroy();
-        reject(new Error("Coordinator connection timeout"));
-      }, 2000);
-
-      socket.on("error", (err) => {
-        clearTimeout(timer);
-        socket.destroy();
-        reject(err);
-      });
-    });
-  }
-
-  private handleCoordinatorResponse(msg: MeshMessage): void {
-    if (msg.method === "peer_list") {
-      for (const peer of msg.peers) {
-        this.peerInfo.set(peer.id, peer);
-        void this.connectToPeerData(peer);
-      }
-    } else if (msg.method === "peer_joined") {
-      this.peerInfo.set(msg.peer.id, msg.peer);
-      void this.connectToPeerData(msg.peer);
-    }
-  }
-
-  private becomeCoordinator(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.coordinatorServer = net.createServer((socket) => {
-        this.handleCoordinatorConnection(socket);
-      });
-
-      this.coordinatorServer.listen(
-        this.coordinatorPort,
+      await this.transport.connectToCoordinator(
         COORDINATOR_HOST,
-        () => {
-          this.isCoordinator = true;
-          this.startStaleCheck();
-          this.peerInfo.set(this.peerId, {
-            id: this.peerId,
-            port: this.dataPort,
-            startedAt: this.startedAt,
-          });
-          resolve();
-        },
+        this.coordinatorPort,
+        this.peerId,
+        this.transport.dataPort,
       );
+    } catch {
+      await this.transport.becomeCoordinator(
+        COORDINATOR_HOST,
+        this.coordinatorPort,
+      );
+      this.startStaleCheck();
+    }
 
-      this.coordinatorServer.on("error", (err: unknown) => {
-        const isAddrInUse =
-          err instanceof Error && "code" in err && err.code === "EADDRINUSE";
-        if (isAddrInUse) {
-          this.coordinatorServer = undefined;
-          void this.connectToCoordinator().then(resolve, reject);
-        } else {
-          reject(err instanceof Error ? err : new Error(String(err)));
-        }
-      });
-    });
+    this.transport.unref();
   }
 
   // -----------------------------------------------------------------------
-  // Coordinator protocol
+  // TransportEvents — callbacks from the transport layer
   // -----------------------------------------------------------------------
 
-  private handleCoordinatorConnection(socket: net.Socket): void {
-    this.coordinatorServerSockets.add(socket);
-    socket.on("close", () => this.coordinatorServerSockets.delete(socket));
-    socket.on("error", () => {
-      this.coordinatorServerSockets.delete(socket);
-    });
+  private handlePeerList(peers: PeerInfo[]): void {
+    for (const peer of peers) {
+      this.peerInfo.set(peer.id, peer);
+      void this.transport.connectToPeer(peer, this.peerId);
+    }
+  }
 
-    const buffer = new MessageBuffer();
-    socket.on("data", (data) => {
-      const items = buffer.append(data.toString());
-      for (const item of items) {
-        if (isMeshMessage(item) && item.method === "introduce") {
-          void this.handleIntroduction(socket, item);
-        }
-      }
-    });
+  private handlePeerJoined(peer: PeerInfo): void {
+    this.peerInfo.set(peer.id, peer);
+    void this.transport.connectToPeer(peer, this.peerId);
   }
 
   private async handleIntroduction(
-    socket: net.Socket,
-    msg: { method: "introduce"; peerId: string; dataPort: number },
+    handle: ConnectionHandle,
+    msg: { peerId: string; dataPort: number },
   ): Promise<void> {
     const newPeer: PeerInfo = {
       id: msg.peerId,
@@ -279,51 +153,39 @@ export class MeshStore implements CommsStore {
       method: "peer_list",
       peers: [...this.peerInfo.values()],
     };
-    await writeAsync(socket, encode(peerList));
+    await this.transport.send(handle, peerList);
 
-    // Broadcast arrival to all existing data connections
+    // Broadcast arrival to all existing peers
     const joined: MeshMessage = { method: "peer_joined", peer: newPeer };
-    await this.broadcastToDataConnections(joined);
+    await this.transport.broadcast(joined);
 
     // Connect to the new peer's data server
-    void this.connectToPeerData(newPeer);
+    void this.transport.connectToPeer(newPeer, this.peerId);
   }
 
-  // -----------------------------------------------------------------------
-  // Data connections
-  // -----------------------------------------------------------------------
-
-  private handleDataConnection(socket: net.Socket): void {
-    this.dataServerSockets.add(socket);
-    socket.on("close", () => this.dataServerSockets.delete(socket));
-
-    const buffer = new MessageBuffer();
-    let remotePeerId: string | undefined;
-
-    socket.on("data", (data) => {
-      const items = buffer.append(data.toString());
-      for (const item of items) {
-        if (isMeshMessage(item)) {
-          void this.handleDataMessage(item);
-          if (item.method === "pong") {
-            remotePeerId = item.peerId;
-          }
-        }
-      }
-      if (remotePeerId && !this.peerConnections.has(remotePeerId)) {
-        this.peerConnections.set(remotePeerId, { socket, buffer });
-      }
-    });
-
-    socket.on("close", () => {
-      if (remotePeerId) this.peerConnections.delete(remotePeerId);
-    });
-    socket.on("error", () => {
-      if (remotePeerId) this.peerConnections.delete(remotePeerId);
-    });
+  private async handlePeerConnected(
+    handle: ConnectionHandle,
+    info: PeerInfo,
+  ): Promise<void> {
+    // If we have state and the peer doesn't, send state sync
+    if (this.agents.size > 0) {
+      const state: SerialisedState = {
+        agents: Object.fromEntries(this.agents),
+        rooms: Object.fromEntries(this.rooms),
+        messages: Object.fromEntries(this.messages),
+        dms: Object.fromEntries(this.dms),
+      };
+      await this.transport.send(handle, {
+        method: "state_sync",
+        state,
+      });
+    }
   }
 
-  private async handleDataMessage(msg: MeshMessage): Promise<void> {
+  private async handleDataMessage(
+    handle: ConnectionHandle,
+    msg: MeshMessage,
+  ): Promise<void> {
     if (msg.method === "state_sync") {
       // Merge — don't replace — so our own state isn't lost
       const incoming = {
@@ -348,6 +210,61 @@ export class MeshStore implements CommsStore {
       await this.applyPatch(msg.patch);
     }
   }
+
+  private async handleBecomeCoordinator(
+    peerList: PeerInfo[],
+  ): Promise<void> {
+    // Take over as coordinator using the data server we already have
+    await this.transport.becomeCoordinator(
+      COORDINATOR_HOST,
+      this.coordinatorPort,
+    );
+    this.peerInfo.clear();
+    for (const peer of peerList) {
+      this.peerInfo.set(peer.id, peer);
+      void this.transport.connectToPeer(peer, this.peerId);
+    }
+    this.startStaleCheck();
+  }
+
+  private handlePeerDisconnected(handle: ConnectionHandle): void {
+    this.peerInfo.delete(handle.id);
+  }
+
+  // -----------------------------------------------------------------------
+  // Transport events accessor (for bridges to wire up)
+  // -----------------------------------------------------------------------
+
+  /** Returns the TransportEvents object that bridges should pass to the transport constructor. */
+  get events(): TransportEvents {
+    return {
+      onMessage: (handle, msg) => {
+        void this.handleDataMessage(handle, msg);
+      },
+      onPeerConnected: (handle, info) => {
+        void this.handlePeerConnected(handle, info);
+      },
+      onPeerDisconnected: (handle) => {
+        this.handlePeerDisconnected(handle);
+      },
+      onIntroduction: (handle, msg) => {
+        void this.handleIntroduction(handle, msg);
+      },
+      onPeerList: (peers) => {
+        this.handlePeerList(peers);
+      },
+      onPeerJoined: (peer) => {
+        this.handlePeerJoined(peer);
+      },
+      onBecomeCoordinator: (peerList) => {
+        void this.handleBecomeCoordinator(peerList);
+      },
+    };
+  }
+
+  // -----------------------------------------------------------------------
+  // State patch application
+  // -----------------------------------------------------------------------
 
   private async applyPatch(patch: MeshStatePatch): Promise<void> {
     switch (patch.type) {
@@ -443,74 +360,12 @@ export class MeshStore implements CommsStore {
     }
   }
 
-  private async connectToPeerData(peer: PeerInfo): Promise<void> {
-    if (peer.id === this.peerId) return;
-    if (this.peerConnections.has(peer.id)) return;
-
-    return new Promise((resolve) => {
-      const socket = net.createConnection(
-        { port: peer.port, host: COORDINATOR_HOST },
-        () => {
-          const buf = new MessageBuffer();
-          this.peerConnections.set(peer.id, { socket, buffer: buf });
-
-          // Identify ourselves
-          const pong: MeshMessage = { method: "pong", peerId: this.peerId };
-          socket.write(encode(pong));
-
-          // If we have state and peer doesn't, send state sync
-          if (this.agents.size > 0) {
-            const state: SerialisedState = {
-              agents: Object.fromEntries(this.agents),
-              rooms: Object.fromEntries(this.rooms),
-              messages: Object.fromEntries(this.messages),
-              dms: Object.fromEntries(this.dms),
-            };
-            socket.write(encode({ method: "state_sync", state }));
-          }
-
-          // Wire up ongoing message handling
-          socket.on("data", (data) => {
-            const items = buf.append(data.toString());
-            for (const item of items) {
-              if (isMeshMessage(item)) {
-                void this.handleDataMessage(item);
-              }
-            }
-          });
-
-          resolve();
-        },
-      );
-
-      socket.on("close", () => this.peerConnections.delete(peer.id));
-      socket.on("error", () => {
-        this.peerConnections.delete(peer.id);
-        socket.destroy();
-        resolve();
-      });
-    });
-  }
-
   // -----------------------------------------------------------------------
-  // Broadcast (async — writes to TCP sockets)
+  // Broadcast
   // -----------------------------------------------------------------------
-
-  private async broadcastToDataConnections(msg: MeshMessage): Promise<void> {
-    const data = encode(msg);
-    const writes: Promise<void>[] = [];
-    for (const [, peer] of this.peerConnections) {
-      writes.push(
-        writeAsync(peer.socket, data).catch(() => {
-          /* broken connection — cleanup handled by close/error listeners */
-        }),
-      );
-    }
-    await Promise.all(writes);
-  }
 
   private async broadcastPatch(patch: MeshStatePatch): Promise<void> {
-    await this.broadcastToDataConnections({ method: "state_update", patch });
+    await this.transport.broadcast({ method: "state_update", patch });
   }
 
   private async deliverLocallyAndBroadcast(
@@ -825,10 +680,6 @@ export class MeshStore implements CommsStore {
     if (isOwner) {
       await this.notifyRoomsOfStatus(id, "offline");
       await this.broadcastPatch({ type: "agent_offline", agentId: id });
-    }
-
-    if (this.isCoordinator) {
-      await this.handoverCoordinator();
     }
   }
 
@@ -1215,9 +1066,7 @@ export class MeshStore implements CommsStore {
         await this.notifyRoomsOfStatus(id, "offline");
       }
       await this.broadcastPatch({ type: "agent_offline", agentId: id });
-      // Clean up stale peer from coordinator's registry
       this.peerInfo.delete(id);
-      this.peerConnections.delete(id);
     }
 
     // Also purge long-offline agents to prevent indefinite accumulation
@@ -1226,7 +1075,6 @@ export class MeshStore implements CommsStore {
     for (const [id, agent] of this.agents) {
       if (agent.status !== "offline") continue;
       const startedAt = new Date(agent.startedAt).getTime();
-      // If the agent went offline long ago, purge it
       if (startedAt < offlineThreshold) {
         purgeIds.push(id);
       }
@@ -1234,14 +1082,12 @@ export class MeshStore implements CommsStore {
     for (const id of purgeIds) {
       this.agents.delete(id);
       this.peerInfo.delete(id);
-      this.peerConnections.delete(id);
       this.identityCache.delete(id);
     }
   }
 
   private isProcessAlive(pid: number): boolean {
     try {
-      // Sending signal 0 doesn't kill the process — it just checks existence
       process.kill(pid, 0);
       return true;
     } catch {
@@ -1250,61 +1096,19 @@ export class MeshStore implements CommsStore {
   }
 
   // -----------------------------------------------------------------------
-  // Coordinator handover
-  // -----------------------------------------------------------------------
-
-  private async handoverCoordinator(): Promise<void> {
-    if (!this.isCoordinator) return;
-
-    let successor: PeerInfo | undefined;
-    for (const [id, info] of this.peerInfo) {
-      if (id === this.peerId) continue;
-      if (!successor || info.startedAt < successor.startedAt) {
-        successor = info;
-      }
-    }
-
-    if (successor) {
-      const peer = this.peerConnections.get(successor.id);
-      if (peer) {
-        const msg: MeshMessage = {
-          method: "become_coordinator",
-          peerList: [...this.peerInfo.values()].filter(
-            (p) => p.id !== this.peerId,
-          ),
-        };
-        await writeAsync(peer.socket, encode(msg)).catch(() => {
-          /* successor socket already destroyed — nothing to hand over */
-        });
-      }
-    }
-
-    // Always clean up coordinator state, even with no successor
-    this.stopStaleCheck();
-    for (const socket of this.coordinatorServerSockets) {
-      socket.unref();
-      socket.destroy();
-    }
-    this.coordinatorServerSockets.clear();
-    this.coordinatorServer?.unref();
-    this.coordinatorServer?.close();
-    this.coordinatorServer = undefined;
-    this.isCoordinator = false;
-  }
-
-  // -----------------------------------------------------------------------
   // Shutdown
   // -----------------------------------------------------------------------
 
   async shutdown(): Promise<void> {
     this.isShutDown = true;
-    // Clear any pending markRead timers so they don't fire after sockets
-    // are destroyed (which would attempt writes on destroyed sockets) or
-    // keep the event loop alive after process.exit().
+    // Clear any pending markRead timers so they don't fire after the
+    // transport is shut down (which would attempt sends on closed sockets)
+    // or keep the event loop alive after process.exit().
     for (const timer of this.pendingMarkReadTimers) {
       clearTimeout(timer);
     }
     this.pendingMarkReadTimers.length = 0;
+
     const agent = this.agents.get(this.peerId);
     if (agent) {
       agent.status = "offline";
@@ -1314,42 +1118,7 @@ export class MeshStore implements CommsStore {
       });
     }
 
-    await this.handoverCoordinator();
-
-    // Destroy the coordinator client socket (not tracked in peerConnections)
-    this.coordinatorSocket?.unref();
-    this.coordinatorSocket?.destroy();
-    this.coordinatorSocket = undefined;
-
-    // Destroy all identified peer connections
-    for (const [, peer] of this.peerConnections) {
-      peer.socket.unref();
-      peer.socket.destroy();
-    }
-    this.peerConnections.clear();
-
-    // Destroy all data server accepted sockets (including unidentified)
-    for (const socket of this.dataServerSockets) {
-      socket.unref();
-      socket.destroy();
-    }
-    this.dataServerSockets.clear();
-
-    // Destroy all coordinator server accepted sockets
-    for (const socket of this.coordinatorServerSockets) {
-      socket.unref();
-      socket.destroy();
-    }
-    this.coordinatorServerSockets.clear();
-
     this.stopStaleCheck();
-
-    // Close servers — stop accepting new connections
-    this.dataServer?.unref();
-    this.dataServer?.close();
-    this.dataServer = undefined;
-    this.coordinatorServer?.unref();
-    this.coordinatorServer?.close();
-    this.coordinatorServer = undefined;
+    await this.transport.shutdown();
   }
 }

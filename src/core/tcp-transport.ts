@@ -54,7 +54,7 @@ function writeAsync(socket: net.Socket, data: string): Promise<void> {
 // TcpTransport
 // ---------------------------------------------------------------------------
 
-export class TcpTransport {
+export class TcpTransport implements MeshTransport {
   // -- Data server (accepts incoming peer data connections) --
   private dataServer: net.Server | undefined;
   private _dataPort = 0;
