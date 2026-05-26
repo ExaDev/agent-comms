@@ -56,6 +56,18 @@ async function main(): Promise<void> {
     jsxImportSource: "preact",
   });
 
+  // Build the service worker as a separate bundle.
+  // Service workers run in a separate context with no DOM access,
+  // so this is intentionally a standalone IIFE with no imports.
+  await esbuild.build({
+    entryPoints: [path.join(FRONTEND_DIR, "sw.ts")],
+    bundle: true,
+    minify: true,
+    target: "es2020",
+    format: "iife",
+    outfile: path.join(DIST_DIR, "sw.js"),
+  });
+
   console.log(`Built frontend: ${DIST_DIR}`);
 }
 
