@@ -6,6 +6,7 @@
  */
 
 import type { Agent, DisplayMessage, Room } from "../types.js";
+import type { RelayStatus } from "../relay-client.js";
 import { ChatArea } from "./ChatArea.js";
 import { Sidebar } from "./Sidebar.js";
 
@@ -16,6 +17,7 @@ export interface AppProps {
   dmTarget: string | undefined;
   messages: DisplayMessage[];
   connected: boolean;
+  relayStatus: RelayStatus;
   onJoinRoom: (roomId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onRenameAgent: (agentId: string, newName: string) => void;
@@ -27,6 +29,8 @@ export interface AppProps {
     description: string,
   ) => void;
   onJoinRoomInput: (roomName: string) => void;
+  onRelayConnect: (urlA: string, urlB: string) => void;
+  onRelayDisconnect: () => void;
 }
 
 export function App(props: AppProps) {
@@ -36,11 +40,14 @@ export function App(props: AppProps) {
         rooms={props.rooms}
         agents={props.agents}
         currentRoom={props.currentRoom}
+        relayStatus={props.relayStatus}
         onJoinRoom={props.onJoinRoom}
         onSelectAgent={props.onSelectAgent}
         onRenameAgent={props.onRenameAgent}
         onCreateRoom={props.onCreateRoom}
         onJoinRoomInput={props.onJoinRoomInput}
+        onRelayConnect={props.onRelayConnect}
+        onRelayDisconnect={props.onRelayDisconnect}
       />
       <ChatArea
         messages={props.messages}
