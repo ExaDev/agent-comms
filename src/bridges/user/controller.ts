@@ -43,7 +43,7 @@ export class ChatController extends EventEmitter {
     this.store = new MeshStore();
     this.store.peerId = identity.fingerprint;
     this.store.setTransport(new TlsTransport(this.store.events, identity));
-    this.tool = new CommsTool(this.store);
+    this.tool = new CommsTool(this.store, this.store.discovery);
 
     // Push delivery events to UIs
     this.store.onDelivery = (_agentId: string, event: DeliveryEvent) => {
@@ -62,7 +62,7 @@ export class ChatController extends EventEmitter {
     const ctrl = Object.create(ChatController.prototype) as ChatController;
     EventEmitter.call(ctrl);
     ctrl.store = store;
-    ctrl.tool = new CommsTool(store);
+    ctrl.tool = new CommsTool(store, store.discovery);
     ctrl.ctx = ctx;
     ctrl.currentRoom = undefined;
     ctrl.userName = "";

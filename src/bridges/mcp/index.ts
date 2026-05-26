@@ -33,7 +33,7 @@ export async function run(): Promise<void> {
   const store = new MeshStore();
   store.peerId = identity.fingerprint;
   store.setTransport(new TlsTransport(store.events, identity));
-  const tool = new CommsTool(store);
+  const tool = new CommsTool(store, store.discovery);
   let agentId: string | undefined;
 
   const mcp = new McpServer(
