@@ -211,6 +211,17 @@ export const DeliveryEventSchema = defineSchema(
 export type DeliveryEvent = z.infer<typeof DeliveryEventSchema>;
 
 // ---------------------------------------------------------------------------
+// Network interfaces
+// ---------------------------------------------------------------------------
+
+export interface NetworkInterface {
+  name: string;
+  address: string;
+  family: "IPv4" | "IPv6";
+  internal: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // CommsAction
 // ---------------------------------------------------------------------------
 
@@ -312,6 +323,18 @@ export const CommsActionSchema = defineSchema(
       action: z.literal("mesh_unadvertise"),
       id: z.string(),
     }),
+    z.object({ action: z.literal("mesh_interfaces") }),
+    z.object({
+      action: z.literal("mesh_listen"),
+      host: z.string(),
+      port: z.number().optional(),
+      policy: z.string().optional(),
+    }),
+    z.object({
+      action: z.literal("mesh_unlisten"),
+      id: z.string(),
+    }),
+    z.object({ action: z.literal("mesh_listeners") }),
   ]),
 );
 export type CommsAction = z.infer<typeof CommsActionSchema>;

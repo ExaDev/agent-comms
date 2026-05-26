@@ -11,6 +11,7 @@
  * TCP, TlsTransport for encrypted connections, etc.
  */
 
+import * as os from "node:os";
 import { nanoid } from "./nanoid.js";
 import { CommsError } from "./store.js";
 import { TcpTransport } from "./tcp-transport.js";
@@ -36,6 +37,8 @@ import type {
   DeliveryEvent,
   DeliveryStatus,
   DmMessage,
+  ListenerInfo,
+  NetworkInterface,
   Room,
   RoomMessage,
   RoomType,
@@ -1103,6 +1106,48 @@ export class MeshStore implements CommsStore {
     } catch {
       return false;
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // Listener management (coordinator only)
+  // -----------------------------------------------------------------------
+
+  async addListener(host: string, port: number, policy: string): Promise<string> {
+    const validPolicies: string[] = ["full", "observe", "rooms-only", "gateway"];
+    if (!validPolicies.includes(policy)) {
+      throw new CommsError(
+        `Invalid policy "${policy}"`, 
+        "INVALID_POLICY",
+      );
+    }
+    return this.transport.addListener(host, port, policy as "full" | "observe" | "rooms-only" | "gateway");
+  }
+
+  async removeListener(id: string): Promise<void> {
+    return this.transport.removeListener(id);
+  }
+
+  listListeners(): ListenerInfo[] {
+    return this.transport.listListeners();
+  }
+
+  getNetworkInterfaces(): NetworkInterface[] {
+    const interfaces = os.networkInterfaces();
+    const result: NetworkInterface[] = [];
+    for (const [name, addrs] of Object.entries(interfaces)) {
+      if (addrs === undefined) continue;
+      for (const addr of addrs) {
+        if (addr.family === "IPv4" || addr.family === "IPv6") {
+          result.push({
+            name,
+            address: addr.address,
+            family: addr.family,
+            internal: addr.internal,
+          });
+        }
+      }
+    }
+    return result;
   }
 
   // -----------------------------------------------------------------------

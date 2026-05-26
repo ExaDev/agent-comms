@@ -12,6 +12,8 @@ import type {
   AgentIdentity,
   DeliveryEvent,
   DmMessage,
+  ListenerInfo,
+  NetworkInterface,
   Room,
   RoomMessage,
   RoomType,
@@ -84,6 +86,12 @@ export interface CommsStore {
   // -- Delivery --
   deliver(agentId: string, event: DeliveryEvent): Promise<void>;
   drainDelivery(agentId: string): Promise<DeliveryEvent[]>;
+
+  // -- Listener management (coordinator only) --
+  addListener(host: string, port: number, policy: string): Promise<string>;
+  removeListener(id: string): Promise<void>;
+  listListeners(): ListenerInfo[];
+  getNetworkInterfaces(): NetworkInterface[];
 
   // -- Lifecycle --
   init(): Promise<void>;
