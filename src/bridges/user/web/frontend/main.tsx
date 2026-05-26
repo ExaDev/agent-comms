@@ -12,6 +12,7 @@ import { CommsWs, fetchAgents, fetchRoomMessages, fetchRooms } from "./api.js";
 import { requireElement } from "./dom.js";
 import { parseInput, routeAction } from "./input.js";
 import { State } from "./state.js";
+import { MeshClient } from "./mesh-client.js";
 import type { Action, DisplayMessage, WsFrame } from "./types.js";
 import { deliveryEventToMessage, roomMessageToDisplay } from "./messages.js";
 import { parseDeepLink, resolveDeepLink, syncUrl } from "./url-sync.js";
@@ -27,6 +28,27 @@ const rootEl = requireElement(document, "#root");
 // ---------------------------------------------------------------------------
 
 const state = new State();
+
+// ---------------------------------------------------------------------------
+// Mesh client — real-time state via SharedWorker
+// ---------------------------------------------------------------------------
+
+const meshClient = new MeshClient();
+
+meshClient.subscribe((meshState) => {
+  // Apply real-time mesh state updates on top of the REST-fetched baseline.
+  // The MeshClient delivers authoritative state from the mesh worker,
+  // which maintains a local copy of all agents and rooms.
+  if (meshState.agents.length > 0) {
+    state.setAgents(meshState.agents);
+  }
+  if (meshState.rooms.length > 0) {
+    state.setRooms(meshState.rooms);
+  }
+  state.setConnected(meshState.connected);
+});
+
+meshClient.connect();
 
 // ---------------------------------------------------------------------------
 // Helpers
