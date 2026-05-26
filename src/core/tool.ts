@@ -364,6 +364,9 @@ export class CommsTool {
     });
     return {
       content: `Advertising mesh "${action.name}" on ${action.method} (port ${String(port)}). ID: ${id}`,
+    };
+  }
+
   private async meshInterfaces(): Promise<CommsResult> {
     const interfaces = this.store.getNetworkInterfaces();
     if (interfaces.length === 0)
@@ -390,6 +393,8 @@ export class CommsTool {
     }
     await this.discovery.stopAdvertising(action.id);
     return { content: `Stopped advertising ${action.id}.`, isError: false };
+  }
+
   private async meshListen(
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_listen" },
