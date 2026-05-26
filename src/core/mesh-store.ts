@@ -15,6 +15,9 @@ import { nanoid } from "./nanoid.js";
 import { CommsError } from "./store.js";
 import { TcpTransport } from "./tcp-transport.js";
 import { dmKey } from "./wire-protocol.js";
+import { DiscoveryManager } from "./discovery.js";
+import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
+import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
 import type {
   MeshMessage,
   MeshStatePatch,
@@ -74,6 +77,8 @@ export class MeshStore implements CommsStore {
   private lastLocalDeliveryKey: string | undefined;
   private localDeliveryKeys = new Set<string>();
 
+  discovery: DiscoveryManager;
+
   constructor(coordinatorPort: number = DEFAULT_COORDINATOR_PORT) {
     this.peerId = nanoid(8);
     this.startedAt = new Date().toISOString();
@@ -81,6 +86,11 @@ export class MeshStore implements CommsStore {
     // Wire up transport with this store's event handlers.
     // TcpTransport is the default; callers can replace via setTransport().
     this.transport = new TcpTransport(this.events);
+
+    // Discovery manager — registers available backends
+    this.discovery = new DiscoveryManager();
+    this.discovery.registerBackend(new MdnsDiscoveryBackend());
+    this.discovery.registerBackend(new TailscaleDiscoveryBackend());
   }
 
   /** Replace the transport (e.g. with TlsTransport for encrypted connections). */

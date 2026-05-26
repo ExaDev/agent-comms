@@ -24,4 +24,12 @@ export { generateVapidKeys } from "./vapid.js";
 export type { VapidKeys } from "./vapid.js";
 export { PushManager } from "./push-manager.js";
 export type { PushSubscription, PushPayload } from "./push-manager.js";
+export { DiscoveryManager } from "./discovery.js";
+export type {
+  DiscoveredMesh,
+  DiscoveryBackend,
+  AdvertiseOptions,
+} from "./discovery.js";
+export { MdnsDiscoveryBackend } from "./discovery-mdns.js";
+export { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
 export * from "./types.js";
