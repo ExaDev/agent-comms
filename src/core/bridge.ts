@@ -23,6 +23,8 @@ const VisibilityEnum = z.enum(["visible", "hidden", "ghost"]);
 const StatusEnum = z.enum(["active", "idle", "busy"]);
 const RoomTypeEnum = z.enum(["public", "private", "secret"]);
 
+const MeshVisibilityEnum = z.enum(["discoverable", "quiet", "dark"]);
+
 export const MCP_TOOL_PARAMS = z.object({
   action: z.enum([
     "register",
@@ -47,6 +49,8 @@ export const MCP_TOOL_PARAMS = z.object({
     "mesh_listen",
     "mesh_unlisten",
     "mesh_listeners",
+    "mesh_set_visibility",
+    "mesh_get_visibility",
   ]),
   name: z.string().optional(),
   visibility: VisibilityEnum.optional(),
@@ -67,6 +71,7 @@ export const MCP_TOOL_PARAMS = z.object({
   policy: z.string().optional(),
   adapter: z.string().optional(),
   id: z.string().optional(),
+  meshVisibility: MeshVisibilityEnum.optional(),
 });
 
 export type ToolParams = z.infer<typeof MCP_TOOL_PARAMS>;
@@ -231,6 +236,23 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       return { action: "mesh_unlisten", id: p.id };
     case "mesh_listeners":
       return { action: "mesh_listeners" };
+    case "mesh_set_visibility": {
+      if (p.meshVisibility === undefined) {
+        throw new BuildActionError("mesh_set_visibility", "meshVisibility");
+      }
+      const result: CommsAction & { action: "mesh_set_visibility" } = {
+        action: "mesh_set_visibility",
+        visibility: p.meshVisibility,
+      };
+      if (p.adapter !== undefined) result.adapter = p.adapter;
+      return result;
+    }
+    case "mesh_get_visibility": {
+      const result: CommsAction & { action: "mesh_get_visibility" } = {
+        action: "mesh_get_visibility",
+      };
+      return result;
+    }
   }
 }
 
