@@ -21,6 +21,8 @@ import * as http from "node:http";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
+import { PushManager } from "../../../core/push-manager.js";
+import type { PushSubscription } from "../../../core/push-manager.js";
 import { ChatController } from "../controller.js";
 
 const WEB_HOST = "127.0.0.1";
@@ -41,6 +43,24 @@ const BUNDLE_JS = fs.readFileSync(
   "utf-8",
 );
 
+const SW_JS = fs.readFileSync(
+  path.join(__dirname, "dist", "sw.js"),
+  "utf-8",
+);
+
+// ---------------------------------------------------------------------------
+// Active handles — needed so HTTP handlers can reach the PushManager
+// ---------------------------------------------------------------------------
+
+const activeHandles: Set<WebServerHandle> = new Set();
+
+function findHandle(controller: ChatController): WebServerHandle | undefined {
+  for (const handle of activeHandles) {
+    if (handle.controller === controller) return handle;
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -49,6 +69,7 @@ export interface WebServerHandle {
   server: http.Server;
   controller: ChatController;
   wss: WebSocketServer;
+  pushManager: PushManager;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,9 +108,11 @@ export async function createWebServer(
     handleRequest(req, res, controller);
   });
 
+  const pushManager = new PushManager();
+
   const wss = new WebSocketServer({ server });
   wss.on("connection", (ws) => {
-    handleWebSocket(ws, controller);
+    handleWebSocket(ws, controller, pushManager);
   });
 
   server.listen(port, WEB_HOST, () => {
@@ -98,7 +121,17 @@ export async function createWebServer(
     console.log(`Agent Comms web UI: http://${WEB_HOST}:${String(actualPort)}`);
   });
 
-  return { server, controller, wss };
+  return { server, controller, wss, pushManager };
+}
+
+class HandleRef {
+  constructor(public readonly handle: WebServerHandle) {
+    activeHandles.add(handle);
+  }
+
+  dispose(): void {
+    activeHandles.delete(this.handle);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -107,6 +140,8 @@ export async function createWebServer(
 
 export async function runWeb(userName: string, port = 0): Promise<void> {
   const handle = await createWebServer(port);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- ref keeps handle alive for cleanup
+  const ref = new HandleRef(handle);
 
   handle.server.on("listening", () => {
     const addr = handle.server.address();
@@ -171,6 +206,26 @@ function handleRequest(
     return;
   }
 
+  // Service worker bundle
+  if (url.pathname === "/sw.js" && req.method === "GET") {
+    res.writeHead(200, {
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Service-Worker-Allowed": "/",
+    });
+    res.end(SW_JS);
+    return;
+  }
+
+  // VAPID public key for push subscription
+  if (url.pathname === "/api/push/vapid-key" && req.method === "GET") {
+    // Lazy-initialise PushManager on first request — this endpoint
+    // is only hit from the frontend when push is supported.
+    const handle = findHandle(controller);
+    const key = handle?.pushManager.getPublicKey() ?? "";
+    json(res, { publicKey: key });
+    return;
+  }
+
   // API routes
   if (url.pathname === "/api/agents" && req.method === "GET") {
     void (async () => {
@@ -230,15 +285,27 @@ function handleRequest(
 // WebSocket handler
 // ---------------------------------------------------------------------------
 
-function handleWebSocket(ws: WebSocket, controller: ChatController): void {
+function handleWebSocket(
+  ws: WebSocket,
+  controller: ChatController,
+  pushManager: PushManager,
+): void {
+  // Track whether this WebSocket is alive for push fallback decisions.
+  let wsAlive = true;
+  // Track the agent ID if the client subscribes to push notifications.
+  let pushAgentId: string | undefined;
+
   // Push delivery events to this client
   function onMessage(event: unknown): void {
-    ws.send(JSON.stringify({ type: "delivery", event }));
+    if (wsAlive) {
+      ws.send(JSON.stringify({ type: "delivery", event }));
+    }
   }
 
   controller.on("message", onMessage);
 
   ws.on("close", () => {
+    wsAlive = false;
     controller.off("message", onMessage);
   });
 
@@ -259,6 +326,37 @@ function handleWebSocket(ws: WebSocket, controller: ChatController): void {
         if (typeof parsed !== "object" || parsed === null)
           throw new Error("Invalid JSON");
         const params = Object.fromEntries(Object.entries(parsed));
+
+        // Handle push subscription messages from the PWA
+        if (params.action === "push_subscribe") {
+          const sub = parsePushSubscription(params.subscription);
+          if (!sub) {
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                message: "Invalid push subscription",
+              }),
+            );
+            return;
+          }
+          const agentId = getString(params, "agentId") ?? controller.agentId;
+          pushAgentId = agentId;
+          pushManager.addSubscription(agentId, sub);
+          ws.send(JSON.stringify({ type: "result", result: { content: "Push subscription registered", isError: false } }));
+          return;
+        }
+
+        if (params.action === "push_unsubscribe") {
+          const agentId =
+            getString(params, "agentId") ??
+            pushAgentId ??
+            controller.agentId;
+          pushManager.removeSubscription(agentId);
+          pushAgentId = undefined;
+          ws.send(JSON.stringify({ type: "result", result: { content: "Push subscription removed", isError: false } }));
+          return;
+        }
+
         const result = await executeAction(controller, params);
         ws.send(JSON.stringify({ type: "result", result }));
       } catch (err) {
@@ -398,6 +496,23 @@ function getRoomType(
     return value;
   }
   return undefined;
+}
+
+function parsePushSubscription(
+  value: unknown,
+): PushSubscription | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  if (!("endpoint" in value) || typeof value.endpoint !== "string")
+    return undefined;
+  if (!("keys" in value) || typeof value.keys !== "object" || value.keys === null)
+    return undefined;
+  const keys = value.keys as Record<string, unknown>;
+  if (typeof keys.p256dh !== "string" || typeof keys.auth !== "string")
+    return undefined;
+  return {
+    endpoint: value.endpoint,
+    keys: { p256dh: keys.p256dh, auth: keys.auth },
+  };
 }
 
 // ---------------------------------------------------------------------------
