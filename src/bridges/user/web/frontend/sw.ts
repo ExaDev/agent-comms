@@ -17,6 +17,10 @@
 // Service worker environment types (minimal, self-contained)
 // ---------------------------------------------------------------------------
 
+interface ExtendableEvent extends Event {
+  waitUntil(promise: Promise<unknown>): void;
+}
+
 interface PushMessageData {
   json(): Record<string, unknown>;
   text(): string;
@@ -94,7 +98,7 @@ interface ServiceWorkerGlobalScope {
   addEventListener(
     type: "fetch",
     listener: (event: FetchEvent) => void,
-  );
+  ): void;
   skipWaiting(): Promise<void>;
 }
 
@@ -175,7 +179,8 @@ self.addEventListener("fetch", (event: FetchEvent) => {
         .catch(() =>
           self.caches
             .open(CACHE_NAME)
-            .then((cache) => cache.match(event.request)),
+            .then((cache) => cache.match(event.request))
+            .then((cached) => cached ?? new Response("Offline", { status: 503 })),
         ),
     );
     return;

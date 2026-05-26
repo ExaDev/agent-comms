@@ -18,6 +18,10 @@ import * as net from "node:net";
 import assert from "node:assert/strict";
 
 const testName = process.argv[2];
+if (testName === undefined) {
+  console.error("Usage: node delivery-receipt.helper.ts <test-name>");
+  process.exit(1);
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -36,7 +40,7 @@ async function allocFreePort(): Promise<number> {
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
       const port = addr && typeof addr === "object" ? addr.port : 0;
-      server.closeAllConnections?.();
+      (server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
       server.close(() => {
         resolve(port);
       });
@@ -263,8 +267,12 @@ async function testDrainDm(): Promise<void> {
     drained.length >= 1,
     `drainDelivery should return DM, got ${String(drained.length)}`,
   );
-  assert.strictEqual(drained[0].type, "dm");
-  assert.strictEqual(drained[0].message.content, "Direct drain!");
+  const event = drained[0];
+  assert.ok(event, "drainDelivery should return at least one event");
+  assert.strictEqual(event.type, "dm");
+  if (event.type === "dm") {
+    assert.strictEqual(event.message.content, "Direct drain!");
+  }
 
   await cleanup(a, b);
 }
@@ -465,7 +473,7 @@ fn()
     const maxWait = 2000; // ms
     const start = Date.now();
     while (
-      process._getActiveHandles().length > 0 &&
+      ((process as unknown as { _getActiveHandles?: () => unknown[] })._getActiveHandles?.()?.length ?? 0) > 0 &&
       Date.now() - start < maxWait
     ) {
       await new Promise<void>((resolve) => setTimeout(resolve, 50));

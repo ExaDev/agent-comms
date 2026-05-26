@@ -357,13 +357,12 @@ export class CommsTool {
     }
     // Default to the mesh coordinator port if not specified
     const port = action.port ?? 19876;
-    const id = await this.discovery.advertise(action.method, {
-      name: action.name,
-      port,
-      adapter: action.adapter,
-    });
+    const opts: { name: string; port: number; adapter?: string } = { name: action.name, port };
+    if (action.adapter !== undefined) opts.adapter = action.adapter;
+    const id = await this.discovery.advertise(action.method, opts);
     return {
       content: `Advertising mesh "${action.name}" on ${action.method} (port ${String(port)}). ID: ${id}`,
+      isError: false,
     };
   }
 

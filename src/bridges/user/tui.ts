@@ -280,5 +280,7 @@ function formatForTerminal(event: DeliveryEvent): string {
     }
     case "name_changed":
       return `${CYAN}✎ ${event.oldName} is now ${event.newName}${RESET}`;
+    case "connection_request":
+      return `${CYAN}🔗 Connection request from ${event.peerId} (${event.name})${RESET}`;
   }
 }

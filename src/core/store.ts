@@ -610,4 +610,24 @@ export class FileStore implements CommsStore {
       await fs.mkdir(dir, { recursive: true });
     }
   }
+
+  // -----------------------------------------------------------------------
+  // Listener management — not supported by FileStore
+  // -----------------------------------------------------------------------
+
+  async addListener(): Promise<string> {
+    throw new CommsError("FileStore does not support listener management", "NOT_SUPPORTED");
+  }
+
+  async removeListener(): Promise<void> {
+    throw new CommsError("FileStore does not support listener management", "NOT_SUPPORTED");
+  }
+
+  listListeners(): import("./transport.js").ListenerInfo[] {
+    return [];
+  }
+
+  getNetworkInterfaces(): import("./types.js").NetworkInterface[] {
+    return [];
+  }
 }

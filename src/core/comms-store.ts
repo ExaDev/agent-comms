@@ -12,13 +12,13 @@ import type {
   AgentIdentity,
   DeliveryEvent,
   DmMessage,
-  ListenerInfo,
   NetworkInterface,
   Room,
   RoomMessage,
   RoomType,
   Visibility,
 } from "./types.js";
+import type { ListenerInfo } from "./transport.js";
 
 export interface CommsStore {
   // -- Identity --

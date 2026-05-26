@@ -65,6 +65,7 @@ export const MCP_TOOL_PARAMS = z.object({
   host: z.string().optional(),
   port: z.number().optional(),
   policy: z.string().optional(),
+  adapter: z.string().optional(),
   id: z.string().optional(),
 });
 
@@ -268,6 +269,8 @@ export function formatDeliveryEvent(event: DeliveryEvent): string {
       return `${event.agentName} declined invite to ${event.room}: "${event.reason}"`;
     case "name_changed":
       return `${event.oldName} is now known as ${event.newName}`;
+    case "connection_request":
+      return `Connection request from ${event.peerId} (${event.name}) fingerprint ${event.fingerprint}`;
   }
 }
 
@@ -296,6 +299,7 @@ export function isActionableEvent(event: DeliveryEvent): boolean {
     case "delivery_status":
     case "invite_declined":
     case "name_changed":
+    case "connection_request":
       return false;
   }
 }

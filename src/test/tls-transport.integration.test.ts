@@ -151,6 +151,10 @@ async function testFingerprintIsPeerId(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const testName = process.argv[2];
+if (testName === undefined) {
+  console.error("Usage: node tls-transport.integration.test.ts <test-name>");
+  process.exit(1);
+}
 
 const tests: Record<string, () => Promise<void>> = {
   "tls-communication": testTlsPeerCommunication,
@@ -168,7 +172,7 @@ fn()
   .then(async () => {
     const maxWait = 2000;
     const start = Date.now();
-    while (process._getActiveHandles().length > 0 && Date.now() - start < maxWait) {
+    while (((process as unknown as { _getActiveHandles?: () => unknown[] })._getActiveHandles?.()?.length ?? 0) > 0 && Date.now() - start < maxWait) {
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
     process.exit(0);

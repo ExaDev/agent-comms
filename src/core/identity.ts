@@ -55,7 +55,12 @@ function derSet(...items: Buffer[]): Buffer {
 /** DER OBJECT IDENTIFIER from dotted-decimal string. */
 function derOID(oid: string): Buffer {
   const parts = oid.split(".").map(Number);
-  const bytes: number[] = [40 * parts[0] + parts[1]];
+  const first = parts[0];
+  const second = parts[1];
+  if (first === undefined || second === undefined) {
+    throw new Error(`Invalid OID: ${oid}`);
+  }
+  const bytes: number[] = [40 * first + second];
   for (let i = 2; i < parts.length; i++) {
     let value = parts[i];
     if (value === undefined) continue;
@@ -241,7 +246,8 @@ export function generateIdentity(): PeerIdentity {
     .digest()
     .subarray(0, 20);
   const serial = Buffer.from(serialBytes);
-  serial[0] = serial[0] & 0x7f;
+  const firstSerialByte = serial[0];
+  if (firstSerialByte !== undefined) serial[0] = firstSerialByte & 0x7f;
 
   // Validity period: now through 365 days from now
   const now = new Date();
@@ -295,12 +301,13 @@ export function generateIdentity(): PeerIdentity {
  */
 export function getCertificateFingerprint(certificate: string): string {
   const der = pemToDer(certificate);
-  return createHash("sha256")
+  const hex = createHash("sha256")
     .update(der)
     .digest("hex")
-    .toUpperCase()
-    .match(/.{2}/g)
-    .join(":");
+    .toUpperCase();
+  const matched = hex.match(/.{2}/g);
+  if (matched === null) return "";
+  return matched.join(":");
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

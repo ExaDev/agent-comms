@@ -37,13 +37,13 @@ import type {
   DeliveryEvent,
   DeliveryStatus,
   DmMessage,
-  ListenerInfo,
   NetworkInterface,
   Room,
   RoomMessage,
   RoomType,
   Visibility,
 } from "./types.js";
+import type { ListenerInfo } from "./transport.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -271,6 +271,9 @@ export class MeshStore implements CommsStore {
       },
       onBecomeCoordinator: (peerList) => {
         void this.handleBecomeCoordinator(peerList);
+      },
+      onConnectionRequest: (_handle, _request) => {
+        // Bidirectional approval not yet implemented — auto-accept all connections
       },
     };
   }

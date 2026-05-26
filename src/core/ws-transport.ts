@@ -14,7 +14,7 @@
 import { WebSocket, WebSocketServer } from "ws";
 import { isMeshMessage } from "./wire-protocol.js";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
-import type { ConnectionHandle, TransportEvents } from "./transport.js";
+import type { ConnectionHandle, MeshTransport, TransportEvents } from "./transport.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -273,6 +273,14 @@ export class WebSocketTransport implements MeshTransport {
     throw new Error(`No connection for handle ${handle.id}`);
   }
 
+  async acceptConnection(_handle: ConnectionHandle): Promise<void> {
+    throw new Error("Bidirectional approval not yet implemented");
+  }
+
+  async rejectConnection(_handle: ConnectionHandle, _reason: string): Promise<void> {
+    throw new Error("Bidirectional approval not yet implemented");
+  }
+
   async broadcast(message: MeshMessage): Promise<void> {
     const data = JSON.stringify(message);
     const writes: Promise<void>[] = [];
@@ -284,6 +292,22 @@ export class WebSocketTransport implements MeshTransport {
       );
     }
     await Promise.all(writes);
+  }
+
+  // -----------------------------------------------------------------------
+  // MeshTransport — Listener management (not supported over WebSocket)
+  // -----------------------------------------------------------------------
+
+  async addListener(): Promise<string> {
+    throw new Error("WebSocketTransport does not support listener management");
+  }
+
+  async removeListener(): Promise<void> {
+    throw new Error("WebSocketTransport does not support listener management");
+  }
+
+  listListeners(): import("./transport.js").ListenerInfo[] {
+    return [];
   }
 
   // -----------------------------------------------------------------------

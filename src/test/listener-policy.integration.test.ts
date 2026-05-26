@@ -273,7 +273,7 @@ describe("listener policy", () => {
     //
     // We intercept at the transport.events level because store.events
     // is a getter that creates a fresh object each call.
-    const receivedHandle = await new Promise<{ policy?: string } | null>((resolve) => {
+    const receivedHandle = await new Promise<{ policy: string | undefined } | null>((resolve) => {
       const timeout = setTimeout(() => resolve(null), 3000);
 
       const transport = (store as unknown as { transport: { events: TransportEvents } }).transport;

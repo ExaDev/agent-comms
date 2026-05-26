@@ -21,7 +21,7 @@ import {
   MessageBuffer,
 } from "./wire-protocol.js";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
-import type { ConnectionHandle, ListenerInfo, ListenerPolicy, TransportEvents } from "./transport.js";
+import type { ConnectionHandle, ListenerInfo, ListenerPolicy, MeshTransport, TransportEvents } from "./transport.js";
 import { nanoid } from "./nanoid.js";
 
 // ---------------------------------------------------------------------------
@@ -349,6 +349,16 @@ export class TcpTransport implements MeshTransport {
     }
 
     throw new Error(`No connection for handle ${handle.id}`);
+  }
+
+  async acceptConnection(_handle: ConnectionHandle): Promise<void> {
+    // Bidirectional approval not yet implemented — connections are auto-accepted
+    throw new Error("Bidirectional approval not yet implemented");
+  }
+
+  async rejectConnection(_handle: ConnectionHandle, _reason: string): Promise<void> {
+    // Bidirectional approval not yet implemented — connections are auto-accepted
+    throw new Error("Bidirectional approval not yet implemented");
   }
 
   async broadcast(message: MeshMessage): Promise<void> {

@@ -182,13 +182,14 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
       }
 
       const beacon = parsed as BeaconPayload;
-      return {
+      const result: DiscoveredMesh = {
         host: rinfo.address,
         port: beacon.port,
         name: beacon.name,
-        agentCount: beacon.agents,
-        policies: beacon.policies,
       };
+      if (beacon.agents !== undefined) result.agentCount = beacon.agents;
+      if (beacon.policies !== undefined) result.policies = beacon.policies;
+      return result;
     } catch {
       return undefined;
     }

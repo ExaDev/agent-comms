@@ -380,6 +380,14 @@ export class TlsTransport {
     throw new Error(`No connection for handle ${handle.id}`);
   }
 
+  async acceptConnection(_handle: ConnectionHandle): Promise<void> {
+    throw new Error("Bidirectional approval not yet implemented");
+  }
+
+  async rejectConnection(_handle: ConnectionHandle, _reason: string): Promise<void> {
+    throw new Error("Bidirectional approval not yet implemented");
+  }
+
   async broadcast(message: MeshMessage): Promise<void> {
     const data = encode(message);
     const writes: Promise<void>[] = [];
