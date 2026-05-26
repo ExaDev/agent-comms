@@ -51,7 +51,7 @@
     "publish:mcp-registry": "tsx scripts/publish-mcp-registry.ts",
     "lint": "eslint .",
     "test": "node --test dist/test/coordinator-socket-error.integration.test.js",
-    "test:delivery": "for t in push-room push-dm drain-room drain-dm read-receipt-push read-receipt-drain readby-array; do node dist/test/delivery-receipt.helper.js $t || exit 1; done",
+    "test:delivery": "node dist/test/delivery-receipt.runner.js",
     "test:all": "pnpm test && pnpm test:delivery",
     "test:frontend": "tsx --test src/bridges/user/web/frontend/test/**/*.unit.test.ts",
     "test:e2e": "playwright test",

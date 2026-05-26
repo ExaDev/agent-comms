@@ -14,6 +14,7 @@
  */
 
 import { MeshStore } from "../core/mesh-store.js";
+import * as net from "node:net";
 import assert from "node:assert/strict";
 
 const testName = process.argv[2];
@@ -23,20 +24,26 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Unique port per process + test name to avoid TIME_WAIT collisions
- * across sequential runs. Uses a hash of the test name mixed with the
- * process PID to produce a port in the ephemeral range.
+ * Allocate a genuinely free coordinator port. Creates a probe server on
+ * port 0, records the OS-assigned port, then immediately closes the
+ * probe. Uses SO_REUSEADDR on the probe so the port doesn't enter
+ * TIME_WAIT — making it immediately available for the coordinator.
  */
-function allocPort(): number {
-  let hash = 0;
-  const input = `${testName}-${process.pid}`;
-  for (let i = 0; i < input.length; i++) {
-    hash = ((hash << 5) - hash + input.charCodeAt(i)) | 0;
-  }
-  return 40000 + (Math.abs(hash) % 10000);
+async function allocFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    // SO_REUSEADDR avoids TIME_WAIT on close
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      const port = addr && typeof addr === "object" ? addr.port : 0;
+      server.closeAllConnections?.();
+      server.close(() => {
+        resolve(port);
+      });
+    });
+    server.on("error", reject);
+  });
 }
-
-const PORT = allocPort();
 
 async function cleanup(...stores: MeshStore[]): Promise<void> {
   for (const s of stores) {
@@ -49,7 +56,8 @@ async function cleanup(...stores: MeshStore[]): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function testPushRoom(): Promise<void> {
-  const a = new MeshStore(PORT);
+  const port = await allocFreePort();
+  const a = new MeshStore(port);
   const deliveriesA: unknown[] = [];
   a.onDelivery = () => {
     deliveriesA.push(1);
@@ -65,7 +73,7 @@ async function testPushRoom(): Promise<void> {
   });
   await sleep(100);
 
-  const b = new MeshStore(PORT);
+  const b = new MeshStore(port);
   const deliveriesB: Record<string, unknown>[] = [];
   b.onDelivery = (_id: string, ev: unknown) => {
     deliveriesB.push(ev as Record<string, unknown>);
@@ -82,7 +90,7 @@ async function testPushRoom(): Promise<void> {
   await sleep(300);
 
   const room = await a.createRoom({
-    name: `push-room-${PORT}`,
+    name: `push-room-${port}`,
     type: "public",
     owner: a.peerId,
     description: "Push delivery test",
@@ -109,7 +117,8 @@ async function testPushRoom(): Promise<void> {
 }
 
 async function testPushDm(): Promise<void> {
-  const a = new MeshStore(PORT);
+  const port = await allocFreePort();
+  const a = new MeshStore(port);
   const deliveriesA: unknown[] = [];
   a.onDelivery = () => {
     deliveriesA.push(1);
@@ -125,7 +134,7 @@ async function testPushDm(): Promise<void> {
   });
   await sleep(100);
 
-  const b = new MeshStore(PORT);
+  const b = new MeshStore(port);
   const deliveriesB: Record<string, unknown>[] = [];
   b.onDelivery = (_id: string, ev: unknown) => {
     deliveriesB.push(ev as Record<string, unknown>);
@@ -159,7 +168,8 @@ async function testPushDm(): Promise<void> {
 }
 
 async function testDrainRoom(): Promise<void> {
-  const a = new MeshStore(PORT);
+  const port = await allocFreePort();
+  const a = new MeshStore(port);
   await a.init();
   await a.registerAgent({
     name: "a",
@@ -172,7 +182,7 @@ async function testDrainRoom(): Promise<void> {
   await sleep(100);
 
   // B has NO onDelivery — events queue for drain
-  const b = new MeshStore(PORT);
+  const b = new MeshStore(port);
   await b.init();
   await b.registerAgent({
     name: "b",
@@ -185,7 +195,7 @@ async function testDrainRoom(): Promise<void> {
   await sleep(300);
 
   const room = await a.createRoom({
-    name: `drain-room-${PORT}`,
+    name: `drain-room-${port}`,
     type: "public",
     owner: a.peerId,
     description: "Drain delivery test",
@@ -220,7 +230,8 @@ async function testDrainRoom(): Promise<void> {
 }
 
 async function testDrainDm(): Promise<void> {
-  const a = new MeshStore(PORT);
+  const port = await allocFreePort();
+  const a = new MeshStore(port);
   await a.init();
   await a.registerAgent({
     name: "a",
@@ -232,7 +243,7 @@ async function testDrainDm(): Promise<void> {
   });
   await sleep(100);
 
-  const b = new MeshStore(PORT);
+  const b = new MeshStore(port);
   await b.init();
   await b.registerAgent({
     name: "b",
@@ -259,7 +270,8 @@ async function testDrainDm(): Promise<void> {
 }
 
 async function testReadReceiptPush(): Promise<void> {
-  const a = new MeshStore(PORT);
+  const port = await allocFreePort();
+  const a = new MeshStore(port);
   const deliveriesA: Record<string, unknown>[] = [];
   a.onDelivery = (_id: string, ev: unknown) => {
     deliveriesA.push(ev as Record<string, unknown>);
@@ -275,7 +287,7 @@ async function testReadReceiptPush(): Promise<void> {
   });
   await sleep(100);
 
-  const b = new MeshStore(PORT);
+  const b = new MeshStore(port);
   b.onDelivery = () => {};
   await b.init();
   await b.registerAgent({
@@ -289,7 +301,7 @@ async function testReadReceiptPush(): Promise<void> {
   await sleep(300);
 
   const room = await a.createRoom({
-    name: `read-push-${PORT}`,
+    name: `read-push-${port}`,
     type: "public",
     owner: a.peerId,
     description: "Read receipt push test",
@@ -312,7 +324,8 @@ async function testReadReceiptPush(): Promise<void> {
 }
 
 async function testReadReceiptDrain(): Promise<void> {
-  const a = new MeshStore(PORT);
+  const port = await allocFreePort();
+  const a = new MeshStore(port);
   const deliveriesA: Record<string, unknown>[] = [];
   a.onDelivery = (_id: string, ev: unknown) => {
     deliveriesA.push(ev as Record<string, unknown>);
@@ -329,7 +342,7 @@ async function testReadReceiptDrain(): Promise<void> {
   await sleep(100);
 
   // B has NO onDelivery — drain triggers markRead
-  const b = new MeshStore(PORT);
+  const b = new MeshStore(port);
   await b.init();
   await b.registerAgent({
     name: "b",
@@ -342,7 +355,7 @@ async function testReadReceiptDrain(): Promise<void> {
   await sleep(300);
 
   const room = await a.createRoom({
-    name: `read-drain-${PORT}`,
+    name: `read-drain-${port}`,
     type: "public",
     owner: a.peerId,
     description: "Read receipt drain test",
@@ -371,7 +384,8 @@ async function testReadReceiptDrain(): Promise<void> {
 }
 
 async function testReadbyArray(): Promise<void> {
-  const a = new MeshStore(PORT);
+  const port = await allocFreePort();
+  const a = new MeshStore(port);
   a.onDelivery = () => {};
   await a.init();
   await a.registerAgent({
@@ -384,7 +398,7 @@ async function testReadbyArray(): Promise<void> {
   });
   await sleep(100);
 
-  const b = new MeshStore(PORT);
+  const b = new MeshStore(port);
   b.onDelivery = () => {};
   await b.init();
   await b.registerAgent({
@@ -398,7 +412,7 @@ async function testReadbyArray(): Promise<void> {
   await sleep(300);
 
   const room = await a.createRoom({
-    name: `readby-${PORT}`,
+    name: `readby-${port}`,
     type: "public",
     owner: a.peerId,
     description: "readBy test",
@@ -443,9 +457,19 @@ if (!fn) {
 }
 
 fn()
-  .then(() => {
-    // Force exit — pending markRead timers and socket close handlers
-    // can keep the event loop alive even after shutdown().
+  .then(async () => {
+    // Wait for all active handles to be cleaned up before exiting.
+    // This ensures TCP sockets are properly closed (FIN sent, not RST)
+    // and the OS releases the ports before the process exits, preventing
+    // the parent process from hanging on subsequent fork/exec.
+    const maxWait = 2000; // ms
+    const start = Date.now();
+    while (
+      process._getActiveHandles().length > 0 &&
+      Date.now() - start < maxWait
+    ) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    }
     process.exit(0);
   })
   .catch((err: unknown) => {

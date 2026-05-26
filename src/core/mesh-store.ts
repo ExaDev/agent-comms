@@ -496,7 +496,7 @@ export class MeshStore implements CommsStore {
               void this.markRead(evt.message.id, this.peerId);
             }
           }, 0);
-          this.pendingMarkReadTimers.push(timer);
+          if (!this.isShutDown) this.pendingMarkReadTimers.push(timer);
         }
         break;
       }
@@ -621,7 +621,7 @@ export class MeshStore implements CommsStore {
           void this.markRead(event.message.id, agentId);
         }
       }, 0);
-      this.pendingMarkReadTimers.push(timer);
+      if (!this.isShutDown) this.pendingMarkReadTimers.push(timer);
     }
 
     // Remote delivery
