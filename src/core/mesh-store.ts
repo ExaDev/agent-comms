@@ -51,7 +51,7 @@ const COORDINATOR_HOST = "127.0.0.1";
 // ---------------------------------------------------------------------------
 
 export class MeshStore implements CommsStore {
-  readonly peerId: string;
+  peerId: string;
   readonly startedAt: string;
   readonly coordinatorPort: number;
 
