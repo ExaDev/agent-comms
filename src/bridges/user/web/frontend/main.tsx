@@ -256,8 +256,12 @@ function rerender(): void {
       onSendAction={handleSendAction}
       onCreateRoom={onCreateRoom}
       onJoinRoomInput={onJoinRoomInput}
-      onRelayConnect={(urlA, urlB) => { relayClient.connectRelay(urlA, urlB); }}
-      onRelayDisconnect={() => { relayClient.disconnect(); }}
+      onRelayConnect={(urlA, urlB) => {
+        relayClient.connectRelay(urlA, urlB);
+      }}
+      onRelayDisconnect={() => {
+        relayClient.disconnect();
+      }}
     />,
     rootEl,
   );

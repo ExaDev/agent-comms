@@ -48,7 +48,10 @@ describe("connection approval", () => {
 
     // Set up coordinator (store A)
     const storeA = new MeshStore(portA);
-    const receivedRequests: DeliveryEvent[] = [];
+    const receivedRequests: Extract<
+      DeliveryEvent,
+      { type: "connection_request" }
+    >[] = [];
     storeA.onDelivery = (_id, event) => {
       if (event.type === "connection_request") {
         receivedRequests.push(event);
@@ -85,12 +88,24 @@ describe("connection approval", () => {
     await sleep(300);
 
     // Coordinator should have received a connection_request event
-    assert.equal(receivedRequests.length, 1, "Coordinator should receive exactly one connection request");
+    assert.equal(
+      receivedRequests.length,
+      1,
+      "Coordinator should receive exactly one connection request",
+    );
     const request = receivedRequests[0];
     assert.equal(request?.type, "connection_request");
     assert.ok(request?.connectionId, "Request should have a connectionId");
-    assert.equal(request?.peerId, storeB.peerId, "Request should contain connector's peer ID");
-    assert.equal(request?.name, "connector", "Request should contain connector's name");
+    assert.equal(
+      request?.peerId,
+      storeB.peerId,
+      "Request should contain connector's peer ID",
+    );
+    assert.equal(
+      request?.name,
+      "connector",
+      "Request should contain connector's name",
+    );
 
     await storeB.shutdown();
     await storeA.shutdown();
@@ -101,7 +116,10 @@ describe("connection approval", () => {
     const portB = portA + 100;
 
     const storeA = new MeshStore(portA);
-    const receivedRequests: DeliveryEvent[] = [];
+    const receivedRequests: Extract<
+      DeliveryEvent,
+      { type: "connection_request" }
+    >[] = [];
     storeA.onDelivery = (_id, event) => {
       if (event.type === "connection_request") {
         receivedRequests.push(event);
@@ -134,7 +152,11 @@ describe("connection approval", () => {
 
     await sleep(300);
 
-    assert.equal(receivedRequests.length, 1, "Coordinator should receive a connection request");
+    assert.equal(
+      receivedRequests.length,
+      1,
+      "Coordinator should receive a connection request",
+    );
     const request = receivedRequests[0];
     assert.ok(request?.connectionId);
 
@@ -166,7 +188,10 @@ describe("connection approval", () => {
     const portB = portA + 100;
 
     const storeA = new MeshStore(portA);
-    const receivedRequests: DeliveryEvent[] = [];
+    const receivedRequests: Extract<
+      DeliveryEvent,
+      { type: "connection_request" }
+    >[] = [];
     storeA.onDelivery = (_id, event) => {
       if (event.type === "connection_request") {
         receivedRequests.push(event);
@@ -199,7 +224,11 @@ describe("connection approval", () => {
 
     await sleep(300);
 
-    assert.equal(receivedRequests.length, 1, "Coordinator should receive a connection request");
+    assert.equal(
+      receivedRequests.length,
+      1,
+      "Coordinator should receive a connection request",
+    );
     const request = receivedRequests[0];
     assert.ok(request?.connectionId);
 
@@ -251,7 +280,11 @@ describe("connection approval", () => {
 
     // No pending connections initially
     let pending = storeA.listPendingConnections();
-    assert.equal(pending.length, 0, "Should have no pending connections initially");
+    assert.equal(
+      pending.length,
+      0,
+      "Should have no pending connections initially",
+    );
 
     // Initiate connection request
     storeB.connectToRemote("127.0.0.1", portA);
@@ -261,8 +294,16 @@ describe("connection approval", () => {
     // Should now have one pending connection
     pending = storeA.listPendingConnections();
     assert.equal(pending.length, 1, "Should have one pending connection");
-    assert.equal(pending[0]?.name, "connector", "Pending connection should show connector name");
-    assert.equal(pending[0]?.peerId, storeB.peerId, "Pending connection should show connector peer ID");
+    assert.equal(
+      pending[0]?.name,
+      "connector",
+      "Pending connection should show connector name",
+    );
+    assert.equal(
+      pending[0]?.peerId,
+      storeB.peerId,
+      "Pending connection should show connector peer ID",
+    );
 
     // Accept to clean up
     const connectionId = pending[0]?.connectionId;
@@ -274,7 +315,11 @@ describe("connection approval", () => {
 
     // No more pending connections after acceptance
     pending = storeA.listPendingConnections();
-    assert.equal(pending.length, 0, "Should have no pending connections after accept");
+    assert.equal(
+      pending.length,
+      0,
+      "Should have no pending connections after accept",
+    );
 
     await storeB.shutdown();
     await storeA.shutdown();
@@ -323,26 +368,52 @@ describe("connection approval", () => {
 
     // Verify coordinator is listening
     const listeners = storeA.listListeners();
-    assert.ok(listeners.length > 0, `Coordinator should have listeners, got ${listeners.length}`);
-    assert.equal(listeners[0]?.port, portA, `Coordinator should be on port ${portA}`);
+    assert.ok(
+      listeners.length > 0,
+      `Coordinator should have listeners, got ${listeners.length}`,
+    );
+    assert.equal(
+      listeners[0]?.port,
+      portA,
+      `Coordinator should be on port ${portA}`,
+    );
 
     // B initiates the connection via the tool
     const connectResult = await toolB.handle(
-      { agentId: storeB.peerId, harness: "test", cwd: "/test/b", pid: process.pid },
+      {
+        agentId: storeB.peerId,
+        harness: "test",
+        cwd: "/test/b",
+        pid: process.pid,
+      },
       connectAction,
     );
-    assert.ok(!connectResult.isError, `mesh_connect should succeed: ${connectResult.content}`);
+    assert.ok(
+      !connectResult.isError,
+      `mesh_connect should succeed: ${connectResult.content}`,
+    );
 
     await sleep(300);
 
     // A checks pending connections via the tool
     const pendingAction = buildAction({ action: "mesh_pending" });
     const pendingResult = await toolA.handle(
-      { agentId: storeA.peerId, harness: "test", cwd: "/test/a", pid: process.pid },
+      {
+        agentId: storeA.peerId,
+        harness: "test",
+        cwd: "/test/a",
+        pid: process.pid,
+      },
       pendingAction,
     );
-    assert.ok(!pendingResult.isError, `mesh_pending should succeed: ${pendingResult.content}`);
-    assert.ok(pendingResult.content.includes("connector"), "Pending list should show connector name");
+    assert.ok(
+      !pendingResult.isError,
+      `mesh_pending should succeed: ${pendingResult.content}`,
+    );
+    assert.ok(
+      pendingResult.content.includes("connector"),
+      "Pending list should show connector name",
+    );
 
     // Extract connectionId from the pending connections list
     const pendingConns = storeA.listPendingConnections();
@@ -356,10 +427,18 @@ describe("connection approval", () => {
       connectionId,
     });
     const acceptResult = await toolA.handle(
-      { agentId: storeA.peerId, harness: "test", cwd: "/test/a", pid: process.pid },
+      {
+        agentId: storeA.peerId,
+        harness: "test",
+        cwd: "/test/a",
+        pid: process.pid,
+      },
       acceptAction,
     );
-    assert.ok(!acceptResult.isError, `mesh_accept should succeed: ${acceptResult.content}`);
+    assert.ok(
+      !acceptResult.isError,
+      `mesh_accept should succeed: ${acceptResult.content}`,
+    );
 
     await sleep(200);
 
@@ -425,11 +504,22 @@ describe("connection approval", () => {
       reason: "not allowed",
     });
     const rejectResult = await toolA.handle(
-      { agentId: storeA.peerId, harness: "test", cwd: "/test/a", pid: process.pid },
+      {
+        agentId: storeA.peerId,
+        harness: "test",
+        cwd: "/test/a",
+        pid: process.pid,
+      },
       rejectAction,
     );
-    assert.ok(!rejectResult.isError, `mesh_reject should succeed: ${rejectResult.content}`);
-    assert.ok(rejectResult.content.includes("not allowed"), "Result should include the reason");
+    assert.ok(
+      !rejectResult.isError,
+      `mesh_reject should succeed: ${rejectResult.content}`,
+    );
+    assert.ok(
+      rejectResult.content.includes("not allowed"),
+      "Result should include the reason",
+    );
 
     // Verify rejection took effect
     const pending = storeA.listPendingConnections();

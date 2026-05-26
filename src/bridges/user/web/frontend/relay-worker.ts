@@ -17,7 +17,10 @@
 // ---------------------------------------------------------------------------
 
 interface SharedWorkerGlobalScope {
-  addEventListener(type: "connect", listener: (event: MessageEvent) => void): void;
+  addEventListener(
+    type: "connect",
+    listener: (event: MessageEvent) => void,
+  ): void;
   close(): void;
 }
 
@@ -90,7 +93,11 @@ type MeshStatePatch =
   | { type: "room_delete"; roomId: string }
   | { type: "message_add"; roomId: string; message: RoomMessage }
   | { type: "dm_add"; key: string; message: DmMessage }
-  | { type: "delivery"; agentId: string; event: { type: string; [key: string]: unknown } }
+  | {
+      type: "delivery";
+      agentId: string;
+      event: { type: string; [key: string]: unknown };
+    }
   | { type: "message_read"; messageId: string; readBy: string; room?: string };
 
 // ---------------------------------------------------------------------------
@@ -214,13 +221,14 @@ function translateRoom(label: "a" | "b", room: Room): Room {
 }
 
 function translateMessage(label: "a" | "b", msg: RoomMessage): RoomMessage {
-  return {
+  const result: RoomMessage = {
     ...msg,
     from: prefixId(label, msg.from),
     room: prefixId(label, msg.room),
     readBy: msg.readBy.map((r) => prefixId(label, r)),
-    replyTo: msg.replyTo ? prefixId(label, msg.replyTo) : undefined,
   };
+  if (msg.replyTo !== undefined) result.replyTo = prefixId(label, msg.replyTo);
+  return result;
 }
 
 function translateDm(label: "a" | "b", msg: DmMessage): DmMessage {
@@ -242,7 +250,10 @@ function translateDmKey(label: "a" | "b", key: string): string {
  * Translate a state_update patch, prefixing all peer/room IDs with the
  * mesh label so they don't collide with IDs from the other mesh.
  */
-function translatePatch(label: "a" | "b", patch: MeshStatePatch): MeshStatePatch {
+function translatePatch(
+  label: "a" | "b",
+  patch: MeshStatePatch,
+): MeshStatePatch {
   switch (patch.type) {
     case "agent_upsert":
       return { ...patch, agent: translateAgent(label, patch.agent) };
@@ -253,9 +264,17 @@ function translatePatch(label: "a" | "b", patch: MeshStatePatch): MeshStatePatch
     case "room_delete":
       return { ...patch, roomId: prefixId(label, patch.roomId) };
     case "message_add":
-      return { ...patch, roomId: prefixId(label, patch.roomId), message: translateMessage(label, patch.message) };
+      return {
+        ...patch,
+        roomId: prefixId(label, patch.roomId),
+        message: translateMessage(label, patch.message),
+      };
     case "dm_add":
-      return { ...patch, key: translateDmKey(label, patch.key), message: translateDm(label, patch.message) };
+      return {
+        ...patch,
+        key: translateDmKey(label, patch.key),
+        message: translateDm(label, patch.message),
+      };
     case "delivery":
       return { ...patch, agentId: prefixId(label, patch.agentId) };
     case "message_read":
@@ -274,7 +293,8 @@ function translatePatch(label: "a" | "b", patch: MeshStatePatch): MeshStatePatch
 function parseWireMessage(raw: unknown): WireMessage | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   if (!("method" in raw)) return undefined;
-  if (typeof (raw as Record<string, unknown>).method !== "string") return undefined;
+  if (typeof (raw as Record<string, unknown>).method !== "string")
+    return undefined;
   return raw as WireMessage;
 }
 
@@ -307,7 +327,11 @@ function translateWireMessage(label: "a" | "b", msg: WireMessage): WireMessage {
   return msg;
 }
 
-function forwardToTarget(source: MeshConnection, target: MeshConnection, raw: unknown): void {
+function forwardToTarget(
+  source: MeshConnection,
+  target: MeshConnection,
+  raw: unknown,
+): void {
   const msg = parseWireMessage(raw);
   if (msg === undefined) return;
   if (!shouldForward(msg)) return;
@@ -467,7 +491,10 @@ self.addEventListener("connect", (event: MessageEvent) => {
   // Send current status to the new port
   try {
     port.postMessage(
-      JSON.stringify({ type: "status", status: getStatus() } satisfies RelayOutbound),
+      JSON.stringify({
+        type: "status",
+        status: getStatus(),
+      } satisfies RelayOutbound),
     );
   } catch {
     // Port not ready yet

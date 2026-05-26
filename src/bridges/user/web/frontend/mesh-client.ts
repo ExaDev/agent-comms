@@ -49,7 +49,10 @@ export class MeshClient {
   private actionCounter = 0;
   private readonly pendingActions = new Map<
     string,
-    { resolve: (result: { content: string; isError: boolean }) => void; reject: (error: Error) => void }
+    {
+      resolve: (result: { content: string; isError: boolean }) => void;
+      reject: (error: Error) => void;
+    }
   >();
 
   /** Connect to the mesh SharedWorker. Idempotent. */
@@ -66,14 +69,19 @@ export class MeshClient {
       if (!isOutboundMessage(raw)) return;
 
       switch (raw.type) {
-        case "state":
+        case "state": {
+          const state = raw as {
+            type: "state";
+            state: { agents: unknown; rooms: unknown };
+          };
           this.state = {
             ...this.state,
-            agents: raw.state.agents,
-            rooms: raw.state.rooms,
+            agents: state.state.agents as typeof this.state.agents,
+            rooms: state.state.rooms as typeof this.state.rooms,
           };
           this.notify();
           break;
+        }
         case "connected":
           this.state = { ...this.state, connected: true };
           this.notify();

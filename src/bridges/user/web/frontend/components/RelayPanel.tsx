@@ -15,9 +15,17 @@ export interface RelayPanelProps {
   onDisconnect: () => void;
 }
 
-export function RelayPanel({ status, onConnect, onDisconnect }: RelayPanelProps) {
-  const [urlA, setUrlA] = useState(status.urlA ?? "ws://localhost:8080/ws/mesh");
-  const [urlB, setUrlB] = useState(status.urlB ?? "ws://localhost:8081/ws/mesh");
+export function RelayPanel({
+  status,
+  onConnect,
+  onDisconnect,
+}: RelayPanelProps) {
+  const [urlA, setUrlA] = useState(
+    status.urlA ?? "ws://localhost:8080/ws/mesh",
+  );
+  const [urlB, setUrlB] = useState(
+    status.urlB ?? "ws://localhost:8081/ws/mesh",
+  );
   const [expanded, setExpanded] = useState(false);
 
   const bothConnected = status.connectedA && status.connectedB;
@@ -34,11 +42,17 @@ export function RelayPanel({ status, onConnect, onDisconnect }: RelayPanelProps)
       <div class="relay-panel relay-collapsed">
         <button
           class="relay-toggle-btn"
-          onClick={() => { setExpanded(true); }}
+          onClick={() => {
+            setExpanded(true);
+          }}
         >
           ⤺ Relay
-          {bothConnected && <span class="relay-badge relay-badge-green">●</span>}
-          {eitherConnected && !bothConnected && <span class="relay-badge relay-badge-yellow">●</span>}
+          {bothConnected && (
+            <span class="relay-badge relay-badge-green">●</span>
+          )}
+          {eitherConnected && !bothConnected && (
+            <span class="relay-badge relay-badge-yellow">●</span>
+          )}
           {status.forwardedCount > 0 && (
             <span class="relay-count">{status.forwardedCount}</span>
           )}
@@ -60,7 +74,9 @@ export function RelayPanel({ status, onConnect, onDisconnect }: RelayPanelProps)
         <span class="relay-title">Mesh Relay</span>
         <button
           class="relay-collapse-btn"
-          onClick={() => { setExpanded(false); }}
+          onClick={() => {
+            setExpanded(false);
+          }}
           title="Collapse relay panel"
         >
           ✕
@@ -81,7 +97,9 @@ export function RelayPanel({ status, onConnect, onDisconnect }: RelayPanelProps)
             }}
             disabled={eitherConnected}
           />
-          <span class={`relay-status-dot ${status.connectedA ? "active" : ""}`} />
+          <span
+            class={`relay-status-dot ${status.connectedA ? "active" : ""}`}
+          />
         </label>
 
         <label class="relay-label">
@@ -97,16 +115,26 @@ export function RelayPanel({ status, onConnect, onDisconnect }: RelayPanelProps)
             }}
             disabled={eitherConnected}
           />
-          <span class={`relay-status-dot ${status.connectedB ? "active" : ""}`} />
+          <span
+            class={`relay-status-dot ${status.connectedB ? "active" : ""}`}
+          />
         </label>
 
         <div class="relay-actions">
           {!eitherConnected ? (
-            <button type="submit" class="relay-connect-btn" disabled={!urlA.trim() || !urlB.trim()}>
+            <button
+              type="submit"
+              class="relay-connect-btn"
+              disabled={!urlA.trim() || !urlB.trim()}
+            >
               Connect
             </button>
           ) : (
-            <button type="button" class="relay-disconnect-btn" onClick={onDisconnect}>
+            <button
+              type="button"
+              class="relay-disconnect-btn"
+              onClick={onDisconnect}
+            >
               Disconnect
             </button>
           )}
@@ -128,7 +156,9 @@ export function RelayPanel({ status, onConnect, onDisconnect }: RelayPanelProps)
       {status.errors.length > 0 && (
         <div class="relay-errors">
           {status.errors.slice(-3).map((err, i) => (
-            <div key={i} class="relay-error">{err}</div>
+            <div key={i} class="relay-error">
+              {err}
+            </div>
           ))}
         </div>
       )}

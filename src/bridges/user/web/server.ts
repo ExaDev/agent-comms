@@ -20,7 +20,7 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { WebSocketServer, type WebSocket } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 import { PushManager } from "../../../core/push-manager.js";
 import type { PushSubscription } from "../../../core/push-manager.js";
 import { ChatController } from "../controller.js";
@@ -43,17 +43,13 @@ const BUNDLE_JS = fs.readFileSync(
   "utf-8",
 );
 
-const MESH_WORKER_JS = fs.existsSync(path.join(__dirname, "dist", "mesh-worker.js"))
-  ? fs.readFileSync(
-      path.join(__dirname, "dist", "mesh-worker.js"),
-      "utf-8",
-    )
+const MESH_WORKER_JS = fs.existsSync(
+  path.join(__dirname, "dist", "mesh-worker.js"),
+)
+  ? fs.readFileSync(path.join(__dirname, "dist", "mesh-worker.js"), "utf-8")
   : "/* mesh-worker not built */";
 
-const SW_JS = fs.readFileSync(
-  path.join(__dirname, "dist", "sw.js"),
-  "utf-8",
-);
+const SW_JS = fs.readFileSync(path.join(__dirname, "dist", "sw.js"), "utf-8");
 
 const MANIFEST_JSON = fs.readFileSync(
   path.join(__dirname, "dist", "manifest.json"),
@@ -61,9 +57,7 @@ const MANIFEST_JSON = fs.readFileSync(
 );
 
 function loadIcon(filename: string): Buffer {
-  return fs.readFileSync(
-    path.join(__dirname, "dist", "icons", filename),
-  );
+  return fs.readFileSync(path.join(__dirname, "dist", "icons", filename));
 }
 
 const ICONS: Record<string, Buffer> = {
@@ -76,7 +70,7 @@ const ICONS: Record<string, Buffer> = {
 // Active handles — needed so HTTP handlers can reach the PushManager
 // ---------------------------------------------------------------------------
 
-const activeHandles: Set<WebServerHandle> = new Set();
+const activeHandles = new Set<WebServerHandle>();
 
 function findHandle(controller: ChatController): WebServerHandle | undefined {
   for (const handle of activeHandles) {
@@ -417,18 +411,29 @@ function handleWebSocket(
           const agentId = getString(params, "agentId") ?? controller.agentId;
           pushAgentId = agentId;
           pushManager.addSubscription(agentId, sub);
-          ws.send(JSON.stringify({ type: "result", result: { content: "Push subscription registered", isError: false } }));
+          ws.send(
+            JSON.stringify({
+              type: "result",
+              result: {
+                content: "Push subscription registered",
+                isError: false,
+              },
+            }),
+          );
           return;
         }
 
         if (params.action === "push_unsubscribe") {
           const agentId =
-            getString(params, "agentId") ??
-            pushAgentId ??
-            controller.agentId;
+            getString(params, "agentId") ?? pushAgentId ?? controller.agentId;
           pushManager.removeSubscription(agentId);
           pushAgentId = undefined;
-          ws.send(JSON.stringify({ type: "result", result: { content: "Push subscription removed", isError: false } }));
+          ws.send(
+            JSON.stringify({
+              type: "result",
+              result: { content: "Push subscription removed", isError: false },
+            }),
+          );
           return;
         }
 
@@ -467,10 +472,14 @@ let meshPatchListenerActive = false;
  * Ensures the global MeshStore.onPatch forwards patches to all mesh peers.
  * Called once on first connection; subsequent calls are no-ops.
  */
-function ensurePatchListener(store: import("../../../core/mesh-store.js").MeshStore): void {
+function ensurePatchListener(
+  store: import("../../../core/mesh-store.js").MeshStore,
+): void {
   if (meshPatchListenerActive) return;
   meshPatchListenerActive = true;
-  store.onPatch = (patch: import("../../../core/wire-protocol.js").MeshStatePatch): void => {
+  store.onPatch = (
+    patch: import("../../../core/wire-protocol.js").MeshStatePatch,
+  ): void => {
     const msg: import("../../../core/wire-protocol.js").MeshMessage = {
       method: "state_update",
       patch,
@@ -491,26 +500,24 @@ function ensurePatchListener(store: import("../../../core/mesh-store.js").MeshSt
  * then forwards all mesh state patches in real-time. Browser peers
  * send action objects which are executed through the ChatController.
  */
-function handleMeshWebSocket(
-  ws: WebSocket,
-  controller: ChatController,
-): void {
+function handleMeshWebSocket(ws: WebSocket, controller: ChatController): void {
   const store = controller.meshStore;
 
   meshPeers.add(ws);
   ensurePatchListener(store);
 
   // Send initial state_sync
-  const agents = store["agents"] as Map<string, unknown>;
-  const rooms = store["rooms"] as Map<string, unknown>;
-  const messages = store["messages"] as Map<string, unknown>;
-  const dms = store["dms"] as Map<string, unknown>;
-  const initialState: import("../../../core/wire-protocol.js").SerialisedState = {
-    agents: Object.fromEntries(agents),
-    rooms: Object.fromEntries(rooms),
-    messages: Object.fromEntries(messages),
-    dms: Object.fromEntries(dms),
-  };
+  const agents = store.agents;
+  const rooms = store.rooms;
+  const messages = store.messages;
+  const dms = store.dms;
+  const initialState: import("../../../core/wire-protocol.js").SerialisedState =
+    {
+      agents: Object.fromEntries(agents),
+      rooms: Object.fromEntries(rooms),
+      messages: Object.fromEntries(messages),
+      dms: Object.fromEntries(dms),
+    };
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ method: "state_sync", state: initialState }));
   }
@@ -673,13 +680,15 @@ function getRoomType(
   return undefined;
 }
 
-function parsePushSubscription(
-  value: unknown,
-): PushSubscription | undefined {
+function parsePushSubscription(value: unknown): PushSubscription | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   if (!("endpoint" in value) || typeof value.endpoint !== "string")
     return undefined;
-  if (!("keys" in value) || typeof value.keys !== "object" || value.keys === null)
+  if (
+    !("keys" in value) ||
+    typeof value.keys !== "object" ||
+    value.keys === null
+  )
     return undefined;
   const keys = value.keys as Record<string, unknown>;
   if (typeof keys.p256dh !== "string" || typeof keys.auth !== "string")
