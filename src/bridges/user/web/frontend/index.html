@@ -4,9 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Comms</title>
+<meta name="theme-color" content="#16213e">
+<link rel="manifest" href="/manifest.json">
 </head>
 <body>
 <div id="root"></div>
 <script src="/bundle.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("/sw.js");
+  });
+}
+</script>
 </body>
 </html>

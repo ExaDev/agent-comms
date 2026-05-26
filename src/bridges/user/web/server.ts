@@ -48,6 +48,23 @@ const SW_JS = fs.readFileSync(
   "utf-8",
 );
 
+const MANIFEST_JSON = fs.readFileSync(
+  path.join(__dirname, "dist", "manifest.json"),
+  "utf-8",
+);
+
+function loadIcon(filename: string): Buffer {
+  return fs.readFileSync(
+    path.join(__dirname, "dist", "icons", filename),
+  );
+}
+
+const ICONS: Record<string, Buffer> = {
+  "icon-96x96.svg": loadIcon("icon-96x96.svg"),
+  "icon-192x192.svg": loadIcon("icon-192x192.svg"),
+  "icon-512x512.svg": loadIcon("icon-512x512.svg"),
+};
+
 // ---------------------------------------------------------------------------
 // Active handles — needed so HTTP handlers can reach the PushManager
 // ---------------------------------------------------------------------------
@@ -214,6 +231,29 @@ function handleRequest(
     });
     res.end(SW_JS);
     return;
+  }
+
+  // Web App Manifest
+  if (url.pathname === "/manifest.json" && req.method === "GET") {
+    res.writeHead(200, {
+      "Content-Type": "application/manifest+json; charset=utf-8",
+    });
+    res.end(MANIFEST_JSON);
+    return;
+  }
+
+  // PWA icons
+  if (url.pathname.startsWith("/icons/") && req.method === "GET") {
+    const filename = url.pathname.slice("/icons/".length);
+    const icon = ICONS[filename];
+    if (icon) {
+      res.writeHead(200, {
+        "Content-Type": "image/svg+xml",
+        "Cache-Control": "public, max-age=604800",
+      });
+      res.end(icon);
+      return;
+    }
   }
 
   // VAPID public key for push subscription

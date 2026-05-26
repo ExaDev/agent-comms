@@ -4,6 +4,8 @@
  * esbuild compiles main.tsx (with inlined CSS) into a single JS bundle.
  * The server loads bundle.js and index.html into memory at startup.
  *
+ * Also copies the web app manifest and PWA icons to dist/ for serving.
+ *
  * Usage: pnpm build:frontend
  */
 
@@ -67,6 +69,22 @@ async function main(): Promise<void> {
     format: "iife",
     outfile: path.join(DIST_DIR, "sw.js"),
   });
+
+  // Copy web app manifest to dist/
+  fs.copyFileSync(
+    path.join(FRONTEND_DIR, "manifest.json"),
+    path.join(DIST_DIR, "manifest.json"),
+  );
+
+  // Copy PWA icons to dist/icons/
+  const iconsDir = path.join(DIST_DIR, "icons");
+  fs.mkdirSync(iconsDir, { recursive: true });
+  for (const file of fs.readdirSync(path.join(FRONTEND_DIR, "icons"))) {
+    fs.copyFileSync(
+      path.join(FRONTEND_DIR, "icons", file),
+      path.join(iconsDir, file),
+    );
+  }
 
   console.log(`Built frontend: ${DIST_DIR}`);
 }
