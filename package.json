@@ -51,6 +51,7 @@
     "publish:mcp-registry": "tsx scripts/publish-mcp-registry.ts",
     "lint": "eslint .",
     "test": "node --test dist/test/coordinator-socket-error.integration.test.js",
+    "test:visibility": "node --test dist/test/visibility.integration.test.js",
     "test:delivery": "node dist/test/delivery-receipt.runner.js",
     "test:all": "pnpm test && pnpm test:delivery",
     "test:frontend": "tsx --test src/bridges/user/web/frontend/test/**/*.unit.test.ts",
