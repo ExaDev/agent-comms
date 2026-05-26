@@ -77,9 +77,6 @@ jobs:
       - uses: actions/upload-pages-artifact@v4
         with:
           path: github-pages
-      - uses: actions/upload-pages-artifact@v4
-        with:
-          path: _site
       - uses: actions/deploy-pages@v4
         id: deployment
 
