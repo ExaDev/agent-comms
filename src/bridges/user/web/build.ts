@@ -83,6 +83,18 @@ async function main(): Promise<void> {
     outfile: path.join(DIST_DIR, "mesh-worker.js"),
   });
 
+  // Build the relay SharedWorker as a separate bundle.
+  // The relay worker connects to two mesh WebSocket endpoints and
+  // forwards wire messages between them with peer ID translation.
+  await esbuild.build({
+    entryPoints: [path.join(FRONTEND_DIR, "relay-worker.ts")],
+    bundle: true,
+    minify: true,
+    target: "es2020",
+    format: "iife",
+    outfile: path.join(DIST_DIR, "relay-worker.js"),
+  });
+
   // Copy web app manifest to dist/
   fs.copyFileSync(
     path.join(FRONTEND_DIR, "manifest.json"),
