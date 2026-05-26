@@ -70,6 +70,19 @@ async function main(): Promise<void> {
     outfile: path.join(DIST_DIR, "sw.js"),
   });
 
+  // Build the mesh SharedWorker as a separate bundle.
+  // SharedWorkers run in their own global scope, shared across tabs.
+  // The worker contains inlined types and no external dependencies —
+  // all state management logic is self-contained.
+  await esbuild.build({
+    entryPoints: [path.join(FRONTEND_DIR, "mesh-worker.ts")],
+    bundle: true,
+    minify: true,
+    target: "es2020",
+    format: "iife",
+    outfile: path.join(DIST_DIR, "mesh-worker.js"),
+  });
+
   // Copy web app manifest to dist/
   fs.copyFileSync(
     path.join(FRONTEND_DIR, "manifest.json"),
