@@ -1147,6 +1147,23 @@ export class MeshStore implements CommsStore {
   }
 
   // -----------------------------------------------------------------------
+  // Mesh visibility
+  // -----------------------------------------------------------------------
+
+  /** Set mesh discovery visibility. Delegates to discovery manager. */
+  async setVisibility(
+    level: import("./types.js").MeshVisibility,
+    adapter?: string,
+  ): Promise<void> {
+    await this.discovery.setVisibility(level, adapter);
+  }
+
+  /** Get current mesh discovery visibility. */
+  getVisibility(adapter?: string): import("./types.js").MeshVisibility {
+    return this.discovery.getVisibility(adapter);
+  }
+
+  // -----------------------------------------------------------------------
   // Listener management (coordinator only)
   // -----------------------------------------------------------------------
 

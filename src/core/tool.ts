@@ -11,6 +11,7 @@ import type {
   AgentId,
   AgentIdentity,
   CommsAction,
+  MeshVisibility,
   NetworkInterface,
   Room,
   RoomMessage,
@@ -35,7 +36,10 @@ export interface CommsResult {
 
 export class CommsTool {
   constructor(
-    private readonly store: CommsStore,
+    private readonly store: CommsStore & {
+      setVisibility?(level: MeshVisibility, adapter?: string): Promise<void>;
+      getVisibility?(adapter?: string): MeshVisibility;
+    },
     private readonly discovery?: DiscoveryManager,
   ) {}
 
@@ -86,6 +90,10 @@ export class CommsTool {
           return await this.meshUnlisten(ctx, action);
         case "mesh_listeners":
           return await this.meshListeners(ctx);
+        case "mesh_set_visibility":
+          return await this.meshSetVisibility(action);
+        case "mesh_get_visibility":
+          return await this.meshGetVisibility(action);
         default:
           return {
             content: `Unknown action: ${JSON.stringify(action).slice(0, 100)}`,
@@ -447,6 +455,39 @@ export class CommsTool {
     });
     return {
       content: `Listeners:\n  ID      Host             Port   Policy      \n${lines.map((l) => `  ${l}`).join("\n")}`,
+      isError: false,
+    };
+  }
+
+  private async meshSetVisibility(
+    action: CommsAction & { action: "mesh_set_visibility" },
+  ): Promise<CommsResult> {
+    if (!this.store.setVisibility) {
+      return {
+        content: "Visibility control is not available on this store.",
+        isError: true,
+      };
+    }
+    await this.store.setVisibility(action.visibility, action.adapter);
+    const adapter = action.adapter ? ` on adapter "${action.adapter}"` : "";
+    return {
+      content: `Mesh visibility set to "${action.visibility}"${adapter}.`,
+      isError: false,
+    };
+  }
+
+  private async meshGetVisibility(
+    action: CommsAction & { action: "mesh_get_visibility" },
+  ): Promise<CommsResult> {
+    if (!this.store.getVisibility) {
+      return {
+        content: "Visibility control is not available on this store.",
+        isError: true,
+      };
+    }
+    const visibility = this.store.getVisibility(action.adapter);
+    return {
+      content: `Mesh visibility: ${visibility}`,
       isError: false,
     };
   }
