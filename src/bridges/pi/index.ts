@@ -110,35 +110,46 @@ export default function (pi: ExtensionAPI) {
   // Lifecycle
   // -----------------------------------------------------------------------
 
+  let meshReady = false;
+
   pi.on("session_start", async (_event, ctx) => {
     uiCtx = ctx.ui;
-    await store.init();
 
-    const reg = await ensureRegistered({
-      store,
-      cwd: process.cwd(),
-      harness: "pi",
-      defaultName: `pi-${nanoid(4)}`,
-    });
-    agentId = reg.agentId;
+    try {
+      await store.init();
+      meshReady = true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      ctx.ui.notify(`Agent Comms: mesh init failed (${msg}). Running without mesh.`, "warning");
+    }
 
-    // Auto-create and join a project room for the working directory
-    await ensureProjectRoom(store, agentId, process.cwd());
-    projectRoom = path.basename(process.cwd());
+    if (meshReady) {
+      const reg = await ensureRegistered({
+        store,
+        cwd: process.cwd(),
+        harness: "pi",
+        defaultName: `pi-${nanoid(4)}`,
+      });
+      agentId = reg.agentId;
 
-    // Start web UI sharing the same mesh peer and agent identity
-    const webCtrl = ChatController.fromExisting(store, {
-      agentId,
-      harness: "pi",
-      cwd: process.cwd(),
-      pid: process.pid,
-    });
-    webHandle = await tryStartWebServer(webCtrl);
+      // Auto-create and join a project room for the working directory
+      await ensureProjectRoom(store, agentId, process.cwd());
+      projectRoom = path.basename(process.cwd());
+
+      // Start web UI sharing the same mesh peer and agent identity
+      const webCtrl = ChatController.fromExisting(store, {
+        agentId,
+        harness: "pi",
+        cwd: process.cwd(),
+        pid: process.pid,
+      });
+      webHandle = await tryStartWebServer(webCtrl);
+    }
 
     refreshStatus();
 
-    if (!reg.isNew) {
-      ctx.ui.notify(`Agent Comms: resumed as ${reg.agentId}`, "info");
+    if (meshReady) {
+      ctx.ui.notify("Agent Comms: connected", "info");
     }
   });
 

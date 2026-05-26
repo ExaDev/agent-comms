@@ -115,20 +115,55 @@ export class MeshStore implements CommsStore {
       startedAt: this.startedAt,
     });
 
-    // Try joining an existing mesh; fall back to becoming coordinator
-    try {
-      await this.transport.connectToCoordinator(
-        COORDINATOR_HOST,
-        this.coordinatorPort,
-        this.peerId,
-        this.transport.dataPort,
+    // Try joining an existing mesh; fall back to becoming coordinator.
+    // If becomeCoordinator fails with EADDRINUSE (another process won the race),
+    // retry connecting — the new coordinator should be ready by now.
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 200;
+    let connected = false;
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        await this.transport.connectToCoordinator(
+          COORDINATOR_HOST,
+          this.coordinatorPort,
+          this.peerId,
+          this.transport.dataPort,
+        );
+        connected = true;
+        break;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        // Only try to become coordinator on the first attempt
+        if (attempt === 0) {
+          try {
+            await this.transport.becomeCoordinator(
+              COORDINATOR_HOST,
+              this.coordinatorPort,
+            );
+            this.startStaleCheck();
+            connected = true;
+            break;
+          } catch (coordErr) {
+            const msg = coordErr instanceof Error ? coordErr.message : String(coordErr);
+            if (!msg.includes("EADDRINUSE")) {
+              throw coordErr;
+            }
+            // EADDRINUSE — another process became coordinator. Retry connect.
+          }
+        }
+        // Wait before retrying
+        if (attempt < MAX_RETRIES - 1) {
+          await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        }
+      }
+    }
+
+    if (!connected) {
+      throw new Error(
+        `Failed to join or create mesh on port ${String(this.coordinatorPort)}: ${lastError?.message ?? "unknown error"}`,
       );
-    } catch {
-      await this.transport.becomeCoordinator(
-        COORDINATOR_HOST,
-        this.coordinatorPort,
-      );
-      this.startStaleCheck();
     }
 
     this.transport.unref();
