@@ -297,6 +297,21 @@ export const CommsActionSchema = defineSchema(
       reason: z.string(),
     }),
     z.object({ action: z.literal("mesh_pending") }),
+    z.object({
+      action: z.literal("mesh_discover"),
+      method: z.string().optional(),
+    }),
+    z.object({
+      action: z.literal("mesh_advertise"),
+      method: z.string(),
+      name: z.string(),
+      port: z.number().optional(),
+      adapter: z.string().optional(),
+    }),
+    z.object({
+      action: z.literal("mesh_unadvertise"),
+      id: z.string(),
+    }),
   ]),
 );
 export type CommsAction = z.infer<typeof CommsActionSchema>;

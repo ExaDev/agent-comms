@@ -40,6 +40,9 @@ export const MCP_TOOL_PARAMS = z.object({
     "decline_invite",
     "kick",
     "destroy_room",
+    "mesh_discover",
+    "mesh_advertise",
+    "mesh_unadvertise",
   ]),
   name: z.string().optional(),
   visibility: VisibilityEnum.optional(),
@@ -54,6 +57,8 @@ export const MCP_TOOL_PARAMS = z.object({
   since: z.string().optional(),
   replyTo: z.string().optional(),
   reason: z.string().optional(),
+  method: z.string().optional(),
+  id: z.string().optional(),
 });
 
 export type ToolParams = z.infer<typeof MCP_TOOL_PARAMS>;
@@ -180,6 +185,29 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       if (p.room === undefined)
         throw new BuildActionError("destroy_room", "room");
       return { action: "destroy_room", room: p.room };
+    case "mesh_discover": {
+      const discover: CommsAction & { action: "mesh_discover" } = {
+        action: "mesh_discover",
+      };
+      if (p.method !== undefined) discover.method = p.method;
+      return discover;
+    }
+    case "mesh_advertise":
+      if (p.name === undefined)
+        throw new BuildActionError("mesh_advertise", "name");
+      if (p.method === undefined)
+        throw new BuildActionError("mesh_advertise", "method");
+      return {
+        action: "mesh_advertise",
+        method: p.method,
+        name: p.name,
+        ...(p.port !== undefined && { port: p.port }),
+        ...(p.adapter !== undefined && { adapter: p.adapter }),
+      };
+    case "mesh_unadvertise":
+      if (p.id === undefined)
+        throw new BuildActionError("mesh_unadvertise", "id");
+      return { action: "mesh_unadvertise", id: p.id };
   }
 }
 
