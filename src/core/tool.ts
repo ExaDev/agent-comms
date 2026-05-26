@@ -485,7 +485,7 @@ export class CommsTool {
         isError: true,
       };
     }
-    const visibility = this.store.getVisibility(action.adapter);
+    const visibility = this.store.getVisibility();
     return {
       content: `Mesh visibility: ${visibility}`,
       isError: false,
