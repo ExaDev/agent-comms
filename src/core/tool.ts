@@ -15,6 +15,7 @@ import type {
   RoomMessage,
 } from "./types.js";
 import type { CommsStore } from "./comms-store.js";
+import type { DiscoveryManager } from "./discovery.js";
 import { CommsError } from "./store.js";
 
 export interface CommsContext {
@@ -31,7 +32,10 @@ export interface CommsResult {
 }
 
 export class CommsTool {
-  constructor(private readonly store: CommsStore) {}
+  constructor(
+    private readonly store: CommsStore,
+    private readonly discovery?: DiscoveryManager,
+  ) {}
 
   async handle(ctx: CommsContext, action: CommsAction): Promise<CommsResult> {
     try {
@@ -66,6 +70,12 @@ export class CommsTool {
           return await this.kick(ctx, action);
         case "destroy_room":
           return await this.destroyRoom(ctx, action);
+        case "mesh_discover":
+          return await this.meshDiscover(action);
+        case "mesh_advertise":
+          return await this.meshAdvertise(ctx, action);
+        case "mesh_unadvertise":
+          return await this.meshUnadvertise(action);
         default:
           return {
             content: `Unknown action: ${JSON.stringify(action).slice(0, 100)}`,
@@ -300,5 +310,64 @@ export class CommsTool {
   ): Promise<CommsResult> {
     await this.store.destroyRoom(action.room, ctx.agentId);
     return { content: `Destroyed room "${action.room}".`, isError: false };
+  }
+
+  private async meshDiscover(
+    action: CommsAction & { action: "mesh_discover" },
+  ): Promise<CommsResult> {
+    if (!this.discovery) {
+      return {
+        content: "Discovery is not available (no backends registered).",
+        isError: true,
+      };
+    }
+    const meshes = await this.discovery.discover(action.method);
+    if (meshes.length === 0) {
+      return { content: "No meshes discovered.", isError: false };
+    }
+    const lines = meshes.map(
+      (m) =>
+        `  ${m.host}:${String(m.port)}  ${m.name}${m.agentCount !== undefined ? ` (${String(m.agentCount)} agents)` : ""}`,
+    );
+    return {
+      content: `Discovered meshes:\n${lines.join("\n")}`,
+      isError: false,
+    };
+  }
+
+  private async meshAdvertise(
+    ctx: CommsContext,
+    action: CommsAction & { action: "mesh_advertise" },
+  ): Promise<CommsResult> {
+    if (!this.discovery) {
+      return {
+        content: "Discovery is not available (no backends registered).",
+        isError: true,
+      };
+    }
+    // Default to the mesh coordinator port if not specified
+    const port = action.port ?? 19876;
+    const id = await this.discovery.advertise(action.method, {
+      name: action.name,
+      port,
+      adapter: action.adapter,
+    });
+    return {
+      content: `Advertising mesh "${action.name}" on ${action.method} (port ${String(port)}). ID: ${id}`,
+      isError: false,
+    };
+  }
+
+  private async meshUnadvertise(
+    action: CommsAction & { action: "mesh_unadvertise" },
+  ): Promise<CommsResult> {
+    if (!this.discovery) {
+      return {
+        content: "Discovery is not available (no backends registered).",
+        isError: true,
+      };
+    }
+    await this.discovery.stopAdvertising(action.id);
+    return { content: `Stopped advertising ${action.id}.`, isError: false };
   }
 }
