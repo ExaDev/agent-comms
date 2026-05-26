@@ -34,3 +34,5 @@ export { MdnsDiscoveryBackend } from "./discovery-mdns.js";
 export { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
 export * from "./types.js";
 export type { ListenerInfo, ListenerPolicy, ConnectionHandle } from "./transport.js";
+export { FederationManager } from "./federation.js";
+export type { FedLink, FedCallbacks } from "./federation.js";

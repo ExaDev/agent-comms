@@ -19,6 +19,8 @@ import { dmKey } from "./wire-protocol.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
 import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
+import { FederationManager } from "./federation.js";
+import type { FedLink } from "./federation.js";
 import type {
   MeshMessage,
   MeshStatePatch,
@@ -81,6 +83,7 @@ export class MeshStore implements CommsStore {
   private localDeliveryKeys = new Set<string>();
 
   discovery: DiscoveryManager;
+  federation: FederationManager;
 
   constructor(coordinatorPort: number = DEFAULT_COORDINATOR_PORT) {
     this.peerId = nanoid(8);
@@ -94,6 +97,21 @@ export class MeshStore implements CommsStore {
     this.discovery = new DiscoveryManager();
     this.discovery.registerBackend(new MdnsDiscoveryBackend());
     this.discovery.registerBackend(new TailscaleDiscoveryBackend());
+
+    // Federation manager — coordinator-to-coordinator links
+    this.federation = new FederationManager(
+      this.peerId, // mesh ID is the coordinator's peer ID
+      `mesh-${this.peerId}`,
+      {
+        onAgentVisible: (agent) => this.handleFedAgentVisible(agent),
+        onAgentGone: (agentId) => this.handleFedAgentGone(agentId),
+        onRoomMessage: (roomId, message) => this.handleFedRoomMessage(roomId, message),
+        onRoomJoin: (roomId, agentId, agentName) => this.handleFedRoomJoin(roomId, agentId, agentName),
+        onRoomLeave: (roomId, agentId) => this.handleFedRoomLeave(roomId, agentId),
+        getVisibleAgents: () => this.getVisibleAgentsForFed(),
+        getFederatedRoomMemberships: () => this.getFederatedRoomMembershipsForFed(),
+      },
+    );
   }
 
   /** Replace the transport (e.g. with TlsTransport for encrypted connections). */
@@ -672,6 +690,10 @@ export class MeshStore implements CommsStore {
     this.agents.set(id, agent);
     await this.writeIdentity(opts.harness, opts.cwd, id);
     await this.broadcastPatch({ type: "agent_upsert", agent });
+    // Broadcast presence to federated links
+    if (agent.visibility === "visible") {
+      await this.federation.broadcastAgentVisible(agent);
+    }
     return agent;
   }
 
@@ -731,6 +753,7 @@ export class MeshStore implements CommsStore {
     if (isOwner) {
       await this.notifyRoomsOfStatus(id, "offline");
       await this.broadcastPatch({ type: "agent_offline", agentId: id });
+      await this.federation.broadcastAgentGone(id);
     }
   }
 
@@ -743,6 +766,7 @@ export class MeshStore implements CommsStore {
     type: RoomType;
     owner: string;
     description: string;
+    federated?: boolean;
   }): Promise<Room> {
     const id = opts.type === "secret" ? `_${opts.name}` : opts.name;
     if (this.rooms.has(id))
@@ -757,6 +781,7 @@ export class MeshStore implements CommsStore {
       description: opts.description,
       members: [opts.owner],
       invited: [],
+      federated: opts.federated ?? false,
     };
 
     this.rooms.set(id, room);
@@ -840,6 +865,12 @@ export class MeshStore implements CommsStore {
       agentId,
     );
 
+    // Notify federated links if the room is federated
+    if (room.federated) {
+      const agentName = agent?.name ?? agentId;
+      await this.federation.broadcastRoomJoin(roomId, agentId, agentName);
+    }
+
     return room;
   }
 
@@ -866,6 +897,11 @@ export class MeshStore implements CommsStore {
       room: roomId,
       agent: agentId,
     });
+
+    // Notify federated links if the room is federated
+    if (room.federated) {
+      await this.federation.broadcastRoomLeave(roomId, agentId);
+    }
 
     if (room.members.length === 0 && room.owner === agentId) {
       await this.destroyRoom(roomId, agentId);
@@ -1000,6 +1036,11 @@ export class MeshStore implements CommsStore {
     arr.push(message);
     this.messages.set(roomId, arr);
     await this.broadcastPatch({ type: "message_add", roomId, message });
+
+    // Forward to federated links if the room is federated
+    if (room.federated) {
+      await this.federation.forwardRoomMessage(roomId, message);
+    }
 
     for (const memberId of room.members) {
       if (memberId !== from) {
@@ -1206,6 +1247,130 @@ export class MeshStore implements CommsStore {
   }
 
   // -----------------------------------------------------------------------
+  // Federation (coordinator-to-coordinator)
+  // -----------------------------------------------------------------------
+
+  async fedConnect(host: string, port: number, name?: string): Promise<string> {
+    return this.federation.connect(host, port, name);
+  }
+
+  async fedDisconnect(linkId: string): Promise<void> {
+    await this.federation.disconnect(linkId);
+  }
+
+  fedLinks(): FedLink[] {
+    return this.federation.listLinks();
+  }
+
+  // -----------------------------------------------------------------------
+  // Federation callbacks (inbound from remote meshes)
+  // -----------------------------------------------------------------------
+
+  private async handleFedAgentVisible(agent: AgentIdentity): Promise<void> {
+    // Store remote agent with a prefixed ID to avoid collisions with local agents
+    const remoteId = `fed:${agent.id}@${agent.harness}`;
+    const remoteAgent: AgentIdentity = {
+      ...agent,
+      id: remoteId,
+      tags: [...agent.tags, "federated"],
+    };
+    this.agents.set(remoteId, remoteAgent);
+    await this.broadcastPatch({ type: "agent_upsert", agent: remoteAgent });
+  }
+
+  private async handleFedAgentGone(agentId: string): Promise<void> {
+    // The agentId comes from the remote mesh — we need to find the prefixed version
+    const prefix = `fed:${agentId}@`;
+    for (const [localId, agent] of this.agents) {
+      if (localId.startsWith(prefix)) {
+        agent.status = "offline";
+        this.agents.set(localId, agent);
+        await this.broadcastPatch({ type: "agent_offline", agentId: localId });
+        break;
+      }
+    }
+  }
+
+  private async handleFedRoomMessage(roomId: string, message: RoomMessage): Promise<void> {
+    const room = this.rooms.get(roomId);
+    if (!room?.federated) return;
+
+    // Store the message locally
+    const arr = this.messages.get(roomId) ?? [];
+    arr.push(message);
+    this.messages.set(roomId, arr);
+
+    // Deliver to all local room members
+    for (const memberId of room.members) {
+      await this.deliverLocallyAndBroadcast(memberId, {
+        type: "room_message",
+        message,
+      });
+    }
+  }
+
+  private async handleFedRoomJoin(roomId: string, agentId: string, agentName: string): Promise<void> {
+    const room = this.rooms.get(roomId);
+    if (!room?.federated) return;
+
+    // Create a shadow agent ID for the remote agent
+    const remoteId = `fed:${agentId}`;
+
+    if (!room.members.includes(remoteId)) {
+      room.members.push(remoteId);
+      this.rooms.set(roomId, room);
+      await this.broadcastPatch({ type: "room_upsert", room });
+    }
+
+    // Notify local members
+    await this.deliverToRoom(roomId, {
+      type: "member_joined",
+      room: roomId,
+      agent: remoteId,
+    }, remoteId);
+  }
+
+  private async handleFedRoomLeave(roomId: string, agentId: string): Promise<void> {
+    const room = this.rooms.get(roomId);
+    if (!room?.federated) return;
+
+    const remoteId = `fed:${agentId}`;
+    room.members = room.members.filter((m) => m !== remoteId);
+    this.rooms.set(roomId, room);
+    await this.broadcastPatch({ type: "room_upsert", room });
+
+    await this.deliverToRoom(roomId, {
+      type: "member_left",
+      room: roomId,
+      agent: remoteId,
+    });
+  }
+
+  private getVisibleAgentsForFed(): AgentIdentity[] {
+    const result: AgentIdentity[] = [];
+    for (const agent of this.agents.values()) {
+      // Only broadcast agents that belong to this mesh (not federated)
+      // and are visible
+      if (agent.visibility === "visible" && !agent.id.startsWith("fed:")) {
+        result.push(agent);
+      }
+    }
+    return result;
+  }
+
+  private getFederatedRoomMembershipsForFed(): Map<string, string[]> {
+    const result = new Map<string, string[]>();
+    for (const [roomId, room] of this.rooms) {
+      if (room.federated) {
+        // Only include local members (not federated ones)
+        const localMembers = room.members.filter((m) => !m.startsWith("fed:"));
+        result.set(roomId, localMembers);
+      }
+    }
+    return result;
+  }
+
+  // -----------------------------------------------------------------------
   // Shutdown
   // -----------------------------------------------------------------------
 
@@ -1229,6 +1394,7 @@ export class MeshStore implements CommsStore {
     }
 
     this.stopStaleCheck();
+    await this.federation.shutdown();
     await this.transport.shutdown();
   }
 }

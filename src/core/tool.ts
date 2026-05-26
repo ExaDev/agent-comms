@@ -94,6 +94,12 @@ export class CommsTool {
           return await this.meshSetVisibility(action);
         case "mesh_get_visibility":
           return await this.meshGetVisibility(action);
+        case "mesh_fed_connect":
+          return await this.meshFedConnect(ctx, action);
+        case "mesh_fed_disconnect":
+          return await this.meshFedDisconnect(ctx, action);
+        case "mesh_fed_links":
+          return await this.meshFedLinks(ctx);
         default:
           return {
             content: `Unknown action: ${JSON.stringify(action).slice(0, 100)}`,
@@ -488,6 +494,50 @@ export class CommsTool {
     const visibility = this.store.getVisibility();
     return {
       content: `Mesh visibility: ${visibility}`,
+  private async meshFedConnect(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "mesh_fed_connect" },
+  ): Promise<CommsResult> {
+    try {
+      const linkId = await this.store.fedConnect(action.host, action.port, action.name);
+      return {
+        content: `Federation link established: ${linkId} to ${action.host}:${String(action.port)}`,
+        isError: false,
+      };
+    } catch (err) {
+      return {
+        content: `Failed to establish federation link: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  private async meshFedDisconnect(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "mesh_fed_disconnect" },
+  ): Promise<CommsResult> {
+    try {
+      await this.store.fedDisconnect(action.linkId);
+      return { content: `Federation link ${action.linkId} closed.`, isError: false };
+    } catch (err) {
+      return {
+        content: `Failed to close federation link: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  private async meshFedLinks(_ctx: CommsContext): Promise<CommsResult> {
+    const links = this.store.fedLinks();
+    if (links.length === 0)
+      return { content: "No federation links.", isError: false };
+
+    const lines = links.map((l) => {
+      const dir = l.direction === "outbound" ? "→" : "←";
+      return `${l.id}  ${dir} ${l.remoteName} (${l.remoteMeshId})`;
+    });
+    return {
+      content: `Federation links:\n${lines.map((l) => `  ${l}`).join("\n")}`,
       isError: false,
     };
   }

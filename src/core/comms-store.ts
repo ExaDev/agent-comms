@@ -93,6 +93,11 @@ export interface CommsStore {
   listListeners(): ListenerInfo[];
   getNetworkInterfaces(): NetworkInterface[];
 
+  // -- Federation (coordinator-to-coordinator) --
+  fedConnect(host: string, port: number, name?: string): Promise<string>;
+  fedDisconnect(linkId: string): Promise<void>;
+  fedLinks(): import("./federation.js").FedLink[];
+
   // -- Lifecycle --
   init(): Promise<void>;
 }

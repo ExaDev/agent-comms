@@ -51,6 +51,9 @@ export const MCP_TOOL_PARAMS = z.object({
     "mesh_listeners",
     "mesh_set_visibility",
     "mesh_get_visibility",
+    "mesh_fed_connect",
+    "mesh_fed_disconnect",
+    "mesh_fed_links",
   ]),
   name: z.string().optional(),
   visibility: VisibilityEnum.optional(),
@@ -253,6 +256,22 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       };
       return result;
     }
+    case "mesh_fed_connect": {
+      if (p.host === undefined) throw new BuildActionError("mesh_fed_connect", "host");
+      if (p.port === undefined) throw new BuildActionError("mesh_fed_connect", "port");
+      const result: CommsAction & { action: "mesh_fed_connect" } = {
+        action: "mesh_fed_connect",
+        host: p.host,
+        port: p.port,
+      };
+      if (p.name !== undefined) result.name = p.name;
+      return result;
+    }
+    case "mesh_fed_disconnect":
+      if (p.id === undefined) throw new BuildActionError("mesh_fed_disconnect", "id");
+      return { action: "mesh_fed_disconnect", linkId: p.id };
+    case "mesh_fed_links":
+      return { action: "mesh_fed_links" };
   }
 }
 
