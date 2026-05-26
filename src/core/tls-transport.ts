@@ -437,7 +437,7 @@ export class TlsTransport {
     // Close coordinator listener servers
     for (const [, listener] of this.coordinatorListeners) {
       listener.server.unref();
-      listener.close();
+      listener.server.close();
     }
     this.coordinatorListeners.clear();
     this.defaultListenerId = undefined;

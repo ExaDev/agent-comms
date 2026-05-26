@@ -408,7 +408,7 @@ export class TcpTransport implements MeshTransport {
     // Close coordinator listener servers — stop accepting new connections
     for (const [, listener] of this.coordinatorListeners) {
       listener.server.unref();
-      listener.close();
+      listener.server.close();
     }
     this.coordinatorListeners.clear();
     this.defaultListenerId = undefined;
