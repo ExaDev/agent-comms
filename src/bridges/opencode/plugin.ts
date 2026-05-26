@@ -13,10 +13,15 @@ import {
   ensureRegistered,
   formatDeliveryEvent,
 } from "../../core/index.js";
+import { TlsTransport } from "../../core/tls-transport.js";
+import { generateIdentity } from "../../core/identity.js";
 import { tryStartWebServer } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
+const identity = generateIdentity();
 const store = new MeshStore();
+store.peerId = identity.fingerprint;
+store.setTransport(new TlsTransport(store.events, identity));
 
 // Minimal interface for the OpenCode SDK client we actually use
 interface OpenCodeClient {

@@ -12,6 +12,8 @@ import {
   ensureRegistered,
   formatDeliveryEvent,
 } from "../../core/index.js";
+import { TlsTransport } from "../../core/tls-transport.js";
+import { generateIdentity } from "../../core/identity.js";
 import type { CommsContext, CommsResult } from "../../core/tool.js";
 import type {
   AgentIdentity,
@@ -37,7 +39,10 @@ export class ChatController extends EventEmitter {
 
   constructor(private userName: string) {
     super();
+    const identity = generateIdentity();
     this.store = new MeshStore();
+    this.store.peerId = identity.fingerprint;
+    this.store.setTransport(new TlsTransport(this.store.events, identity));
     this.tool = new CommsTool(this.store);
 
     // Push delivery events to UIs

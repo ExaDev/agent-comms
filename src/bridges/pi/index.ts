@@ -27,6 +27,8 @@ import {
   formatDeliveryEvent,
   isActionableEvent,
 } from "../../core/index.js";
+import { TlsTransport } from "../../core/tls-transport.js";
+import { generateIdentity } from "../../core/identity.js";
 import { tryStartWebServer, type WebServerHandle } from "../user/web/server.js";
 import { ChatController } from "../user/controller.js";
 import { nanoid } from "../../core/nanoid.js";
@@ -38,7 +40,11 @@ function getWebPort(handle: WebServerHandle): number | undefined {
 }
 
 export default function (pi: ExtensionAPI) {
+  // Generate cryptographic identity and use TLS transport
+  const identity = generateIdentity();
   const store = new MeshStore();
+  store.peerId = identity.fingerprint;
+  store.setTransport(new TlsTransport(store.events, identity));
   const tool = new CommsTool(store);
 
   let agentId: string | undefined;

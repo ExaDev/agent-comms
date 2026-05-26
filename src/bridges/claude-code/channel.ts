@@ -20,6 +20,8 @@ import {
   formatDeliveryEvent,
   MCP_TOOL_PARAMS,
 } from "../../core/index.js";
+import { TlsTransport } from "../../core/tls-transport.js";
+import { generateIdentity } from "../../core/identity.js";
 import { tryStartWebServer } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
@@ -28,7 +30,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export async function run(): Promise<void> {
+  const identity = generateIdentity();
   const store = new MeshStore();
+  store.peerId = identity.fingerprint;
+  store.setTransport(new TlsTransport(store.events, identity));
   const tool = new CommsTool(store);
   let agentId: string | undefined;
 
