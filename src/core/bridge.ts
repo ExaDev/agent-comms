@@ -43,6 +43,10 @@ export const MCP_TOOL_PARAMS = z.object({
     "mesh_discover",
     "mesh_advertise",
     "mesh_unadvertise",
+    "mesh_interfaces",
+    "mesh_listen",
+    "mesh_unlisten",
+    "mesh_listeners",
   ]),
   name: z.string().optional(),
   visibility: VisibilityEnum.optional(),
@@ -58,6 +62,9 @@ export const MCP_TOOL_PARAMS = z.object({
   replyTo: z.string().optional(),
   reason: z.string().optional(),
   method: z.string().optional(),
+  host: z.string().optional(),
+  port: z.number().optional(),
+  policy: z.string().optional(),
   id: z.string().optional(),
 });
 
@@ -208,6 +215,21 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       if (p.id === undefined)
         throw new BuildActionError("mesh_unadvertise", "id");
       return { action: "mesh_unadvertise", id: p.id };
+    case "mesh_interfaces":
+      return { action: "mesh_interfaces" };
+    case "mesh_listen":
+      if (p.host === undefined) throw new BuildActionError("mesh_listen", "host");
+      return {
+        action: "mesh_listen",
+        host: p.host,
+        ...(p.port !== undefined && { port: p.port }),
+        ...(p.policy !== undefined && { policy: p.policy }),
+      };
+    case "mesh_unlisten":
+      if (p.id === undefined) throw new BuildActionError("mesh_unlisten", "id");
+      return { action: "mesh_unlisten", id: p.id };
+    case "mesh_listeners":
+      return { action: "mesh_listeners" };
   }
 }
 

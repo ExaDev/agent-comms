@@ -11,9 +11,11 @@ import type {
   AgentId,
   AgentIdentity,
   CommsAction,
+  NetworkInterface,
   Room,
   RoomMessage,
 } from "./types.js";
+import type { ListenerInfo } from "./transport.js";
 import type { CommsStore } from "./comms-store.js";
 import type { DiscoveryManager } from "./discovery.js";
 import { CommsError } from "./store.js";
@@ -76,6 +78,14 @@ export class CommsTool {
           return await this.meshAdvertise(ctx, action);
         case "mesh_unadvertise":
           return await this.meshUnadvertise(action);
+        case "mesh_interfaces":
+          return await this.meshInterfaces();
+        case "mesh_listen":
+          return await this.meshListen(ctx, action);
+        case "mesh_unlisten":
+          return await this.meshUnlisten(ctx, action);
+        case "mesh_listeners":
+          return await this.meshListeners(ctx);
         default:
           return {
             content: `Unknown action: ${JSON.stringify(action).slice(0, 100)}`,
@@ -354,6 +364,17 @@ export class CommsTool {
     });
     return {
       content: `Advertising mesh "${action.name}" on ${action.method} (port ${String(port)}). ID: ${id}`,
+  private async meshInterfaces(): Promise<CommsResult> {
+    const interfaces = this.store.getNetworkInterfaces();
+    if (interfaces.length === 0)
+      return { content: "No network interfaces found.", isError: false };
+
+    const lines = interfaces.map((iface: NetworkInterface) => {
+      const internal = iface.internal ? " (internal)" : "";
+      return `${iface.name.padEnd(12)} ${iface.family.padEnd(4)} ${iface.address}${internal}`;
+    });
+    return {
+      content: `Interfaces:\n${lines.join("\n")}`,
       isError: false,
     };
   }
@@ -369,5 +390,60 @@ export class CommsTool {
     }
     await this.discovery.stopAdvertising(action.id);
     return { content: `Stopped advertising ${action.id}.`, isError: false };
+  private async meshListen(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "mesh_listen" },
+  ): Promise<CommsResult> {
+    const policy = (action.policy ?? "full") as string;
+    const validPolicies = ["full", "observe", "rooms-only", "gateway"];
+    if (!validPolicies.includes(policy)) {
+      return {
+        content: `Invalid policy "${policy}". Must be one of: ${validPolicies.join(", ")}`,
+        isError: true,
+      };
+    }
+    try {
+      const id = await this.store.addListener(
+        action.host,
+        action.port ?? 0,
+        policy as "full" | "observe" | "rooms-only" | "gateway",
+      );
+      return { content: `Listener added: ${id} on ${action.host}:${action.port ?? "auto"} with policy ${policy}.`, isError: false };
+    } catch (err) {
+      return {
+        content: `Failed to add listener: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  private async meshUnlisten(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "mesh_unlisten" },
+  ): Promise<CommsResult> {
+    try {
+      await this.store.removeListener(action.id);
+      return { content: `Listener ${action.id} removed.`, isError: false };
+    } catch (err) {
+      return {
+        content: `Failed to remove listener: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  private async meshListeners(_ctx: CommsContext): Promise<CommsResult> {
+    const listeners = this.store.listListeners();
+    if (listeners.length === 0)
+      return { content: "No listeners (not coordinator).", isError: false };
+
+    const lines = listeners.map((l: ListenerInfo) => {
+      const flag = l.isDefault ? " (default)" : "";
+      return `${l.id}  ${l.host.padEnd(15)} ${String(l.port).padEnd(6)} ${l.policy.padEnd(11)}${flag}`;
+    });
+    return {
+      content: `Listeners:\n  ID      Host             Port   Policy      \n${lines.map((l) => `  ${l}`).join("\n")}`,
+      isError: false,
+    };
   }
 }
