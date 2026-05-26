@@ -14,6 +14,7 @@
  */
 
 import { MeshStore } from "../core/mesh-store.js";
+import type { DeliveryEvent } from "../core/types.js";
 import * as net from "node:net";
 import assert from "node:assert/strict";
 
@@ -77,8 +78,8 @@ async function testPushRoom(): Promise<void> {
   await sleep(100);
 
   const b = new MeshStore(port);
-  const deliveriesB: Record<string, unknown>[] = [];
-  b.onDelivery = (_id: string, ev: unknown) => {
+  const deliveriesB: DeliveryEvent[] = [];
+  b.onDelivery = (_id: string, ev: DeliveryEvent) => {
     deliveriesB.push(ev);
   };
   await b.init();
@@ -110,7 +111,10 @@ async function testPushRoom(): Promise<void> {
     deliveriesB.length >= 1,
     `B should receive at least 1 delivery, got ${String(deliveriesB.length)}`,
   );
-  const roomMsg = deliveriesB.find((ev) => ev.type === "room_message");
+  const roomMsg = deliveriesB.find(
+    (ev): ev is Extract<DeliveryEvent, { type: "room_message" }> =>
+      ev.type === "room_message",
+  );
   assert.ok(roomMsg !== undefined, "Should find room_message event");
   assert.strictEqual(roomMsg.message.content, "Hello push!");
   assert.strictEqual(roomMsg.message.from, a.peerId);
@@ -137,8 +141,8 @@ async function testPushDm(): Promise<void> {
   await sleep(100);
 
   const b = new MeshStore(port);
-  const deliveriesB: Record<string, unknown>[] = [];
-  b.onDelivery = (_id: string, ev: unknown) => {
+  const deliveriesB: DeliveryEvent[] = [];
+  b.onDelivery = (_id: string, ev: DeliveryEvent) => {
     deliveriesB.push(ev);
   };
   await b.init();
@@ -275,8 +279,8 @@ async function testDrainDm(): Promise<void> {
 async function testReadReceiptPush(): Promise<void> {
   const port = await allocFreePort();
   const a = new MeshStore(port);
-  const deliveriesA: Record<string, unknown>[] = [];
-  a.onDelivery = (_id: string, ev: unknown) => {
+  const deliveriesA: DeliveryEvent[] = [];
+  a.onDelivery = (_id: string, ev: DeliveryEvent) => {
     deliveriesA.push(ev);
   };
   await a.init();
@@ -320,7 +324,10 @@ async function testReadReceiptPush(): Promise<void> {
   await sleep(500);
 
   const readReceipt = deliveriesA.find(
-    (ev) => ev.type === "delivery_status" && ev.status === "read",
+    (
+      ev,
+    ): ev is Extract<DeliveryEvent, { type: "delivery_status" }> =>
+      ev.type === "delivery_status" && ev.status === "read",
   );
   assert.ok(readReceipt !== undefined, "A should receive a read receipt");
   assert.strictEqual(readReceipt.agent, b.peerId);
@@ -331,8 +338,8 @@ async function testReadReceiptPush(): Promise<void> {
 async function testReadReceiptDrain(): Promise<void> {
   const port = await allocFreePort();
   const a = new MeshStore(port);
-  const deliveriesA: Record<string, unknown>[] = [];
-  a.onDelivery = (_id: string, ev: unknown) => {
+  const deliveriesA: DeliveryEvent[] = [];
+  a.onDelivery = (_id: string, ev: DeliveryEvent) => {
     deliveriesA.push(ev);
   };
   await a.init();
@@ -473,10 +480,11 @@ fn()
     // the parent process from hanging on subsequent fork/exec.
     const maxWait = 2000; // ms
     const start = Date.now();
-    const handles: unknown[] =
-      typeof process._getActiveHandles === "function"
-        ? process._getActiveHandles()
-        : [];
+    const getHandles: () => unknown[] =
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+      (process as unknown as { _getActiveHandles?: () => unknown[] })
+        ._getActiveHandles ?? (() => []);
+    const handles: unknown[] = getHandles();
     while (handles.length > 0 && Date.now() - start < maxWait) {
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }

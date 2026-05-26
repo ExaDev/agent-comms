@@ -287,7 +287,10 @@ function parseWireMessage(raw: unknown): WireMessage | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   if (!("method" in raw)) return undefined;
   if (typeof raw.method !== "string") return undefined;
-  return raw satisfies WireMessage;
+  // Spread into a new object to satisfy WireMessage — raw is narrowed to
+  // object & { method: string } but not to the WireMessage union
+  const msg: WireMessage = { ...raw, method: raw.method };
+  return msg;
 }
 
 // ---------------------------------------------------------------------------
@@ -306,9 +309,12 @@ function translateWireMessage(label: "a" | "b", msg: WireMessage): WireMessage {
     msg.method === "state_update" &&
     "patch" in msg &&
     typeof msg.patch === "object" &&
-    msg.patch !== null
+    msg.patch !== null &&
+    "type" in msg.patch &&
+    typeof msg.patch.type === "string"
   ) {
-    const patch = msg.patch satisfies MeshStatePatch;
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    const patch = msg.patch as MeshStatePatch;
     return { ...msg, patch: translatePatch(label, patch) };
   }
   if (

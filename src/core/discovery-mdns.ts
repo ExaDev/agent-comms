@@ -203,11 +203,10 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
         return undefined;
       if (!("name" in parsed) || typeof parsed.name !== "string")
         return undefined;
-      const beacon = parsed satisfies BeaconPayload;
       const result: DiscoveredMesh = {
         host: rinfo.address,
-        port: beacon.port,
-        name: beacon.name,
+        port: parsed.port,
+        name: parsed.name,
       };
       if ("agents" in parsed && typeof parsed.agents === "number")
         result.agentCount = parsed.agents;

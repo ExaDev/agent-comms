@@ -59,8 +59,10 @@ export class ChatController extends EventEmitter {
    * instead of creating a redundant one.
    */
   static fromExisting(store: MeshStore, ctx: CommsContext): ChatController {
-    const ctrl = new ChatController(store, ctx.userName);
-    // Replace the context with the existing one
+    const ctrl = new ChatController("");
+    // Replace the store with the existing one
+    ctrl.store = store;
+    ctrl.tool = new CommsTool(store, store.discovery);
     ctrl.ctx = ctx;
 
     // Push delivery events to UIs

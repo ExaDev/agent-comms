@@ -26,6 +26,7 @@ import type {
   AgentIdentity,
   DeliveryEvent,
   DmMessage,
+  NetworkInterface,
   Room,
   RoomMessage,
   RoomType,

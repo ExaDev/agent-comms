@@ -72,11 +72,19 @@ export class MeshClient {
           )
             break;
           if (!("agents" in raw.state) || !("rooms" in raw.state)) break;
-          // State from mesh SharedWorker is SerialisedState — agents/rooms are Records
+          const state = raw.state;
+          const agents =
+            typeof state.agents === "object" && state.agents !== null
+              ? Object.values(state.agents)
+              : [];
+          const rooms =
+            typeof state.rooms === "object" && state.rooms !== null
+              ? Object.values(state.rooms)
+              : [];
           this.state = {
             ...this.state,
-            agents: raw.state.agents satisfies typeof this.state.agents,
-            rooms: raw.state.rooms satisfies typeof this.state.rooms,
+            agents,
+            rooms,
           };
           this.notify();
           break;

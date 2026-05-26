@@ -10,7 +10,7 @@ import * as net from "node:net";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
-import type { TransportEvents } from "../core/transport.js";
+import type { ConnectionHandle, TransportEvents } from "../core/transport.js";
 import * as assert from "node:assert/strict";
 import { test, describe } from "node:test";
 

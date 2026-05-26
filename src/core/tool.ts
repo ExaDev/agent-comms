@@ -432,15 +432,10 @@ export class CommsTool {
       };
     }
     try {
-      const typedPolicy = policy satisfies
-        | "full"
-        | "observe"
-        | "rooms-only"
-        | "gateway";
       const id = await this.store.addListener(
         action.host,
         action.port ?? 0,
-        typedPolicy,
+        policy,
       );
       return {
         content: `Listener added: ${id} on ${action.host}${String(action.port ?? "auto")} with policy ${policy}.`,
