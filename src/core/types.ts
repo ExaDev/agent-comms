@@ -198,6 +198,14 @@ export const DeliveryEventSchema = defineSchema(
       oldName: z.string(),
       newName: z.string(),
     }),
+    z.object({
+      type: z.literal("connection_request"),
+      connectionId: z.string(),
+      peerId: z.string(),
+      dataPort: z.number(),
+      name: z.string(),
+      fingerprint: z.string(),
+    }),
   ]),
 );
 export type DeliveryEvent = z.infer<typeof DeliveryEventSchema>;
@@ -273,6 +281,22 @@ export const CommsActionSchema = defineSchema(
       action: z.literal("destroy_room"),
       room: z.string(),
     }),
+    z.object({
+      action: z.literal("mesh_connect"),
+      host: z.string(),
+      port: z.number(),
+      policy: z.string().optional(),
+    }),
+    z.object({
+      action: z.literal("mesh_accept"),
+      connectionId: z.string(),
+    }),
+    z.object({
+      action: z.literal("mesh_reject"),
+      connectionId: z.string(),
+      reason: z.string(),
+    }),
+    z.object({ action: z.literal("mesh_pending") }),
   ]),
 );
 export type CommsAction = z.infer<typeof CommsActionSchema>;

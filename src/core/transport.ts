@@ -56,13 +56,25 @@ export interface TransportEvents {
   onPeerDisconnected(handle: ConnectionHandle): void;
 
   /**
-   * A new peer introduced itself to the coordinator.
+   * A peer introduced itself to the coordinator.
    * Only fires on the coordinator instance.
    * MeshStore should send the peer list and broadcast the arrival.
    */
   onIntroduction(
     handle: ConnectionHandle,
     msg: { peerId: string; dataPort: number },
+  ): void;
+
+  /**
+   * A new peer introduced itself and is awaiting approval.
+   * Replaces onIntroduction when connection approval is active.
+   * Only fires on the coordinator instance.
+   * MeshStore should queue the request and deliver a connection_request
+   * event to the owning agent.
+   */
+  onConnectionRequest(
+    handle: ConnectionHandle,
+    info: { peerId: string; dataPort: number; name: string; fingerprint: string },
   ): void;
 
   /**
@@ -129,6 +141,17 @@ export interface MeshTransport {
    * Send a wire message to a specific peer connection.
    */
   send(handle: ConnectionHandle, message: MeshMessage): Promise<void>;
+
+  /**
+   * Accept a pending connection. Sends connect_accepted and processes
+   * the introduction as normal (peer_list, peer_joined broadcast).
+   */
+  acceptConnection(handle: ConnectionHandle): Promise<void>;
+
+  /**
+   * Reject a pending connection. Sends connect_rejected and closes the socket.
+   */
+  rejectConnection(handle: ConnectionHandle, reason: string): Promise<void>;
 
   /**
    * Broadcast a wire message to all connected peer data connections.

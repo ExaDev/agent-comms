@@ -57,6 +57,9 @@ export type MeshMessage =
   | { method: "state_sync"; state: SerialisedState }
   | { method: "state_update"; patch: MeshStatePatch }
   | { method: "introduce"; peerId: string; dataPort: number }
+  | { method: "connect_request"; peerId: string; dataPort: number; name: string; fingerprint: string }
+  | { method: "connect_accepted"; peerId: string; dataPort: number }
+  | { method: "connect_rejected"; peerId: string; reason: string }
   | { method: "peer_list"; peers: PeerInfo[] }
   | { method: "peer_joined"; peer: PeerInfo }
   | { method: "peer_left"; peerId: string }
