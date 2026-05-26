@@ -97,6 +97,7 @@ export const RoomSchema = defineSchema(
     description: z.string(),
     members: z.array(z.string()),
     invited: z.array(z.string()),
+    federated: z.boolean().optional(),
   }),
 );
 export type Room = z.infer<typeof RoomSchema>;
@@ -350,6 +351,18 @@ export const CommsActionSchema = defineSchema(
       adapter: z.string().optional(),
     }),
     z.object({ action: z.literal("mesh_get_visibility") }),
+    // Federation actions (coordinator-to-coordinator)
+    z.object({
+      action: z.literal("mesh_fed_connect"),
+      host: z.string(),
+      port: z.number(),
+      name: z.string().optional(),
+    }),
+    z.object({
+      action: z.literal("mesh_fed_disconnect"),
+      linkId: z.string(),
+    }),
+    z.object({ action: z.literal("mesh_fed_links") }),
   ]),
 );
 export type CommsAction = z.infer<typeof CommsActionSchema>;
