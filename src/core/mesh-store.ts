@@ -118,6 +118,10 @@ function dmKey(a: string, b: string): string {
 
 function writeAsync(socket: net.Socket, data: string): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (socket.destroyed) {
+      resolve();
+      return;
+    }
     socket.write(data, "utf-8", (err) => {
       if (err) reject(err);
       else resolve();
@@ -157,6 +161,8 @@ export class MeshStore implements CommsStore {
   private coordinatorSocket: net.Socket | undefined;
   private peerInfo = new Map<string, PeerInfo>();
   private staleCheckTimer: ReturnType<typeof setInterval> | undefined;
+  private isShutDown = false;
+  private pendingMarkReadTimers: ReturnType<typeof setTimeout>[] = [];
 
   onDelivery:
     | ((agentId: string, event: DeliveryEvent) => void | Promise<void>)
@@ -476,16 +482,21 @@ export class MeshStore implements CommsStore {
             if (oldest !== undefined) this.localDeliveryKeys.delete(oldest);
           }
           void this.onDelivery(patch.agentId, patch.event);
-          // Auto-mark read — push bridges consume immediately
-          if (patch.event.type === "room_message") {
-            await this.markRead(
-              patch.event.message.id,
-              this.peerId,
-              patch.event.message.room,
-            );
-          } else if (patch.event.type === "dm") {
-            await this.markRead(patch.event.message.id, this.peerId);
-          }
+          // Auto-mark read — scheduled as a macrotask to yield to the event
+          // loop. Without this yield, the delivery → markRead → broadcast
+          // → peer receives → handleDataMessage chain monopolises the
+          // microtask queue and starves macrotasks (timers, new connections,
+          // sendRoomMessage return values).
+          const evt = patch.event;
+          const timer = setTimeout(() => {
+            if (this.isShutDown) return;
+            if (evt.type === "room_message") {
+              void this.markRead(evt.message.id, this.peerId, evt.message.room);
+            } else if (evt.type === "dm") {
+              void this.markRead(evt.message.id, this.peerId);
+            }
+          }, 0);
+          this.pendingMarkReadTimers.push(timer);
         }
         break;
       }
@@ -600,12 +611,17 @@ export class MeshStore implements CommsStore {
         if (oldest !== undefined) this.localDeliveryKeys.delete(oldest);
       }
       void this.onDelivery(agentId, event);
-      // Auto-mark read — push bridges consume immediately
-      if (event.type === "room_message") {
-        await this.markRead(event.message.id, agentId, event.message.room);
-      } else if (event.type === "dm") {
-        await this.markRead(event.message.id, agentId);
-      }
+      // Auto-mark read — scheduled as a macrotask to yield to the event
+      // loop (see matching comment in applyPatch for rationale).
+      const timer = setTimeout(() => {
+        if (this.isShutDown) return;
+        if (event.type === "room_message") {
+          void this.markRead(event.message.id, agentId, event.message.room);
+        } else if (event.type === "dm") {
+          void this.markRead(event.message.id, agentId);
+        }
+      }, 0);
+      this.pendingMarkReadTimers.push(timer);
     }
 
     // Remote delivery
@@ -1321,7 +1337,9 @@ export class MeshStore implements CommsStore {
             (p) => p.id !== this.peerId,
           ),
         };
-        await writeAsync(peer.socket, encode(msg));
+        await writeAsync(peer.socket, encode(msg)).catch(() => {
+          /* successor socket already destroyed — nothing to hand over */
+        });
       }
     }
 
@@ -1343,6 +1361,14 @@ export class MeshStore implements CommsStore {
   // -----------------------------------------------------------------------
 
   async shutdown(): Promise<void> {
+    this.isShutDown = true;
+    // Clear any pending markRead timers so they don't fire after sockets
+    // are destroyed (which would attempt writes on destroyed sockets) or
+    // keep the event loop alive after process.exit().
+    for (const timer of this.pendingMarkReadTimers) {
+      clearTimeout(timer);
+    }
+    this.pendingMarkReadTimers.length = 0;
     const agent = this.agents.get(this.peerId);
     if (agent) {
       agent.status = "offline";
