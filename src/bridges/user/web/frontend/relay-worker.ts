@@ -313,6 +313,7 @@ function translateWireMessage(label: "a" | "b", msg: WireMessage): WireMessage {
     "type" in msg.patch &&
     typeof msg.patch.type === "string"
   ) {
+    // Patch validated as object with string `type` — cast to MeshStatePatch discriminated union
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     const patch = msg.patch as MeshStatePatch;
     return { ...msg, patch: translatePatch(label, patch) };

@@ -73,11 +73,16 @@ export class MeshClient {
             break;
           if (!("agents" in raw.state) || !("rooms" in raw.state)) break;
           const state = raw.state;
-          const agents =
+          // State from mesh SharedWorker is SerialisedState where agents/rooms
+          // are Record<string, T>. Object.values on object returns any[], which
+          // is the actual runtime shape.
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          const agents: AgentIdentity[] =
             typeof state.agents === "object" && state.agents !== null
               ? Object.values(state.agents)
               : [];
-          const rooms =
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          const rooms: RoomLike[] =
             typeof state.rooms === "object" && state.rooms !== null
               ? Object.values(state.rooms)
               : [];

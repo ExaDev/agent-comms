@@ -61,9 +61,6 @@ export default defineConfig(
       ...tseslint.configs.strictTypeChecked,
       ...tseslint.configs.stylisticTypeChecked,
     ],
-    linterOptions: {
-      noInlineConfig: true,
-    },
     languageOptions: {
       parserOptions: {
         projectService: {

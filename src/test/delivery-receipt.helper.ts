@@ -324,9 +324,7 @@ async function testReadReceiptPush(): Promise<void> {
   await sleep(500);
 
   const readReceipt = deliveriesA.find(
-    (
-      ev,
-    ): ev is Extract<DeliveryEvent, { type: "delivery_status" }> =>
+    (ev): ev is Extract<DeliveryEvent, { type: "delivery_status" }> =>
       ev.type === "delivery_status" && ev.status === "read",
   );
   assert.ok(readReceipt !== undefined, "A should receive a read receipt");
