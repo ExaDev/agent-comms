@@ -630,4 +630,20 @@ export class FileStore implements CommsStore {
   getNetworkInterfaces(): import("./types.js").NetworkInterface[] {
     return [];
   }
+
+  // -----------------------------------------------------------------------
+  // Federation — not supported by FileStore
+  // -----------------------------------------------------------------------
+
+  async fedConnect(): Promise<string> {
+    throw new CommsError("FileStore does not support federation", "NOT_SUPPORTED");
+  }
+
+  async fedDisconnect(): Promise<void> {
+    throw new CommsError("FileStore does not support federation", "NOT_SUPPORTED");
+  }
+
+  fedLinks(): import("./federation.js").FedLink[] {
+    return [];
+  }
 }

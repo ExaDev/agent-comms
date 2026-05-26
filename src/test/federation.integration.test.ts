@@ -116,7 +116,9 @@ async function main(): Promise<void> {
 
   const linksB = b.store.fedLinks();
   assert.strictEqual(linksB.length, 1, "B should have 1 federation link");
-  assert.ok(linksB[0]?.remoteMeshId.length > 0, "Remote mesh ID should be present");
+  const link = linksB[0];
+  assert.ok(link, "Link should exist");
+  assert.ok(link.remoteMeshId.length > 0, "Remote mesh ID should be present");
 
   await sleep(200);
 
