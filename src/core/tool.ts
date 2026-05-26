@@ -379,7 +379,10 @@ export class CommsTool {
     }
     // Default to the mesh coordinator port if not specified
     const port = action.port ?? 19876;
-    const opts: { name: string; port: number; adapter?: string } = { name: action.name, port };
+    const opts: { name: string; port: number; adapter?: string } = {
+      name: action.name,
+      port,
+    };
     if (action.adapter !== undefined) opts.adapter = action.adapter;
     const id = await this.discovery.advertise(action.method, opts);
     return {
@@ -420,7 +423,7 @@ export class CommsTool {
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_listen" },
   ): Promise<CommsResult> {
-    const policy = (action.policy ?? "full") as string;
+    const policy = action.policy ?? "full";
     const validPolicies = ["full", "observe", "rooms-only", "gateway"];
     if (!validPolicies.includes(policy)) {
       return {
@@ -434,7 +437,10 @@ export class CommsTool {
         action.port ?? 0,
         policy as "full" | "observe" | "rooms-only" | "gateway",
       );
-      return { content: `Listener added: ${id} on ${action.host}:${action.port ?? "auto"} with policy ${policy}.`, isError: false };
+      return {
+        content: `Listener added: ${id} on ${action.host}:${action.port ?? "auto"} with policy ${policy}.`,
+        isError: false,
+      };
     } catch (err) {
       return {
         content: `Failed to add listener: ${err instanceof Error ? err.message : String(err)}`,
@@ -511,7 +517,11 @@ export class CommsTool {
     action: CommsAction & { action: "mesh_fed_connect" },
   ): Promise<CommsResult> {
     try {
-      const linkId = await this.store.fedConnect(action.host, action.port, action.name);
+      const linkId = await this.store.fedConnect(
+        action.host,
+        action.port,
+        action.name,
+      );
       return {
         content: `Federation link established: ${linkId} to ${action.host}:${String(action.port)}`,
         isError: false,
@@ -548,7 +558,10 @@ export class CommsTool {
   ): Promise<CommsResult> {
     try {
       await this.store.fedDisconnect(action.linkId);
-      return { content: `Federation link ${action.linkId} closed.`, isError: false };
+      return {
+        content: `Federation link ${action.linkId} closed.`,
+        isError: false,
+      };
     } catch (err) {
       return {
         content: `Failed to close federation link: ${err instanceof Error ? err.message : String(err)}`,

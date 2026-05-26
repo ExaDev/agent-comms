@@ -49,7 +49,7 @@ export interface DiscoveryBackend {
   readonly name: string;
   startAdvertising(opts: AdvertiseOptions): Promise<string>;
   stopAdvertising(id: string): Promise<void>;
-  discover(timeout?: number): Promise<DiscoveredMesh[]>
+  discover(timeout?: number): Promise<DiscoveredMesh[]>;
   /** Stop all activity (timers, sockets) for this backend. */
   stop(): Promise<void>;
 }
@@ -64,7 +64,10 @@ export class DiscoveryManager {
   private meshVisibility: MeshVisibility = "discoverable";
   private perAdapterVisibility = new Map<string, MeshVisibility>();
   /** Advertisements that were paused due to visibility changes. */
-  private pausedAdvertisements = new Map<string, { backendName: string; opts: AdvertiseOptions }>();
+  private pausedAdvertisements = new Map<
+    string,
+    { backendName: string; opts: AdvertiseOptions }
+  >();
 
   /** Register a discovery backend. */
   registerBackend(backend: DiscoveryBackend): void {
@@ -166,7 +169,9 @@ export class DiscoveryManager {
     this.activeAdvertisements.clear();
   }
 
-  private async pauseAdvertisementsForBackend(backendName: string): Promise<void> {
+  private async pauseAdvertisementsForBackend(
+    backendName: string,
+  ): Promise<void> {
     for (const [id, bn] of this.activeAdvertisements) {
       if (bn === backendName) {
         this.pausedAdvertisements.set(id, {
@@ -198,7 +203,9 @@ export class DiscoveryManager {
     }
   }
 
-  private async resumeAdvertisementsForBackend(backendName: string): Promise<void> {
+  private async resumeAdvertisementsForBackend(
+    backendName: string,
+  ): Promise<void> {
     for (const [id, paused] of this.pausedAdvertisements) {
       if (paused.backendName === backendName) {
         this.pausedAdvertisements.delete(id);

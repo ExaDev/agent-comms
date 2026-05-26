@@ -14,7 +14,11 @@ import * as http from "node:http";
 import * as net from "node:net";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { DiscoveredMesh, DiscoveryBackend, AdvertiseOptions } from "./discovery.js";
+import type {
+  DiscoveredMesh,
+  DiscoveryBackend,
+  AdvertiseOptions,
+} from "./discovery.js";
 
 const execFileAsync = promisify(execFile);
 const TCP_PROBE_TIMEOUT_MS = 500;
@@ -66,9 +70,7 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
    * Discover meshes on the tailnet by probing peers.
    * Returns peers that respond to a TCP connection on port 19876.
    */
-  async discover(
-    timeout?: number,
-  ): Promise<DiscoveredMesh[]> {
+  async discover(timeout?: number): Promise<DiscoveredMesh[]> {
     void timeout;
 
     const peers = await this.getPeers();
@@ -95,13 +97,11 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
    * Get tailnet peers via `tailscale status --json`.
    * Falls back to the local API at localhost:49156 if the CLI is unavailable.
    */
-  private async getPeers(): Promise<
-    Array<{ ip: string; hostname: string }>
-  > {
+  private async getPeers(): Promise<{ ip: string; hostname: string }[]> {
     const status = await this.fetchTailscaleStatus();
     if (!status?.Peer) return [];
 
-    const peers: Array<{ ip: string; hostname: string }> = [];
+    const peers: { ip: string; hostname: string }[] = [];
     for (const [, peer] of Object.entries(status.Peer)) {
       if (!peer.Online) continue;
       const ips = peer.TailscaleIPs;
@@ -123,10 +123,7 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
   private async fetchTailscaleStatus(): Promise<TailscaleStatus | undefined> {
     // Try CLI first
     try {
-      const { stdout } = await execFileAsync("tailscale", [
-        "status",
-        "--json",
-      ]);
+      const { stdout } = await execFileAsync("tailscale", ["status", "--json"]);
       return JSON.parse(stdout) as TailscaleStatus;
     } catch {
       // CLI not available — try the local API

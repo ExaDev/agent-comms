@@ -79,10 +79,7 @@ interface ServiceWorkerGlobalScope {
   registration: ServiceWorkerRegistration;
   clients: Clients;
   caches: CacheStorage;
-  addEventListener(
-    type: "push",
-    listener: (event: PushEvent) => void,
-  ): void;
+  addEventListener(type: "push", listener: (event: PushEvent) => void): void;
   addEventListener(
     type: "notificationclick",
     listener: (event: NotificationEvent) => void,
@@ -95,10 +92,7 @@ interface ServiceWorkerGlobalScope {
     type: "activate",
     listener: (event: ExtendableEvent) => void,
   ): void;
-  addEventListener(
-    type: "fetch",
-    listener: (event: FetchEvent) => void,
-  ): void;
+  addEventListener(type: "fetch", listener: (event: FetchEvent) => void): void;
   skipWaiting(): Promise<void>;
 }
 
@@ -180,7 +174,9 @@ self.addEventListener("fetch", (event: FetchEvent) => {
           self.caches
             .open(CACHE_NAME)
             .then((cache) => cache.match(event.request))
-            .then((cached) => cached ?? new Response("Offline", { status: 503 })),
+            .then(
+              (cached) => cached ?? new Response("Offline", { status: 503 }),
+            ),
         ),
     );
     return;
@@ -222,8 +218,8 @@ self.addEventListener("push", (event: PushEvent) => {
   if (event.data) {
     try {
       const data = event.data.json();
-      if (typeof data["title"] === "string") title = data["title"];
-      if (typeof data["body"] === "string") body = data["body"];
+      if (typeof data.title === "string") title = data.title;
+      if (typeof data.body === "string") body = data.body;
     } catch {
       const text = event.data.text();
       if (text) body = text;
@@ -247,8 +243,7 @@ self.addEventListener("push", (event: PushEvent) => {
 self.addEventListener("notificationclick", (event: NotificationEvent) => {
   event.notification.close();
 
-  const targetUrl =
-    event.notification.data?.url ?? self.location.origin;
+  const targetUrl = event.notification.data?.url ?? self.location.origin;
 
   event.waitUntil(
     self.clients

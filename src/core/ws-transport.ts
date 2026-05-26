@@ -14,7 +14,11 @@
 import { WebSocket, WebSocketServer } from "ws";
 import { isMeshMessage } from "./wire-protocol.js";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
-import type { ConnectionHandle, MeshTransport, TransportEvents } from "./transport.js";
+import type {
+  ConnectionHandle,
+  MeshTransport,
+  TransportEvents,
+} from "./transport.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -392,7 +396,10 @@ export class WebSocketTransport implements MeshTransport {
     void fingerprint;
   }
 
-  async rejectConnection(handle: ConnectionHandle, reason: string): Promise<void> {
+  async rejectConnection(
+    handle: ConnectionHandle,
+    reason: string,
+  ): Promise<void> {
     const pending = this.pendingConnections.get(handle.id);
     if (!pending) {
       throw new Error(`No pending connection for handle ${handle.id}`);

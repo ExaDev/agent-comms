@@ -19,13 +19,14 @@
 
 import * as net from "node:net";
 import * as tls from "node:tls";
-import {
-  encode,
-  isMeshMessage,
-  MessageBuffer,
-} from "./wire-protocol.js";
+import { encode, isMeshMessage, MessageBuffer } from "./wire-protocol.js";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
-import type { ConnectionHandle, ListenerInfo, ListenerPolicy, TransportEvents } from "./transport.js";
+import type {
+  ConnectionHandle,
+  ListenerInfo,
+  ListenerPolicy,
+  TransportEvents,
+} from "./transport.js";
 import type { PeerIdentity } from "./identity.js";
 import { nanoid } from "./nanoid.js";
 
@@ -40,7 +41,10 @@ const CONNECT_TIMEOUT_MS = 2000;
 // Async socket write helper (not exported)
 // ---------------------------------------------------------------------------
 
-function writeAsync(socket: net.Socket | tls.TLSSocket, data: string): Promise<void> {
+function writeAsync(
+  socket: net.Socket | tls.TLSSocket,
+  data: string,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     if (socket.destroyed) {
       resolve();
@@ -65,7 +69,13 @@ export class TlsTransport {
   // -- Coordinator listeners (multiple adapters) --
   private coordinatorListeners = new Map<
     string,
-    { server: tls.Server; policy: ListenerPolicy; host: string; port: number; isDefault: boolean }
+    {
+      server: tls.Server;
+      policy: ListenerPolicy;
+      host: string;
+      port: number;
+      isDefault: boolean;
+    }
   >();
   /** The default localhost listener ID (set once during becomeCoordinator). */
   private defaultListenerId: string | undefined;
@@ -182,37 +192,34 @@ export class TlsTransport {
   ): Promise<void> {
     this._peerId = peerId;
     await new Promise<void>((resolve, reject) => {
-      const socket = tls.connect(
-        { ...this.connectOptions, host, port },
-        () => {
-          this.coordinatorSocket = socket;
+      const socket = tls.connect({ ...this.connectOptions, host, port }, () => {
+        this.coordinatorSocket = socket;
 
-          // Send introduction
-          const intro: MeshMessage = {
-            method: "introduce",
-            peerId,
-            dataPort: localDataPort,
-          };
-          socket.write(encode(intro));
+        // Send introduction
+        const intro: MeshMessage = {
+          method: "introduce",
+          peerId,
+          dataPort: localDataPort,
+        };
+        socket.write(encode(intro));
 
-          // Wire up coordinator message handling
-          const buffer = new MessageBuffer();
-          socket.on("data", (data) => {
-            const items = buffer.append(data.toString());
-            for (const item of items) {
-              if (isMeshMessage(item)) {
-                this.dispatchCoordinatorClientMessage(item);
-              }
+        // Wire up coordinator message handling
+        const buffer = new MessageBuffer();
+        socket.on("data", (data) => {
+          const items = buffer.append(data.toString());
+          for (const item of items) {
+            if (isMeshMessage(item)) {
+              this.dispatchCoordinatorClientMessage(item);
             }
-          });
-          socket.on("error", () => {
-            /* ignore late errors on coordinator connection */
-          });
+          }
+        });
+        socket.on("error", () => {
+          /* ignore late errors on coordinator connection */
+        });
 
-          clearTimeout(timer);
-          resolve();
-        },
-      );
+        clearTimeout(timer);
+        resolve();
+      });
 
       const timer = setTimeout(() => {
         socket.destroy();
@@ -241,50 +248,47 @@ export class TlsTransport {
   ): Promise<void> {
     this._peerId = peerId;
     await new Promise<void>((resolve, reject) => {
-      const socket = tls.connect(
-        { ...this.connectOptions, host, port },
-        () => {
-          this.coordinatorSocket = socket;
+      const socket = tls.connect({ ...this.connectOptions, host, port }, () => {
+        this.coordinatorSocket = socket;
 
-          // Send connect_request instead of introduce
-          const req: MeshMessage = {
-            method: "connect_request",
-            peerId,
-            dataPort: localDataPort,
-            name,
-            fingerprint,
-          };
-          socket.write(encode(req));
+        // Send connect_request instead of introduce
+        const req: MeshMessage = {
+          method: "connect_request",
+          peerId,
+          dataPort: localDataPort,
+          name,
+          fingerprint,
+        };
+        socket.write(encode(req));
 
-          clearTimeout(timer);
+        clearTimeout(timer);
 
-          // Wire up coordinator message handling
-          const buffer = new MessageBuffer();
-          let approved = false;
-          socket.on("data", (data) => {
-            const items = buffer.append(data.toString());
-            for (const item of items) {
-              if (!isMeshMessage(item)) continue;
+        // Wire up coordinator message handling
+        const buffer = new MessageBuffer();
+        let approved = false;
+        socket.on("data", (data) => {
+          const items = buffer.append(data.toString());
+          for (const item of items) {
+            if (!isMeshMessage(item)) continue;
 
-              if (!approved) {
-                if (item.method === "connect_accepted") {
-                  approved = true;
-                  resolve();
-                } else if (item.method === "connect_rejected") {
-                  socket.destroy();
-                  reject(new Error(`Connection rejected: ${item.reason}`));
-                  return;
-                }
-              } else {
-                this.dispatchCoordinatorClientMessage(item);
+            if (!approved) {
+              if (item.method === "connect_accepted") {
+                approved = true;
+                resolve();
+              } else if (item.method === "connect_rejected") {
+                socket.destroy();
+                reject(new Error(`Connection rejected: ${item.reason}`));
+                return;
               }
+            } else {
+              this.dispatchCoordinatorClientMessage(item);
             }
-          });
-          socket.on("error", () => {
-            /* ignore late errors on coordinator connection */
-          });
-        },
-      );
+          }
+        });
+        socket.on("error", () => {
+          /* ignore late errors on coordinator connection */
+        });
+      });
 
       const timer = setTimeout(() => {
         socket.destroy();
@@ -333,7 +337,11 @@ export class TlsTransport {
   // MeshTransport — Multi-listener management
   // -----------------------------------------------------------------------
 
-  async addListener(host: string, port: number, policy: ListenerPolicy): Promise<string> {
+  async addListener(
+    host: string,
+    port: number,
+    policy: ListenerPolicy,
+  ): Promise<string> {
     if (!this._isCoordinator) {
       throw new Error("Only the coordinator can add listeners");
     }
@@ -346,7 +354,8 @@ export class TlsTransport {
 
       server.listen(port, host, () => {
         const addr = server.address();
-        const actualPort = typeof addr === "object" && addr !== null ? addr.port : port;
+        const actualPort =
+          typeof addr === "object" && addr !== null ? addr.port : port;
         this.coordinatorListeners.set(id, {
           server,
           policy,
@@ -497,7 +506,10 @@ export class TlsTransport {
     void fingerprint;
   }
 
-  async rejectConnection(handle: ConnectionHandle, reason: string): Promise<void> {
+  async rejectConnection(
+    handle: ConnectionHandle,
+    reason: string,
+  ): Promise<void> {
     const pending = this.pendingConnections.get(handle.id);
     if (!pending) {
       throw new Error(`No pending connection for handle ${handle.id}`);

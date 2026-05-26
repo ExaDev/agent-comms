@@ -23,10 +23,26 @@ describe("listener policy", () => {
 
     const listeners = store.listListeners();
     assert.equal(listeners.length, 1, "Should have exactly one listener");
-    assert.equal(listeners[0]?.policy, "full", "Default listener should have full policy");
-    assert.equal(listeners[0]?.isDefault, true, "Default listener should be marked as default");
-    assert.equal(listeners[0]?.host, "127.0.0.1", "Default listener should be on localhost");
-    assert.equal(listeners[0]?.port, TEST_PORT, "Default listener should be on the coordinator port");
+    assert.equal(
+      listeners[0]?.policy,
+      "full",
+      "Default listener should have full policy",
+    );
+    assert.equal(
+      listeners[0]?.isDefault,
+      true,
+      "Default listener should be marked as default",
+    );
+    assert.equal(
+      listeners[0]?.host,
+      "127.0.0.1",
+      "Default listener should be on localhost",
+    );
+    assert.equal(
+      listeners[0]?.port,
+      TEST_PORT,
+      "Default listener should be on the coordinator port",
+    );
 
     await store.shutdown();
   });
@@ -43,8 +59,16 @@ describe("listener policy", () => {
 
     const newListener = listeners.find((l) => l.id === id);
     assert.ok(newListener, "New listener should be listed");
-    assert.equal(newListener.policy, "observe", "New listener should have observe policy");
-    assert.equal(newListener.isDefault, false, "New listener should not be default");
+    assert.equal(
+      newListener.policy,
+      "observe",
+      "New listener should have observe policy",
+    );
+    assert.equal(
+      newListener.isDefault,
+      false,
+      "New listener should not be default",
+    );
     assert.ok(newListener.port > 0, "Should have an assigned port");
 
     await store.shutdown();
@@ -60,7 +84,11 @@ describe("listener policy", () => {
     await store.removeListener(id);
     const listeners = store.listListeners();
     assert.equal(listeners.length, 1, "Should be back to one listener");
-    assert.equal(listeners[0]?.isDefault, true, "Remaining listener should be the default");
+    assert.equal(
+      listeners[0]?.isDefault,
+      true,
+      "Remaining listener should be the default",
+    );
 
     await store.shutdown();
   });
@@ -133,8 +161,14 @@ describe("listener policy", () => {
     );
 
     assert.ok(!result.isError, "Should not be an error");
-    assert.ok(result.content.includes("full"), "Should list the default full listener");
-    assert.ok(result.content.includes("rooms-only"), "Should list the rooms-only listener");
+    assert.ok(
+      result.content.includes("full"),
+      "Should list the default full listener",
+    );
+    assert.ok(
+      result.content.includes("rooms-only"),
+      "Should list the rooms-only listener",
+    );
 
     await store.shutdown();
   });
@@ -159,7 +193,10 @@ describe("listener policy", () => {
     );
 
     assert.ok(!result.isError, "Should not be an error");
-    assert.ok(result.content.includes("lo") || result.content.includes("IPv4"), "Should list network interfaces");
+    assert.ok(
+      result.content.includes("lo") || result.content.includes("IPv4"),
+      "Should list network interfaces",
+    );
 
     await store.shutdown();
   });
@@ -214,7 +251,10 @@ describe("listener policy", () => {
     );
 
     assert.ok(!result.isError, "Should not be an error");
-    assert.ok(result.content.includes("Listener added"), "Should confirm addition");
+    assert.ok(
+      result.content.includes("Listener added"),
+      "Should confirm addition",
+    );
 
     const listeners = store.listListeners();
     assert.equal(listeners.length, 2, "Should have two listeners");
@@ -273,10 +313,14 @@ describe("listener policy", () => {
     //
     // We intercept at the transport.events level because store.events
     // is a getter that creates a fresh object each call.
-    const receivedHandle = await new Promise<{ policy: string | undefined } | null>((resolve) => {
+    const receivedHandle = await new Promise<{
+      policy: string | undefined;
+    } | null>((resolve) => {
       const timeout = setTimeout(() => resolve(null), 3000);
 
-      const transport = (store as unknown as { transport: { events: TransportEvents } }).transport;
+      const transport = (
+        store as unknown as { transport: { events: TransportEvents } }
+      ).transport;
       const originalOnIntroduction = transport.events.onIntroduction;
       transport.events.onIntroduction = (handle, msg) => {
         // Capture the handle's policy
@@ -292,11 +336,13 @@ describe("listener policy", () => {
       });
 
       socket.on("connect", () => {
-        socket.write(JSON.stringify({
-          method: "introduce",
-          peerId: "test-observe-peer",
-          dataPort: 19999,
-        }) + "\n");
+        socket.write(
+          JSON.stringify({
+            method: "introduce",
+            peerId: "test-observe-peer",
+            dataPort: 19999,
+          }) + "\n",
+        );
       });
 
       socket.on("error", () => {
@@ -307,7 +353,11 @@ describe("listener policy", () => {
     });
 
     assert.ok(receivedHandle, "Should receive an introduction");
-    assert.equal(receivedHandle.policy, "observe", "Handle should carry observe policy");
+    assert.equal(
+      receivedHandle.policy,
+      "observe",
+      "Handle should carry observe policy",
+    );
 
     await store.shutdown();
   });

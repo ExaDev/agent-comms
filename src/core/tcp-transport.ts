@@ -15,13 +15,15 @@
  */
 
 import * as net from "node:net";
-import {
-  encode,
-  isMeshMessage,
-  MessageBuffer,
-} from "./wire-protocol.js";
+import { encode, isMeshMessage, MessageBuffer } from "./wire-protocol.js";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
-import type { ConnectionHandle, ListenerInfo, ListenerPolicy, MeshTransport, TransportEvents } from "./transport.js";
+import type {
+  ConnectionHandle,
+  ListenerInfo,
+  ListenerPolicy,
+  MeshTransport,
+  TransportEvents,
+} from "./transport.js";
 import { nanoid } from "./nanoid.js";
 
 // ---------------------------------------------------------------------------
@@ -63,7 +65,13 @@ export class TcpTransport implements MeshTransport {
   // -- Coordinator listeners (multiple adapters) --
   private coordinatorListeners = new Map<
     string,
-    { server: net.Server; policy: ListenerPolicy; host: string; port: number; isDefault: boolean }
+    {
+      server: net.Server;
+      policy: ListenerPolicy;
+      host: string;
+      port: number;
+      isDefault: boolean;
+    }
   >();
   /** The default localhost listener ID (set once during becomeCoordinator). */
   private defaultListenerId: string | undefined;
@@ -300,7 +308,11 @@ export class TcpTransport implements MeshTransport {
   // MeshTransport — Multi-listener management
   // -----------------------------------------------------------------------
 
-  async addListener(host: string, port: number, policy: ListenerPolicy): Promise<string> {
+  async addListener(
+    host: string,
+    port: number,
+    policy: ListenerPolicy,
+  ): Promise<string> {
     if (!this._isCoordinator) {
       throw new Error("Only the coordinator can add listeners");
     }
@@ -313,7 +325,8 @@ export class TcpTransport implements MeshTransport {
 
       server.listen(port, host, () => {
         const addr = server.address();
-        const actualPort = typeof addr === "object" && addr !== null ? addr.port : port;
+        const actualPort =
+          typeof addr === "object" && addr !== null ? addr.port : port;
         this.coordinatorListeners.set(id, {
           server,
           policy,
@@ -465,7 +478,10 @@ export class TcpTransport implements MeshTransport {
     void fingerprint;
   }
 
-  async rejectConnection(handle: ConnectionHandle, reason: string): Promise<void> {
+  async rejectConnection(
+    handle: ConnectionHandle,
+    reason: string,
+  ): Promise<void> {
     const pending = this.pendingConnections.get(handle.id);
     if (!pending) {
       throw new Error(`No pending connection for handle ${handle.id}`);

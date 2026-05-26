@@ -50,7 +50,9 @@ async function testTlsPeerCommunication(): Promise<void> {
   storeA.setTransport(new TlsTransport(storeA.events, identityA));
 
   const deliveriesA: unknown[] = [];
-  storeA.onDelivery = () => { deliveriesA.push(1); };
+  storeA.onDelivery = () => {
+    deliveriesA.push(1);
+  };
   await storeA.init();
   await storeA.registerAgent({
     name: "a",
@@ -96,7 +98,10 @@ async function testTlsPeerCommunication(): Promise<void> {
   await storeA.sendRoomMessage(room.id, storeA.peerId, "Hello over TLS!");
   await sleep(300);
 
-  assert.ok(deliveriesB.length >= 1, `B should receive at least 1 delivery, got ${String(deliveriesB.length)}`);
+  assert.ok(
+    deliveriesB.length >= 1,
+    `B should receive at least 1 delivery, got ${String(deliveriesB.length)}`,
+  );
   const roomMsg = deliveriesB.find((ev) => ev.type === "room_message");
   assert.ok(roomMsg !== undefined, "Should find room_message event");
   const message = roomMsg.message as Record<string, unknown>;
@@ -172,7 +177,12 @@ fn()
   .then(async () => {
     const maxWait = 2000;
     const start = Date.now();
-    while (((process as unknown as { _getActiveHandles?: () => unknown[] })._getActiveHandles?.()?.length ?? 0) > 0 && Date.now() - start < maxWait) {
+    while (
+      ((
+        process as unknown as { _getActiveHandles?: () => unknown[] }
+      )._getActiveHandles?.()?.length ?? 0) > 0 &&
+      Date.now() - start < maxWait
+    ) {
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
     process.exit(0);

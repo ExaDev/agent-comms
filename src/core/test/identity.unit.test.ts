@@ -71,7 +71,10 @@ describe("generateIdentity", () => {
 
     assert.strictEqual(x509.subject, "CN=agent-comms");
     assert.strictEqual(x509.issuer, "CN=agent-comms");
-    assert.ok(x509.verify(x509.publicKey), "certificate should verify against its own public key");
+    assert.ok(
+      x509.verify(x509.publicKey),
+      "certificate should verify against its own public key",
+    );
   });
 
   it("includes localhost and 127.0.0.1 in Subject Alternative Names", () => {

@@ -128,13 +128,19 @@ async function main(): Promise<void> {
   const agentsB = await b.store.listAgents(b.store.peerId);
   console.log(`  B sees ${String(agentsB.length)} agent(s)`);
   const fedAgentsB = agentsB.filter((ag) => ag.tags.includes("federated"));
-  assert.ok(fedAgentsB.length >= 1, "B should see at least 1 federated agent from A");
+  assert.ok(
+    fedAgentsB.length >= 1,
+    "B should see at least 1 federated agent from A",
+  );
 
   // A should see B's agent as a federated agent
   const agentsA = await a.store.listAgents(a.store.peerId);
   console.log(`  A sees ${String(agentsA.length)} agent(s)`);
   const fedAgentsA = agentsA.filter((ag) => ag.tags.includes("federated"));
-  assert.ok(fedAgentsA.length >= 1, "A should see at least 1 federated agent from B");
+  assert.ok(
+    fedAgentsA.length >= 1,
+    "A should see at least 1 federated agent from B",
+  );
 
   // --- Test 3: Federated room messages propagate ---
   console.log("Test 3: Federated room messages propagate...");
@@ -167,13 +173,18 @@ async function main(): Promise<void> {
   b.deliveries.length = 0;
 
   // Send a message from A's agent in the federated room
-  const msg = await a.store.sendRoomMessage(fedRoom.id, a.store.peerId, "Hello from mesh A!");
+  const msg = await a.store.sendRoomMessage(
+    fedRoom.id,
+    a.store.peerId,
+    "Hello from mesh A!",
+  );
   console.log(`  A sent: "${msg.content}"`);
   await sleep(500);
 
   // B should receive the federated message
   const fedMsgs = b.deliveries.filter(
-    (e) => e.type === "room_message" && (e.message as RoomMessage).content === "Hello from mesh A!",
+    (e) =>
+      e.type === "room_message" && e.message.content === "Hello from mesh A!",
   );
   console.log(`  B received ${String(fedMsgs.length)} federated message(s)`);
   assert.ok(fedMsgs.length >= 1, "B should receive the federated room message");
@@ -191,7 +202,9 @@ async function main(): Promise<void> {
     description: "Local-only room",
     // federated defaults to false
   });
-  console.log(`  Created non-federated room: ${localRoom.id}, federated=${String(localRoom.federated)}`);
+  console.log(
+    `  Created non-federated room: ${localRoom.id}, federated=${String(localRoom.federated)}`,
+  );
   await sleep(100);
 
   // Clear deliveries
@@ -199,16 +212,25 @@ async function main(): Promise<void> {
 
   // Send a message in the non-federated room
   console.log("  Sending message in non-federated room...");
-  await a.store.sendRoomMessage(localRoom.id, a.store.peerId, "Secret local message");
+  await a.store.sendRoomMessage(
+    localRoom.id,
+    a.store.peerId,
+    "Secret local message",
+  );
   console.log("  Message sent.");
   await sleep(100);
 
   // B should NOT receive this message
   const leakedMsgs = b.deliveries.filter(
-    (e) => e.type === "room_message" && (e.message as RoomMessage).content === "Secret local message",
+    (e) =>
+      e.type === "room_message" && e.message.content === "Secret local message",
   );
   console.log(`  B received ${String(leakedMsgs.length)} leaked message(s)`);
-  assert.strictEqual(leakedMsgs.length, 0, "B should NOT receive non-federated room messages");
+  assert.strictEqual(
+    leakedMsgs.length,
+    0,
+    "B should NOT receive non-federated room messages",
+  );
 
   // --- Test 5: Federation link listing ---
   console.log("Test 5: Federation link listing...");
@@ -222,7 +244,11 @@ async function main(): Promise<void> {
   await sleep(200);
 
   const linksAfter = b.store.fedLinks();
-  assert.strictEqual(linksAfter.length, 0, "B should have 0 federation links after disconnect");
+  assert.strictEqual(
+    linksAfter.length,
+    0,
+    "B should have 0 federation links after disconnect",
+  );
 
   // --- Cleanup ---
   console.log("\nCleaning up...");

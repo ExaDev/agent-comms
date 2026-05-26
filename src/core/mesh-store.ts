@@ -87,9 +87,17 @@ export class MeshStore implements CommsStore {
     | undefined;
 
   /** Fires for every state patch — both locally generated and remote. */
-  onPatch:
-    | ((patch: MeshStatePatch) => void | Promise<void>)
-    | undefined;
+  onPatch: ((patch: MeshStatePatch) => void | Promise<void>) | undefined;
+
+  /** Serialise the full mesh state for state_sync messages. */
+  serialise(): import("./wire-protocol.js").SerialisedState {
+    return {
+      agents: Object.fromEntries(this.agents),
+      rooms: Object.fromEntries(this.rooms),
+      messages: Object.fromEntries(this.messages),
+      dms: Object.fromEntries(this.dms),
+    };
+  }
 
   private lastLocalDeliveryKey: string | undefined;
   private localDeliveryKeys = new Set<string>();
@@ -117,11 +125,15 @@ export class MeshStore implements CommsStore {
       {
         onAgentVisible: (agent) => this.handleFedAgentVisible(agent),
         onAgentGone: (agentId) => this.handleFedAgentGone(agentId),
-        onRoomMessage: (roomId, message) => this.handleFedRoomMessage(roomId, message),
-        onRoomJoin: (roomId, agentId, agentName) => this.handleFedRoomJoin(roomId, agentId, agentName),
-        onRoomLeave: (roomId, agentId) => this.handleFedRoomLeave(roomId, agentId),
+        onRoomMessage: (roomId, message) =>
+          this.handleFedRoomMessage(roomId, message),
+        onRoomJoin: (roomId, agentId, agentName) =>
+          this.handleFedRoomJoin(roomId, agentId, agentName),
+        onRoomLeave: (roomId, agentId) =>
+          this.handleFedRoomLeave(roomId, agentId),
         getVisibleAgents: () => this.getVisibleAgentsForFed(),
-        getFederatedRoomMemberships: () => this.getFederatedRoomMembershipsForFed(),
+        getFederatedRoomMemberships: () =>
+          this.getFederatedRoomMembershipsForFed(),
       },
     );
   }
@@ -176,7 +188,8 @@ export class MeshStore implements CommsStore {
             connected = true;
             break;
           } catch (coordErr) {
-            const msg = coordErr instanceof Error ? coordErr.message : String(coordErr);
+            const msg =
+              coordErr instanceof Error ? coordErr.message : String(coordErr);
             if (!msg.includes("EADDRINUSE")) {
               throw coordErr;
             }
@@ -185,7 +198,9 @@ export class MeshStore implements CommsStore {
         }
         // Wait before retrying
         if (attempt < MAX_RETRIES - 1) {
-          await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+          await new Promise<void>((resolve) =>
+            setTimeout(resolve, RETRY_DELAY_MS),
+          );
         }
       }
     }
@@ -289,9 +304,7 @@ export class MeshStore implements CommsStore {
     }
   }
 
-  private async handleBecomeCoordinator(
-    peerList: PeerInfo[],
-  ): Promise<void> {
+  private async handleBecomeCoordinator(peerList: PeerInfo[]): Promise<void> {
     // Take over as coordinator using the data server we already have
     await this.transport.becomeCoordinator(
       COORDINATOR_HOST,
@@ -315,7 +328,12 @@ export class MeshStore implements CommsStore {
 
   private handleConnectionRequest(
     handle: ConnectionHandle,
-    request: { peerId: string; dataPort: number; name: string; fingerprint: string },
+    request: {
+      peerId: string;
+      dataPort: number;
+      name: string;
+      fingerprint: string;
+    },
   ): void {
     this.pendingInboundConnections.set(handle.id, {
       peerId: request.peerId,
@@ -365,16 +383,17 @@ export class MeshStore implements CommsStore {
   }
 
   /** List all pending inbound connections awaiting approval. */
-  listPendingConnections(): Array<{
+  listPendingConnections(): {
     connectionId: string;
     peerId: string;
     dataPort: number;
     name: string;
     fingerprint: string;
-  }> {
-    return [...this.pendingInboundConnections.entries()].map(
-      ([id, info]) => ({ connectionId: id, ...info }),
-    );
+  }[] {
+    return [...this.pendingInboundConnections.entries()].map(([id, info]) => ({
+      connectionId: id,
+      ...info,
+    }));
   }
 
   /** Initiate an outbound connection to a remote coordinator requiring approval.
@@ -385,18 +404,20 @@ export class MeshStore implements CommsStore {
     // Fire-and-forget: don't await the full approval handshake.
     // The coordinator will either accept (triggering normal introduction flow)
     // or reject (closing the socket). Handle rejection to avoid unhandled rejection.
-    this.transport.connectToRemote(
-      host,
-      port,
-      this.peerId,
-      this.transport.dataPort,
-      agent?.name ?? "",
-      "",
-    ).catch((err: unknown) => {
-      // Rejection is expected when the coordinator denies the connection.
-      // Log silently — the calling tool already returned success.
-      void err;
-    });
+    this.transport
+      .connectToRemote(
+        host,
+        port,
+        this.peerId,
+        this.transport.dataPort,
+        agent?.name ?? "",
+        "",
+      )
+      .catch((err: unknown) => {
+        // Rejection is expected when the coordinator denies the connection.
+        // Log silently — the calling tool already returned success.
+        void err;
+      });
   }
 
   /** Start only the data server without connecting to a coordinator.
@@ -1329,15 +1350,25 @@ export class MeshStore implements CommsStore {
   // Listener management (coordinator only)
   // -----------------------------------------------------------------------
 
-  async addListener(host: string, port: number, policy: string): Promise<string> {
-    const validPolicies: string[] = ["full", "observe", "rooms-only", "gateway"];
+  async addListener(
+    host: string,
+    port: number,
+    policy: string,
+  ): Promise<string> {
+    const validPolicies: string[] = [
+      "full",
+      "observe",
+      "rooms-only",
+      "gateway",
+    ];
     if (!validPolicies.includes(policy)) {
-      throw new CommsError(
-        `Invalid policy "${policy}"`, 
-        "INVALID_POLICY",
-      );
+      throw new CommsError(`Invalid policy "${policy}"`, "INVALID_POLICY");
     }
-    return this.transport.addListener(host, port, policy as "full" | "observe" | "rooms-only" | "gateway");
+    return this.transport.addListener(
+      host,
+      port,
+      policy as "full" | "observe" | "rooms-only" | "gateway",
+    );
   }
 
   async removeListener(id: string): Promise<void> {
@@ -1412,7 +1443,10 @@ export class MeshStore implements CommsStore {
     }
   }
 
-  private async handleFedRoomMessage(roomId: string, message: RoomMessage): Promise<void> {
+  private async handleFedRoomMessage(
+    roomId: string,
+    message: RoomMessage,
+  ): Promise<void> {
     const room = this.rooms.get(roomId);
     if (!room?.federated) return;
 
@@ -1430,7 +1464,11 @@ export class MeshStore implements CommsStore {
     }
   }
 
-  private async handleFedRoomJoin(roomId: string, agentId: string, agentName: string): Promise<void> {
+  private async handleFedRoomJoin(
+    roomId: string,
+    agentId: string,
+    agentName: string,
+  ): Promise<void> {
     const room = this.rooms.get(roomId);
     if (!room?.federated) return;
 
@@ -1444,14 +1482,21 @@ export class MeshStore implements CommsStore {
     }
 
     // Notify local members
-    await this.deliverToRoom(roomId, {
-      type: "member_joined",
-      room: roomId,
-      agent: remoteId,
-    }, remoteId);
+    await this.deliverToRoom(
+      roomId,
+      {
+        type: "member_joined",
+        room: roomId,
+        agent: remoteId,
+      },
+      remoteId,
+    );
   }
 
-  private async handleFedRoomLeave(roomId: string, agentId: string): Promise<void> {
+  private async handleFedRoomLeave(
+    roomId: string,
+    agentId: string,
+  ): Promise<void> {
     const room = this.rooms.get(roomId);
     if (!room?.federated) return;
 

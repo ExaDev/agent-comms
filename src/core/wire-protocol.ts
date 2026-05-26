@@ -57,7 +57,13 @@ export type MeshMessage =
   | { method: "state_sync"; state: SerialisedState }
   | { method: "state_update"; patch: MeshStatePatch }
   | { method: "introduce"; peerId: string; dataPort: number }
-  | { method: "connect_request"; peerId: string; dataPort: number; name: string; fingerprint: string }
+  | {
+      method: "connect_request";
+      peerId: string;
+      dataPort: number;
+      name: string;
+      fingerprint: string;
+    }
   | { method: "connect_accepted"; peerId: string; dataPort: number }
   | { method: "connect_rejected"; peerId: string; reason: string }
   | { method: "peer_list"; peers: PeerInfo[] }
@@ -71,7 +77,12 @@ export type MeshMessage =
   | { method: "fed_agent_visible"; agent: AgentIdentity }
   | { method: "fed_agent_gone"; agentId: string }
   | { method: "fed_room_message"; roomId: string; message: RoomMessage }
-  | { method: "fed_room_join"; roomId: string; agentId: string; agentName: string }
+  | {
+      method: "fed_room_join";
+      roomId: string;
+      agentId: string;
+      agentName: string;
+    }
   | { method: "fed_room_leave"; roomId: string; agentId: string }
   | { method: "fed_ping" }
   | { method: "fed_pong" };

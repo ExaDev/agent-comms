@@ -262,7 +262,8 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
     case "mesh_interfaces":
       return { action: "mesh_interfaces" };
     case "mesh_listen":
-      if (p.host === undefined) throw new BuildActionError("mesh_listen", "host");
+      if (p.host === undefined)
+        throw new BuildActionError("mesh_listen", "host");
       return {
         action: "mesh_listen",
         host: p.host,
@@ -292,8 +293,10 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       return result;
     }
     case "mesh_fed_connect": {
-      if (p.host === undefined) throw new BuildActionError("mesh_fed_connect", "host");
-      if (p.port === undefined) throw new BuildActionError("mesh_fed_connect", "port");
+      if (p.host === undefined)
+        throw new BuildActionError("mesh_fed_connect", "host");
+      if (p.port === undefined)
+        throw new BuildActionError("mesh_fed_connect", "port");
       const result: CommsAction & { action: "mesh_fed_connect" } = {
         action: "mesh_fed_connect",
         host: p.host,
@@ -303,7 +306,8 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       return result;
     }
     case "mesh_fed_disconnect":
-      if (p.id === undefined) throw new BuildActionError("mesh_fed_disconnect", "id");
+      if (p.id === undefined)
+        throw new BuildActionError("mesh_fed_disconnect", "id");
       return { action: "mesh_fed_disconnect", linkId: p.id };
     case "mesh_fed_links":
       return { action: "mesh_fed_links" };

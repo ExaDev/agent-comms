@@ -13,7 +13,11 @@
  */
 
 import * as dgram from "node:dgram";
-import type { DiscoveredMesh, DiscoveryBackend, AdvertiseOptions } from "./discovery.js";
+import type {
+  DiscoveredMesh,
+  DiscoveryBackend,
+  AdvertiseOptions,
+} from "./discovery.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -44,14 +48,13 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
   private isListening = false;
 
   async startAdvertising(opts: AdvertiseOptions): Promise<string> {
-    const id = `mdns-${opts.port}`;
+    const id = `mdns-${String(opts.port)}`;
 
     this.currentPayload = {
       type: "agent-comms-beacon",
       name: opts.name,
       port: opts.port,
-      policies:
-        opts.policy === "name-only" ? ["name-only"] : ["full"],
+      policies: opts.policy === "name-only" ? ["name-only"] : ["full"],
     };
 
     await this.ensureListening();
@@ -168,17 +171,12 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
 
     const payload = Buffer.from(JSON.stringify(this.currentPayload));
     // Broadcast to the beacon port on the standard broadcast address
-    this.socket.send(
-      payload,
-      BEACON_PORT,
-      "255.255.255.255",
-      (err) => {
-        if (err) {
-          // Broadcast failures are non-fatal — the network may not
-          // support broadcast (e.g. some cloud environments).
-        }
-      },
-    );
+    this.socket.send(payload, BEACON_PORT, "255.255.255.255", (err) => {
+      if (err) {
+        // Broadcast failures are non-fatal — the network may not
+        // support broadcast (e.g. some cloud environments).
+      }
+    });
   }
 
   private parseBeacon(
@@ -218,11 +216,7 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
   }
 
   private cleanupSocket(): void {
-    if (
-      this.socket &&
-      !this.currentPayload &&
-      !this.hasActiveListeners()
-    ) {
+    if (this.socket && !this.currentPayload && !this.hasActiveListeners()) {
       this.socket.close();
       this.socket = undefined;
       this.isListening = false;

@@ -39,7 +39,11 @@ function derLength(length: number): Buffer {
 
 /** Wrap content bytes in a DER tag. */
 function derWrap(tag: number, content: Buffer): Buffer {
-  return Buffer.concat([Buffer.from([tag]), derLength(content.length), content]);
+  return Buffer.concat([
+    Buffer.from([tag]),
+    derLength(content.length),
+    content,
+  ]);
 }
 
 /** DER SEQUENCE. */
@@ -149,7 +153,11 @@ function buildCertificateDer(
   signatureAlgorithm: Buffer,
   signature: Buffer,
 ): Buffer {
-  return derSequence(tbsCertificate, signatureAlgorithm, derBitString(signature));
+  return derSequence(
+    tbsCertificate,
+    signatureAlgorithm,
+    derBitString(signature),
+  );
 }
 
 /**
@@ -199,7 +207,10 @@ function buildTbsCertificate(
 function buildExtensions(publicKeyDer: Buffer): Buffer {
   // Subject Key Identifier
   const ski = createHash("sha1").update(publicKeyDer).digest();
-  const skiExtension = derSequence(derOID(OID_SKI), derOctetString(derOctetString(ski)));
+  const skiExtension = derSequence(
+    derOID(OID_SKI),
+    derOctetString(derOctetString(ski)),
+  );
 
   // Subject Alternative Name
   const sanValue = derSequence(
@@ -301,10 +312,7 @@ export function generateIdentity(): PeerIdentity {
  */
 export function getCertificateFingerprint(certificate: string): string {
   const der = pemToDer(certificate);
-  const hex = createHash("sha256")
-    .update(der)
-    .digest("hex")
-    .toUpperCase();
+  const hex = createHash("sha256").update(der).digest("hex").toUpperCase();
   const matched = hex.match(/.{2}/g);
   if (matched === null) return "";
   return matched.join(":");

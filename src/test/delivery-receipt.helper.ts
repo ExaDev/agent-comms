@@ -40,7 +40,9 @@ async function allocFreePort(): Promise<number> {
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
       const port = addr && typeof addr === "object" ? addr.port : 0;
-      (server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
+      (
+        server as unknown as { closeAllConnections?: () => void }
+      ).closeAllConnections?.();
       server.close(() => {
         resolve(port);
       });
@@ -473,7 +475,9 @@ fn()
     const maxWait = 2000; // ms
     const start = Date.now();
     while (
-      ((process as unknown as { _getActiveHandles?: () => unknown[] })._getActiveHandles?.()?.length ?? 0) > 0 &&
+      ((
+        process as unknown as { _getActiveHandles?: () => unknown[] }
+      )._getActiveHandles?.()?.length ?? 0) > 0 &&
       Date.now() - start < maxWait
     ) {
       await new Promise<void>((resolve) => setTimeout(resolve, 50));

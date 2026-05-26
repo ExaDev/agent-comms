@@ -88,10 +88,7 @@ export async function sendWebPush(
 // Encryption (RFC 8291)
 // ---------------------------------------------------------------------------
 
-function encrypt(
-  plaintext: Buffer,
-  keys: PushSubscription["keys"],
-): Buffer {
+function encrypt(plaintext: Buffer, keys: PushSubscription["keys"]): Buffer {
   // Decode the subscription's p256dh and auth keys
   const recipientPubKey = base64urlDecode(keys.p256dh);
   const authKey = base64urlDecode(keys.auth);
@@ -103,7 +100,10 @@ function encrypt(
     format: "der",
     type: "pkcs8",
   });
-  const senderPublicDer = ecdh.publicKey.export({ type: "spki", format: "der" });
+  const senderPublicDer = ecdh.publicKey.export({
+    type: "spki",
+    format: "der",
+  });
   const senderPublicKey = senderPublicDer.subarray(senderPublicDer.length - 65);
 
   // Derive the shared secret via ECDH
@@ -111,7 +111,10 @@ function encrypt(
     privateKey: senderPrivateKey,
     publicKey: crypto.createPublicKey({
       key: concat(
-        Buffer.from("3059301306072a8648ce3d020106082a8648ce3d030107034200", "hex"),
+        Buffer.from(
+          "3059301306072a8648ce3d020106082a8648ce3d030107034200",
+          "hex",
+        ),
         recipientPubKey,
       ),
       format: "der",
@@ -140,11 +143,7 @@ function encrypt(
   const padded = concat(plaintext, Buffer.from([0x02]));
 
   // Encrypt with AES-128-GCM
-  const cipher = crypto.createCipheriv(
-    "aes-128-gcm",
-    encryptionKey,
-    nonce,
-  );
+  const cipher = crypto.createCipheriv("aes-128-gcm", encryptionKey, nonce);
   const ciphertext = cipher.update(padded);
   const authTag = cipher.getAuthTag();
 
@@ -196,10 +195,7 @@ function buildVapidJwt(
   const sec1Der = concat(
     Buffer.from("30770201010420", "hex"),
     privScalar,
-    Buffer.from(
-      "a00a06082a8648ce3d030107a14403420004",
-      "hex",
-    ),
+    Buffer.from("a00a06082a8648ce3d030107a14403420004", "hex"),
     base64urlDecode(vapidKeys.publicKey),
   );
   const privateKey = crypto.createPrivateKey({
@@ -266,12 +262,13 @@ function post(
         const chunks: Buffer[] = [];
         res.on("data", (chunk: Buffer) => chunks.push(chunk));
         res.on("end", () => {
-          if (res.statusCode !== undefined && (res.statusCode < 200 || res.statusCode > 299)) {
+          if (
+            res.statusCode !== undefined &&
+            (res.statusCode < 200 || res.statusCode > 299)
+          ) {
             const body = Buffer.concat(chunks).toString("utf-8");
             reject(
-              new Error(
-                `Push service returned ${res.statusCode}: ${body}`,
-              ),
+              new Error(`Push service returned ${res.statusCode}: ${body}`),
             );
           } else {
             resolve();

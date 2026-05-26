@@ -205,14 +205,26 @@ export class FederationManager {
   }
 
   /** Forward a room message to all ready links (federated rooms only). */
-  async forwardRoomMessage(roomId: string, message: RoomMessage): Promise<void> {
+  async forwardRoomMessage(
+    roomId: string,
+    message: RoomMessage,
+  ): Promise<void> {
     const msg: MeshMessage = { method: "fed_room_message", roomId, message };
     await this.broadcastToReady(msg);
   }
 
   /** Broadcast a room join to all ready links. */
-  async broadcastRoomJoin(roomId: string, agentId: string, agentName: string): Promise<void> {
-    const msg: MeshMessage = { method: "fed_room_join", roomId, agentId, agentName };
+  async broadcastRoomJoin(
+    roomId: string,
+    agentId: string,
+    agentName: string,
+  ): Promise<void> {
+    const msg: MeshMessage = {
+      method: "fed_room_join",
+      roomId,
+      agentId,
+      agentName,
+    };
     await this.broadcastToReady(msg);
   }
 
@@ -255,7 +267,9 @@ export class FederationManager {
 
       const timer = setTimeout(() => {
         socket.destroy();
-        reject(new Error(`Federation connection timeout to ${host}:${String(port)}`));
+        reject(
+          new Error(`Federation connection timeout to ${host}:${String(port)}`),
+        );
       }, 5000);
 
       socket.on("error", (err) => {
@@ -379,7 +393,7 @@ export class FederationManager {
    */
   private async syncStateToLink(linkId: string): Promise<void> {
     const link = this.links.get(linkId);
-    if (!link || !link.ready) return;
+    if (!link?.ready) return;
 
     // Sync visible agents
     const agents = this.callbacks.getVisibleAgents();
@@ -392,9 +406,16 @@ export class FederationManager {
     const rooms = this.callbacks.getFederatedRoomMemberships();
     for (const [roomId, memberIds] of rooms) {
       for (const memberId of memberIds) {
-        const agent = this.callbacks.getVisibleAgents().find((a) => a.id === memberId);
+        const agent = this.callbacks
+          .getVisibleAgents()
+          .find((a) => a.id === memberId);
         const agentName = agent?.name ?? memberId;
-        const msg: MeshMessage = { method: "fed_room_join", roomId, agentId: memberId, agentName };
+        const msg: MeshMessage = {
+          method: "fed_room_join",
+          roomId,
+          agentId: memberId,
+          agentName,
+        };
         await this.writeToSocket(link.socket, msg);
       }
     }
@@ -442,7 +463,7 @@ export class FederationManager {
 
   private async sendPing(linkId: string): Promise<void> {
     const link = this.links.get(linkId);
-    if (!link || !link.ready) return;
+    if (!link?.ready) return;
 
     const msg: MeshMessage = { method: "fed_ping" };
     await this.writeToSocket(link.socket, msg);
@@ -460,7 +481,10 @@ export class FederationManager {
   // Internal — helpers
   // -----------------------------------------------------------------------
 
-  private async writeToSocket(socket: tls.TLSSocket, msg: MeshMessage): Promise<void> {
+  private async writeToSocket(
+    socket: tls.TLSSocket,
+    msg: MeshMessage,
+  ): Promise<void> {
     if (socket.destroyed) return;
     const data = encode(msg);
     await new Promise<void>((resolve, reject) => {

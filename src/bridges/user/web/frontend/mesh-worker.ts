@@ -16,7 +16,10 @@
 // ---------------------------------------------------------------------------
 
 interface SharedWorkerGlobalScope {
-  addEventListener(type: "connect", listener: (event: MessageEvent) => void): void;
+  addEventListener(
+    type: "connect",
+    listener: (event: MessageEvent) => void,
+  ): void;
   close(): void;
 }
 
@@ -114,7 +117,11 @@ interface StateSnapshot {
 type WorkerOutbound =
   | { type: "state"; state: StateSnapshot }
   | { type: "patch"; patch: MeshStatePatch }
-  | { type: "actionResult"; id: string; result: { content: string; isError: boolean } }
+  | {
+      type: "actionResult";
+      id: string;
+      result: { content: string; isError: boolean };
+    }
   | { type: "actionError"; id: string; message: string }
   | { type: "connected" }
   | { type: "disconnected" };
@@ -309,7 +316,9 @@ function handleServerMessage(raw: unknown): void {
 
 function isMeshStateMessage(
   value: unknown,
-): value is { method: "state_sync"; state: SerialisedState } | { method: "state_update"; patch: MeshStatePatch } {
+): value is
+  | { method: "state_sync"; state: SerialisedState }
+  | { method: "state_update"; patch: MeshStatePatch } {
   if (typeof value !== "object" || value === null) return false;
   if (!("method" in value)) return false;
   const method = (value as Record<string, unknown>).method;
@@ -369,7 +378,10 @@ self.addEventListener("connect", (event: MessageEvent) => {
   // Send current state to the new port
   try {
     port.postMessage(
-      JSON.stringify({ type: "state", state: getStateSnapshot() } satisfies WorkerOutbound),
+      JSON.stringify({
+        type: "state",
+        state: getStateSnapshot(),
+      } satisfies WorkerOutbound),
     );
   } catch {
     // Port not ready yet — will get state on next update

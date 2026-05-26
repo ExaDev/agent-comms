@@ -9,7 +9,11 @@
 
 import type { VapidKeys } from "./vapid.js";
 import { generateVapidKeys } from "./vapid.js";
-import { sendWebPush, type PushSubscription, type PushPayload } from "./web-push.js";
+import {
+  sendWebPush,
+  type PushSubscription,
+  type PushPayload,
+} from "./web-push.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,7 +28,7 @@ export type { PushSubscription, PushPayload };
 export class PushManager {
   private readonly vapidKeys: VapidKeys;
   private readonly subject: string;
-  private readonly subscriptions: Map<string, PushSubscription> = new Map();
+  private readonly subscriptions = new Map<string, PushSubscription>();
 
   constructor(subject = "mailto:agent-comms@localhost") {
     this.vapidKeys = generateVapidKeys();

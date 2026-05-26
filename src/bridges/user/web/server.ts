@@ -24,6 +24,11 @@ import { WebSocketServer, WebSocket } from "ws";
 import { PushManager } from "../../../core/push-manager.js";
 import type { PushSubscription } from "../../../core/push-manager.js";
 import { ChatController } from "../controller.js";
+import type { MeshStore } from "../../../core/mesh-store.js";
+import type {
+  MeshMessage,
+  MeshStatePatch,
+} from "../../../core/wire-protocol.js";
 
 const WEB_HOST = "127.0.0.1";
 
@@ -177,8 +182,8 @@ class HandleRef {
 
 export async function runWeb(userName: string, port = 0): Promise<void> {
   const handle = await createWebServer(port);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- ref keeps handle alive for cleanup
-  const ref = new HandleRef(handle);
+  // Keep handle alive for cleanup — variable is intentionally unused
+  void new HandleRef(handle);
 
   handle.server.on("listening", () => {
     const addr = handle.server.address();
@@ -472,15 +477,11 @@ let meshPatchListenerActive = false;
  * Ensures the global MeshStore.onPatch forwards patches to all mesh peers.
  * Called once on first connection; subsequent calls are no-ops.
  */
-function ensurePatchListener(
-  store: import("../../../core/mesh-store.js").MeshStore,
-): void {
+function ensurePatchListener(store: MeshStore): void {
   if (meshPatchListenerActive) return;
   meshPatchListenerActive = true;
-  store.onPatch = (
-    patch: import("../../../core/wire-protocol.js").MeshStatePatch,
-  ): void => {
-    const msg: import("../../../core/wire-protocol.js").MeshMessage = {
+  store.onPatch = (patch: MeshStatePatch): void => {
+    const msg: MeshMessage = {
       method: "state_update",
       patch,
     };
@@ -507,19 +508,9 @@ function handleMeshWebSocket(ws: WebSocket, controller: ChatController): void {
   ensurePatchListener(store);
 
   // Send initial state_sync
-  const agents = store.agents;
-  const rooms = store.rooms;
-  const messages = store.messages;
-  const dms = store.dms;
-  const initialState: import("../../../core/wire-protocol.js").SerialisedState =
-    {
-      agents: Object.fromEntries(agents),
-      rooms: Object.fromEntries(rooms),
-      messages: Object.fromEntries(messages),
-      dms: Object.fromEntries(dms),
-    };
+  const state = store.serialise();
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ method: "state_sync", state: initialState }));
+    ws.send(JSON.stringify({ method: "state_sync", state }));
   }
 
   ws.on("close", () => {
@@ -690,7 +681,7 @@ function parsePushSubscription(value: unknown): PushSubscription | undefined {
     value.keys === null
   )
     return undefined;
-  const keys = value.keys as Record<string, unknown>;
+  const keys: Record<string, unknown> = value.keys as Record<string, unknown>;
   if (typeof keys.p256dh !== "string" || typeof keys.auth !== "string")
     return undefined;
   return {

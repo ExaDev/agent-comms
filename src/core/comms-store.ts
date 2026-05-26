@@ -100,13 +100,13 @@ export interface CommsStore {
   // -- Connection approval --
   acceptConnection(connectionId: string): Promise<void>;
   rejectConnection(connectionId: string, reason: string): Promise<void>;
-  listPendingConnections(): Array<{
+  listPendingConnections(): {
     connectionId: string;
     peerId: string;
     dataPort: number;
     name: string;
     fingerprint: string;
-  }>;
+  }[];
   connectToRemote(host: string, port: number): Promise<void>;
 
   /** Start only the data server without connecting to a coordinator. */

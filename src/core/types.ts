@@ -35,11 +35,7 @@ export type RoomId = string;
 // ---------------------------------------------------------------------------
 
 export const MeshVisibility = defineSchema(
-  z.union([
-    z.literal("discoverable"),
-    z.literal("quiet"),
-    z.literal("dark"),
-  ]),
+  z.union([z.literal("discoverable"), z.literal("quiet"), z.literal("dark")]),
 );
 export type MeshVisibility = z.infer<typeof MeshVisibility>;
 

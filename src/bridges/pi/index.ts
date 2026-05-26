@@ -120,7 +120,10 @@ export default function (pi: ExtensionAPI) {
       meshReady = true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      ctx.ui.notify(`Agent Comms: mesh init failed (${msg}). Running without mesh.`, "warning");
+      ctx.ui.notify(
+        `Agent Comms: mesh init failed (${msg}). Running without mesh.`,
+        "warning",
+      );
     }
 
     if (meshReady) {

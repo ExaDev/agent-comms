@@ -616,11 +616,17 @@ export class FileStore implements CommsStore {
   // -----------------------------------------------------------------------
 
   async addListener(): Promise<string> {
-    throw new CommsError("FileStore does not support listener management", "NOT_SUPPORTED");
+    throw new CommsError(
+      "FileStore does not support listener management",
+      "NOT_SUPPORTED",
+    );
   }
 
   async removeListener(): Promise<void> {
-    throw new CommsError("FileStore does not support listener management", "NOT_SUPPORTED");
+    throw new CommsError(
+      "FileStore does not support listener management",
+      "NOT_SUPPORTED",
+    );
   }
 
   listListeners(): import("./transport.js").ListenerInfo[] {
@@ -636,11 +642,17 @@ export class FileStore implements CommsStore {
   // -----------------------------------------------------------------------
 
   async fedConnect(): Promise<string> {
-    throw new CommsError("FileStore does not support federation", "NOT_SUPPORTED");
+    throw new CommsError(
+      "FileStore does not support federation",
+      "NOT_SUPPORTED",
+    );
   }
 
   async fedDisconnect(): Promise<void> {
-    throw new CommsError("FileStore does not support federation", "NOT_SUPPORTED");
+    throw new CommsError(
+      "FileStore does not support federation",
+      "NOT_SUPPORTED",
+    );
   }
 
   fedLinks(): import("./federation.js").FedLink[] {
@@ -650,28 +662,40 @@ export class FileStore implements CommsStore {
   // -----------------------------------------------------------------------
 
   async acceptConnection(): Promise<void> {
-    throw new CommsError("FileStore does not support connection approval", "NOT_SUPPORTED");
+    throw new CommsError(
+      "FileStore does not support connection approval",
+      "NOT_SUPPORTED",
+    );
   }
 
   async rejectConnection(): Promise<void> {
-    throw new CommsError("FileStore does not support connection approval", "NOT_SUPPORTED");
+    throw new CommsError(
+      "FileStore does not support connection approval",
+      "NOT_SUPPORTED",
+    );
   }
 
-  listPendingConnections(): Array<{
+  listPendingConnections(): {
     connectionId: string;
     peerId: string;
     dataPort: number;
     name: string;
     fingerprint: string;
-  }> {
+  }[] {
     return [];
   }
 
   async connectToRemote(): Promise<void> {
-    throw new CommsError("FileStore does not support remote connections", "NOT_SUPPORTED");
+    throw new CommsError(
+      "FileStore does not support remote connections",
+      "NOT_SUPPORTED",
+    );
   }
 
   async startDataServerOnly(): Promise<void> {
-    throw new CommsError("FileStore does not support network operations", "NOT_SUPPORTED");
+    throw new CommsError(
+      "FileStore does not support network operations",
+      "NOT_SUPPORTED",
+    );
   }
 }

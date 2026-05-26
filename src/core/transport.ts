@@ -87,7 +87,12 @@ export interface TransportEvents {
    */
   onConnectionRequest(
     handle: ConnectionHandle,
-    info: { peerId: string; dataPort: number; name: string; fingerprint: string },
+    info: {
+      peerId: string;
+      dataPort: number;
+      name: string;
+      fingerprint: string;
+    },
   ): void;
 
   /**
@@ -190,7 +195,11 @@ export interface MeshTransport {
    * Only valid when this instance is the coordinator.
    * Returns listener ID.
    */
-  addListener(host: string, port: number, policy: ListenerPolicy): Promise<string>;
+  addListener(
+    host: string,
+    port: number,
+    policy: ListenerPolicy,
+  ): Promise<string>;
 
   /**
    * Remove a listener by ID. Cannot remove the default localhost listener.
