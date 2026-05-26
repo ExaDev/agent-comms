@@ -10,6 +10,7 @@ import * as net from "node:net";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
+import type { TransportEvents } from "../core/transport.js";
 import * as assert from "node:assert/strict";
 import { test, describe } from "node:test";
 
@@ -269,11 +270,15 @@ describe("listener policy", () => {
 
     // Connect to the observe listener and send an introduce message
     // The transport should tag the connection handle with policy="observe"
+    //
+    // We intercept at the transport.events level because store.events
+    // is a getter that creates a fresh object each call.
     const receivedHandle = await new Promise<{ policy?: string } | null>((resolve) => {
       const timeout = setTimeout(() => resolve(null), 3000);
 
-      const originalOnIntroduction = store.events.onIntroduction;
-      store.events.onIntroduction = (handle, msg) => {
+      const transport = (store as unknown as { transport: { events: TransportEvents } }).transport;
+      const originalOnIntroduction = transport.events.onIntroduction;
+      transport.events.onIntroduction = (handle, msg) => {
         // Capture the handle's policy
         resolve({ policy: handle.policy });
         clearTimeout(timeout);
