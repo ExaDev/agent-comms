@@ -494,6 +494,10 @@ export class CommsTool {
     const visibility = this.store.getVisibility();
     return {
       content: `Mesh visibility: ${visibility}`,
+      isError: false,
+    };
+  }
+
   private async meshFedConnect(
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_fed_connect" },
