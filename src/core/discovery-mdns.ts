@@ -104,22 +104,25 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
 
     await this.ensureListening();
 
+    const socket = this.socket;
+    if (socket === undefined) return [];
+
     // Collect beacons for the specified duration
     const handler = (msg: Buffer, rinfo: dgram.RemoteInfo) => {
       const mesh = this.parseBeacon(msg, rinfo);
       if (mesh) {
-        const key = `${mesh.host}:${mesh.port}`;
+        const key = `${mesh.host}:${String(mesh.port)}`;
         discovered.set(key, mesh);
       }
     };
 
-    this.socket!.on("message", handler);
+    socket.on("message", handler);
 
     await new Promise<void>((resolve) => {
       setTimeout(resolve, timeout);
     });
 
-    this.socket!.off("message", handler);
+    socket.off("message", handler);
     this.cleanupSocket();
 
     return [...discovered.values()];
@@ -190,19 +193,30 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
         typeof parsed !== "object" ||
         parsed === null ||
         !("type" in parsed) ||
-        (parsed as { type: string }).type !== "agent-comms-beacon"
+        typeof parsed.type !== "string" ||
+        parsed.type !== "agent-comms-beacon"
       ) {
         return undefined;
       }
 
-      const beacon = parsed as BeaconPayload;
+      if (!("port" in parsed) || typeof parsed.port !== "number")
+        return undefined;
+      if (!("name" in parsed) || typeof parsed.name !== "string")
+        return undefined;
+      const beacon = parsed satisfies BeaconPayload;
       const result: DiscoveredMesh = {
         host: rinfo.address,
         port: beacon.port,
         name: beacon.name,
       };
-      if (beacon.agents !== undefined) result.agentCount = beacon.agents;
-      if (beacon.policies !== undefined) result.policies = beacon.policies;
+      if ("agents" in parsed && typeof parsed.agents === "number")
+        result.agentCount = parsed.agents;
+      if (
+        "policies" in parsed &&
+        Array.isArray(parsed.policies) &&
+        parsed.policies.every((v) => typeof v === "string")
+      )
+        result.policies = parsed.policies;
       return result;
     } catch {
       return undefined;

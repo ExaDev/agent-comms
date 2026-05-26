@@ -321,7 +321,10 @@ describe("listener policy", () => {
       const transport = (
         store as unknown as { transport: { events: TransportEvents } }
       ).transport;
-      const originalOnIntroduction = transport.events.onIntroduction;
+      const originalOnIntroduction = (
+        handle: ConnectionHandle,
+        msg: { peerId: string; dataPort: number },
+      ) => transport.events.onIntroduction(handle, msg);
       transport.events.onIntroduction = (handle, msg) => {
         // Capture the handle's policy
         resolve({ policy: handle.policy });

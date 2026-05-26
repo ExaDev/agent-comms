@@ -32,6 +32,8 @@ import type {
   Visibility,
 } from "./types.js";
 import type { CommsStore } from "./comms-store.js";
+import type { ListenerInfo } from "./transport.js";
+import type { FedLink } from "./federation.js";
 
 // ---------------------------------------------------------------------------
 // CommsError
@@ -629,11 +631,11 @@ export class FileStore implements CommsStore {
     );
   }
 
-  listListeners(): import("./transport.js").ListenerInfo[] {
+  listListeners(): ListenerInfo[] {
     return [];
   }
 
-  getNetworkInterfaces(): import("./types.js").NetworkInterface[] {
+  getNetworkInterfaces(): NetworkInterface[] {
     return [];
   }
 
@@ -655,7 +657,7 @@ export class FileStore implements CommsStore {
     );
   }
 
-  fedLinks(): import("./federation.js").FedLink[] {
+  fedLinks(): FedLink[] {
     return [];
   }
   // Connection approval — not supported by FileStore

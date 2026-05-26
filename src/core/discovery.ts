@@ -118,8 +118,8 @@ export class DiscoveryManager {
       // Pause advertisements and stop backends entirely
       await this.pauseAllAdvertisements();
       await this.stopAllBackends();
-    } else if (level === "discoverable") {
-      // Resume previously paused advertisements and restart backends
+    } else {
+      // discoverable — resume previously paused advertisements and restart backends
       await this.resumeAllAdvertisements();
     }
   }
@@ -148,7 +148,7 @@ export class DiscoveryManager {
         const backend = this.backends.get(adapter);
         if (backend) await backend.stop();
       }
-    } else if (level === "discoverable") {
+    } else {
       await this.resumeAdvertisementsForBackend(adapter);
     }
   }
@@ -163,7 +163,9 @@ export class DiscoveryManager {
       });
       const backend = this.backends.get(backendName);
       if (backend) {
-        await backend.stopAdvertising(id).catch(() => {});
+        await backend.stopAdvertising(id).catch(() => {
+          /* intentionally empty — best-effort stop */
+        });
       }
     }
     this.activeAdvertisements.clear();
@@ -180,7 +182,9 @@ export class DiscoveryManager {
         });
         const backend = this.backends.get(backendName);
         if (backend) {
-          await backend.stopAdvertising(id).catch(() => {});
+          await backend.stopAdvertising(id).catch(() => {
+            /* intentionally empty — best-effort stop */
+          });
         }
         this.activeAdvertisements.delete(id);
       }
@@ -189,14 +193,16 @@ export class DiscoveryManager {
 
   private async stopAllBackends(): Promise<void> {
     for (const backend of this.backends.values()) {
-      await backend.stop().catch(() => {});
+      await backend.stop().catch(() => {
+        /* intentionally empty — best-effort stop */
+      });
     }
   }
 
   private async resumeAllAdvertisements(): Promise<void> {
     // Restart backends first (they may have been stopped in "dark" mode)
     // Note: backends reinitialise their sockets on next startAdvertising/discover call.
-    for (const [id, paused] of this.pausedAdvertisements) {
+    for (const [id] of this.pausedAdvertisements) {
       this.pausedAdvertisements.delete(id);
       // We can't fully resume without original opts — the caller must
       // re-advertise. Mark as not paused so new advertise calls work.
@@ -206,8 +212,8 @@ export class DiscoveryManager {
   private async resumeAdvertisementsForBackend(
     backendName: string,
   ): Promise<void> {
-    for (const [id, paused] of this.pausedAdvertisements) {
-      if (paused.backendName === backendName) {
+    for (const [id, entry] of this.pausedAdvertisements) {
+      if (entry.backendName === backendName) {
         this.pausedAdvertisements.delete(id);
       }
     }
@@ -260,7 +266,7 @@ export class DiscoveryManager {
     const deduped: DiscoveredMesh[] = [];
     for (const meshes of results) {
       for (const mesh of meshes) {
-        const key = `${mesh.host}:${mesh.port}`;
+        const key = `${mesh.host}:${String(mesh.port)}`;
         if (!seen.has(key)) {
           seen.add(key);
           deduped.push(mesh);

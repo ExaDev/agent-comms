@@ -16,17 +16,13 @@ import { nanoid } from "./nanoid.js";
 import { CommsError } from "./store.js";
 import { TcpTransport } from "./tcp-transport.js";
 import { dmKey } from "./wire-protocol.js";
+import type { SerialisedState } from "./wire-protocol.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
 import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
 import { FederationManager } from "./federation.js";
 import type { FedLink } from "./federation.js";
-import type {
-  MeshMessage,
-  MeshStatePatch,
-  PeerInfo,
-  SerialisedState,
-} from "./wire-protocol.js";
+import type { MeshMessage, MeshStatePatch, PeerInfo } from "./wire-protocol.js";
 import type {
   ConnectionHandle,
   MeshTransport,
@@ -39,13 +35,14 @@ import type {
   DeliveryEvent,
   DeliveryStatus,
   DmMessage,
+  MeshVisibility,
   NetworkInterface,
   Room,
   RoomMessage,
   RoomType,
   Visibility,
 } from "./types.js";
-import type { ListenerInfo } from "./transport.js";
+import type { ListenerInfo, ListenerPolicy } from "./transport.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -90,7 +87,7 @@ export class MeshStore implements CommsStore {
   onPatch: ((patch: MeshStatePatch) => void | Promise<void>) | undefined;
 
   /** Serialise the full mesh state for state_sync messages. */
-  serialise(): import("./wire-protocol.js").SerialisedState {
+  serialise(): SerialisedState {
     return {
       agents: Object.fromEntries(this.agents),
       rooms: Object.fromEntries(this.rooms),
@@ -258,7 +255,7 @@ export class MeshStore implements CommsStore {
 
   private async handlePeerConnected(
     handle: ConnectionHandle,
-    info: PeerInfo,
+    _info: PeerInfo,
   ): Promise<void> {
     // If we have state and the peer doesn't, send state sync
     if (this.agents.size > 0) {
@@ -1334,15 +1331,12 @@ export class MeshStore implements CommsStore {
   // -----------------------------------------------------------------------
 
   /** Set mesh discovery visibility. Delegates to discovery manager. */
-  async setVisibility(
-    level: import("./types.js").MeshVisibility,
-    adapter?: string,
-  ): Promise<void> {
+  async setVisibility(level: MeshVisibility, adapter?: string): Promise<void> {
     await this.discovery.setVisibility(level, adapter);
   }
 
   /** Get current mesh discovery visibility. */
-  getVisibility(adapter?: string): import("./types.js").MeshVisibility {
+  getVisibility(adapter?: string): MeshVisibility {
     return this.discovery.getVisibility(adapter);
   }
 
@@ -1355,20 +1349,15 @@ export class MeshStore implements CommsStore {
     port: number,
     policy: string,
   ): Promise<string> {
-    const validPolicies: string[] = [
-      "full",
-      "observe",
-      "rooms-only",
-      "gateway",
-    ];
-    if (!validPolicies.includes(policy)) {
+    function isListenerPolicy(v: string): v is ListenerPolicy {
+      return (
+        v === "full" || v === "observe" || v === "rooms-only" || v === "gateway"
+      );
+    }
+    if (!isListenerPolicy(policy)) {
       throw new CommsError(`Invalid policy "${policy}"`, "INVALID_POLICY");
     }
-    return this.transport.addListener(
-      host,
-      port,
-      policy as "full" | "observe" | "rooms-only" | "gateway",
-    );
+    return this.transport.addListener(host, port, policy);
   }
 
   async removeListener(id: string): Promise<void> {
@@ -1385,14 +1374,12 @@ export class MeshStore implements CommsStore {
     for (const [name, addrs] of Object.entries(interfaces)) {
       if (addrs === undefined) continue;
       for (const addr of addrs) {
-        if (addr.family === "IPv4" || addr.family === "IPv6") {
-          result.push({
-            name,
-            address: addr.address,
-            family: addr.family,
-            internal: addr.internal,
-          });
-        }
+        result.push({
+          name,
+          address: addr.address,
+          family: addr.family,
+          internal: addr.internal,
+        });
       }
     }
     return result;
@@ -1467,7 +1454,7 @@ export class MeshStore implements CommsStore {
   private async handleFedRoomJoin(
     roomId: string,
     agentId: string,
-    agentName: string,
+    _agentName: string,
   ): Promise<void> {
     const room = this.rooms.get(roomId);
     if (!room?.federated) return;

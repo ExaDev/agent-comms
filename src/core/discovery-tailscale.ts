@@ -43,6 +43,13 @@ interface TailscaleStatus {
   Self?: TailscalePeer;
 }
 
+function parseTailscaleStatus(raw: unknown): TailscaleStatus {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error("Invalid TailscaleStatus: expected object");
+  }
+  return raw satisfies TailscaleStatus;
+}
+
 // ---------------------------------------------------------------------------
 // Tailscale backend
 // ---------------------------------------------------------------------------
@@ -52,7 +59,7 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
 
   /** No-op — the coordinator already listens on the Tailscale IP. */
   async startAdvertising(opts: AdvertiseOptions): Promise<string> {
-    return `tailscale-${opts.port}`;
+    return `tailscale-${String(opts.port)}`;
   }
 
   /** No-op — nothing to stop. */
@@ -124,7 +131,7 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
     // Try CLI first
     try {
       const { stdout } = await execFileAsync("tailscale", ["status", "--json"]);
-      return JSON.parse(stdout) as TailscaleStatus;
+      return parseTailscaleStatus(JSON.parse(stdout));
     } catch {
       // CLI not available — try the local API
     }
@@ -149,10 +156,12 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
           res.on("end", () => {
             try {
               resolve(
-                JSON.parse(Buffer.concat(chunks).toString()) as TailscaleStatus,
+                parseTailscaleStatus(
+                  JSON.parse(Buffer.concat(chunks).toString()),
+                ),
               );
             } catch (err) {
-              reject(err);
+              reject(err instanceof Error ? err : new Error(String(err)));
             }
           });
         },

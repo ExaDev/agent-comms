@@ -12,7 +12,6 @@
  */
 
 import * as tls from "node:tls";
-import * as net from "node:net";
 import { encode, isMeshMessage, MessageBuffer } from "./wire-protocol.js";
 import type { MeshMessage } from "./wire-protocol.js";
 import type { AgentIdentity, RoomMessage } from "./types.js";

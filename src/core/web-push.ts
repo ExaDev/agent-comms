@@ -44,8 +44,6 @@ const CONTENT_ENCODING = "aes128gcm";
 const KEY_LENGTH = 16;
 const NONCE_LENGTH = 12;
 const SALT_LENGTH = 16;
-const PAD_SIZE = 1;
-const TAG_LENGTH = 16;
 const MAX_PAYLOAD_SIZE = 4078;
 
 // ---------------------------------------------------------------------------
@@ -69,7 +67,7 @@ export async function sendWebPush(
 
   if (plaintextBuf.length > MAX_PAYLOAD_SIZE) {
     throw new Error(
-      `Payload too large: ${plaintextBuf.length} bytes (max ${MAX_PAYLOAD_SIZE})`,
+      `Payload too large: ${String(plaintextBuf.length)} bytes (max ${String(MAX_PAYLOAD_SIZE)})`,
     );
   }
 
@@ -268,7 +266,9 @@ function post(
           ) {
             const body = Buffer.concat(chunks).toString("utf-8");
             reject(
-              new Error(`Push service returned ${res.statusCode}: ${body}`),
+              new Error(
+                `Push service returned ${String(res.statusCode)}: ${body}`,
+              ),
             );
           } else {
             resolve();

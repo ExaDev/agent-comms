@@ -675,15 +675,11 @@ function parsePushSubscription(value: unknown): PushSubscription | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   if (!("endpoint" in value) || typeof value.endpoint !== "string")
     return undefined;
-  if (
-    !("keys" in value) ||
-    typeof value.keys !== "object" ||
-    value.keys === null
-  )
-    return undefined;
-  const keys: Record<string, unknown> = value.keys as Record<string, unknown>;
-  if (typeof keys.p256dh !== "string" || typeof keys.auth !== "string")
-    return undefined;
+  if (!("keys" in value)) return undefined;
+  const keys = value.keys;
+  if (typeof keys !== "object" || keys === null) return undefined;
+  if (!("p256dh" in keys) || typeof keys.p256dh !== "string") return undefined;
+  if (!("auth" in keys) || typeof keys.auth !== "string") return undefined;
   return {
     endpoint: value.endpoint,
     keys: { p256dh: keys.p256dh, auth: keys.auth },

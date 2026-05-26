@@ -432,13 +432,18 @@ export class CommsTool {
       };
     }
     try {
+      const typedPolicy = policy satisfies
+        | "full"
+        | "observe"
+        | "rooms-only"
+        | "gateway";
       const id = await this.store.addListener(
         action.host,
         action.port ?? 0,
-        policy as "full" | "observe" | "rooms-only" | "gateway",
+        typedPolicy,
       );
       return {
-        content: `Listener added: ${id} on ${action.host}:${action.port ?? "auto"} with policy ${policy}.`,
+        content: `Listener added: ${id} on ${action.host}${String(action.port ?? "auto")} with policy ${policy}.`,
         isError: false,
       };
     } catch (err) {
@@ -497,7 +502,7 @@ export class CommsTool {
   }
 
   private async meshGetVisibility(
-    action: CommsAction & { action: "mesh_get_visibility" },
+    _action: CommsAction & { action: "mesh_get_visibility" },
   ): Promise<CommsResult> {
     if (!this.store.getVisibility) {
       return {

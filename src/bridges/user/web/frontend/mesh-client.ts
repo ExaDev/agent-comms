@@ -21,11 +21,6 @@ import type { Agent, Room } from "./types.js";
 type AgentIdentity = Agent;
 type RoomLike = Room;
 
-interface MeshStatePatch {
-  type: string;
-  [key: string]: unknown;
-}
-
 export type MeshStateListener = (state: MeshClientState) => void;
 
 export interface MeshClientState {
@@ -70,14 +65,18 @@ export class MeshClient {
 
       switch (raw.type) {
         case "state": {
-          const state = raw as {
-            type: "state";
-            state: { agents: unknown; rooms: unknown };
-          };
+          if (
+            !("state" in raw) ||
+            typeof raw.state !== "object" ||
+            raw.state === null
+          )
+            break;
+          if (!("agents" in raw.state) || !("rooms" in raw.state)) break;
+          // State from mesh SharedWorker is SerialisedState — agents/rooms are Records
           this.state = {
             ...this.state,
-            agents: state.state.agents as typeof this.state.agents,
-            rooms: state.state.rooms as typeof this.state.rooms,
+            agents: raw.state.agents satisfies typeof this.state.agents,
+            rooms: raw.state.rooms satisfies typeof this.state.rooms,
           };
           this.notify();
           break;

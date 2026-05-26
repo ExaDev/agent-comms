@@ -121,6 +121,7 @@ export default defineConfig(
       "**/*.test.tsx",
       "**/*.e2e.test.ts",
       "**/*.spec.ts",
+      "**/test/*.helper.ts",
     ],
     rules: {
       "@typescript-eslint/no-floating-promises": "off",
@@ -134,6 +135,7 @@ export default defineConfig(
       "@typescript-eslint/no-empty-function": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
       "@typescript-eslint/no-unsafe-return": "off",
       "@typescript-eslint/require-await": "off",
       "@typescript-eslint/no-unused-vars": "off",

@@ -40,9 +40,6 @@ async function allocFreePort(): Promise<number> {
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
       const port = addr && typeof addr === "object" ? addr.port : 0;
-      (
-        server as unknown as { closeAllConnections?: () => void }
-      ).closeAllConnections?.();
       server.close(() => {
         resolve(port);
       });
@@ -82,7 +79,7 @@ async function testPushRoom(): Promise<void> {
   const b = new MeshStore(port);
   const deliveriesB: Record<string, unknown>[] = [];
   b.onDelivery = (_id: string, ev: unknown) => {
-    deliveriesB.push(ev as Record<string, unknown>);
+    deliveriesB.push(ev);
   };
   await b.init();
   await b.registerAgent({
@@ -96,7 +93,7 @@ async function testPushRoom(): Promise<void> {
   await sleep(300);
 
   const room = await a.createRoom({
-    name: `push-room-${port}`,
+    name: `push-room-${String(port)}`,
     type: "public",
     owner: a.peerId,
     description: "Push delivery test",
@@ -115,9 +112,8 @@ async function testPushRoom(): Promise<void> {
   );
   const roomMsg = deliveriesB.find((ev) => ev.type === "room_message");
   assert.ok(roomMsg !== undefined, "Should find room_message event");
-  const message = roomMsg.message as Record<string, unknown>;
-  assert.strictEqual(message.content, "Hello push!");
-  assert.strictEqual(message.from, a.peerId);
+  assert.strictEqual(roomMsg.message.content, "Hello push!");
+  assert.strictEqual(roomMsg.message.from, a.peerId);
 
   await cleanup(a, b);
 }
@@ -143,7 +139,7 @@ async function testPushDm(): Promise<void> {
   const b = new MeshStore(port);
   const deliveriesB: Record<string, unknown>[] = [];
   b.onDelivery = (_id: string, ev: unknown) => {
-    deliveriesB.push(ev as Record<string, unknown>);
+    deliveriesB.push(ev);
   };
   await b.init();
   await b.registerAgent({
@@ -166,9 +162,8 @@ async function testPushDm(): Promise<void> {
   );
   const dm = deliveriesB.find((ev) => ev.type === "dm");
   assert.ok(dm !== undefined, "Should find dm event");
-  const message = dm.message as Record<string, unknown>;
-  assert.strictEqual(message.content, "Direct push!");
-  assert.strictEqual(message.from, a.peerId);
+  assert.strictEqual(dm.message.content, "Direct push!");
+  assert.strictEqual(dm.message.from, a.peerId);
 
   await cleanup(a, b);
 }
@@ -201,7 +196,7 @@ async function testDrainRoom(): Promise<void> {
   await sleep(300);
 
   const room = await a.createRoom({
-    name: `drain-room-${port}`,
+    name: `drain-room-${String(port)}`,
     type: "public",
     owner: a.peerId,
     description: "Drain delivery test",
@@ -272,9 +267,7 @@ async function testDrainDm(): Promise<void> {
   const event = drained[0];
   assert.ok(event, "drainDelivery should return at least one event");
   assert.strictEqual(event.type, "dm");
-  if (event.type === "dm") {
-    assert.strictEqual(event.message.content, "Direct drain!");
-  }
+  assert.strictEqual(event.message.content, "Direct drain!");
 
   await cleanup(a, b);
 }
@@ -284,7 +277,7 @@ async function testReadReceiptPush(): Promise<void> {
   const a = new MeshStore(port);
   const deliveriesA: Record<string, unknown>[] = [];
   a.onDelivery = (_id: string, ev: unknown) => {
-    deliveriesA.push(ev as Record<string, unknown>);
+    deliveriesA.push(ev);
   };
   await a.init();
   await a.registerAgent({
@@ -298,7 +291,9 @@ async function testReadReceiptPush(): Promise<void> {
   await sleep(100);
 
   const b = new MeshStore(port);
-  b.onDelivery = () => {};
+  b.onDelivery = () => {
+    /* intentionally empty — dummy handler for drain delivery */
+  };
   await b.init();
   await b.registerAgent({
     name: "b",
@@ -311,7 +306,7 @@ async function testReadReceiptPush(): Promise<void> {
   await sleep(300);
 
   const room = await a.createRoom({
-    name: `read-push-${port}`,
+    name: `read-push-${String(port)}`,
     type: "public",
     owner: a.peerId,
     description: "Read receipt push test",
@@ -338,7 +333,7 @@ async function testReadReceiptDrain(): Promise<void> {
   const a = new MeshStore(port);
   const deliveriesA: Record<string, unknown>[] = [];
   a.onDelivery = (_id: string, ev: unknown) => {
-    deliveriesA.push(ev as Record<string, unknown>);
+    deliveriesA.push(ev);
   };
   await a.init();
   await a.registerAgent({
@@ -365,7 +360,7 @@ async function testReadReceiptDrain(): Promise<void> {
   await sleep(300);
 
   const room = await a.createRoom({
-    name: `read-drain-${port}`,
+    name: `read-drain-${String(port)}`,
     type: "public",
     owner: a.peerId,
     description: "Read receipt drain test",
@@ -396,7 +391,9 @@ async function testReadReceiptDrain(): Promise<void> {
 async function testReadbyArray(): Promise<void> {
   const port = await allocFreePort();
   const a = new MeshStore(port);
-  a.onDelivery = () => {};
+  a.onDelivery = () => {
+    /* intentionally empty — dummy handler for drain delivery */
+  };
   await a.init();
   await a.registerAgent({
     name: "a",
@@ -409,7 +406,9 @@ async function testReadbyArray(): Promise<void> {
   await sleep(100);
 
   const b = new MeshStore(port);
-  b.onDelivery = () => {};
+  b.onDelivery = () => {
+    /* intentionally empty — dummy handler for drain delivery */
+  };
   await b.init();
   await b.registerAgent({
     name: "b",
@@ -422,7 +421,7 @@ async function testReadbyArray(): Promise<void> {
   await sleep(300);
 
   const room = await a.createRoom({
-    name: `readby-${port}`,
+    name: `readby-${String(port)}`,
     type: "public",
     owner: a.peerId,
     description: "readBy test",
@@ -474,12 +473,11 @@ fn()
     // the parent process from hanging on subsequent fork/exec.
     const maxWait = 2000; // ms
     const start = Date.now();
-    while (
-      ((
-        process as unknown as { _getActiveHandles?: () => unknown[] }
-      )._getActiveHandles?.()?.length ?? 0) > 0 &&
-      Date.now() - start < maxWait
-    ) {
+    const handles: unknown[] =
+      typeof process._getActiveHandles === "function"
+        ? process._getActiveHandles()
+        : [];
+    while (handles.length > 0 && Date.now() - start < maxWait) {
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
     process.exit(0);

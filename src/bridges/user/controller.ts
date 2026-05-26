@@ -59,13 +59,9 @@ export class ChatController extends EventEmitter {
    * instead of creating a redundant one.
    */
   static fromExisting(store: MeshStore, ctx: CommsContext): ChatController {
-    const ctrl = Object.create(ChatController.prototype) as ChatController;
-    EventEmitter.call(ctrl);
-    ctrl.store = store;
-    ctrl.tool = new CommsTool(store, store.discovery);
+    const ctrl = new ChatController(store, ctx.userName);
+    // Replace the context with the existing one
     ctrl.ctx = ctx;
-    ctrl.currentRoom = undefined;
-    ctrl.userName = "";
 
     // Push delivery events to UIs
     store.onDelivery = (_agentId: string, event: DeliveryEvent) => {
@@ -282,9 +278,7 @@ export class ChatController extends EventEmitter {
   // -----------------------------------------------------------------------
 
   async shutdown(): Promise<void> {
-    if (this.ctx) {
-      await this.store.setAgentOffline(this.ctx.agentId);
-    }
+    await this.store.setAgentOffline(this.ctx.agentId);
     await this.store.shutdown();
   }
 }

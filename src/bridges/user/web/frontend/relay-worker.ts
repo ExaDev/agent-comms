@@ -79,13 +79,6 @@ interface DmMessage {
   readBy: string[];
 }
 
-interface SerialisedState {
-  agents: Record<string, AgentIdentity>;
-  rooms: Record<string, Room>;
-  messages: Record<string, RoomMessage[]>;
-  dms: Record<string, DmMessage[]>;
-}
-
 type MeshStatePatch =
   | { type: "agent_upsert"; agent: AgentIdentity }
   | { type: "agent_offline"; agentId: string }
@@ -293,9 +286,8 @@ function translatePatch(
 function parseWireMessage(raw: unknown): WireMessage | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   if (!("method" in raw)) return undefined;
-  if (typeof (raw as Record<string, unknown>).method !== "string")
-    return undefined;
-  return raw as WireMessage;
+  if (typeof raw.method !== "string") return undefined;
+  return raw satisfies WireMessage;
 }
 
 // ---------------------------------------------------------------------------
@@ -310,19 +302,38 @@ function shouldForward(msg: WireMessage): boolean {
 }
 
 function translateWireMessage(label: "a" | "b", msg: WireMessage): WireMessage {
-  if (msg.method === "state_update") {
-    const patch = msg.patch as MeshStatePatch;
+  if (
+    msg.method === "state_update" &&
+    "patch" in msg &&
+    typeof msg.patch === "object" &&
+    msg.patch !== null
+  ) {
+    const patch = msg.patch satisfies MeshStatePatch;
     return { ...msg, patch: translatePatch(label, patch) };
   }
-  if (msg.method === "peer_joined") {
-    const peer = msg.peer as { id: string; port: number; startedAt: string };
+  if (
+    msg.method === "peer_joined" &&
+    "peer" in msg &&
+    typeof msg.peer === "object" &&
+    msg.peer !== null &&
+    "id" in msg.peer &&
+    typeof msg.peer.id === "string" &&
+    "port" in msg.peer &&
+    typeof msg.peer.port === "number" &&
+    "startedAt" in msg.peer &&
+    typeof msg.peer.startedAt === "string"
+  ) {
     return {
       ...msg,
-      peer: { ...peer, id: prefixId(label, peer.id) },
+      peer: { ...msg.peer, id: prefixId(label, msg.peer.id) },
     };
   }
-  if (msg.method === "peer_left") {
-    return { ...msg, peerId: prefixId(label, msg.peerId as string) };
+  if (
+    msg.method === "peer_left" &&
+    "peerId" in msg &&
+    typeof msg.peerId === "string"
+  ) {
+    return { ...msg, peerId: prefixId(label, msg.peerId) };
   }
   return msg;
 }
@@ -476,8 +487,11 @@ function handlePortMessage(msg: RelayInbound): void {
 function isRelayInbound(value: unknown): value is RelayInbound {
   if (typeof value !== "object" || value === null) return false;
   if (!("type" in value)) return false;
-  const t = (value as Record<string, unknown>).type;
-  return t === "connect" || t === "disconnect" || t === "status";
+  const t = value.type;
+  return (
+    typeof t === "string" &&
+    (t === "connect" || t === "disconnect" || t === "status")
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -485,12 +499,13 @@ function isRelayInbound(value: unknown): value is RelayInbound {
 // ---------------------------------------------------------------------------
 
 self.addEventListener("connect", (event: MessageEvent) => {
-  const port = event.ports[0] as unknown as MessagePortLike;
-  ports.add(port);
+  const rawPort = event.ports[0];
+  if (rawPort === undefined) return;
+  ports.add(rawPort);
 
   // Send current status to the new port
   try {
-    port.postMessage(
+    rawPort.postMessage(
       JSON.stringify({
         type: "status",
         status: getStatus(),
@@ -500,7 +515,7 @@ self.addEventListener("connect", (event: MessageEvent) => {
     // Port not ready yet
   }
 
-  port.onmessage = (e: MessageEvent) => {
+  rawPort.onmessage = (e: MessageEvent) => {
     const parsed: unknown = JSON.parse(
       typeof e.data === "string" ? e.data : String(e.data),
     );

@@ -19,6 +19,7 @@ import type {
   Visibility,
 } from "./types.js";
 import type { ListenerInfo } from "./transport.js";
+import type { FedLink } from "./federation.js";
 
 export interface CommsStore {
   // -- Identity --
@@ -96,7 +97,7 @@ export interface CommsStore {
   // -- Federation (coordinator-to-coordinator) --
   fedConnect(host: string, port: number, name?: string): Promise<string>;
   fedDisconnect(linkId: string): Promise<void>;
-  fedLinks(): import("./federation.js").FedLink[];
+  fedLinks(): FedLink[];
   // -- Connection approval --
   acceptConnection(connectionId: string): Promise<void>;
   rejectConnection(connectionId: string, reason: string): Promise<void>;

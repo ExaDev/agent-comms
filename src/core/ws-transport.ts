@@ -16,6 +16,7 @@ import { isMeshMessage } from "./wire-protocol.js";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
 import type {
   ConnectionHandle,
+  ListenerInfo,
   MeshTransport,
   TransportEvents,
 } from "./transport.js";
@@ -146,7 +147,7 @@ export class WebSocketTransport implements MeshTransport {
   ): Promise<void> {
     this._peerId = peerId;
     await new Promise<void>((resolve, reject) => {
-      const url = `ws://${host}:${port}`;
+      const url = `ws://${host}:${String(port)}`;
       const ws = new WebSocket(url);
 
       const timer = setTimeout(() => {
@@ -208,7 +209,7 @@ export class WebSocketTransport implements MeshTransport {
   ): Promise<void> {
     this._peerId = peerId;
     await new Promise<void>((resolve, reject) => {
-      const url = `ws://${host}:${port}`;
+      const url = `ws://${host}:${String(port)}`;
       const ws = new WebSocket(url);
 
       const timer = setTimeout(() => {
@@ -300,7 +301,7 @@ export class WebSocketTransport implements MeshTransport {
     if (this.peerConnections.has(peer.id)) return;
 
     await new Promise<void>((resolve) => {
-      const url = `ws://127.0.0.1:${peer.port}`;
+      const url = `ws://127.0.0.1:${String(peer.port)}`;
       const ws = new WebSocket(url);
 
       ws.on("open", () => {
@@ -442,7 +443,7 @@ export class WebSocketTransport implements MeshTransport {
     throw new Error("WebSocketTransport does not support listener management");
   }
 
-  listListeners(): import("./transport.js").ListenerInfo[] {
+  listListeners(): ListenerInfo[] {
     return [];
   }
 

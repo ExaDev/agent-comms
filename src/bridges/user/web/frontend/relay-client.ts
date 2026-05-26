@@ -127,7 +127,8 @@ function isStatusMessage(value: unknown): value is StatusMessage {
     typeof value === "object" &&
     value !== null &&
     "type" in value &&
-    (value as Record<string, unknown>).type === "status" &&
+    typeof value.type === "string" &&
+    value.type === "status" &&
     "status" in value
   );
 }
@@ -137,6 +138,7 @@ function isErrorMessage(value: unknown): value is ErrorMessage {
     typeof value === "object" &&
     value !== null &&
     "type" in value &&
-    (value as Record<string, unknown>).type === "error"
+    typeof value.type === "string" &&
+    value.type === "error"
   );
 }

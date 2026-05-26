@@ -85,11 +85,7 @@ interface ServiceWorkerGlobalScope {
     listener: (event: NotificationEvent) => void,
   ): void;
   addEventListener(
-    type: "install",
-    listener: (event: ExtendableEvent) => void,
-  ): void;
-  addEventListener(
-    type: "activate",
+    type: "install" | "activate",
     listener: (event: ExtendableEvent) => void,
   ): void;
   addEventListener(type: "fetch", listener: (event: FetchEvent) => void): void;
@@ -243,7 +239,14 @@ self.addEventListener("push", (event: PushEvent) => {
 self.addEventListener("notificationclick", (event: NotificationEvent) => {
   event.notification.close();
 
-  const targetUrl = event.notification.data?.url ?? self.location.origin;
+  const notificationData: unknown = event.notification.data;
+  const targetUrl =
+    typeof notificationData === "object" &&
+    notificationData !== null &&
+    "url" in notificationData &&
+    typeof notificationData.url === "string"
+      ? notificationData.url
+      : self.location.origin;
 
   event.waitUntil(
     self.clients

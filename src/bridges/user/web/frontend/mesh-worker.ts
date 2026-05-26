@@ -287,7 +287,7 @@ function handleServerMessage(raw: unknown): void {
     if (raw.method === "state_sync") {
       applyStateSync(raw.state);
       broadcastToPorts({ type: "state", state: getStateSnapshot() });
-    } else if (raw.method === "state_update") {
+    } else {
       applyPatch(raw.patch);
       broadcastToPorts({ type: "patch", patch: raw.patch });
     }
@@ -296,19 +296,30 @@ function handleServerMessage(raw: unknown): void {
 
   // Action responses from the server — { type: "result" } or { type: "error" }
   if (typeof raw === "object" && raw !== null && "type" in raw) {
-    const msg = raw as Record<string, unknown>;
-    if (msg.type === "result" && "result" in msg) {
-      // Broadcast to all ports — the main thread MeshClient correlates
+    if (
+      raw.type === "result" &&
+      "result" in raw &&
+      typeof raw.result === "object" &&
+      raw.result !== null &&
+      "content" in raw.result &&
+      typeof raw.result.content === "string" &&
+      "isError" in raw.result &&
+      typeof raw.result.isError === "boolean"
+    ) {
       broadcastToPorts({
         type: "actionResult",
         id: "",
-        result: msg.result as { content: string; isError: boolean },
+        result: { content: raw.result.content, isError: raw.result.isError },
       });
-    } else if (msg.type === "error" && "message" in msg) {
+    } else if (
+      raw.type === "error" &&
+      "message" in raw &&
+      typeof raw.message === "string"
+    ) {
       broadcastToPorts({
         type: "actionError",
         id: "",
-        message: msg.message as string,
+        message: raw.message,
       });
     }
   }
@@ -321,8 +332,11 @@ function isMeshStateMessage(
   | { method: "state_update"; patch: MeshStatePatch } {
   if (typeof value !== "object" || value === null) return false;
   if (!("method" in value)) return false;
-  const method = (value as Record<string, unknown>).method;
-  return method === "state_sync" || method === "state_update";
+  const method = value.method;
+  return (
+    typeof method === "string" &&
+    (method === "state_sync" || method === "state_update")
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -348,9 +362,8 @@ function handlePortMessage(msg: WorkerInbound): void {
       connect(msg.url);
       break;
     case "action": {
-      const socket = ws;
-      if (socket?.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(msg.action));
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg.action));
       }
       break;
     }
@@ -363,8 +376,11 @@ function handlePortMessage(msg: WorkerInbound): void {
 function isWorkerInbound(value: unknown): value is WorkerInbound {
   if (typeof value !== "object" || value === null) return false;
   if (!("type" in value)) return false;
-  const t = (value as Record<string, unknown>).type;
-  return t === "init" || t === "action" || t === "getState";
+  const t = value.type;
+  return (
+    typeof t === "string" &&
+    (t === "init" || t === "action" || t === "getState")
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -372,12 +388,14 @@ function isWorkerInbound(value: unknown): value is WorkerInbound {
 // ---------------------------------------------------------------------------
 
 self.addEventListener("connect", (event: MessageEvent) => {
-  const port = event.ports[0] as unknown as MessagePortLike;
-  ports.add(port);
+  const rawPort = event.ports[0];
+  if (rawPort === undefined) return;
+  // MessagePort satisfies MessagePortLike (has postMessage, close, onmessage)
+  ports.add(rawPort);
 
   // Send current state to the new port
   try {
-    port.postMessage(
+    rawPort.postMessage(
       JSON.stringify({
         type: "state",
         state: getStateSnapshot(),
@@ -387,7 +405,7 @@ self.addEventListener("connect", (event: MessageEvent) => {
     // Port not ready yet — will get state on next update
   }
 
-  port.onmessage = (e: MessageEvent) => {
+  rawPort.onmessage = (e: MessageEvent) => {
     const parsed: unknown = JSON.parse(
       typeof e.data === "string" ? e.data : String(e.data),
     );
