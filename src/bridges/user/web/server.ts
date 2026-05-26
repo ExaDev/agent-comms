@@ -43,6 +43,13 @@ const BUNDLE_JS = fs.readFileSync(
   "utf-8",
 );
 
+const MESH_WORKER_JS = fs.existsSync(path.join(__dirname, "dist", "mesh-worker.js"))
+  ? fs.readFileSync(
+      path.join(__dirname, "dist", "mesh-worker.js"),
+      "utf-8",
+    )
+  : "/* mesh-worker not built */";
+
 const SW_JS = fs.readFileSync(
   path.join(__dirname, "dist", "sw.js"),
   "utf-8",
@@ -127,9 +134,28 @@ export async function createWebServer(
 
   const pushManager = new PushManager();
 
-  const wss = new WebSocketServer({ server });
+  // Separate WS servers for chat and mesh bridge endpoints
+  const wss = new WebSocketServer({ noServer: true });
+  const meshWss = new WebSocketServer({ noServer: true });
+
+  server.on("upgrade", (req, socket, head) => {
+    if (req.url === "/ws/mesh") {
+      meshWss.handleUpgrade(req, socket, head, (ws) => {
+        meshWss.emit("connection", ws, req);
+      });
+    } else {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit("connection", ws, req);
+      });
+    }
+  });
+
   wss.on("connection", (ws) => {
     handleWebSocket(ws, controller, pushManager);
+  });
+
+  meshWss.on("connection", (ws) => {
+    handleMeshWebSocket(ws, controller);
   });
 
   server.listen(port, WEB_HOST, () => {
@@ -220,6 +246,15 @@ function handleRequest(
       "Content-Type": "application/javascript; charset=utf-8",
     });
     res.end(BUNDLE_JS);
+    return;
+  }
+
+  // Mesh SharedWorker bundle
+  if (url.pathname === "/mesh-worker.js" && req.method === "GET") {
+    res.writeHead(200, {
+      "Content-Type": "application/javascript; charset=utf-8",
+    });
+    res.end(MESH_WORKER_JS);
     return;
   }
 
@@ -416,6 +451,106 @@ function handleWebSocket(
     const rooms = await controller.getRooms();
     ws.send(JSON.stringify({ type: "state", agents, rooms }));
   })();
+}
+
+// ---------------------------------------------------------------------------
+// Mesh WebSocket handler — bridges browser peers to the TCP mesh
+// ---------------------------------------------------------------------------
+
+/** Active mesh WS connections — shared across handler invocations. */
+const meshPeers = new Set<WebSocket>();
+
+/** Whether the global onPatch listener has been wired. */
+let meshPatchListenerActive = false;
+
+/**
+ * Ensures the global MeshStore.onPatch forwards patches to all mesh peers.
+ * Called once on first connection; subsequent calls are no-ops.
+ */
+function ensurePatchListener(store: import("../../../core/mesh-store.js").MeshStore): void {
+  if (meshPatchListenerActive) return;
+  meshPatchListenerActive = true;
+  store.onPatch = (patch: import("../../../core/wire-protocol.js").MeshStatePatch): void => {
+    const msg: import("../../../core/wire-protocol.js").MeshMessage = {
+      method: "state_update",
+      patch,
+    };
+    const data = JSON.stringify(msg);
+    for (const peer of meshPeers) {
+      if (peer.readyState === WebSocket.OPEN) {
+        peer.send(data);
+      }
+    }
+  };
+}
+
+/**
+ * Handles a WebSocket connection on /ws/mesh.
+ *
+ * Sends the current mesh state as a state_sync message on connect,
+ * then forwards all mesh state patches in real-time. Browser peers
+ * send action objects which are executed through the ChatController.
+ */
+function handleMeshWebSocket(
+  ws: WebSocket,
+  controller: ChatController,
+): void {
+  const store = controller.meshStore;
+
+  meshPeers.add(ws);
+  ensurePatchListener(store);
+
+  // Send initial state_sync
+  const agents = store["agents"] as Map<string, unknown>;
+  const rooms = store["rooms"] as Map<string, unknown>;
+  const messages = store["messages"] as Map<string, unknown>;
+  const dms = store["dms"] as Map<string, unknown>;
+  const initialState: import("../../../core/wire-protocol.js").SerialisedState = {
+    agents: Object.fromEntries(agents),
+    rooms: Object.fromEntries(rooms),
+    messages: Object.fromEntries(messages),
+    dms: Object.fromEntries(dms),
+  };
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ method: "state_sync", state: initialState }));
+  }
+
+  ws.on("close", () => {
+    meshPeers.delete(ws);
+  });
+
+  ws.on("message", (data) => {
+    void (async () => {
+      try {
+        const raw =
+          typeof data === "string"
+            ? data
+            : new TextDecoder().decode(
+                data instanceof ArrayBuffer
+                  ? data
+                  : Buffer.isBuffer(data)
+                    ? data
+                    : Buffer.concat(data),
+              );
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed !== "object" || parsed === null) {
+          throw new Error("Invalid JSON");
+        }
+        const params = Object.fromEntries(Object.entries(parsed));
+
+        // Execute action through the controller
+        const result = await executeAction(controller, params);
+        ws.send(JSON.stringify({ type: "result", result }));
+      } catch (err) {
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            message: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      }
+    })();
+  });
 }
 
 // ---------------------------------------------------------------------------
