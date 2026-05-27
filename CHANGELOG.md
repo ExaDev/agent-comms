@@ -1,3 +1,9 @@
+## [1.17.1](https://github.com/ExaDev/agent-comms/compare/v1.17.0...v1.17.1) (2026-05-27)
+
+### Bug Fixes
+
+* render initial UI on first load without REST or mesh connection ([496e0ee](https://github.com/ExaDev/agent-comms/commit/496e0ee047709467275a6cd5f80cdae12a08685f))
+
 ## [1.17.0](https://github.com/ExaDev/agent-comms/compare/v1.16.1...v1.17.0) (2026-05-27)
 
 ### Features
