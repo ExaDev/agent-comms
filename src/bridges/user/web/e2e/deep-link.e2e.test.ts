@@ -110,6 +110,7 @@ test.describe("Deep linking", () => {
     const roomItem = page.locator("#room-list .room-item", {
       hasText: roomName,
     });
+    await roomItem.waitFor({ state: "visible", timeout: 10000 });
     await roomItem.click();
     await expect(page.locator("#header")).toContainText(roomName);
 

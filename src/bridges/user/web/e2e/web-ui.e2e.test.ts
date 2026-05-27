@@ -108,6 +108,7 @@ test.describe("Web UI", () => {
     const roomItem = page.locator("#room-list .room-item", {
       hasText: roomName,
     });
+    await roomItem.waitFor({ state: "visible", timeout: 10000 });
     await roomItem.click();
 
     // Wait for join to complete
@@ -193,6 +194,7 @@ test.describe("Web UI", () => {
     const roomItem = page.locator("#room-list .room-item", {
       hasText: roomName,
     });
+    await roomItem.waitFor({ state: "visible", timeout: 10000 });
     await roomItem.click();
     await expect(page.locator("#header")).toContainText(roomName);
 
