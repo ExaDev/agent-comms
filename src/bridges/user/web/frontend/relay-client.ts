@@ -45,7 +45,7 @@ export class RelayClient {
   connect(): void {
     if (this.worker) return;
 
-    const worker = new SharedWorker("/relay-worker.js");
+    const worker = new SharedWorker("./relay-worker.js");
     this.worker = worker;
 
     worker.port.onmessage = (event: MessageEvent) => {

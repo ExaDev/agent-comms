@@ -101,13 +101,13 @@ declare const self: ServiceWorkerGlobalScope;
 const CACHE_NAME = "agent-comms-v1";
 
 const APP_SHELL = [
-  "/",
-  "/bundle.js",
-  "/sw.js",
-  "/manifest.json",
-  "/icons/icon-96x96.svg",
-  "/icons/icon-192x192.svg",
-  "/icons/icon-512x512.svg",
+  "./",
+  "./bundle.js",
+  "./sw.js",
+  "./manifest.json",
+  "./icons/icon-96x96.svg",
+  "./icons/icon-192x192.svg",
+  "./icons/icon-512x512.svg",
 ];
 
 // ---------------------------------------------------------------------------
