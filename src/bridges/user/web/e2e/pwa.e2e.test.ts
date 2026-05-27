@@ -11,6 +11,15 @@
 
 import { test, expect } from "./fixtures.js";
 
+function hasSizes(value: unknown): value is { sizes: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "sizes" in value &&
+    typeof value.sizes === "string"
+  );
+}
+
 test.describe("PWA features", () => {
   test.describe("Service worker registration", () => {
     test("service worker is registered after page load", async ({
@@ -23,7 +32,8 @@ test.describe("PWA features", () => {
         const regs = await navigator.serviceWorker.getRegistrations();
         return regs.map((reg) => ({
           scope: reg.scope,
-          state: reg.installing?.state ?? reg.waiting?.state ?? reg.active?.state,
+          state:
+            reg.installing?.state ?? reg.waiting?.state ?? reg.active?.state,
         }));
       });
 
@@ -76,14 +86,16 @@ test.describe("PWA features", () => {
     test("manifest.json has required PWA fields", async ({ page, port }) => {
       await page.goto(`http://127.0.0.1:${port}`);
 
-      const manifest = await page.evaluate(async () => {
-        const link = document.querySelector('link[rel="manifest"]');
-        if (!link) return null;
-        const href = link.getAttribute("href");
-        if (!href) return null;
-        const res = await fetch(href);
-        return res.json() as Promise<Record<string, unknown>>;
-      });
+      const manifest = await page.evaluate<Record<string, unknown> | null>(
+        async () => {
+          const link = document.querySelector('link[rel="manifest"]');
+          if (!link) return null;
+          const href = link.getAttribute("href");
+          if (!href) return null;
+          const res = await fetch(href);
+          return res.json();
+        },
+      );
 
       expect(manifest).not.toBeNull();
       expect(manifest?.name).toBe("Agent Comms");
@@ -101,8 +113,8 @@ test.describe("PWA features", () => {
       await page.goto(`http://127.0.0.1:${port}`);
 
       // In browser context, standalone should not match
-      const browserMode = await page.evaluate(() =>
-        window.matchMedia("(display-mode: standalone)").matches,
+      const browserMode = await page.evaluate(
+        () => window.matchMedia("(display-mode: standalone)").matches,
       );
       expect(browserMode).toBe(false);
 
@@ -161,10 +173,13 @@ test.describe("PWA features", () => {
       await page.waitForTimeout(2000);
 
       // Check that the agent-comms cache exists and has app shell entries
-      const cacheEntries = await page.evaluate(async () => {
+      const cacheEntries = await page.evaluate<{
+        found: boolean;
+        entries: string[];
+      }>(async () => {
         const names = await caches.keys();
         const commsCache = names.find((n) => n.startsWith("agent-comms"));
-        if (!commsCache) return { found: false, entries: [] as string[] };
+        if (!commsCache) return { found: false, entries: [] };
 
         const cache = await caches.open(commsCache);
         const requests = await cache.keys();
@@ -179,10 +194,7 @@ test.describe("PWA features", () => {
       expect(cacheEntries.entries).toContain("/bundle.js");
     });
 
-    test("cached index.html survives offline mode", async ({
-      page,
-      port,
-    }) => {
+    test("cached index.html survives offline mode", async ({ page, port }) => {
       await page.goto(`http://127.0.0.1:${port}`);
 
       // Wait for service worker to activate
@@ -216,10 +228,7 @@ test.describe("PWA features", () => {
       await context.setOffline(false);
     });
 
-    test("cached bundle.js is served offline", async ({
-      page,
-      port,
-    }) => {
+    test("cached bundle.js is served offline", async ({ page, port }) => {
       await page.goto(`http://127.0.0.1:${port}`);
 
       // Wait for service worker to activate
@@ -262,10 +271,7 @@ test.describe("PWA features", () => {
   });
 
   test.describe("Install prompt", () => {
-    test("manifest has installability requirements", async ({
-      page,
-      port,
-    }) => {
+    test("manifest has installability requirements", async ({ page, port }) => {
       await page.goto(`http://127.0.0.1:${port}`);
 
       // Verify the manifest link exists — this is what triggers
@@ -278,23 +284,23 @@ test.describe("PWA features", () => {
 
       // Verify manifest has the fields required for installability:
       // name (or short_name), icons (192px + 512px), start_url, display
-      const manifest = await page.evaluate(async () => {
-        const link = document.querySelector('link[rel="manifest"]');
-        const href = link?.getAttribute("href");
-        if (!href) return null;
-        const res = await fetch(href);
-        return res.json() as Promise<Record<string, unknown>>;
-      });
+      const manifest = await page.evaluate<Record<string, unknown> | null>(
+        async () => {
+          const link = document.querySelector('link[rel="manifest"]');
+          const href = link?.getAttribute("href");
+          if (!href) return null;
+          const res = await fetch(href);
+          return res.json();
+        },
+      );
 
       expect(manifest?.name).toBeTruthy();
       expect(manifest?.icons).toBeTruthy();
-      const icons = manifest?.icons as
-        | Array<Record<string, unknown>>
-        | undefined;
+      const icons = manifest?.icons;
       const hasRequiredIcons =
         Array.isArray(icons) &&
-        icons.some((i) => String(i.sizes).includes("192")) &&
-        icons.some((i) => String(i.sizes).includes("512"));
+        icons.some((icon) => hasSizes(icon) && icon.sizes.includes("192")) &&
+        icons.some((icon) => hasSizes(icon) && icon.sizes.includes("512"));
       expect(hasRequiredIcons).toBe(true);
     });
 
