@@ -37,10 +37,10 @@ export class ChatController extends EventEmitter {
   private ctx!: CommsContext;
   private currentRoom: string | undefined;
 
-  constructor(private userName: string) {
+  constructor(private userName: string, coordinatorPort?: number) {
     super();
     const identity = generateIdentity();
-    this.store = new MeshStore();
+    this.store = new MeshStore(coordinatorPort);
     this.store.peerId = identity.fingerprint;
     this.store.setTransport(new TlsTransport(this.store.events, identity));
     this.tool = new CommsTool(this.store, this.store.discovery);
