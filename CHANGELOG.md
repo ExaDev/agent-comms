@@ -1,3 +1,101 @@
+## [1.15.0](https://github.com/ExaDev/agent-comms/compare/v1.14.0...v1.15.0) (2026-05-27)
+
+### Features
+
+* **bridge:** add mesh_set_visibility and mesh_get_visibility to buildAction ([374ad2d](https://github.com/ExaDev/agent-comms/commit/374ad2da9782a7a6a4772ec92fe6482927ade00b))
+* **bridge:** add PWA manifest, offline caching, and installability ([3872e5f](https://github.com/ExaDev/agent-comms/commit/3872e5f426d5544bdb43b0e47092a3b6238ba88b))
+* **bridge:** add root entry point for pi auto-discovery ([e16b39b](https://github.com/ExaDev/agent-comms/commit/e16b39b55b43cd0931c0bbd7c8e5448b14e51863))
+* **bridge:** add service worker with push notification handling ([b91537c](https://github.com/ExaDev/agent-comms/commit/b91537c5431c6c4461399dd5b507979ff16fc3ab))
+* **bridge:** add URL query parameter deep linking for rooms and DMs ([f4ce6e2](https://github.com/ExaDev/agent-comms/commit/f4ce6e26b8a02e7e5e098658feebd8792771e12c))
+* **bridge:** enable TLS transport across all bridges ([927ee99](https://github.com/ExaDev/agent-comms/commit/927ee997ae080963da889f77bc892899746ed01d))
+* **bridge:** integrate PushManager into web server ([51c7e64](https://github.com/ExaDev/agent-comms/commit/51c7e64d7d7a1185982913718c39478a33caec4a))
+* **bridge:** pass discovery manager to CommsTool in all bridges ([ab302d6](https://github.com/ExaDev/agent-comms/commit/ab302d65780f5cd94f9e28d6957431050bdabbb2))
+* **bridge:** restore project tree sidebar, agent rename, and routeAction ([74fd260](https://github.com/ExaDev/agent-comms/commit/74fd260fc2d92cac7a5c2e4f19a81311f8c1db32))
+* **build:** add mesh-worker.ts as separate esbuild entry point ([c615bc8](https://github.com/ExaDev/agent-comms/commit/c615bc852bcb5cca34142f5d615bcdc5a1c00b8e))
+* **core:** add bidirectional approval wire messages and types ([558c68b](https://github.com/ExaDev/agent-comms/commit/558c68b7833ca41fd788b0eea70907cf96df4b11))
+* **core:** add cryptographic identity generation ([89ec5cb](https://github.com/ExaDev/agent-comms/commit/89ec5cb392ce683337af23ed33dcec45fdc1aadd))
+* **core:** add discovery module with mDNS and Tailscale backends ([8063874](https://github.com/ExaDev/agent-comms/commit/80638740d2dd96679b0889a0830a0feec1a3f4df))
+* **core:** add federation wire messages and types ([aca2526](https://github.com/ExaDev/agent-comms/commit/aca2526c35bd118a39cd20513f97bc4265a8ed19))
+* **core:** add listener management and network interface discovery to MeshStore ([8bb9570](https://github.com/ExaDev/agent-comms/commit/8bb9570cebb9d4abe2a01b88a4c2ecb5cf9aeead))
+* **core:** add mesh_discover, mesh_advertise, mesh_unadvertise action types ([fb9613b](https://github.com/ExaDev/agent-comms/commit/fb9613b3f1b6c98cc12a3faa928224d46ccec66e))
+* **core:** add MeshVisibility type and stop() to discovery backends ([696f11d](https://github.com/ExaDev/agent-comms/commit/696f11dff47ece5e44cdfeafd2032b83939ef09f))
+* **core:** add multi-listener coordinator support with per-listener policies ([cf897e8](https://github.com/ExaDev/agent-comms/commit/cf897e85f46dc3df6b2c6d3f01ce4816559497c4))
+* **core:** add onPatch callback to MeshStore ([4fc5676](https://github.com/ExaDev/agent-comms/commit/4fc567600ff06dd1c155ff657cbf8d21e7e20428))
+* **core:** add PushManager for browser push subscriptions ([1dad588](https://github.com/ExaDev/agent-comms/commit/1dad588ed4d839e9a3f858db161b33d4b07ff8a8))
+* **core:** add TlsTransport with certificate pinning ([527429c](https://github.com/ExaDev/agent-comms/commit/527429ccc2ba8b94c6bd545e7163cc6922c9dd2b))
+* **core:** add VAPID key generation for Web Push ([90ce608](https://github.com/ExaDev/agent-comms/commit/90ce608b218150cc9c7251f0845973087ab84494))
+* **core:** add visibility state machine to DiscoveryManager ([3bd6326](https://github.com/ExaDev/agent-comms/commit/3bd6326d2d43d91e0e135dd527b676ead40c4433))
+* **core:** add WebSocketTransport for browser mesh participation ([1dbe6c6](https://github.com/ExaDev/agent-comms/commit/1dbe6c6ae6be53e97fdcdbeef5bb2f93fb1780c7))
+* **core:** export VAPID and PushManager from public API ([b68c4e7](https://github.com/ExaDev/agent-comms/commit/b68c4e78774716c6f2b70f189bdee720446ed119))
+* **core:** handle discovery actions in CommsTool ([8cf06c8](https://github.com/ExaDev/agent-comms/commit/8cf06c8cfe6d2882d191542aa0f2242a70bd22ac))
+* **core:** implement bidirectional connection approval ([5fd3d14](https://github.com/ExaDev/agent-comms/commit/5fd3d148996c6be924c41d25336fc25932b55ac9))
+* **core:** implement FederationManager ([04bb349](https://github.com/ExaDev/agent-comms/commit/04bb349e9dce7f56da8beac22a1cb8af75f92fe7))
+* **core:** implement TcpTransport with connection lifecycle and event dispatch ([a1d2196](https://github.com/ExaDev/agent-comms/commit/a1d21960af05a0ab16d921b75722d815c5ebd69b))
+* **core:** implement Web Push encryption and VAPID signing ([eacaa95](https://github.com/ExaDev/agent-comms/commit/eacaa955e34ffb013d99c0f247a9d70de8840123))
+* **core:** wire discovery backends into MeshStore and exports ([e545dde](https://github.com/ExaDev/agent-comms/commit/e545dde43fd9523b3c8b645c726d55d154760c2d))
+* **core:** wire federation into MeshStore, CommsTool, and buildAction ([9d5a0ac](https://github.com/ExaDev/agent-comms/commit/9d5a0ac3d871530b41bb68c705a8fc514459aa9f))
+* **core:** wire listener actions through CommsTool and bridge helpers ([5cb4a3b](https://github.com/ExaDev/agent-comms/commit/5cb4a3bf253d3262cd8ec5487c9a2af85ea44a4f))
+* **core:** wire visibility through MeshStore and CommsTool ([0606977](https://github.com/ExaDev/agent-comms/commit/06069772803df0fdff870e975b8975fa713a93ab))
+* **web:** add /ws/mesh bridge endpoint for browser mesh participation ([c22e44b](https://github.com/ExaDev/agent-comms/commit/c22e44bcb86a5ab53766b77dd5575eabd1dc40dd))
+* **web:** add relay SharedWorker for cross-mesh message forwarding ([f9d6c31](https://github.com/ExaDev/agent-comms/commit/f9d6c31d09f377f485940bf381eecea73ec3b68a))
+* **web:** add RelayClient main-thread API ([b163e66](https://github.com/ExaDev/agent-comms/commit/b163e66c65578d691114c727b89e07ed40e8726b))
+* **web:** add RelayPanel component with relay configuration UI ([52b3eb7](https://github.com/ExaDev/agent-comms/commit/52b3eb7ba2b1598a98cf3665ae9aa2dc46cda4b1))
+* **web:** add SharedWorker mesh node and main-thread MeshClient ([c889c91](https://github.com/ExaDev/agent-comms/commit/c889c911c42ce84f695bd9d33768c4a8ff9fcec6))
+* **web:** integrate MeshClient into frontend for real-time mesh state ([b03bbd7](https://github.com/ExaDev/agent-comms/commit/b03bbd71a93ff5b68ee6bd87207ba36b2d53ce59))
+* **web:** wire relay client into App, Sidebar, and main entry point ([df4b83e](https://github.com/ExaDev/agent-comms/commit/df4b83eefa3e43d7f7baf0389ed1dc547d883615))
+
+### Bug Fixes
+
+* **bridge:** share mesh store between pi bridge and web server ([6438629](https://github.com/ExaDev/agent-comms/commit/6438629e0f0cb1cd61b67de91a94fbb718c02a37))
+* **build:** replace lint-staged with direct eslint in git hooks ([a495d81](https://github.com/ExaDev/agent-comms/commit/a495d818a167a3bb03002a8abd3aed9e0a1fe972))
+* **ci:** remove stale _site upload-artifact step ([522e93b](https://github.com/ExaDev/agent-comms/commit/522e93bd20c84d5fcee67bae7c958f9b7c7a4ceb))
+* **ci:** skip husky hooks during semantic-release ([05eb4bb](https://github.com/ExaDev/agent-comms/commit/05eb4bb795ec620c3cac2d84d6a59602192813f9))
+* **core:** add federation stubs to FileStore and fix test narrowing ([b2abcab](https://github.com/ExaDev/agent-comms/commit/b2abcab41bacd54365fda445b03b02ef5039ebb6))
+* **core:** handle EADDRINUSE race in coordinator election and graceful degradation ([b0c3894](https://github.com/ExaDev/agent-comms/commit/b0c3894b7eef749c1b55f1cd40d00e3f4ce01489))
+* **core:** prevent event-loop starvation in delivery chain ([c54c07d](https://github.com/ExaDev/agent-comms/commit/c54c07d83528519bab0917c5dbcf2045fce46864))
+* **core:** prevent untracked markRead timers after shutdown ([b45e215](https://github.com/ExaDev/agent-comms/commit/b45e215677d4c23b4fa8988c70a3645b4afd6be8))
+* **core:** remove invalid adapter reference from meshGetVisibility ([58177a0](https://github.com/ExaDev/agent-comms/commit/58177a0a0b34f8e5b341e6617b199bfab69bd20e))
+* **core:** resolve merge conflict leftovers in tool.ts ([90152dc](https://github.com/ExaDev/agent-comms/commit/90152dc8adc752ab4243c8ff9d70f858afd46bea))
+* **core:** resolve merge conflicts from parallel agent integration ([9acf30c](https://github.com/ExaDev/agent-comms/commit/9acf30c05feff9c693e3454fe246180915070c39))
+* **core:** resolve type errors from parallel agent integration ([c1e9af4](https://github.com/ExaDev/agent-comms/commit/c1e9af4c0acdffec05ce92536364aeb8dfec1a8c))
+* **core:** use listener.server.close() in transport shutdown ([4c08bb0](https://github.com/ExaDev/agent-comms/commit/4c08bb06717fe9f6bc5a4a8b70340363c7e0790f))
+* remove noInlineConfig to allow eslint-disable for legitimate casts ([e27af8d](https://github.com/ExaDev/agent-comms/commit/e27af8d3b11c1522289af650d5ab38cdf9388c1a))
+* resolve all ESLint errors with proper type narrowing and runtime validation ([8d47f7d](https://github.com/ExaDev/agent-comms/commit/8d47f7d386ba56887560f3813497c5191185202f))
+* resolve CI type errors and lint failures ([7ffa4f3](https://github.com/ExaDev/agent-comms/commit/7ffa4f3b9058e40859d164d1a8dcca4a8e75cbf9))
+* resolve TypeScript errors from satisfies-based type narrowing ([036b603](https://github.com/ExaDev/agent-comms/commit/036b603f687f2f7957391da4425c189859cbd16f))
+* **test:** intercept transport events for listener policy test ([b9a0d07](https://github.com/ExaDev/agent-comms/commit/b9a0d07a9d44d38faa3e5d81c4fa314d1c5f07c4))
+
+### Refactoring
+
+* **bridge:** separate folder toggle from directory room selection ([ae2a898](https://github.com/ExaDev/agent-comms/commit/ae2a89809624ddfdf1b430d9bc4776c3ae2c3b71))
+* **core:** extract wire protocol and transport interface ([852dc5f](https://github.com/ExaDev/agent-comms/commit/852dc5fde37c4025739cfe377560c1d657192af0))
+* **core:** inject transport into MeshStore via DI ([1ab25b0](https://github.com/ExaDev/agent-comms/commit/1ab25b045fa43cd86cf7e6fff767000813e67454))
+
+### Styles
+
+* apply prettier formatting across codebase ([7879d3b](https://github.com/ExaDev/agent-comms/commit/7879d3b77a833a8a562d30f1355a1c36f6a8d181))
+
+### Tests
+
+* add federation integration tests ([19b2241](https://github.com/ExaDev/agent-comms/commit/19b2241d18e9b9d2cd2f8d957762dc7582e3128a))
+* add visibility integration tests and test:visibility script ([2ac7298](https://github.com/ExaDev/agent-comms/commit/2ac7298e310ca33fad1f52a15a2f78afb0085ace))
+* **core:** add delivery receipt integration tests ([6a59a65](https://github.com/ExaDev/agent-comms/commit/6a59a65cb0edd2803a7da4af9a161c624dbf89df))
+* **core:** add listener policy integration test ([386bbac](https://github.com/ExaDev/agent-comms/commit/386bbacb6a1ef28a88c1b726b7d5d34d693212c2))
+
+### Build
+
+* **web:** add relay-worker.ts as separate esbuild IIFE entry point ([6f0f569](https://github.com/ExaDev/agent-comms/commit/6f0f56911588b35de0bf04f862e62fae2d9c524f))
+
+### CI
+
+* deploy PWA to GitHub Pages on push to main ([c9176c1](https://github.com/ExaDev/agent-comms/commit/c9176c1099feefb1d04ac82098083f8b8c03a472))
+* trigger Pages deployment ([1458e38](https://github.com/ExaDev/agent-comms/commit/1458e38d0e78e12e210b031d7ed55932b9b3973a))
+
+### Chores
+
+* **ci:** update to Node 26 and latest action versions ([665e14f](https://github.com/ExaDev/agent-comms/commit/665e14f7bb66086ab9dab7789af541dbc2761a53))
+* ignore local .worktrees/ directories ([11e1a29](https://github.com/ExaDev/agent-comms/commit/11e1a2900dd2df7bf2765361e865bc6815b2d5b7))
+
 ## [1.14.0](https://github.com/ExaDev/agent-comms/compare/v1.13.0...v1.14.0) (2026-05-25)
 
 ### Features
