@@ -1,1 +1,1 @@
-node node_modules/.bin/eslint . 2>&1 && node node_modules/.bin/tsc --noEmit 2>&1 && node --test dist/test/coordinator-socket-error.integration.test.js 2>&1
+node node_modules/.bin/eslint . 2>&1 && node node_modules/.bin/tsc --noEmit 2>&1 && node node_modules/.bin/tsx src/bridges/user/web/build.ts 2>&1 && printf '#!/usr/bin/env node\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js && node --test dist/test/coordinator-socket-error.integration.test.js 2>&1
