@@ -93,6 +93,24 @@ type MeshStatePatch =
     }
   | { type: "message_read"; messageId: string; readBy: string; room?: string };
 
+const PATCH_TYPES = new Set([
+  "agent_upsert",
+  "agent_offline",
+  "room_upsert",
+  "room_delete",
+  "message_add",
+  "dm_add",
+  "delivery",
+  "message_read",
+]);
+
+function isMeshStatePatch(value: unknown): value is MeshStatePatch {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("type" in value)) return false;
+  if (typeof value.type !== "string") return false;
+  return PATCH_TYPES.has(value.type);
+}
+
 // ---------------------------------------------------------------------------
 // Wire message (subset — only what the relay needs to handle)
 // ---------------------------------------------------------------------------
@@ -308,15 +326,9 @@ function translateWireMessage(label: "a" | "b", msg: WireMessage): WireMessage {
   if (
     msg.method === "state_update" &&
     "patch" in msg &&
-    typeof msg.patch === "object" &&
-    msg.patch !== null &&
-    "type" in msg.patch &&
-    typeof msg.patch.type === "string"
+    isMeshStatePatch(msg.patch)
   ) {
-    // Patch validated as object with string `type` — cast to MeshStatePatch discriminated union
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-    const patch = msg.patch as MeshStatePatch;
-    return { ...msg, patch: translatePatch(label, patch) };
+    return { ...msg, patch: translatePatch(label, msg.patch) };
   }
   if (
     msg.method === "peer_joined" &&
