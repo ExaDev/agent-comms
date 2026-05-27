@@ -30,7 +30,7 @@ export function ProjectTree({
   currentRoom,
 }: ProjectTreeProps) {
   return (
-    <div class="project-tree">
+    <div id="room-list" class="project-tree">
       {tree.roots.map((node) => (
         <TreeNodeView
           node={node}
