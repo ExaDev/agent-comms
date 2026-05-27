@@ -97,6 +97,6 @@ jobs:
           # Do NOT set registry-url — it creates an .npmrc that overrides OIDC
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - run: pnpm exec semantic-release
+      - run: HUSKY=0 pnpm exec semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
