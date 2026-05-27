@@ -41,10 +41,7 @@ test.describe("PWA features", () => {
       expect(registrations[0]?.scope).toContain("/");
     });
 
-    test("service worker is registered and present", async ({
-      page,
-      port,
-    }) => {
+    test("service worker is registered and present", async ({ page, port }) => {
       await page.goto(`http://127.0.0.1:${port}`);
 
       const hasRegistration = await page.evaluate(async () => {
