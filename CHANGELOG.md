@@ -1,3 +1,9 @@
+## [1.17.0](https://github.com/ExaDev/agent-comms/compare/v1.16.1...v1.17.0) (2026-05-27)
+
+### Features
+
+* defer mesh connection on first visit to avoid browser prompt ([e618be3](https://github.com/ExaDev/agent-comms/commit/e618be3bbe15b58597f02078b7134fc921587eda))
+
 ## [1.16.1](https://github.com/ExaDev/agent-comms/compare/v1.16.0...v1.16.1) (2026-05-27)
 
 ### Bug Fixes
