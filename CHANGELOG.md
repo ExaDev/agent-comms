@@ -1,3 +1,18 @@
+## [1.16.0](https://github.com/ExaDev/agent-comms/compare/v1.15.1...v1.16.0) (2026-05-27)
+
+### Features
+
+* sequential port discovery for standalone PWA mesh discovery ([d23ba26](https://github.com/ExaDev/agent-comms/commit/d23ba26faf55b6a2bf7e52666c3cc415437300e9))
+
+### Bug Fixes
+
+* prettier formatting and void expression in main.tsx ([c318dca](https://github.com/ExaDev/agent-comms/commit/c318dca674954a4046e087581a1913bd1b306d25))
+* wrap void-returning callback in braces for no-confusing-void-expression ([b8ef5df](https://github.com/ExaDev/agent-comms/commit/b8ef5df06c9052c4c199ffbad72005540c8574c1))
+
+### Styles
+
+* prettier formatting ([fc54d6f](https://github.com/ExaDev/agent-comms/commit/fc54d6f3ae51830ef50ce541c5f8a02063a780fc))
+
 ## [1.15.1](https://github.com/ExaDev/agent-comms/compare/v1.15.0...v1.15.1) (2026-05-27)
 
 ### Bug Fixes
