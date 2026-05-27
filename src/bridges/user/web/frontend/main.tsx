@@ -143,9 +143,16 @@ function sendAction(action: Action): void {
 }
 
 async function refreshState(): Promise<void> {
-  const [agents, rooms] = await Promise.all([fetchAgents(), fetchRooms()]);
-  state.setAgents(agents);
-  state.setRooms(rooms);
+  try {
+    const [agents, rooms] = await Promise.all([
+      fetchAgents(),
+      fetchRooms(),
+    ]);
+    state.setAgents(agents);
+    state.setRooms(rooms);
+  } catch {
+    // REST API unavailable (standalone PWA) — MeshClient provides state
+  }
 }
 
 async function onJoinRoom(roomId: string): Promise<void> {
@@ -275,7 +282,12 @@ state.subscribe(rerender);
 
 const deepLink = parseDeepLink(location.search);
 
-ws.connect();
+// Only connect the direct server WebSocket when served from localhost.
+// On GitHub Pages / standalone deployments, only MeshClient is used.
+const localPattern = /^(localhost|127\.\d+\.\d+\.\d+)(:\d+)?$/;
+if (localPattern.test(location.host)) {
+  ws.connect();
+}
 
 // Initial state fetch, then resolve any deep link from the URL
 void refreshState().then(() => {

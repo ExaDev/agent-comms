@@ -32,6 +32,47 @@ import type {
 
 const WEB_HOST = "127.0.0.1";
 
+/** Maximum number of ports to try when searching for a free one. */
+const WEB_PORT_MAX_ATTEMPTS = 10;
+
+// ---------------------------------------------------------------------------
+// Port discovery — walk up from 19877
+// ---------------------------------------------------------------------------
+
+/**
+ * Try binding sequentially from WEB_PORT_BASE.
+ * Returns the first port that succeeds, or undefined if all are taken.
+ */
+function findFreePort(
+  base: number,
+  maxAttempts: number = WEB_PORT_MAX_ATTEMPTS,
+): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    let attempts = 0;
+
+    function tryPort(port: number): void {
+      if (attempts >= maxAttempts) {
+        resolve(undefined);
+        return;
+      }
+      attempts++;
+
+      const probe = http.createServer();
+      probe.on("error", () => {
+        probe.close();
+        tryPort(port + 1);
+      });
+      probe.listen(port, WEB_HOST, () => {
+        const addr = probe.address();
+        const actualPort = typeof addr === "object" && addr ? addr.port : port;
+        probe.close(() => resolve(actualPort));
+      });
+    }
+
+    tryPort(base);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Static assets — loaded into memory at module load
 // ---------------------------------------------------------------------------
@@ -105,8 +146,12 @@ export interface WebServerHandle {
  */
 export async function tryStartWebServer(
   controller?: ChatController,
+  coordinatorPort?: number,
 ): Promise<WebServerHandle | undefined> {
-  return createWebServer(0, controller);
+  const base = (coordinatorPort ?? 19876) + 1;
+  const port = await findFreePort(base);
+  if (port === undefined) return undefined;
+  return createWebServer(port, controller);
 }
 
 /**

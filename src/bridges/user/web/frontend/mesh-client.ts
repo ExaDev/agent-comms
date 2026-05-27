@@ -119,10 +119,21 @@ export class MeshClient {
 
     worker.port.start();
 
-    // Tell the worker to connect to the mesh WS endpoint
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${proto}//${location.host}/ws/mesh`;
-    this.postToWorker({ type: "init", url });
+    // Discover the web server — walk up from 19877 matching the server's
+    // port discovery. If served by the local server (location.host is
+    // localhost/127.0.0.1), use that directly. Otherwise probe localhost.
+    const localPattern = /^(localhost|127\.\d+\.\d+\.\d+)(:\d+)?$/;
+    const isLocal = localPattern.test(location.host);
+    if (isLocal) {
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const url = `${proto}//${location.host}/ws/mesh`;
+      this.postToWorker({ type: "init", url });
+    } else {
+      // Standalone PWA (e.g. GitHub Pages) — probe localhost ports.
+      // The web server binds at coordinatorPort + 1, walking up if taken.
+      // Coordinator defaults to 19876, so web server starts at 19877.
+      this.probeLocalMesh(19877, 10);
+    }
   }
 
   /** Get the current mesh state (snapshot). */
@@ -151,6 +162,35 @@ export class MeshClient {
       this.worker = undefined;
     }
     this.pendingActions.clear();
+  }
+
+  /**
+   * Probe localhost ports sequentially for the web server's /ws/mesh endpoint.
+   * Matches the server's port discovery: starts at 19877, walks up.
+   * Sends an init message to the worker on first successful WS upgrade.
+   */
+  private probeLocalMesh(basePort: number, maxAttempts: number): void {
+    let attempts = 0;
+
+    const tryPort = (port: number): void => {
+      if (attempts >= maxAttempts) return;
+      attempts++;
+
+      const url = `ws://127.0.0.1:${String(port)}/ws/mesh`;
+      // Quick HTTP fetch to check if anything is listening and speaks our protocol.
+      // A WebSocket upgrade would be cleaner but fetch is simpler and avoids
+      // a visible WS error in the console.
+      fetch(`http://127.0.0.1:${String(port)}/`, { mode: "no-cors" })
+        .then(() => {
+          // Something responded — try connecting via the worker
+          this.postToWorker({ type: "init", url });
+        })
+        .catch(() => {
+          tryPort(port + 1);
+        });
+    };
+
+    tryPort(basePort);
   }
 
   private postToWorker(msg: unknown): void {

@@ -146,7 +146,7 @@ export default function (pi: ExtensionAPI) {
         cwd: process.cwd(),
         pid: process.pid,
       });
-      webHandle = await tryStartWebServer(webCtrl);
+      webHandle = await tryStartWebServer(webCtrl, store.coordinatorPort);
     }
 
     refreshStatus();
