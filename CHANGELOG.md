@@ -1,3 +1,9 @@
+## [1.19.3](https://github.com/ExaDev/agent-comms/compare/v1.19.2...v1.19.3) (2026-05-27)
+
+### Bug Fixes
+
+* **core:** remove spurious async from synchronous methods ([5c594e4](https://github.com/ExaDev/agent-comms/commit/5c594e4479b2caaeb020ff7423cb770dae5677b6))
+
 ## [1.19.2](https://github.com/ExaDev/agent-comms/compare/v1.19.1...v1.19.2) (2026-05-27)
 
 ### Bug Fixes

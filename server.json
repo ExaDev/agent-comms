@@ -7,12 +7,12 @@
     "url": "https://github.com/ExaDev/agent-comms",
     "source": "github"
   },
-  "version": "1.19.2",
+  "version": "1.19.3",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "agent-comms",
-      "version": "1.19.2",
+      "version": "1.19.3",
       "transport": {
         "type": "stdio"
       }
