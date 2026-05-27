@@ -1,3 +1,9 @@
+## [1.19.4](https://github.com/ExaDev/agent-comms/compare/v1.19.3...v1.19.4) (2026-05-27)
+
+### Refactoring
+
+* **bridge:** replace MeshStatePatch type assertion with type guard ([d54cbb5](https://github.com/ExaDev/agent-comms/commit/d54cbb5c026a381aa88fe974ee163990049e1a65))
+
 ## [1.19.3](https://github.com/ExaDev/agent-comms/compare/v1.19.2...v1.19.3) (2026-05-27)
 
 ### Bug Fixes
