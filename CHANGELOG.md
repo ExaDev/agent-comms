@@ -1,3 +1,9 @@
+## [1.19.5](https://github.com/ExaDev/agent-comms/compare/v1.19.4...v1.19.5) (2026-05-27)
+
+### Bug Fixes
+
+* **bridge:** use OS-assigned port for auto-started web servers ([69d3624](https://github.com/ExaDev/agent-comms/commit/69d3624e2d5f5d66f7edb67fd022e1363c3dc0c3))
+
 ## [1.19.4](https://github.com/ExaDev/agent-comms/compare/v1.19.3...v1.19.4) (2026-05-27)
 
 ### Refactoring
