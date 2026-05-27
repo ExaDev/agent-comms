@@ -1,3 +1,22 @@
+## [1.18.0](https://github.com/ExaDev/agent-comms/compare/v1.17.1...v1.18.0) (2026-05-27)
+
+### Features
+
+* **bridge:** extract testable modules and add 31 new tests ([b71aaa2](https://github.com/ExaDev/agent-comms/commit/b71aaa2c1e5bdfb72d2fb321708ee996718a53d2))
+
+### Bug Fixes
+
+* **bridge:** add room-list ID to ProjectTree for E2E test selectors ([b930fe9](https://github.com/ExaDev/agent-comms/commit/b930fe9234ef8c71c5e8b6e9130bd2695aa10f1c)), closes [#room-list](https://github.com/ExaDev/agent-comms/issues/room-list)
+* **bridge:** capture deep link before rerender clears URL params ([c162f0c](https://github.com/ExaDev/agent-comms/commit/c162f0c417598f2770f710594bc677feba392e5b))
+* **bridge:** correct /join test assertion from 'Switched to' to 'Joined' ([ac1bb24](https://github.com/ExaDev/agent-comms/commit/ac1bb242322577282c8f6c33590bab52aec2d92b))
+* **bridge:** fix deep link E2E tests for room ID and message clearing ([bfc55e4](https://github.com/ExaDev/agent-comms/commit/bfc55e4ce98691380d871b446c8f0f04f4cb4e66))
+* **bridge:** isolate E2E test coordinator ports to prevent EADDRINUSE ([c0f03ab](https://github.com/ExaDev/agent-comms/commit/c0f03ab4af078eb00d7d8507f23404baa8008886))
+* **bridge:** wait for room items before clicking in E2E tests ([c949358](https://github.com/ExaDev/agent-comms/commit/c949358e945d06e7b8908c96aa91b6ea5808a17f))
+
+### Styles
+
+* **bridge:** apply prettier and eslint formatting fixes ([8e5a643](https://github.com/ExaDev/agent-comms/commit/8e5a64356130240eba817f26d19acba21ae499cc))
+
 ## [1.17.1](https://github.com/ExaDev/agent-comms/compare/v1.17.0...v1.17.1) (2026-05-27)
 
 ### Bug Fixes
