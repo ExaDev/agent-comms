@@ -68,6 +68,12 @@ test.describe("PWA features", () => {
       // Reload so the activated SW takes control of the page
       await page.reload();
 
+      // Wait for the SW to claim the page after reload
+      await page.waitForFunction(
+        () => navigator.serviceWorker.controller !== null,
+        { timeout: 10000 },
+      );
+
       const hasController = await page.evaluate(
         () => navigator.serviceWorker.controller !== null,
       );
