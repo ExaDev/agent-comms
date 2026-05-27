@@ -144,14 +144,12 @@ function sendAction(action: Action): void {
 
 async function refreshState(): Promise<void> {
   try {
-    const [agents, rooms] = await Promise.all([
-      fetchAgents(),
-      fetchRooms(),
-    ]);
+    const [agents, rooms] = await Promise.all([fetchAgents(), fetchRooms()]);
     state.setAgents(agents);
     state.setRooms(rooms);
   } catch {
     // REST API unavailable (standalone PWA) — MeshClient provides state
+    return;
   }
 }
 
