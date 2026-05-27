@@ -284,6 +284,7 @@ function rerender(): void {
 }
 
 state.subscribe(rerender);
+rerender();
 
 // ---------------------------------------------------------------------------
 // Boot
