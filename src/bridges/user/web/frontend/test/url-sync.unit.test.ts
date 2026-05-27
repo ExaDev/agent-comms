@@ -4,11 +4,7 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import {
-  parseDeepLink,
-  resolveDeepLink,
-  syncUrl,
-} from "../url-sync.js";
+import { parseDeepLink, resolveDeepLink, syncUrl } from "../url-sync.js";
 import type { Room } from "../types.js";
 
 // ---------------------------------------------------------------------------
@@ -109,7 +105,10 @@ describe("resolveDeepLink", () => {
   it("resolves a cwd deep link to matching project room", () => {
     const link = parseDeepLink("?cwd=/home/user/my-project")!;
     const resolved = resolveDeepLink(link, rooms);
-    assert.deepStrictEqual(resolved, { kind: "room", targetId: "project-room" });
+    assert.deepStrictEqual(resolved, {
+      kind: "room",
+      targetId: "project-room",
+    });
   });
 
   it("returns undefined for cwd deep link with no matching project room", () => {
@@ -130,7 +129,7 @@ describe("resolveDeepLink", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncUrl", () => {
-  let replaceStateCalls: Array<{ url: string }> = [];
+  let replaceStateCalls: { url: string }[] = [];
   let originalHistory: unknown;
   let originalLocation: unknown;
 
@@ -142,11 +141,7 @@ describe("syncUrl", () => {
 
     Object.defineProperty(globalThis, "history", {
       value: {
-        replaceState(
-          _data: unknown,
-          _unused: string,
-          url?: string,
-        ): void {
+        replaceState(_data: unknown, _unused: string, url?: string): void {
           replaceStateCalls.push({ url: url ?? "" });
         },
       },

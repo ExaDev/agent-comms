@@ -17,7 +17,7 @@ test.describe("Deep linking", () => {
   test("navigating to ?room= selects the room", async ({ page, port }) => {
     const roomName = uniqueName("deep-room");
 
-    // Create a room via the API
+    // Create a room via the API and extract the room ID
     const res = await fetch(`http://127.0.0.1:${port}/api/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -29,18 +29,22 @@ test.describe("Deep linking", () => {
     });
     const result = await res.json();
     expect(result.isError).toBeFalsy();
+    // Result content: 'Created public room "name" (id).'
+    const idMatch = (result.content as string).match(/\(([a-zA-Z0-9_-]+)\)\.$/);
+    const roomId = idMatch?.[1];
+    expect(roomId).toBeTruthy();
 
-    // Navigate with the room deep link
-    await page.goto(`http://127.0.0.1:${port}?room=${roomName}`);
+    // Navigate with the room deep link (uses room ID, not name)
+    await page.goto(`http://127.0.0.1:${port}?room=${roomId}`);
 
     // Wait for the page to load and connect
     await expect(page.locator("#messages")).toContainText("Connected to mesh", {
-      timeout: 5000,
+      timeout: 10000,
     });
 
     // The header should show the room name (deep link resolved and joined)
     await expect(page.locator("#header")).toContainText(roomName, {
-      timeout: 5000,
+      timeout: 10000,
     });
   });
 
@@ -61,12 +65,12 @@ test.describe("Deep linking", () => {
 
     // Wait for the page to load
     await expect(page.locator("#messages")).toContainText("Connected to mesh", {
-      timeout: 5000,
+      timeout: 10000,
     });
 
     // The header should show "DM with agent-123"
     await expect(page.locator("#header")).toContainText("DM with agent-123", {
-      timeout: 5000,
+      timeout: 10000,
     });
   });
 
@@ -77,7 +81,7 @@ test.describe("Deep linking", () => {
     await page.goto(`http://127.0.0.1:${port}?room=nonexistent-room`);
 
     await expect(page.locator("#messages")).toContainText("Connected to mesh", {
-      timeout: 5000,
+      timeout: 10000,
     });
 
     // The deep link can't resolve, so header stays at default

@@ -284,13 +284,13 @@ function rerender(): void {
 }
 
 state.subscribe(rerender);
-rerender();
 
-// ---------------------------------------------------------------------------
-// Boot
-// ---------------------------------------------------------------------------
-
+// Capture the deep link from the URL BEFORE the first render — syncUrl()
+// clears the query parameters via replaceState, which would make
+// location.search empty by the time parseDeepLink runs.
 const deepLink = parseDeepLink(location.search);
+
+rerender();
 
 // Auto-connect when served from local server, or when the user has connected before.
 // First-time visitors to the standalone PWA see a connect prompt instead of

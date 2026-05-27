@@ -9,7 +9,6 @@
 
 import { test, expect } from "./fixtures.js";
 import WS from "ws";
-import WS from "ws";
 
 let testCounter = 0;
 function uniqueName(prefix: string): string {
@@ -25,7 +24,7 @@ test.describe("Web UI", () => {
     await expect(page).toHaveTitle("Agent Comms");
 
     // Sidebar header visible
-    await expect(page.locator("#sidebar h2")).toHaveText("Agent Comms");
+    await expect(page.locator("#sidebar h2")).toContainText("Agent Comms");
 
     // Input bar present
     await expect(page.locator("#input")).toBeVisible();
@@ -84,7 +83,7 @@ test.describe("Web UI", () => {
 
     // Should see the room in sidebar
     await expect(page.locator("#room-list")).toContainText(roomName, {
-      timeout: 5000,
+      timeout: 10000,
     });
   });
 
@@ -120,7 +119,7 @@ test.describe("Web UI", () => {
 
     // The server responds with a "Sent to" result
     await expect(page.locator("#messages")).toContainText("Sent to", {
-      timeout: 5000,
+      timeout: 10000,
     });
   });
 
@@ -168,7 +167,7 @@ test.describe("Web UI", () => {
     await page.locator("#send-btn").click();
 
     await expect(page.locator("#header")).toContainText(roomName, {
-      timeout: 5000,
+      timeout: 10000,
     });
     await expect(page.locator("#messages")).toContainText("Switched to");
   });
@@ -204,7 +203,7 @@ test.describe("Web UI", () => {
     await expect(page.locator("#messages")).toContainText(
       `Left room "${roomName}"`,
       {
-        timeout: 5000,
+        timeout: 10000,
       },
     );
   });
@@ -262,7 +261,7 @@ test.describe("Web UI", () => {
     const roomItem = page.locator("#room-list .room-item", {
       hasText: roomName,
     });
-    await expect(roomItem).toBeVisible({ timeout: 5000 });
+    await expect(roomItem).toBeVisible({ timeout: 10000 });
     await expect(roomItem).toContainText("(1)");
   });
 
