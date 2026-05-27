@@ -170,7 +170,7 @@ test.describe("Web UI", () => {
     await expect(page.locator("#header")).toContainText(roomName, {
       timeout: 10000,
     });
-    await expect(page.locator("#messages")).toContainText("Switched to");
+    await expect(page.locator("#messages")).toContainText("Joined");
   });
 
   test("can leave a room via /leave command", async ({ page, port }) => {
