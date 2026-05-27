@@ -1,3 +1,9 @@
+## [1.15.1](https://github.com/ExaDev/agent-comms/compare/v1.15.0...v1.15.1) (2026-05-27)
+
+### Bug Fixes
+
+* use relative paths for GitHub Pages subpath deployment ([3ea54e4](https://github.com/ExaDev/agent-comms/commit/3ea54e428dea8cae61d82d9be30076e980a093c8))
+
 ## [1.15.0](https://github.com/ExaDev/agent-comms/compare/v1.14.0...v1.15.0) (2026-05-27)
 
 ### Features
