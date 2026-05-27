@@ -37,6 +37,31 @@ import { nanoid } from "./nanoid.js";
 const COORDINATOR_HOST = "127.0.0.1";
 const CONNECT_TIMEOUT_MS = 2000;
 
+/**
+ * Wrap tls.createServer with a retry for intermittent OpenSSL ASN.1 races
+ * that occur when parallel test workers create TLS servers simultaneously.
+ * Up to 3 attempts before propagating the error.
+ */
+function retryCreateTlsServer(
+  options: tls.TlsOptions,
+  callback: (socket: tls.TLSSocket) => void,
+): tls.Server {
+  let attempts = 0;
+  const maxAttempts = 3;
+  const tryCreate = (): tls.Server => {
+    attempts++;
+    try {
+      return tls.createServer(options, callback);
+    } catch {
+      if (attempts < maxAttempts) return tryCreate();
+      throw new Error(
+        `tls.createServer failed after ${String(attempts)} attempts`,
+      );
+    }
+  };
+  return tryCreate();
+}
+
 // ---------------------------------------------------------------------------
 // Async socket write helper (not exported)
 // ---------------------------------------------------------------------------
@@ -166,7 +191,7 @@ export class TlsTransport {
 
   async startDataServer(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      this.dataServer = tls.createServer(this.tlsOptions, (socket) => {
+      this.dataServer = retryCreateTlsServer(this.tlsOptions, (socket) => {
         this.handleIncomingDataConnection(socket);
       });
       this.dataServer.listen(0, COORDINATOR_HOST, () => {
@@ -310,7 +335,7 @@ export class TlsTransport {
   async becomeCoordinator(host: string, port: number): Promise<void> {
     const id = nanoid(8);
     await new Promise<void>((resolve, reject) => {
-      const server = tls.createServer(this.tlsOptions, (socket) => {
+      const server = retryCreateTlsServer(this.tlsOptions, (socket) => {
         this.handleCoordinatorServerConnection(socket, "full");
       });
 
@@ -348,7 +373,7 @@ export class TlsTransport {
 
     const id = nanoid(8);
     await new Promise<void>((resolve, reject) => {
-      const server = tls.createServer(this.tlsOptions, (socket) => {
+      const server = retryCreateTlsServer(this.tlsOptions, (socket) => {
         this.handleCoordinatorServerConnection(socket, policy);
       });
 
