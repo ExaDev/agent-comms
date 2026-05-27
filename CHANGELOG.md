@@ -1,3 +1,9 @@
+## [1.16.1](https://github.com/ExaDev/agent-comms/compare/v1.16.0...v1.16.1) (2026-05-27)
+
+### Bug Fixes
+
+* skip REST API calls entirely on standalone PWA ([e76698f](https://github.com/ExaDev/agent-comms/commit/e76698f267b8045aadafa775387f588a9aac509b))
+
 ## [1.16.0](https://github.com/ExaDev/agent-comms/compare/v1.15.1...v1.16.0) (2026-05-27)
 
 ### Features
