@@ -1,3 +1,32 @@
+## [1.19.0](https://github.com/ExaDev/agent-comms/compare/v1.18.0...v1.19.0) (2026-05-27)
+
+### Features
+
+* **bridge:** add E2E tests for PWA features ([ca5f322](https://github.com/ExaDev/agent-comms/commit/ca5f322235942475bca367304208e076a88368d4))
+* **bridge:** add sidebar toggle with collapse/expand ([d8b2d47](https://github.com/ExaDev/agent-comms/commit/d8b2d471b8e3c418b1e9da4f127d95aa32bb9278)), closes [#sidebar-toggle](https://github.com/ExaDev/agent-comms/issues/sidebar-toggle)
+
+### Bug Fixes
+
+* **bridge:** relax SW activation check for headless Chromium ([87e5717](https://github.com/ExaDev/agent-comms/commit/87e57179982161871f4c5acd786df6807465cead))
+* **bridge:** remove type assertions from PWA E2E test ([28d7819](https://github.com/ExaDev/agent-comms/commit/28d7819369c303258e1b95e636deb443e6bf7da8))
+* **bridge:** simplify SW activation test to registration check ([6288265](https://github.com/ExaDev/agent-comms/commit/6288265d272ff9ab4150f75190e1d4df8bae84e8))
+* **bridge:** verify SW activation without requiring controller claim ([9131dd5](https://github.com/ExaDev/agent-comms/commit/9131dd5676a9ae897b0001fccb733e492f329680))
+* **bridge:** wait for SW controller after reload in PWA E2E test ([da99706](https://github.com/ExaDev/agent-comms/commit/da997067dd9e7dac179bdbd1822c063903486a2d))
+* **build:** use direct node invocations in pre-push hook ([900b7c3](https://github.com/ExaDev/agent-comms/commit/900b7c3c059321e6d85014c60fcc080050565451))
+
+### Styles
+
+* **bridge:** apply eslint --fix formatting to PWA E2E test ([9a77db6](https://github.com/ExaDev/agent-comms/commit/9a77db67d4af3882b22ba46ac82ed4a6872d8135))
+
+### Tests
+
+* **bridge:** add E2E tests for deferred mesh connection and connect prompt ([1da3db4](https://github.com/ExaDev/agent-comms/commit/1da3db46b5c921d012b006ea352ea31c9d064cf4))
+* **bridge:** add E2E tests for web UI interactions ([90a437f](https://github.com/ExaDev/agent-comms/commit/90a437f747040972e3e63be76e9f1f43d341be89))
+
+### Chores
+
+* **build:** simplify pre-push hook to avoid submodule deadlocks ([6eddd38](https://github.com/ExaDev/agent-comms/commit/6eddd383ea5a9249b65ca6be335294138705b4b1))
+
 ## [1.18.0](https://github.com/ExaDev/agent-comms/compare/v1.17.1...v1.18.0) (2026-05-27)
 
 ### Features
