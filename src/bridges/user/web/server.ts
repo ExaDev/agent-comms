@@ -29,7 +29,6 @@ import type {
   MeshMessage,
   MeshStatePatch,
 } from "../../../core/wire-protocol.js";
-import { findFreePort } from "./port-discovery.js";
 
 const WEB_HOST = "127.0.0.1";
 
@@ -101,17 +100,21 @@ export interface WebServerHandle {
 // ---------------------------------------------------------------------------
 
 /**
- * Start the web UI server on an OS-assigned port.
- * Returns the server handle, or undefined if port discovery fails.
+ * Start the web UI server on an OS-assigned free port.
+ *
+ * Uses port 0 (OS-assigned) to avoid TOCTOU races when multiple bridges
+ * start web servers concurrently — the OS atomically allocates a unique
+ * free port for each.
+ *
+ * The PWA discovery path (probe from 19877) is only used when the page is
+ * served from a non-local host (e.g. GitHub Pages). When served locally
+ * (the common case for bridge-started servers), the browser connects via
+ * location.host directly — so the port number doesn't need to be predictable.
  */
 export async function tryStartWebServer(
   controller?: ChatController,
-  coordinatorPort?: number,
 ): Promise<WebServerHandle | undefined> {
-  const base = (coordinatorPort ?? 19876) + 1;
-  const port = await findFreePort(base);
-  if (port === undefined) return undefined;
-  return createWebServer(port, controller);
+  return createWebServer(0, controller);
 }
 
 /**
