@@ -65,7 +65,9 @@ function findFreePort(
       probe.listen(port, WEB_HOST, () => {
         const addr = probe.address();
         const actualPort = typeof addr === "object" && addr ? addr.port : port;
-        probe.close(() => { resolve(actualPort); });
+        probe.close(() => {
+          resolve(actualPort);
+        });
       });
     }
 
