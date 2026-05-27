@@ -143,14 +143,10 @@ function sendAction(action: Action): void {
 }
 
 async function refreshState(): Promise<void> {
-  try {
-    const [agents, rooms] = await Promise.all([fetchAgents(), fetchRooms()]);
-    state.setAgents(agents);
-    state.setRooms(rooms);
-  } catch {
-    // REST API unavailable (standalone PWA) — MeshClient provides state
-    return;
-  }
+  if (!isLocalServer) return;
+  const [agents, rooms] = await Promise.all([fetchAgents(), fetchRooms()]);
+  state.setAgents(agents);
+  state.setRooms(rooms);
 }
 
 async function onJoinRoom(roomId: string): Promise<void> {
@@ -160,9 +156,11 @@ async function onJoinRoom(roomId: string): Promise<void> {
 
   sendAction({ action: "join_room", room: roomId });
 
-  // Load history
-  const messages = await fetchRoomMessages(roomId);
-  state.setMessages(messages.map(roomMessageToDisplay));
+  // Load history (skip REST fetch on standalone PWA — no server)
+  if (isLocalServer) {
+    const messages = await fetchRoomMessages(roomId);
+    state.setMessages(messages.map(roomMessageToDisplay));
+  }
   addMessage({ type: "system", text: `Joined ${roomId}` });
 }
 
@@ -282,8 +280,11 @@ const deepLink = parseDeepLink(location.search);
 
 // Only connect the direct server WebSocket when served from localhost.
 // On GitHub Pages / standalone deployments, only MeshClient is used.
-const localPattern = /^(localhost|127\.\d+\.\d+\.\d+)(:\d+)?$/;
-if (localPattern.test(location.host)) {
+/** Whether the page is served from a local mesh server (vs standalone PWA). */
+const isLocalServer = /^(localhost|127\.\d+\.\d+\.\d+)(:\d+)?$/.test(
+  location.host,
+);
+if (isLocalServer) {
   ws.connect();
 }
 
