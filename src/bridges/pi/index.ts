@@ -178,6 +178,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("comms-url", {
     description: "Show the Agent Comms web UI URL",
+    // eslint-disable-next-line @typescript-eslint/require-await -- SDK requires Promise<void> return
     handler: async (_args, ctx) => {
       if (!webHandle) {
         ctx.ui.notify("Web UI is not running.", "error");

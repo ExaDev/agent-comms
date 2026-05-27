@@ -618,14 +618,14 @@ export class FileStore implements CommsStore {
   // Listener management — not supported by FileStore
   // -----------------------------------------------------------------------
 
-  async addListener(): Promise<string> {
+  addListener(): Promise<string> {
     throw new CommsError(
       "FileStore does not support listener management",
       "NOT_SUPPORTED",
     );
   }
 
-  async removeListener(): Promise<void> {
+  removeListener(): Promise<void> {
     throw new CommsError(
       "FileStore does not support listener management",
       "NOT_SUPPORTED",
@@ -644,14 +644,14 @@ export class FileStore implements CommsStore {
   // Federation — not supported by FileStore
   // -----------------------------------------------------------------------
 
-  async fedConnect(): Promise<string> {
+  fedConnect(): Promise<string> {
     throw new CommsError(
       "FileStore does not support federation",
       "NOT_SUPPORTED",
     );
   }
 
-  async fedDisconnect(): Promise<void> {
+  fedDisconnect(): Promise<void> {
     throw new CommsError(
       "FileStore does not support federation",
       "NOT_SUPPORTED",
@@ -664,14 +664,14 @@ export class FileStore implements CommsStore {
   // Connection approval — not supported by FileStore
   // -----------------------------------------------------------------------
 
-  async acceptConnection(): Promise<void> {
+  acceptConnection(): Promise<void> {
     throw new CommsError(
       "FileStore does not support connection approval",
       "NOT_SUPPORTED",
     );
   }
 
-  async rejectConnection(): Promise<void> {
+  rejectConnection(): Promise<void> {
     throw new CommsError(
       "FileStore does not support connection approval",
       "NOT_SUPPORTED",
@@ -688,14 +688,14 @@ export class FileStore implements CommsStore {
     return [];
   }
 
-  async connectToRemote(): Promise<void> {
+  connectToRemote(): Promise<void> {
     throw new CommsError(
       "FileStore does not support remote connections",
       "NOT_SUPPORTED",
     );
   }
 
-  async startDataServerOnly(): Promise<void> {
+  startDataServerOnly(): Promise<void> {
     throw new CommsError(
       "FileStore does not support network operations",
       "NOT_SUPPORTED",

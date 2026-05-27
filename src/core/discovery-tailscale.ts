@@ -58,19 +58,21 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
   readonly name = "tailscale";
 
   /** No-op — the coordinator already listens on the Tailscale IP. */
-  async startAdvertising(opts: AdvertiseOptions): Promise<string> {
-    return `tailscale-${String(opts.port)}`;
+  startAdvertising(opts: AdvertiseOptions): Promise<string> {
+    return Promise.resolve(`tailscale-${String(opts.port)}`);
   }
 
   /** No-op — nothing to stop. */
-  async stopAdvertising(id: string): Promise<void> {
+  stopAdvertising(id: string): Promise<void> {
     void id;
+    return Promise.resolve();
   }
 
   /** Stop discovery — no-op since Tailscale has no persistent state to clean up. */
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
     // Tailscale discovery is stateless — each discover() call probes peers fresh.
     // No persistent connections or timers to tear down.
+    return Promise.resolve();
   }
 
   /**

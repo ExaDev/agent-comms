@@ -435,11 +435,11 @@ export class WebSocketTransport implements MeshTransport {
   // MeshTransport — Listener management (not supported over WebSocket)
   // -----------------------------------------------------------------------
 
-  async addListener(): Promise<string> {
+  addListener(): Promise<string> {
     throw new Error("WebSocketTransport does not support listener management");
   }
 
-  async removeListener(): Promise<void> {
+  removeListener(): Promise<void> {
     throw new Error("WebSocketTransport does not support listener management");
   }
 
@@ -451,7 +451,7 @@ export class WebSocketTransport implements MeshTransport {
   // MeshTransport — Shutdown / unref
   // -----------------------------------------------------------------------
 
-  async shutdown(): Promise<void> {
+  shutdown(): Promise<void> {
     this.shutDown = true;
 
     // Destroy the coordinator client socket
@@ -492,6 +492,8 @@ export class WebSocketTransport implements MeshTransport {
     this.coordinatorServer = undefined;
 
     this._isCoordinator = false;
+
+    return Promise.resolve();
   }
 
   unref(): void {

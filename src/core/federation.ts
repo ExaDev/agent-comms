@@ -171,15 +171,17 @@ export class FederationManager {
   // -----------------------------------------------------------------------
 
   /** Disconnect a specific federation link. */
-  async disconnect(linkId: string): Promise<void> {
+  disconnect(linkId: string): Promise<void> {
     const link = this.links.get(linkId);
-    if (!link) return;
+    if (!link) return Promise.resolve();
 
     this.clearLinkTimers(linkId);
     link.ready = false;
     link.socket.unref();
     link.socket.destroy();
     this.links.delete(linkId);
+
+    return Promise.resolve();
   }
 
   /** List all active federation links. */

@@ -83,7 +83,7 @@ export class CommsTool {
         case "mesh_reject":
           return await this.meshReject(ctx, action);
         case "mesh_pending":
-          return await this.meshPending(ctx);
+          return this.meshPending(ctx);
         case "mesh_discover":
           return await this.meshDiscover(action);
         case "mesh_advertise":
@@ -91,23 +91,23 @@ export class CommsTool {
         case "mesh_unadvertise":
           return await this.meshUnadvertise(action);
         case "mesh_interfaces":
-          return await this.meshInterfaces();
+          return this.meshInterfaces();
         case "mesh_listen":
           return await this.meshListen(ctx, action);
         case "mesh_unlisten":
           return await this.meshUnlisten(ctx, action);
         case "mesh_listeners":
-          return await this.meshListeners(ctx);
+          return this.meshListeners(ctx);
         case "mesh_set_visibility":
           return await this.meshSetVisibility(action);
         case "mesh_get_visibility":
-          return await this.meshGetVisibility(action);
+          return this.meshGetVisibility(action);
         case "mesh_fed_connect":
           return await this.meshFedConnect(ctx, action);
         case "mesh_fed_disconnect":
           return await this.meshFedDisconnect(ctx, action);
         case "mesh_fed_links":
-          return await this.meshFedLinks(ctx);
+          return this.meshFedLinks(ctx);
         default:
           return {
             content: `Unknown action: ${JSON.stringify(action).slice(0, 100)}`,
@@ -391,7 +391,7 @@ export class CommsTool {
     };
   }
 
-  private async meshInterfaces(): Promise<CommsResult> {
+  private meshInterfaces(): CommsResult {
     const interfaces = this.store.getNetworkInterfaces();
     if (interfaces.length === 0)
       return { content: "No network interfaces found.", isError: false };
@@ -464,7 +464,7 @@ export class CommsTool {
     }
   }
 
-  private async meshListeners(_ctx: CommsContext): Promise<CommsResult> {
+  private meshListeners(_ctx: CommsContext): CommsResult {
     const listeners = this.store.listListeners();
     if (listeners.length === 0)
       return { content: "No listeners (not coordinator).", isError: false };
@@ -496,9 +496,9 @@ export class CommsTool {
     };
   }
 
-  private async meshGetVisibility(
+  private meshGetVisibility(
     _action: CommsAction & { action: "mesh_get_visibility" },
-  ): Promise<CommsResult> {
+  ): CommsResult {
     if (!this.store.getVisibility) {
       return {
         content: "Visibility control is not available on this store.",
@@ -588,7 +588,7 @@ export class CommsTool {
     }
   }
 
-  private async meshFedLinks(_ctx: CommsContext): Promise<CommsResult> {
+  private meshFedLinks(_ctx: CommsContext): CommsResult {
     const links = this.store.fedLinks();
     if (links.length === 0)
       return { content: "No federation links.", isError: false };
@@ -621,7 +621,7 @@ export class CommsTool {
     }
   }
 
-  private async meshPending(_ctx: CommsContext): Promise<CommsResult> {
+  private meshPending(_ctx: CommsContext): CommsResult {
     const pending = this.store.listPendingConnections();
     if (pending.length === 0)
       return { content: "No pending connections.", isError: false };

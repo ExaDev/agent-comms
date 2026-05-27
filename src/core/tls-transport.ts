@@ -398,7 +398,7 @@ export class TlsTransport {
     return id;
   }
 
-  async removeListener(id: string): Promise<void> {
+  removeListener(id: string): Promise<void> {
     const listener = this.coordinatorListeners.get(id);
     if (!listener) {
       throw new Error(`Listener ${id} not found`);
@@ -410,6 +410,8 @@ export class TlsTransport {
     listener.server.unref();
     listener.server.close();
     this.coordinatorListeners.delete(id);
+
+    return Promise.resolve();
   }
 
   listListeners(): ListenerInfo[] {
@@ -569,7 +571,7 @@ export class TlsTransport {
   // MeshTransport — Shutdown / unref
   // -----------------------------------------------------------------------
 
-  async shutdown(): Promise<void> {
+  shutdown(): Promise<void> {
     this.shutDown = true;
 
     // Destroy the coordinator client socket
@@ -622,6 +624,8 @@ export class TlsTransport {
     this.defaultListenerId = undefined;
 
     this._isCoordinator = false;
+
+    return Promise.resolve();
   }
 
   unref(): void {

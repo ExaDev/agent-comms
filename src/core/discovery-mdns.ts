@@ -63,7 +63,7 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
     return id;
   }
 
-  async stopAdvertising(id: string): Promise<void> {
+  stopAdvertising(id: string): Promise<void> {
     void id;
 
     if (this.beaconTimer !== undefined) {
@@ -79,10 +79,12 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
       this.socket = undefined;
       this.isListening = false;
     }
+
+    return Promise.resolve();
   }
 
   /** Stop all beacon activity and close the socket. */
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
     if (this.beaconTimer !== undefined) {
       clearInterval(this.beaconTimer);
       this.beaconTimer = undefined;
@@ -95,6 +97,8 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
       this.socket = undefined;
       this.isListening = false;
     }
+
+    return Promise.resolve();
   }
 
   async discover(

@@ -479,7 +479,6 @@ fn()
     const maxWait = 2000; // ms
     const start = Date.now();
     const getHandles: () => unknown[] =
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
       (process as unknown as { _getActiveHandles?: () => unknown[] })
         ._getActiveHandles ?? (() => []);
     const handles: unknown[] = getHandles();

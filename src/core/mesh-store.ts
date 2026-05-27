@@ -396,7 +396,7 @@ export class MeshStore implements CommsStore {
   /** Initiate an outbound connection to a remote coordinator requiring approval.
    *  Fires the connect_request and returns immediately. The connection
    *  completes asynchronously when the coordinator accepts or rejects. */
-  async connectToRemote(host: string, port: number): Promise<void> {
+  connectToRemote(host: string, port: number): Promise<void> {
     const agent = this.agents.get(this.peerId);
     // Fire-and-forget: don't await the full approval handshake.
     // The coordinator will either accept (triggering normal introduction flow)
@@ -415,6 +415,8 @@ export class MeshStore implements CommsStore {
         // Log silently — the calling tool already returned success.
         void err;
       });
+
+    return Promise.resolve();
   }
 
   /** Start only the data server without connecting to a coordinator.

@@ -199,7 +199,7 @@ export class DiscoveryManager {
     }
   }
 
-  private async resumeAllAdvertisements(): Promise<void> {
+  private resumeAllAdvertisements(): Promise<void> {
     // Restart backends first (they may have been stopped in "dark" mode)
     // Note: backends reinitialise their sockets on next startAdvertising/discover call.
     for (const [id] of this.pausedAdvertisements) {
@@ -207,16 +207,16 @@ export class DiscoveryManager {
       // We can't fully resume without original opts — the caller must
       // re-advertise. Mark as not paused so new advertise calls work.
     }
+    return Promise.resolve();
   }
 
-  private async resumeAdvertisementsForBackend(
-    backendName: string,
-  ): Promise<void> {
+  private resumeAdvertisementsForBackend(backendName: string): Promise<void> {
     for (const [id, entry] of this.pausedAdvertisements) {
       if (entry.backendName === backendName) {
         this.pausedAdvertisements.delete(id);
       }
     }
+    return Promise.resolve();
   }
 
   /** Stop a previously started advertisement. */
