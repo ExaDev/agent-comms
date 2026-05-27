@@ -1,3 +1,9 @@
+## [1.19.2](https://github.com/ExaDev/agent-comms/compare/v1.19.1...v1.19.2) (2026-05-27)
+
+### Bug Fixes
+
+* **build:** restore build step in pre-push hook using direct node calls ([48ba490](https://github.com/ExaDev/agent-comms/commit/48ba49018fd1345ea61f70e7b45f78452e695188))
+
 ## [1.19.1](https://github.com/ExaDev/agent-comms/compare/v1.19.0...v1.19.1) (2026-05-27)
 
 ### Bug Fixes
