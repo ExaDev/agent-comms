@@ -128,7 +128,8 @@ export async function createWebServer(
   existingController?: ChatController,
   coordinatorPort?: number,
 ): Promise<WebServerHandle> {
-  const controller = existingController ?? new ChatController("Dashboard", coordinatorPort);
+  const controller =
+    existingController ?? new ChatController("Dashboard", coordinatorPort);
   if (!existingController) {
     await controller.init();
   }

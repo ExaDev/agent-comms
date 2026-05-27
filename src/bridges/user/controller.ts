@@ -37,7 +37,10 @@ export class ChatController extends EventEmitter {
   private ctx!: CommsContext;
   private currentRoom: string | undefined;
 
-  constructor(private userName: string, coordinatorPort?: number) {
+  constructor(
+    private userName: string,
+    coordinatorPort?: number,
+  ) {
     super();
     const identity = generateIdentity();
     this.store = new MeshStore(coordinatorPort);
