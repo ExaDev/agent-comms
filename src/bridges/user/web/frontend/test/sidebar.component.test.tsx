@@ -11,6 +11,16 @@ import { act } from "preact/test-utils";
 import { Window } from "happy-dom";
 import { Sidebar } from "../components/Sidebar.js";
 import type { Agent, Room } from "../types.js";
+import type { RelayStatus } from "../relay-client.js";
+
+const MOCK_RELAY_STATUS: RelayStatus = {
+  connectedA: false,
+  connectedB: false,
+  urlA: undefined,
+  urlB: undefined,
+  forwardedCount: 0,
+  errors: [],
+};
 
 let windowRef: Window | undefined;
 
@@ -53,6 +63,14 @@ const MOCK_AGENT: Agent = {
   subscribedRooms: [],
 };
 
+const SIDEBAR_DEFAULTS = {
+  relayStatus: MOCK_RELAY_STATUS,
+  collapsed: false,
+  onRenameAgent: () => {},
+  onRelayConnect: () => {},
+  onRelayDisconnect: () => {},
+};
+
 describe("Sidebar interactions", () => {
   it("calls onJoinRoom when a room is clicked", () => {
     const { container, cleanup } = setup();
@@ -69,6 +87,7 @@ describe("Sidebar interactions", () => {
           onSelectAgent={() => {}}
           onCreateRoom={() => {}}
           onJoinRoomInput={() => {}}
+          {...SIDEBAR_DEFAULTS}
         />,
         container,
       );
@@ -95,6 +114,7 @@ describe("Sidebar interactions", () => {
           }}
           onCreateRoom={() => {}}
           onJoinRoomInput={() => {}}
+          {...SIDEBAR_DEFAULTS}
         />,
         container,
       );
@@ -118,6 +138,7 @@ describe("Sidebar interactions", () => {
           onSelectAgent={() => {}}
           onCreateRoom={() => {}}
           onJoinRoomInput={() => {}}
+          {...SIDEBAR_DEFAULTS}
         />,
         container,
       );
@@ -152,6 +173,7 @@ describe("Sidebar interactions", () => {
           onSelectAgent={() => {}}
           onCreateRoom={() => {}}
           onJoinRoomInput={() => {}}
+          {...SIDEBAR_DEFAULTS}
         />,
         container,
       );
@@ -191,6 +213,7 @@ describe("Sidebar interactions", () => {
           onSelectAgent={() => {}}
           onCreateRoom={() => {}}
           onJoinRoomInput={() => {}}
+          {...SIDEBAR_DEFAULTS}
         />,
         container,
       );
@@ -230,6 +253,7 @@ describe("Sidebar interactions", () => {
           onSelectAgent={() => {}}
           onCreateRoom={() => {}}
           onJoinRoomInput={() => {}}
+          {...SIDEBAR_DEFAULTS}
         />,
         container,
       );
@@ -255,6 +279,7 @@ describe("Sidebar interactions", () => {
           onSelectAgent={() => {}}
           onCreateRoom={() => {}}
           onJoinRoomInput={() => {}}
+          {...SIDEBAR_DEFAULTS}
         />,
         container,
       );

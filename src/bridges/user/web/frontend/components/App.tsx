@@ -5,6 +5,7 @@
  * from the imperative shell in main.tsx.
  */
 
+import { useState } from "preact/hooks";
 import type { Agent, DisplayMessage, Room } from "../types.js";
 import type { RelayStatus } from "../relay-client.js";
 import { ChatArea } from "./ChatArea.js";
@@ -35,13 +36,26 @@ export interface AppProps {
 }
 
 export function App(props: AppProps) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   return (
     <>
+      <button
+        id="sidebar-toggle"
+        class="sidebar-toggle-btn"
+        title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        onClick={() => {
+          setSidebarCollapsed((v) => !v);
+        }}
+      >
+        {sidebarCollapsed ? "☰" : "✕"}
+      </button>
       <Sidebar
         rooms={props.rooms}
         agents={props.agents}
         currentRoom={props.currentRoom}
         relayStatus={props.relayStatus}
+        collapsed={sidebarCollapsed}
         onJoinRoom={props.onJoinRoom}
         onSelectAgent={props.onSelectAgent}
         onRenameAgent={props.onRenameAgent}

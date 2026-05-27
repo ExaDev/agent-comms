@@ -16,6 +16,7 @@ interface SidebarProps {
   agents: Agent[];
   currentRoom: string | undefined;
   relayStatus: RelayStatus;
+  collapsed: boolean;
   onJoinRoom: (roomId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onRenameAgent: (agentId: string, newName: string) => void;
@@ -34,6 +35,7 @@ export function Sidebar({
   agents,
   currentRoom,
   relayStatus,
+  collapsed,
   onJoinRoom,
   onSelectAgent,
   onRenameAgent,
@@ -51,7 +53,7 @@ export function Sidebar({
   const tree = buildProjectTree(visibleAgents, rooms);
 
   return (
-    <div id="sidebar">
+    <div id="sidebar" class={collapsed ? "sidebar-collapsed" : ""}>
       <h2>
         Agent Comms
         <button
