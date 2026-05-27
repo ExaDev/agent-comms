@@ -1,3 +1,9 @@
+## [1.19.1](https://github.com/ExaDev/agent-comms/compare/v1.19.0...v1.19.1) (2026-05-27)
+
+### Bug Fixes
+
+* **core:** retry tls.createServer on intermittent OpenSSL ASN.1 race ([6af1d19](https://github.com/ExaDev/agent-comms/commit/6af1d19274456c73103e14f4bb108670e6f1546a))
+
 ## [1.19.0](https://github.com/ExaDev/agent-comms/compare/v1.18.0...v1.19.0) (2026-05-27)
 
 ### Features
