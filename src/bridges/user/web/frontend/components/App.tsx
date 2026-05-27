@@ -31,6 +31,7 @@ export interface AppProps {
   onJoinRoomInput: (roomName: string) => void;
   onRelayConnect: (urlA: string, urlB: string) => void;
   onRelayDisconnect: () => void;
+  onConnectToMesh: () => void;
 }
 
 export function App(props: AppProps) {
@@ -53,8 +54,10 @@ export function App(props: AppProps) {
         messages={props.messages}
         currentRoom={props.currentRoom}
         dmTarget={props.dmTarget}
+        connected={props.connected}
         onSendAction={props.onSendAction}
         onLeaveRoom={props.onLeaveRoom}
+        onConnectToMesh={props.onConnectToMesh}
       />
     </>
   );

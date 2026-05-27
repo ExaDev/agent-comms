@@ -507,3 +507,31 @@ body {
   color: var(--red);
   line-height: 1.4;
 }
+
+/* Connect prompt */
+.connect-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  text-align: center;
+  color: var(--dim);
+}
+.connect-prompt p {
+  margin: 0;
+}
+.connect-btn {
+  padding: 8px 20px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.connect-btn:hover {
+  background: var(--accent);
+  color: var(--bg);
+}

@@ -16,6 +16,11 @@ import { MeshClient } from "./mesh-client.js";
 import { RelayClient } from "./relay-client.js";
 import type { Action, DisplayMessage, WsFrame } from "./types.js";
 import type { RelayStatus } from "./relay-client.js";
+
+/** Whether the page is served from a local mesh server (vs standalone PWA). */
+const isLocalServer = /^(localhost|127\.\d+\.\d+\.\d+)(:\d+)?$/.test(
+  location.host,
+);
 import { deliveryEventToMessage, roomMessageToDisplay } from "./messages.js";
 import { parseDeepLink, resolveDeepLink, syncUrl } from "./url-sync.js";
 
@@ -50,7 +55,10 @@ meshClient.subscribe((meshState) => {
   state.setConnected(meshState.connected);
 });
 
-meshClient.connect();
+// Don't auto-connect the MeshClient on first load.
+// The user must explicitly connect to avoid Chrome's "access device"
+// prompt appearing before the user understands the UI.
+// meshClient.connect() is called from onConnectToMesh().
 
 // ---------------------------------------------------------------------------
 // Relay client — P2P mesh relay
@@ -265,6 +273,11 @@ function rerender(): void {
       onRelayDisconnect={() => {
         relayClient.disconnect();
       }}
+      onConnectToMesh={() => {
+        localStorage.setItem("agent-comms-connected", "true");
+        meshClient.connect();
+        if (isLocalServer) ws.connect();
+      }}
     />,
     rootEl,
   );
@@ -278,14 +291,14 @@ state.subscribe(rerender);
 
 const deepLink = parseDeepLink(location.search);
 
-// Only connect the direct server WebSocket when served from localhost.
-// On GitHub Pages / standalone deployments, only MeshClient is used.
-/** Whether the page is served from a local mesh server (vs standalone PWA). */
-const isLocalServer = /^(localhost|127\.\d+\.\d+\.\d+)(:\d+)?$/.test(
-  location.host,
-);
-if (isLocalServer) {
-  ws.connect();
+// Auto-connect when served from local server, or when the user has connected before.
+// First-time visitors to the standalone PWA see a connect prompt instead of
+// Chrome's unexpected "access device" permission prompt.
+const hasConnectedBefore =
+  localStorage.getItem("agent-comms-connected") === "true";
+if (isLocalServer || hasConnectedBefore) {
+  meshClient.connect();
+  if (isLocalServer) ws.connect();
 }
 
 // Initial state fetch, then resolve any deep link from the URL

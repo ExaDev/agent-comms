@@ -12,16 +12,20 @@ interface ChatAreaProps {
   messages: DisplayMessage[];
   currentRoom: string | undefined;
   dmTarget: string | undefined;
+  connected: boolean;
   onSendAction: (text: string) => void;
   onLeaveRoom: () => void;
+  onConnectToMesh: () => void;
 }
 
 export function ChatArea({
   messages,
   currentRoom,
   dmTarget,
+  connected,
   onSendAction,
   onLeaveRoom,
+  onConnectToMesh,
 }: ChatAreaProps) {
   const [inputText, setInputText] = useState("");
 
@@ -61,6 +65,14 @@ export function ChatArea({
         )}
       </div>
       <MessageList messages={messages} />
+      {!connected && messages.length === 0 && (
+        <div class="connect-prompt">
+          <p>Connect to a local mesh to discover agents and rooms.</p>
+          <button class="connect-btn" onClick={onConnectToMesh}>
+            Connect to local mesh
+          </button>
+        </div>
+      )}
       <div id="input-bar">
         <input
           id="input"
