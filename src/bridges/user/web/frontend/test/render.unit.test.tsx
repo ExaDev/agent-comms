@@ -167,8 +167,10 @@ describe("ChatArea component", () => {
           messages={[]}
           currentRoom={undefined}
           dmTarget={undefined}
+          connected={true}
           onSendAction={() => {}}
           onLeaveRoom={() => {}}
+          onConnectToMesh={() => {}}
         />,
         container,
       );
@@ -188,8 +190,10 @@ describe("ChatArea component", () => {
           messages={[]}
           currentRoom="test-room"
           dmTarget={undefined}
+          connected={true}
           onSendAction={() => {}}
           onLeaveRoom={() => {}}
+          onConnectToMesh={() => {}}
         />,
         container,
       );
@@ -210,8 +214,10 @@ describe("ChatArea component", () => {
           messages={[]}
           currentRoom={undefined}
           dmTarget="agent-1"
+          connected={true}
           onSendAction={() => {}}
           onLeaveRoom={() => {}}
+          onConnectToMesh={() => {}}
         />,
         container,
       );
@@ -230,8 +236,10 @@ describe("ChatArea component", () => {
           messages={[]}
           currentRoom={undefined}
           dmTarget={undefined}
+          connected={true}
           onSendAction={() => {}}
           onLeaveRoom={() => {}}
+          onConnectToMesh={() => {}}
         />,
         container,
       );
@@ -250,8 +258,10 @@ describe("ChatArea component", () => {
           messages={[]}
           currentRoom={undefined}
           dmTarget={undefined}
+          connected={true}
           onSendAction={() => {}}
           onLeaveRoom={() => {}}
+          onConnectToMesh={() => {}}
         />,
         container,
       );

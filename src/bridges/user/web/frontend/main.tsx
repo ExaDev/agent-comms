@@ -17,10 +17,10 @@ import { RelayClient } from "./relay-client.js";
 import type { Action, DisplayMessage, WsFrame } from "./types.js";
 import type { RelayStatus } from "./relay-client.js";
 
+import { isLocalHost, hasConnectedBefore } from "./boot-logic.js";
+
 /** Whether the page is served from a local mesh server (vs standalone PWA). */
-const isLocalServer = /^(localhost|127\.\d+\.\d+\.\d+)(:\d+)?$/.test(
-  location.host,
-);
+const isLocalServer = isLocalHost(location.host);
 import { deliveryEventToMessage, roomMessageToDisplay } from "./messages.js";
 import { parseDeepLink, resolveDeepLink, syncUrl } from "./url-sync.js";
 
@@ -295,9 +295,8 @@ const deepLink = parseDeepLink(location.search);
 // Auto-connect when served from local server, or when the user has connected before.
 // First-time visitors to the standalone PWA see a connect prompt instead of
 // Chrome's unexpected "access device" permission prompt.
-const hasConnectedBefore =
-  localStorage.getItem("agent-comms-connected") === "true";
-if (isLocalServer || hasConnectedBefore) {
+const previouslyConnected = hasConnectedBefore(localStorage);
+if (isLocalServer || previouslyConnected) {
   meshClient.connect();
   if (isLocalServer) ws.connect();
 }

@@ -36,10 +36,12 @@ describe("ChatArea interactions", () => {
           messages={[]}
           currentRoom="room-1"
           dmTarget={undefined}
+          connected={true}
           onSendAction={() => {}}
           onLeaveRoom={() => {
             leftCalled = true;
           }}
+          onConnectToMesh={() => {}}
         />,
         container,
       );
@@ -60,8 +62,10 @@ describe("ChatArea interactions", () => {
           messages={[]}
           currentRoom={undefined}
           dmTarget={undefined}
+          connected={true}
           onSendAction={() => {}}
           onLeaveRoom={() => {}}
+          onConnectToMesh={() => {}}
         />,
         container,
       );
@@ -79,8 +83,10 @@ describe("ChatArea interactions", () => {
           messages={[]}
           currentRoom={undefined}
           dmTarget={undefined}
+          connected={true}
           onSendAction={() => {}}
           onLeaveRoom={() => {}}
+          onConnectToMesh={() => {}}
         />,
         container,
       );
@@ -109,12 +115,123 @@ describe("ChatArea interactions", () => {
           messages={messages}
           currentRoom="r1"
           dmTarget={undefined}
+          connected={true}
           onSendAction={() => {}}
           onLeaveRoom={() => {}}
+          onConnectToMesh={() => {}}
         />,
         container,
       );
       assert.strictEqual(container.querySelectorAll(".msg").length, 2);
+    } finally {
+      cleanup();
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // Connect prompt — deferred mesh connection UI
+  // -----------------------------------------------------------------------
+
+  it("renders connect prompt when disconnected with no messages", () => {
+    const { container, cleanup } = setup();
+    try {
+      preactRender(
+        <ChatArea
+          messages={[]}
+          currentRoom={undefined}
+          dmTarget={undefined}
+          connected={false}
+          onSendAction={() => {}}
+          onLeaveRoom={() => {}}
+          onConnectToMesh={() => {}}
+        />,
+        container,
+      );
+      const prompt = container.querySelector(".connect-prompt");
+      assert.ok(prompt, "should render .connect-prompt");
+      const btn = container.querySelector(".connect-btn");
+      assert.ok(btn, "should render .connect-btn");
+      assert.strictEqual(btn?.textContent, "Connect to local mesh");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("does not render connect prompt when connected", () => {
+    const { container, cleanup } = setup();
+    try {
+      preactRender(
+        <ChatArea
+          messages={[]}
+          currentRoom={undefined}
+          dmTarget={undefined}
+          connected={true}
+          onSendAction={() => {}}
+          onLeaveRoom={() => {}}
+          onConnectToMesh={() => {}}
+        />,
+        container,
+      );
+      assert.strictEqual(
+        container.querySelector(".connect-prompt"),
+        null,
+        "should not render .connect-prompt when connected",
+      );
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("does not render connect prompt when disconnected but messages exist", () => {
+    const messages: DisplayMessage[] = [
+      { type: "system", text: "Previous session" },
+    ];
+    const { container, cleanup } = setup();
+    try {
+      preactRender(
+        <ChatArea
+          messages={messages}
+          currentRoom={undefined}
+          dmTarget={undefined}
+          connected={false}
+          onSendAction={() => {}}
+          onLeaveRoom={() => {}}
+          onConnectToMesh={() => {}}
+        />,
+        container,
+      );
+      assert.strictEqual(
+        container.querySelector(".connect-prompt"),
+        null,
+        "should not render .connect-prompt when messages exist",
+      );
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("calls onConnectToMesh when connect button is clicked", () => {
+    const { container, cleanup } = setup();
+    try {
+      let connectCalled = false;
+      preactRender(
+        <ChatArea
+          messages={[]}
+          currentRoom={undefined}
+          dmTarget={undefined}
+          connected={false}
+          onSendAction={() => {}}
+          onLeaveRoom={() => {}}
+          onConnectToMesh={() => {
+            connectCalled = true;
+          }}
+        />,
+        container,
+      );
+      const btn = container.querySelector(".connect-btn")!;
+      assert.ok(btn);
+      btn.click();
+      assert.strictEqual(connectCalled, true);
     } finally {
       cleanup();
     }
