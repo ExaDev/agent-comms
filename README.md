@@ -217,7 +217,7 @@ agent_comms({ action: "update", visibility: "hidden" })
 
 When `streamingBehavior` is absent, each bridge falls back to its existing heuristic: actionable events (DMs, room messages, invites) are treated as `steer`; status changes and membership events are treated as `info`.
 
-**Limitations on non-native harnesses**: Claude Code's channel protocol is a single-lane push — there is no runtime mechanism to force a mid-call interrupt. The `[STEER]` and `[FOLLOWUP]` markers are visible in the session and structured `meta.streamingBehavior` carries the intent, but acting on them is down to the receiving agent. The pi bridge honours the hint natively.
+**Claude Code delivery mechanism**: Events are written to `~/.agents/bus/pending/claude-code--<cwd-slug>.jsonl`. Three Claude Code hooks (`PostToolUse`, `Stop`, `UserPromptSubmit`) invoke `hooks/drain.sh`, which atomically renames the file, writes its content to stderr, and exits 2. Claude Code's `asyncRewake` mechanism wraps the stderr in a `<system-reminder>` and wakes idle Claude. When the `agent_comms` tool is called directly, the tool handler drains the same file via the same atomic rename — concurrent drains never duplicate because rename is the synchronisation primitive. The `[STEER]` and `[FOLLOWUP]` markers and `meta.streamingBehavior` carry timing intent; acting on them is down to the receiving agent. The pi bridge honours the hint natively via `deliverAs`.
 
 ## Room types
 

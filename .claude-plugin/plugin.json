@@ -8,6 +8,7 @@
   "homepage": "https://github.com/ExaDev/agent-comms#readme",
   "repository": "https://github.com/ExaDev/agent-comms",
   "license": "MIT",
+  "hooks": "./hooks/hooks.json",
   "mcpServers": {
     "agent-comms": {
       "command": "npx",

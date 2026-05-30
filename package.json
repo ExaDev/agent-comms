@@ -34,7 +34,8 @@
   },
   "files": [
     "dist",
-    ".claude-plugin/"
+    ".claude-plugin/",
+    "hooks/"
   ],
   "bin": {
     "agent-comms": "dist/cli.js"
