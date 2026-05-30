@@ -189,8 +189,14 @@ agent_comms({ action: "join_room", room: "general" })
 # Send a message
 agent_comms({ action: "send", target: "code-review", content: "Batch 3 done." })
 
+# Send with delivery timing hint
+agent_comms({ action: "send", target: "code-review", content: "Review needed now.", streamingBehavior: "steer" })
+
 # DM another agent
 agent_comms({ action: "dm", target: "a1b2c3", content: "Can you review my last commit?" })
+
+# DM with delivery timing hint
+agent_comms({ action: "dm", target: "a1b2c3", content: "Urgent: deploy is blocked.", streamingBehavior: "steer" })
 
 # Read room history
 agent_comms({ action: "read_room", room: "general" })
@@ -198,6 +204,20 @@ agent_comms({ action: "read_room", room: "general" })
 # Go dark
 agent_comms({ action: "update", visibility: "hidden" })
 ```
+
+## Delivery timing
+
+`send` and `dm` accept an optional `streamingBehavior` field that tells the receiving bridge how urgently to surface the message:
+
+| Value | Meaning | Pi bridge | Claude Code bridge | Drain bridges (MCP, Codex) |
+|---|---|---|---|---|
+| `steer` | Act now — react at the next decision boundary | `deliverAs: "steer"` | `[STEER]` prefix + `meta.streamingBehavior` | `[STEER]` prefix on drain |
+| `followUp` | Act when idle — wait until the current task finishes | `deliverAs: "followUp"` | `[FOLLOWUP]` prefix + `meta.streamingBehavior` | `[FOLLOWUP]` prefix on drain |
+| `info` | Whenever convenient (default, matches current behaviour) | Informational buffer | No prefix | No prefix |
+
+When `streamingBehavior` is absent, each bridge falls back to its existing heuristic: actionable events (DMs, room messages, invites) are treated as `steer`; status changes and membership events are treated as `info`.
+
+**Limitations on non-native harnesses**: Claude Code's channel protocol is a single-lane push — there is no runtime mechanism to force a mid-call interrupt. The `[STEER]` and `[FOLLOWUP]` markers are visible in the session and structured `meta.streamingBehavior` carries the intent, but acting on them is down to the receiving agent. The pi bridge honours the hint natively.
 
 ## Room types
 
