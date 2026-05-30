@@ -30,6 +30,7 @@ import type {
   Room,
   RoomMessage,
   RoomType,
+  StreamingBehavior,
   Visibility,
 } from "./types.js";
 import type { CommsStore } from "./comms-store.js";
@@ -452,6 +453,7 @@ export class FileStore implements CommsStore {
     from: string,
     content: string,
     replyTo?: string,
+    streamingBehavior?: StreamingBehavior,
   ): Promise<RoomMessage> {
     const room = await this.getRoom(roomId);
     if (!room)
@@ -468,6 +470,7 @@ export class FileStore implements CommsStore {
       timestamp: new Date().toISOString(),
       replyTo,
       readBy: [from],
+      ...(streamingBehavior !== undefined && { streamingBehavior }),
     };
 
     await fs.mkdir(this.roomMessagesDir(roomId), { recursive: true });
@@ -513,7 +516,12 @@ export class FileStore implements CommsStore {
   // DMs
   // -------------------------------------------------------------------------
 
-  async sendDm(from: string, to: string, content: string): Promise<DmMessage> {
+  async sendDm(
+    from: string,
+    to: string,
+    content: string,
+    streamingBehavior?: StreamingBehavior,
+  ): Promise<DmMessage> {
     if (to !== from) {
       const recipient = await this.getAgent(to);
       if (!recipient)
@@ -530,6 +538,7 @@ export class FileStore implements CommsStore {
       content,
       timestamp: new Date().toISOString(),
       readBy: [from],
+      ...(streamingBehavior !== undefined && { streamingBehavior }),
     };
 
     const dir = this.dmDir(from, to);

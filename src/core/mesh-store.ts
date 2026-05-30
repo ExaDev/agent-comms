@@ -40,6 +40,7 @@ import type {
   Room,
   RoomMessage,
   RoomType,
+  StreamingBehavior,
   Visibility,
 } from "./types.js";
 import type { ListenerInfo, ListenerPolicy } from "./transport.js";
@@ -1155,6 +1156,7 @@ export class MeshStore implements CommsStore {
     from: string,
     content: string,
     replyTo?: string,
+    streamingBehavior?: StreamingBehavior,
   ): Promise<RoomMessage> {
     const room = this.rooms.get(roomId);
     if (!room)
@@ -1171,6 +1173,7 @@ export class MeshStore implements CommsStore {
       timestamp: new Date().toISOString(),
       replyTo,
       readBy: [from],
+      ...(streamingBehavior !== undefined && { streamingBehavior }),
     };
 
     const arr = this.messages.get(roomId) ?? [];
@@ -1209,7 +1212,12 @@ export class MeshStore implements CommsStore {
   // CommsStore — DMs
   // -----------------------------------------------------------------------
 
-  async sendDm(from: string, to: string, content: string): Promise<DmMessage> {
+  async sendDm(
+    from: string,
+    to: string,
+    content: string,
+    streamingBehavior?: StreamingBehavior,
+  ): Promise<DmMessage> {
     if (to !== from) {
       const recipient = this.agents.get(to);
       if (!recipient)
@@ -1226,6 +1234,7 @@ export class MeshStore implements CommsStore {
       content,
       timestamp: new Date().toISOString(),
       readBy: [from],
+      ...(streamingBehavior !== undefined && { streamingBehavior }),
     };
 
     const key = dmKey(from, to);

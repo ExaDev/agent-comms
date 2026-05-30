@@ -244,6 +244,7 @@ export class CommsTool {
       ctx.agentId,
       action.content,
       action.replyTo,
+      action.streamingBehavior,
     );
     return {
       content: `Sent to ${action.target}: ${msg.id}`,
@@ -256,7 +257,12 @@ export class CommsTool {
     action: CommsAction & { action: "dm" },
   ): Promise<CommsResult> {
     const targetId = action.target;
-    const msg = await this.store.sendDm(ctx.agentId, targetId, action.content);
+    const msg = await this.store.sendDm(
+      ctx.agentId,
+      targetId,
+      action.content,
+      action.streamingBehavior,
+    );
     return {
       content: `DM sent to ${action.target}: ${msg.id}`,
       isError: false,

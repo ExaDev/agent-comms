@@ -16,6 +16,7 @@ import type {
   Room,
   RoomMessage,
   RoomType,
+  StreamingBehavior,
   Visibility,
 } from "./types.js";
 import type { ListenerInfo } from "./transport.js";
@@ -78,11 +79,17 @@ export interface CommsStore {
     from: string,
     content: string,
     replyTo?: string,
+    streamingBehavior?: StreamingBehavior,
   ): Promise<RoomMessage>;
   readRoomMessages(roomId: string, since?: string): Promise<RoomMessage[]>;
 
   // -- DMs --
-  sendDm(from: string, to: string, content: string): Promise<DmMessage>;
+  sendDm(
+    from: string,
+    to: string,
+    content: string,
+    streamingBehavior?: StreamingBehavior,
+  ): Promise<DmMessage>;
 
   // -- Delivery --
   deliver(agentId: string, event: DeliveryEvent): Promise<void>;
