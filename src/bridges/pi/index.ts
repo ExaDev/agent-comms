@@ -24,6 +24,7 @@ import {
   buildAction,
   ensureProjectRoom,
   ensureRegistered,
+  extractStreamingBehavior,
   formatDeliveryEvent,
   isActionableEvent,
 } from "../../core/index.js";
@@ -86,19 +87,27 @@ export default function (pi: ExtensionAPI) {
     }
 
     const line = formatDeliveryEvent(event);
+    const hint = extractStreamingBehavior(event);
 
-    if (isActionableEvent(event)) {
-      // Actionable events wake the model via sendMessage (not sendUserMessage)
+    // Pick deliverAs from sender hint; fall back to event-type heuristic
+    const deliverAs: "steer" | "followUp" | undefined =
+      hint === "followUp"
+        ? "followUp"
+        : hint === "steer" || (!hint && isActionableEvent(event))
+          ? "steer"
+          : undefined;
+
+    if (deliverAs !== undefined) {
       pi.sendMessage(
         {
           content: `📬 ${line}`,
           customType: "comms-delivery",
           display: false,
         },
-        { triggerTurn: true, deliverAs: "steer" },
+        { triggerTurn: true, deliverAs },
       );
     } else {
-      // Informational events buffer for next tool call
+      // info or non-actionable with no hint — buffer for next tool call
       informationalBuffer.push(line);
     }
 
@@ -277,6 +286,12 @@ export default function (pi: ExtensionAPI) {
       reason: Type.Optional(
         Type.String({
           description: "Reason for declining an invite (for decline_invite)",
+        }),
+      ),
+      streamingBehavior: Type.Optional(
+        StringEnum(["steer", "followUp", "info"], {
+          description:
+            "Delivery timing hint: steer (act now), followUp (act when idle), info (whenever convenient)",
         }),
       ),
     }),
