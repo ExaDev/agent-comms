@@ -1,3 +1,9 @@
+## [1.21.0](https://github.com/ExaDev/agent-comms/compare/v1.20.0...v1.21.0) (2026-05-30)
+
+### Features
+
+* **bridge:** reserve channel notifications for actionable events in Claude Code bridge ([ffe123d](https://github.com/ExaDev/agent-comms/commit/ffe123dd6ac0c870790d756c55aec6b9490e405e))
+
 ## [1.20.0](https://github.com/ExaDev/agent-comms/compare/v1.19.5...v1.20.0) (2026-05-30)
 
 ### Features
