@@ -1,3 +1,9 @@
+## [1.22.0](https://github.com/ExaDev/agent-comms/compare/v1.21.2...v1.22.0) (2026-05-30)
+
+### Features
+
+* **bridge:** add asyncRewake hooks for idle-Claude delivery ([dacdeba](https://github.com/ExaDev/agent-comms/commit/dacdebae342cc98f03b2e2de0c5d2ca7bbf68b1f))
+
 ## [1.21.2](https://github.com/ExaDev/agent-comms/compare/v1.21.1...v1.21.2) (2026-05-30)
 
 ### Bug Fixes
