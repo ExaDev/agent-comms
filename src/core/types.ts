@@ -59,6 +59,11 @@ export const RoomType = defineSchema(
 );
 export type RoomType = z.infer<typeof RoomType>;
 
+export const StreamingBehavior = defineSchema(
+  z.union([z.literal("steer"), z.literal("followUp"), z.literal("info")]),
+);
+export type StreamingBehavior = z.infer<typeof StreamingBehavior>;
+
 // ---------------------------------------------------------------------------
 // AgentIdentity
 // ---------------------------------------------------------------------------
@@ -111,6 +116,7 @@ export const RoomMessageSchema = defineSchema(
     timestamp: z.string(),
     replyTo: z.string().optional(),
     readBy: z.array(z.string()),
+    streamingBehavior: StreamingBehavior.optional(),
   }),
 );
 export type RoomMessage = z.infer<typeof RoomMessageSchema>;
@@ -123,6 +129,7 @@ export const DmMessageSchema = defineSchema(
     content: z.string(),
     timestamp: z.string(),
     readBy: z.array(z.string()),
+    streamingBehavior: StreamingBehavior.optional(),
   }),
 );
 export type DmMessage = z.infer<typeof DmMessageSchema>;
@@ -267,11 +274,13 @@ export const CommsActionSchema = defineSchema(
       target: z.string(),
       content: z.string(),
       replyTo: z.string().optional(),
+      streamingBehavior: StreamingBehavior.optional(),
     }),
     z.object({
       action: z.literal("dm"),
       target: z.string(),
       content: z.string(),
+      streamingBehavior: StreamingBehavior.optional(),
     }),
     z.object({ action: z.literal("list_agents") }),
     z.object({
