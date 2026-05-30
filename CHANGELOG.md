@@ -1,3 +1,9 @@
+## [1.21.2](https://github.com/ExaDev/agent-comms/compare/v1.21.1...v1.21.2) (2026-05-30)
+
+### Bug Fixes
+
+* **bridge:** buffer all delivery events for idle-Claude fallback ([cb340fe](https://github.com/ExaDev/agent-comms/commit/cb340fe61a2bbc3054231f57aac51bfc840eeb51))
+
 ## [1.21.1](https://github.com/ExaDev/agent-comms/compare/v1.21.0...v1.21.1) (2026-05-30)
 
 ### Chores
