@@ -17,6 +17,7 @@ import {
   CommsTool,
   buildAction,
   ensureRegistered,
+  extractStreamingBehavior,
   formatDeliveryEvent,
   MCP_TOOL_PARAMS,
 } from "../../core/index.js";
@@ -49,9 +50,13 @@ export async function run(): Promise<void> {
   // Incoming messages arrive via TCP mesh — push as channel notifications
   store.onDelivery = async (_targetId: string, event) => {
     const line = formatDeliveryEvent(event);
+    const hint = extractStreamingBehavior(event);
     await mcp.server.notification({
       method: "notifications/claude/channel",
-      params: { content: line, meta: {} },
+      params: {
+        content: line,
+        meta: { streamingBehavior: hint ?? "info" },
+      },
     });
   };
 
@@ -67,6 +72,7 @@ export async function run(): Promise<void> {
         "register, update, whoami, create_room, list_rooms, join_room, leave_room,",
         "send, dm, list_agents, read_room, invite, decline_invite, kick, destroy_room.",
         'Incoming messages appear as <channel source="agent-comms"> events.',
+        "Use streamingBehavior on send/dm: steer (act now), followUp (act when idle), info (whenever, default).",
       ].join(" "),
       inputSchema: MCP_TOOL_PARAMS,
     },
