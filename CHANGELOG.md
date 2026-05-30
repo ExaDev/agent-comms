@@ -1,3 +1,16 @@
+## [1.23.0](https://github.com/ExaDev/agent-comms/compare/v1.22.0...v1.23.0) (2026-05-30)
+
+### Features
+
+* **cli:** add /agent-comms:agents slash command ([16ea3cc](https://github.com/ExaDev/agent-comms/commit/16ea3ccd1d3bc9fed5f19fa563a011779dbc2c5c))
+* **cli:** add slash commands for agent-comms actions ([7522d9e](https://github.com/ExaDev/agent-comms/commit/7522d9eb4b463bfb299db0c544f6c0d588545d6a))
+
+### Bug Fixes
+
+* **bridge:** key pending file by Claude Code PID, not just cwd ([8ef9149](https://github.com/ExaDev/agent-comms/commit/8ef914923ec689e528e103ca6920bbb3d78ee1d9))
+* **bridge:** use synchronous hooks for Stop and PostToolUse drain ([e5714fe](https://github.com/ExaDev/agent-comms/commit/e5714feba73c11d8ad03d019f5a8834eee86970d))
+* **release:** sync marketplace.json version on release ([8d0e288](https://github.com/ExaDev/agent-comms/commit/8d0e28875dd2d721c396412152e6fe9c45e4d2f1))
+
 ## [1.22.0](https://github.com/ExaDev/agent-comms/compare/v1.21.2...v1.22.0) (2026-05-30)
 
 ### Features
