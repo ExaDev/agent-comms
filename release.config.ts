@@ -58,6 +58,7 @@ const config: GlobalConfig = {
           "package.json",
           "pnpm-lock.yaml",
           ".claude-plugin/plugin.json",
+          ".claude-plugin/marketplace.json",
           "server.json",
           "CHANGELOG.md",
           "README.md",

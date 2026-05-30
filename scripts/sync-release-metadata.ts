@@ -33,6 +33,7 @@ function stringifyJson(value: JsonObject): string {
 const root = process.cwd();
 const packagePath = path.join(root, "package.json");
 const pluginPath = path.join(root, ".claude-plugin/plugin.json");
+const marketplacePath = path.join(root, ".claude-plugin/marketplace.json");
 const serverPath = path.join(root, "server.json");
 const readmePath = path.join(root, "README.md");
 
@@ -43,6 +44,10 @@ const packageObject = parseJsonObject(
 const pluginObject = parseJsonObject(
   await readFile(pluginPath, "utf8"),
   ".claude-plugin/plugin.json",
+);
+const marketplaceObject = parseJsonObject(
+  await readFile(marketplacePath, "utf8"),
+  ".claude-plugin/marketplace.json",
 );
 const serverObject = parseJsonObject(
   await readFile(serverPath, "utf8"),
@@ -63,6 +68,28 @@ const serverVersion = requireString(
 const pluginVersion = requireString(
   pluginObject.version,
   ".claude-plugin/plugin.json version",
+);
+
+// marketplace.json contains a `plugins` array — find the entry whose name
+// matches package.json `name` and bump its version. Throw if the plugin
+// isn't declared at all, since that would silently leave the manifest stale.
+const marketplacePluginsValue = marketplaceObject.plugins;
+if (!isUnknownArray(marketplacePluginsValue)) {
+  throw new Error(
+    ".claude-plugin/marketplace.json must declare a plugins array",
+  );
+}
+const marketplacePluginEntry = marketplacePluginsValue.find(
+  (entry): entry is JsonObject => isRecord(entry) && entry.name === packageName,
+);
+if (!marketplacePluginEntry) {
+  throw new Error(
+    `.claude-plugin/marketplace.json has no plugin entry named "${packageName}"`,
+  );
+}
+const marketplacePluginVersion = requireString(
+  marketplacePluginEntry.version,
+  `.claude-plugin/marketplace.json plugins[name=${packageName}].version`,
 );
 
 if (serverName !== mcpName) {
@@ -103,6 +130,7 @@ if (identifier !== packageName) {
 serverObject.version = packageVersion;
 packageEntryValue.version = packageVersion;
 pluginObject.version = packageVersion;
+marketplacePluginEntry.version = packageVersion;
 
 const readmeContent = await readFile(readmePath, "utf8");
 const updatedReadme = readmeContent
@@ -114,6 +142,7 @@ const updatedReadme = readmeContent
 
 const needsServerWrite = serverVersion !== packageVersion;
 const needsPluginWrite = pluginVersion !== packageVersion;
+const needsMarketplaceWrite = marketplacePluginVersion !== packageVersion;
 const needsReadmeWrite = readmeContent !== updatedReadme;
 
 if (needsServerWrite) {
@@ -121,6 +150,9 @@ if (needsServerWrite) {
 }
 if (needsPluginWrite) {
   await writeFile(pluginPath, stringifyJson(pluginObject));
+}
+if (needsMarketplaceWrite) {
+  await writeFile(marketplacePath, stringifyJson(marketplaceObject));
 }
 if (needsReadmeWrite) {
   await writeFile(readmePath, updatedReadme);
