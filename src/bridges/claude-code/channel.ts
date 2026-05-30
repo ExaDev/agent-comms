@@ -19,6 +19,7 @@ import {
   ensureRegistered,
   extractStreamingBehavior,
   formatDeliveryEvent,
+  isActionableEvent,
   MCP_TOOL_PARAMS,
 } from "../../core/index.js";
 import { TlsTransport } from "../../core/tls-transport.js";
@@ -37,6 +38,7 @@ export async function run(): Promise<void> {
   store.setTransport(new TlsTransport(store.events, identity));
   const tool = new CommsTool(store, store.discovery);
   let agentId: string | undefined;
+  const informationalBuffer: string[] = [];
 
   const mcp = new McpServer(
     { name: "agent-comms", version: "0.2.0" },
@@ -47,17 +49,25 @@ export async function run(): Promise<void> {
     },
   );
 
-  // Incoming messages arrive via TCP mesh — push as channel notifications
+  // Actionable events with a non-info hint push immediately as channel
+  // notifications. Everything else (informational system events, or messages
+  // the sender flagged as info) buffers and drains on the next tool call.
   store.onDelivery = async (_targetId: string, event) => {
     const line = formatDeliveryEvent(event);
     const hint = extractStreamingBehavior(event);
-    await mcp.server.notification({
-      method: "notifications/claude/channel",
-      params: {
-        content: line,
-        meta: { streamingBehavior: hint ?? "info" },
-      },
-    });
+    const shouldPush = isActionableEvent(event) && hint !== "info";
+
+    if (shouldPush) {
+      await mcp.server.notification({
+        method: "notifications/claude/channel",
+        params: {
+          content: line,
+          meta: { streamingBehavior: hint ?? "steer" },
+        },
+      });
+    } else {
+      informationalBuffer.push(line);
+    }
   };
 
   // -----------------------------------------------------------------------
@@ -104,8 +114,14 @@ export async function run(): Promise<void> {
         action,
       );
 
+      const pending = informationalBuffer.splice(0);
+      const prefix =
+        pending.length > 0
+          ? `[comms] Pending:\n${pending.map((l) => `  📬 ${l}`).join("\n")}\n\n`
+          : "";
+
       return {
-        content: [{ type: "text", text: result.content }],
+        content: [{ type: "text", text: `${prefix}${result.content}` }],
         isError: result.isError,
       };
     },
