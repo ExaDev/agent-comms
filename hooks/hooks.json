@@ -6,7 +6,6 @@
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
-          "asyncRewake": true,
           "timeout": 5
         }
       ]
@@ -19,7 +18,6 @@
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
-          "asyncRewake": true,
           "timeout": 5
         }
       ]
@@ -32,6 +30,7 @@
         {
           "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
+          "asyncRewake": true,
           "timeout": 5
         }
       ]
