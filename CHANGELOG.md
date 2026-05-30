@@ -1,3 +1,9 @@
+## [1.21.1](https://github.com/ExaDev/agent-comms/compare/v1.21.0...v1.21.1) (2026-05-30)
+
+### Chores
+
+* **deps:** upgrade direct deps and add overrides to clear audit warnings ([1712222](https://github.com/ExaDev/agent-comms/commit/1712222eb7ee973f32576ccac6c336d8c41327ac))
+
 ## [1.21.0](https://github.com/ExaDev/agent-comms/compare/v1.20.0...v1.21.0) (2026-05-30)
 
 ### Features
