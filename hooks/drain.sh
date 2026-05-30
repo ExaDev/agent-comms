@@ -11,7 +11,38 @@
 set -euo pipefail
 
 SLUG="${PWD//[^a-zA-Z0-9]/_}"
-PENDING="$HOME/.agents/bus/pending/claude-code--${SLUG}.jsonl"
+
+# Walk up the process tree to find the Claude Code PID. Two Claude Code
+# instances in the same cwd would otherwise share one pending file and consume
+# each other's messages. Each Claude Code session has a unique PID; the bridge
+# discovers and uses the same value, so each session gets its own file.
+find_claude_pid() {
+  local pid=$PPID
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    [ "$pid" -le 1 ] && return 1
+    local info ppid comm
+    info=$(ps -p "$pid" -o ppid=,comm= 2>/dev/null) || return 1
+    info=${info#"${info%%[![:space:]]*}"}
+    [ -z "$info" ] && return 1
+    ppid=${info%%[[:space:]]*}
+    comm=${info#*[[:space:]]}
+    comm=${comm#"${comm%%[![:space:]]*}"}
+    case "$comm" in
+      */claude|claude) echo "$pid"; return 0 ;;
+    esac
+    pid=$ppid
+  done
+  return 1
+}
+
+CLAUDE_PID=$(find_claude_pid 2>/dev/null || true)
+if [ -n "$CLAUDE_PID" ]; then
+  PENDING="$HOME/.agents/bus/pending/claude-code--${SLUG}--${CLAUDE_PID}.jsonl"
+else
+  echo "agent-comms drain.sh: could not locate Claude Code PID, falling back to shared cwd file" >&2
+  PENDING="$HOME/.agents/bus/pending/claude-code--${SLUG}.jsonl"
+fi
+
 DRAINING="${PENDING}.draining-$$-$(date +%s%N 2>/dev/null || date +%s)"
 
 # Atomic drain — if rename fails (file absent), nothing to surface.

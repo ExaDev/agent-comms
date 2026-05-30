@@ -12,6 +12,7 @@
  * and wake idle Claude via exit code 2.
  */
 
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -42,15 +43,90 @@ function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
   return typeof err === "object" && err !== null && "code" in err;
 }
 
-function pendingFilePath(cwd: string): string {
-  const slug = cwd.replace(/[^a-zA-Z0-9]/g, "_");
-  return path.join(
-    os.homedir(),
-    ".agents",
-    "bus",
-    "pending",
-    `claude-code--${slug}.jsonl`,
-  );
+function cwdSlug(cwd: string): string {
+  return cwd.replace(/[^a-zA-Z0-9]/g, "_");
+}
+
+function pendingDir(): string {
+  return path.join(os.homedir(), ".agents", "bus", "pending");
+}
+
+/**
+ * Walk up the process tree to find the Claude Code CLI PID.
+ *
+ * The bridge runs ~3 hops below claude (tsx wrapper → tsx loader → bridge),
+ * so process.ppid alone isn't enough. We walk until we find an ancestor
+ * whose command basename is "claude".
+ *
+ * Two Claude Code instances in the same cwd would otherwise share one
+ * pending file and consume each other's messages. Keying by Claude PID
+ * isolates them. Returns undefined if no claude ancestor can be located
+ * within 10 hops — caller falls back to cwd-only path.
+ */
+function findClaudeCodePid(): number | undefined {
+  let pid = process.ppid;
+  for (let i = 0; i < 10 && pid > 1; i++) {
+    let out: string;
+    try {
+      out = execFileSync("ps", ["-o", "ppid=,comm=", "-p", String(pid)], {
+        encoding: "utf-8",
+      });
+    } catch {
+      return undefined;
+    }
+    const trimmed = out.trim();
+    const match = /^(\d+)\s+(.+)$/.exec(trimmed);
+    if (!match) return undefined;
+    const parentPid = Number.parseInt(match[1] ?? "", 10);
+    const comm = (match[2] ?? "").trim();
+    if (/(^|\/)claude$/.test(comm)) return pid;
+    if (!Number.isFinite(parentPid)) return undefined;
+    pid = parentPid;
+  }
+  return undefined;
+}
+
+function pendingFilePath(cwd: string, claudePid: number | undefined): string {
+  const slug = cwdSlug(cwd);
+  const name =
+    claudePid !== undefined
+      ? `claude-code--${slug}--${String(claudePid)}.jsonl`
+      : `claude-code--${slug}.jsonl`;
+  return path.join(pendingDir(), name);
+}
+
+/**
+ * Drop pending files in this cwd whose owning Claude Code PID is no longer
+ * alive. Prevents accumulation when sessions exit without graceful shutdown.
+ */
+function cleanupStalePendingFiles(cwd: string): void {
+  const dir = pendingDir();
+  const slug = cwdSlug(cwd);
+  const prefix = `claude-code--${slug}--`;
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch (err) {
+    if (isErrnoException(err) && err.code === "ENOENT") return;
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.startsWith(prefix) || !entry.endsWith(".jsonl")) continue;
+    const pidStr = entry.slice(prefix.length, -".jsonl".length);
+    const pid = Number.parseInt(pidStr, 10);
+    if (!Number.isFinite(pid) || pid <= 1) continue;
+    try {
+      process.kill(pid, 0);
+    } catch (err) {
+      if (isErrnoException(err) && err.code === "ESRCH") {
+        try {
+          fs.unlinkSync(path.join(dir, entry));
+        } catch {
+          // best-effort cleanup, ignore failures
+        }
+      }
+    }
+  }
 }
 
 function appendPending(filePath: string, line: string): void {
@@ -82,7 +158,14 @@ export async function run(): Promise<void> {
   const tool = new CommsTool(store, store.discovery);
   let agentId: string | undefined;
 
-  const pendingFile = pendingFilePath(process.cwd());
+  const claudeCodePid = findClaudeCodePid();
+  if (claudeCodePid === undefined) {
+    process.stderr.write(
+      "agent-comms bridge: could not locate Claude Code PID; using shared cwd pending file (concurrent sessions in the same cwd will share messages)\n",
+    );
+  }
+  cleanupStalePendingFiles(process.cwd());
+  const pendingFile = pendingFilePath(process.cwd(), claudeCodePid);
 
   const mcp = new McpServer(
     { name: "agent-comms", version: "0.2.0" },
