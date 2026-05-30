@@ -12,7 +12,12 @@
 
 import * as path from "node:path";
 import type { CommsStore } from "./comms-store.js";
-import type { CommsAction, DeliveryEvent, Visibility } from "./types.js";
+import type {
+  CommsAction,
+  DeliveryEvent,
+  StreamingBehavior,
+  Visibility,
+} from "./types.js";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -80,6 +85,7 @@ export const MCP_TOOL_PARAMS = z.object({
   id: z.string().optional(),
   meshVisibility: MeshVisibilityEnum.optional(),
   connectionId: z.string().optional(),
+  streamingBehavior: z.enum(["steer", "followUp", "info"]).optional(),
 });
 
 export type ToolParams = z.infer<typeof MCP_TOOL_PARAMS>;
@@ -156,6 +162,8 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
           content: p.content,
         };
         if (p.replyTo !== undefined) send.replyTo = p.replyTo;
+        if (p.streamingBehavior !== undefined)
+          send.streamingBehavior = p.streamingBehavior;
         return send;
       }
       if (p.room !== undefined) {
@@ -165,6 +173,8 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
           content: p.content,
         };
         if (p.replyTo !== undefined) send.replyTo = p.replyTo;
+        if (p.streamingBehavior !== undefined)
+          send.streamingBehavior = p.streamingBehavior;
         return send;
       }
       throw new BuildActionError("send", "target");
@@ -172,10 +182,24 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
     case "dm": {
       if (p.content === undefined) throw new BuildActionError("dm", "content");
       if (p.target !== undefined) {
-        return { action: "dm", target: p.target, content: p.content };
+        const dm: CommsAction & { action: "dm" } = {
+          action: "dm",
+          target: p.target,
+          content: p.content,
+        };
+        if (p.streamingBehavior !== undefined)
+          dm.streamingBehavior = p.streamingBehavior;
+        return dm;
       }
       if (p.agent !== undefined) {
-        return { action: "dm", target: p.agent, content: p.content };
+        const dm: CommsAction & { action: "dm" } = {
+          action: "dm",
+          target: p.agent,
+          content: p.content,
+        };
+        if (p.streamingBehavior !== undefined)
+          dm.streamingBehavior = p.streamingBehavior;
+        return dm;
       }
       throw new BuildActionError("dm", "target");
     }
@@ -315,15 +339,31 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
 }
 
 // ---------------------------------------------------------------------------
+// extractStreamingBehavior — pull hint from message envelope if present
+// ---------------------------------------------------------------------------
+
+export function extractStreamingBehavior(
+  event: DeliveryEvent,
+): StreamingBehavior | undefined {
+  if (event.type === "dm" || event.type === "room_message") {
+    return event.message.streamingBehavior;
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
 // formatDeliveryEvent — DeliveryEvent → human-readable string
 // ---------------------------------------------------------------------------
 
 export function formatDeliveryEvent(event: DeliveryEvent): string {
+  const hint = extractStreamingBehavior(event);
+  const pfx =
+    hint === "steer" ? "[STEER] " : hint === "followUp" ? "[FOLLOWUP] " : "";
   switch (event.type) {
     case "room_message":
-      return `[${event.message.room}] ${event.message.from}: ${event.message.content}`;
+      return `${pfx}[${event.message.room}] ${event.message.from}: ${event.message.content}`;
     case "dm":
-      return `DM from ${event.message.from}: ${event.message.content}`;
+      return `${pfx}DM from ${event.message.from}: ${event.message.content}`;
     case "room_invite": {
       const desc = event.roomDescription ? ` — ${event.roomDescription}` : "";
       const who = event.fromCwd

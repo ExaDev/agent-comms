@@ -13,6 +13,7 @@ export type { CommsContext, CommsResult } from "./tool.js";
 export {
   buildAction,
   formatDeliveryEvent,
+  extractStreamingBehavior,
   isActionableEvent,
   ensureRegistered,
   ensureProjectRoom,
