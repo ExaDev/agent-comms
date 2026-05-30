@@ -1,3 +1,17 @@
+## [1.20.0](https://github.com/ExaDev/agent-comms/compare/v1.19.5...v1.20.0) (2026-05-30)
+
+### Features
+
+* **bridge:** populate meta.streamingBehavior on Claude Code channel notifications ([8f23cc3](https://github.com/ExaDev/agent-comms/commit/8f23cc3a2a76c7032410d41c8c271bc3bfcaa8be))
+* **bridge:** use streamingBehavior hint to select deliverAs in pi bridge ([64be6af](https://github.com/ExaDev/agent-comms/commit/64be6af7c1dced2b4fb2af95111352bb37872947))
+* **core:** add extractStreamingBehavior and delivery hint prefixes ([58dbc5b](https://github.com/ExaDev/agent-comms/commit/58dbc5b850a55fcfac310dc256f10d8934c30660))
+* **core:** add StreamingBehavior type and extend message/action schemas ([0c288a4](https://github.com/ExaDev/agent-comms/commit/0c288a41a43db07b471275422ff5c663a64b8780))
+* **core:** thread streamingBehavior through store and tool ([2481743](https://github.com/ExaDev/agent-comms/commit/248174327ec072f64efa52baf277c9f7543cc4e1))
+
+### Documentation
+
+* document streamingBehavior delivery timing field and per-bridge behaviour ([9551a2e](https://github.com/ExaDev/agent-comms/commit/9551a2e6252663f748c5f706b40d0611213165b4))
+
 ## [1.19.5](https://github.com/ExaDev/agent-comms/compare/v1.19.4...v1.19.5) (2026-05-27)
 
 ### Bug Fixes
