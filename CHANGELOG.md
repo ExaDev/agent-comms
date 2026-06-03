@@ -1,3 +1,9 @@
+## [1.23.1](https://github.com/ExaDev/agent-comms/compare/v1.23.0...v1.23.1) (2026-06-03)
+
+### Refactoring
+
+* **bridge:** use local tsx path instead of npx for claude-code bridge ([1629c8e](https://github.com/ExaDev/agent-comms/commit/1629c8e0d80c4a787ee48a173ea207d3f6ee220c))
+
 ## [1.23.0](https://github.com/ExaDev/agent-comms/compare/v1.22.0...v1.23.0) (2026-05-30)
 
 ### Features
