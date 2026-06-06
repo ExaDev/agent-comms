@@ -1,6 +1,6 @@
 {
   "name": "agent-comms",
-  "version": "1.23.1",
+  "version": "1.24.0",
   "description": "Cross-harness communication mesh for LLM agents — rooms, DMs, presence, and real-time push delivery over TCP",
   "type": "module",
   "packageManager": "pnpm@10.33.0",

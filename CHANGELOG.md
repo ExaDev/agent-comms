@@ -1,3 +1,15 @@
+## [1.24.0](https://github.com/ExaDev/agent-comms/compare/v1.23.1...v1.24.0) (2026-06-06)
+
+### Features
+
+* **bridge:** clean up mesh state on Claude Code exit ([3088e00](https://github.com/ExaDev/agent-comms/commit/3088e00f3fb29f87a114601d9647d149bd8f7899))
+* **core:** add hasCoordinatorConnection and onError to transport ([1133260](https://github.com/ExaDev/agent-comms/commit/1133260a5199195be82e7773c328bb2c6369925f))
+
+### Bug Fixes
+
+* **bridge:** adapt pi bridge to graceful mesh degradation ([5ba4e43](https://github.com/ExaDev/agent-comms/commit/5ba4e43451447d0c86cbf430aae2081ab5d81671))
+* **mesh-store:** degrade gracefully when coordinator port is held by orphan ([d9303ff](https://github.com/ExaDev/agent-comms/commit/d9303ffe0ad30bce45ab040b6152af76a813604f))
+
 ## [1.23.1](https://github.com/ExaDev/agent-comms/compare/v1.23.0...v1.23.1) (2026-06-03)
 
 ### Refactoring
