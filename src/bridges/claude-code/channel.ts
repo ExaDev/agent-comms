@@ -270,4 +270,31 @@ export async function run(): Promise<void> {
     defaultName: `claude-code-${nanoid(4)}`,
   });
   agentId = reg.agentId;
+
+  // -----------------------------------------------------------------------
+  // Shutdown — clean up mesh state when Claude Code exits
+  // -----------------------------------------------------------------------
+
+  async function shutdown(): Promise<void> {
+    try {
+      if (agentId !== undefined) {
+        await store.setAgentOffline(agentId);
+      }
+      await store.shutdown();
+    } catch {
+      // best-effort — the process is exiting anyway
+    }
+  }
+
+  for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+    process.on(signal, () => {
+      void shutdown().finally(() => process.exit(0));
+    });
+  }
+
+  process.on("exit", () => {
+    // Synchronous fallback if async shutdown didn't complete in time.
+    // store.shutdown() is async but the coordinator socket unref() in
+    // MeshStore.init() means the process won't hang on the way out.
+  });
 }
