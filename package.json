@@ -67,7 +67,7 @@
     "@eslint/json": "1.2.0",
     "@eslint/markdown": "8.0.1",
     "@mariozechner/pi-ai": "0.70.2",
-    "@mariozechner/pi-coding-agent": "0.70.2",
+    "@mariozechner/pi-coding-agent": "0.73.1",
     "@playwright/test": "1.60.0",
     "@semantic-release/changelog": "6.0.3",
     "@semantic-release/commit-analyzer": "13.0.1",
