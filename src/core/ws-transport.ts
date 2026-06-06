@@ -109,6 +109,10 @@ export class WebSocketTransport implements MeshTransport {
     return this._isCoordinator;
   }
 
+  get hasCoordinatorConnection(): boolean {
+    return this.coordinatorWs?.readyState === WebSocket.OPEN;
+  }
+
   // -----------------------------------------------------------------------
   // MeshTransport — Data server
   // -----------------------------------------------------------------------

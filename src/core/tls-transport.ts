@@ -35,7 +35,7 @@ import { nanoid } from "./nanoid.js";
 // ---------------------------------------------------------------------------
 
 const COORDINATOR_HOST = "127.0.0.1";
-const CONNECT_TIMEOUT_MS = 2000;
+const CONNECT_TIMEOUT_MS = 1000;
 
 /**
  * Wrap tls.createServer with a retry for intermittent OpenSSL ASN.1 races
@@ -159,6 +159,12 @@ export class TlsTransport {
 
   get isCoordinator(): boolean {
     return this._isCoordinator;
+  }
+
+  get hasCoordinatorConnection(): boolean {
+    return (
+      this.coordinatorSocket !== undefined && !this.coordinatorSocket.destroyed
+    );
   }
 
   // -----------------------------------------------------------------------

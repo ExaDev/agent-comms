@@ -34,7 +34,7 @@ import { nanoid } from "./nanoid.js";
 const COORDINATOR_HOST = "127.0.0.1";
 
 /** Timeout for connecting to the coordinator before giving up. */
-const CONNECT_TIMEOUT_MS = 2000;
+const CONNECT_TIMEOUT_MS = 1000;
 
 // ---------------------------------------------------------------------------
 // Async socket write helper (not exported)
@@ -130,6 +130,12 @@ export class TcpTransport implements MeshTransport {
 
   get isCoordinator(): boolean {
     return this._isCoordinator;
+  }
+
+  get hasCoordinatorConnection(): boolean {
+    return (
+      this.coordinatorSocket !== undefined && !this.coordinatorSocket.destroyed
+    );
   }
 
   // -----------------------------------------------------------------------

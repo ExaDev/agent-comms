@@ -69,6 +69,11 @@ export interface TransportEvents {
   onPeerDisconnected(handle: ConnectionHandle): void;
 
   /**
+   * A non-fatal error occurred that consumers should know about.
+   */
+  onError?(error: Error): void;
+
+  /**
    * A peer introduced itself to the coordinator.
    * Only fires on the coordinator instance.
    * MeshStore should send the peer list and broadcast the arrival.
@@ -122,6 +127,9 @@ export interface MeshTransport {
 
   /** Whether this instance is the mesh coordinator. */
   readonly isCoordinator: boolean;
+
+  /** Whether this instance has a live connection to a coordinator. */
+  readonly hasCoordinatorConnection: boolean;
 
   /**
    * Start the data server on an OS-assigned port.
