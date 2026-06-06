@@ -72,7 +72,15 @@ export class MeshStore implements CommsStore {
   private peerInfo = new Map<string, PeerInfo>();
   private staleCheckTimer: ReturnType<typeof setInterval> | undefined;
   private isShutDown = false;
+  private initialised = false;
   private pendingMarkReadTimers: ReturnType<typeof setTimeout>[] = [];
+
+  /** Whether the mesh has a live coordinator connection. */
+  get connected(): boolean {
+    return (
+      this.transport.isCoordinator || this.transport.hasCoordinatorConnection
+    );
+  }
 
   // -- Pending inbound connections awaiting approval --
   private pendingInboundConnections = new Map<
@@ -146,6 +154,8 @@ export class MeshStore implements CommsStore {
   // -----------------------------------------------------------------------
 
   async init(): Promise<void> {
+    if (this.initialised) return;
+    this.initialised = true;
     await this.transport.startDataServer();
 
     // Register our own peer info
@@ -156,57 +166,49 @@ export class MeshStore implements CommsStore {
     });
 
     // Try joining an existing mesh; fall back to becoming coordinator.
-    // If becomeCoordinator fails with EADDRINUSE (another process won the race),
-    // retry connecting — the new coordinator should be ready by now.
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 200;
+    //
+    // Single attempt: connect to an existing coordinator, or become one.
+    // If the coordinator port is occupied but unresponsive (e.g. an orphan
+    // process from a previous session), degrade gracefully instead of
+    // retrying. Retrying tls.connect after a failed handshake to a
+    // non-TLS endpoint can freeze the event loop (Node.js TLS session
+    // cache bug), so we only try once.
     let connected = false;
-    let lastError: Error | undefined;
 
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      await this.transport.connectToCoordinator(
+        COORDINATOR_HOST,
+        this.coordinatorPort,
+        this.peerId,
+        this.transport.dataPort,
+      );
+      connected = true;
+    } catch {
       try {
-        await this.transport.connectToCoordinator(
+        await this.transport.becomeCoordinator(
           COORDINATOR_HOST,
           this.coordinatorPort,
-          this.peerId,
-          this.transport.dataPort,
         );
+        this.startStaleCheck();
         connected = true;
-        break;
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        // Only try to become coordinator on the first attempt
-        if (attempt === 0) {
-          try {
-            await this.transport.becomeCoordinator(
-              COORDINATOR_HOST,
-              this.coordinatorPort,
-            );
-            this.startStaleCheck();
-            connected = true;
-            break;
-          } catch (coordErr) {
-            const msg =
-              coordErr instanceof Error ? coordErr.message : String(coordErr);
-            if (!msg.includes("EADDRINUSE")) {
-              throw coordErr;
-            }
-            // EADDRINUSE — another process became coordinator. Retry connect.
-          }
+      } catch (coordErr) {
+        const msg =
+          coordErr instanceof Error ? coordErr.message : String(coordErr);
+        if (!msg.includes("EADDRINUSE")) {
+          throw coordErr;
         }
-        // Wait before retrying
-        if (attempt < MAX_RETRIES - 1) {
-          await new Promise<void>((resolve) =>
-            setTimeout(resolve, RETRY_DELAY_MS),
-          );
-        }
+        // EADDRINUSE — port held by an unresponsive process. Degrade.
       }
     }
 
     if (!connected) {
-      throw new Error(
-        `Failed to join or create mesh on port ${String(this.coordinatorPort)}: ${lastError?.message ?? "unknown error"}`,
+      this.events.onError?.(
+        new Error(
+          `MeshStore: could not join or create mesh on port ${String(this.coordinatorPort)}. ` +
+            "Running without mesh — agent-comms will be unavailable.",
+        ),
       );
+      return;
     }
 
     this.transport.unref();
