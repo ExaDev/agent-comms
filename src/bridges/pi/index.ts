@@ -124,13 +124,12 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     uiCtx = ctx.ui;
 
-    try {
-      await store.init();
-      meshReady = true;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+    await store.init();
+    meshReady = store.connected;
+
+    if (!meshReady) {
       ctx.ui.notify(
-        `Agent Comms: mesh init failed (${msg}). Running without mesh.`,
+        "Agent Comms: mesh unavailable (no coordinator). Running without mesh.",
         "warning",
       );
     }
