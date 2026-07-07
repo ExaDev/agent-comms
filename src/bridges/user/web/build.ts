@@ -44,6 +44,10 @@ const inlineCssPlugin: esbuild.Plugin = {
 };
 
 async function main(): Promise<void> {
+  // Start from a clean output dir so stale artifacts (e.g. renamed bundles,
+  // leftover sourcemaps) can't linger and get swept into the published
+  // package by the copy-web-assets step.
+  fs.rmSync(DIST_DIR, { recursive: true, force: true });
   fs.mkdirSync(DIST_DIR, { recursive: true });
 
   await esbuild.build({

@@ -48,7 +48,7 @@
   "scripts": {
     "prepare": "husky",
     "build:frontend": "tsx src/bridges/user/web/build.ts",
-    "build": "pnpm build:frontend && tsc && printf '#!/usr/bin/env node\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js",
+    "build": "pnpm build:frontend && tsc && tsx scripts/copy-web-assets.ts && printf '#!/usr/bin/env node\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js",
     "generate:server-json": "tsx scripts/sync-release-metadata.ts",
     "publish:mcp-registry": "tsx scripts/publish-mcp-registry.ts",
     "lint": "eslint .",
