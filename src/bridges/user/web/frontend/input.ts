@@ -26,8 +26,7 @@ export type InputResult =
 // ---------------------------------------------------------------------------
 
 export type LocalRoute =
-  | { kind: "join_room"; room: string }
-  | { kind: "leave_room" };
+  { kind: "join_room"; room: string } | { kind: "leave_room" };
 
 /**
  * Classify an InputResult to determine if it should be handled locally

@@ -139,8 +139,7 @@ interface RelayStatus {
 }
 
 type RelayOutbound =
-  | { type: "status"; status: RelayStatus }
-  | { type: "error"; message: string };
+  { type: "status"; status: RelayStatus } | { type: "error"; message: string };
 
 // ---------------------------------------------------------------------------
 // Relay state
