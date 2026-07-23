@@ -1,3 +1,5 @@
+## [1.24.1](https://github.com/ExaDev/agent-comms/compare/v1.24.0...v1.24.1) (2026-07-23)
+
 ## [1.24.0](https://github.com/ExaDev/agent-comms/compare/v1.23.1...v1.24.0) (2026-06-06)
 
 ### Features
