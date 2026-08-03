@@ -1,3 +1,9 @@
+## [1.24.2](https://github.com/ExaDev/agent-comms/compare/v1.24.1...v1.24.2) (2026-08-03)
+
+### Bug Fixes
+
+* override conventional-changelog-writer to fix empty changelog notes ([5cb0c2e](https://github.com/ExaDev/agent-comms/commit/5cb0c2ebd7994f8641bc63301397006918a1c1e5))
+
 ## [1.24.1](https://github.com/ExaDev/agent-comms/compare/v1.24.0...v1.24.1) (2026-07-23)
 
 ### Chores
