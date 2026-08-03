@@ -8,3 +8,6 @@ overrides:
   qs: ">=6.15.2"
   basic-ftp: ">=6.0.1"
   "@anthropic-ai/sdk": ">=0.91.1"
+  # @semantic-release/release-notes-generator pins conventional-changelog-writer to
+  # ^8.0.0, which predates the breaking Handlebars-to-render-function template rewrite that conventional-changelog-conventionalcommits@10.x now requires -- without this override, generateNotes silently produces an empty changelog body (just the version header, no Features/Bug Fixes sections), which is what happened to v1.24.1's entry. Confirmed upstream: https://github.com/semantic-release/release-notes-generator/issues/992
+  conventional-changelog-writer: ^9.2.0
