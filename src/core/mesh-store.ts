@@ -11,7 +11,9 @@
  * TCP, TlsTransport for encrypted connections, etc.
  */
 
+import * as fs from "node:fs";
 import * as os from "node:os";
+import * as path from "node:path";
 import { nanoid } from "./nanoid.js";
 import { CommsError } from "./store.js";
 import { TcpTransport } from "./tcp-transport.js";
@@ -786,12 +788,45 @@ export class MeshStore implements CommsStore {
     cwd: string,
   ): Promise<{ id: string } | undefined> {
     await Promise.resolve();
-    return this.identityCache.get(`${harness}--${cwd}`);
+    const cached = this.identityCache.get(`${harness}--${cwd}`);
+    if (cached) return cached;
+    // Fallback: read from disk so identity survives restarts
+    try {
+      const dir = path.join(os.homedir(), ".agent-comms");
+      const file = path.join(
+        dir,
+        `${harness}--${cwd.replace(/[\\/:*?"<>|]/g, "_")}.json`,
+      );
+      if (fs.existsSync(file)) {
+        const data = JSON.parse(fs.readFileSync(file, "utf-8")) as {
+          id?: string;
+        };
+        if (data?.id) {
+          this.identityCache.set(`${harness}--${cwd}`, { id: data.id });
+          return { id: data.id };
+        }
+      }
+    } catch {
+      // ignore read errors
+    }
+    return undefined;
   }
 
   async writeIdentity(harness: string, cwd: string, id: string): Promise<void> {
     await Promise.resolve();
     this.identityCache.set(`${harness}--${cwd}`, { id });
+    // Persist to disk so identity survives restarts
+    try {
+      const dir = path.join(os.homedir(), ".agent-comms");
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(
+        dir,
+        `${harness}--${cwd.replace(/[\\/:*?"<>|]/g, "_")}.json`,
+      );
+      fs.writeFileSync(file, JSON.stringify({ id }), "utf-8");
+    } catch {
+      // ignore write errors
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -808,13 +843,37 @@ export class MeshStore implements CommsStore {
   }): Promise<AgentIdentity> {
     const existing = await this.readIdentity(opts.harness, opts.cwd);
     if (existing) {
-      return this.updateAgent(existing.id, {
+      // If the agent already exists in the local store, update it
+      if (this.agents.has(existing.id)) {
+        return this.updateAgent(existing.id, {
+          name: opts.name,
+          visibility: opts.visibility,
+          tags: opts.tags,
+          status: "active",
+          pid: opts.pid,
+        });
+      }
+      // Identity exists on disk but agent not in local store (e.g., after
+      // restart).  Re-create the agent with the persisted ID so other peers
+      // can find us.
+      const agent: AgentIdentity = {
+        id: existing.id,
         name: opts.name,
-        visibility: opts.visibility,
-        tags: opts.tags,
-        status: "active",
+        harness: opts.harness,
+        cwd: opts.cwd,
         pid: opts.pid,
-      });
+        startedAt: this.startedAt,
+        visibility: opts.visibility,
+        status: "active",
+        tags: opts.tags,
+        subscribedRooms: [],
+      };
+      this.agents.set(existing.id, agent);
+      await this.broadcastPatch({ type: "agent_upsert", agent });
+      if (agent.visibility === "visible") {
+        await this.federation.broadcastAgentVisible(agent);
+      }
+      return agent;
     }
 
     const id = this.peerId;
