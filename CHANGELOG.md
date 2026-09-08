@@ -1,3 +1,13 @@
+## [1.24.4](https://github.com/ExaDev/agent-comms/compare/v1.24.3...v1.24.4) (2026-09-08)
+
+### Bug Fixes
+
+* **release:** retry MCP registry publish on npm propagation lag ([e1aaaa9](https://github.com/ExaDev/agent-comms/commit/e1aaaa9782f324a4683d94bf8fafcd7e66ba8706))
+
+### Tests
+
+* **mesh-store:** assert cross-peer visibility and room membership in e2e ([023a46a](https://github.com/ExaDev/agent-comms/commit/023a46a144d4564c2bb4053e22631f9c3496e65d))
+
 ## [1.24.3](https://github.com/ExaDev/agent-comms/compare/v1.24.2...v1.24.3) (2026-09-08)
 
 ### Bug Fixes
