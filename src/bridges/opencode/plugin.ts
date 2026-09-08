@@ -14,11 +14,18 @@ import {
   formatDeliveryEvent,
 } from "../../core/index.js";
 import { TlsTransport } from "../../core/tls-transport.js";
-import { generateIdentity } from "../../core/identity.js";
+import {
+  loadOrCreateIdentity,
+  type IdentitySlot,
+} from "../../core/identity-store.js";
 import { tryStartWebServer } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
-const identity = generateIdentity();
+// Persistent identity for this slot: a stable fingerprint means the agent
+// ID survives restarts, so peers can keep targeting us. A plugin unload has
+// no hook here; a stale lock self-heals via the pid probe.
+const identitySlot: IdentitySlot = { harness: "opencode", cwd: process.cwd() };
+const identity = loadOrCreateIdentity(identitySlot);
 const store = new MeshStore();
 store.peerId = identity.fingerprint;
 store.setTransport(new TlsTransport(store.events, identity));

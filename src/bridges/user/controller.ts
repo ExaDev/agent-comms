@@ -13,7 +13,11 @@ import {
   formatDeliveryEvent,
 } from "../../core/index.js";
 import { TlsTransport } from "../../core/tls-transport.js";
-import { generateIdentity } from "../../core/identity.js";
+import {
+  loadOrCreateIdentity,
+  releaseIdentityLock,
+  type IdentitySlot,
+} from "../../core/identity-store.js";
 import type { CommsContext, CommsResult } from "../../core/tool.js";
 import type {
   AgentIdentity,
@@ -28,6 +32,8 @@ import type {
 
 export class ChatController extends EventEmitter {
   private store: MeshStore;
+  /** Set only when this controller owns its persisted identity (standalone mode). */
+  private ownedIdentitySlot: IdentitySlot | undefined;
 
   /** Expose the underlying MeshStore for handle cleanup. */
   get meshStore(): MeshStore {
@@ -42,7 +48,11 @@ export class ChatController extends EventEmitter {
     coordinatorPort?: number,
   ) {
     super();
-    const identity = generateIdentity();
+    // Persistent identity for the web user's slot so the chat identity
+    // survives relaunches of the standalone web CLI
+    const identitySlot: IdentitySlot = { harness: "user", cwd: process.cwd() };
+    this.ownedIdentitySlot = identitySlot;
+    const identity = loadOrCreateIdentity(identitySlot);
     this.store = new MeshStore(coordinatorPort);
     this.store.peerId = identity.fingerprint;
     this.store.setTransport(new TlsTransport(this.store.events, identity));
@@ -285,5 +295,8 @@ export class ChatController extends EventEmitter {
   async shutdown(): Promise<void> {
     await this.store.setAgentOffline(this.ctx.agentId);
     await this.store.shutdown();
+    if (this.ownedIdentitySlot !== undefined) {
+      releaseIdentityLock(this.ownedIdentitySlot);
+    }
   }
 }

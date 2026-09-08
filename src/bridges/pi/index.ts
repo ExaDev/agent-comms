@@ -29,7 +29,11 @@ import {
   isActionableEvent,
 } from "../../core/index.js";
 import { TlsTransport } from "../../core/tls-transport.js";
-import { generateIdentity } from "../../core/identity.js";
+import {
+  loadOrCreateIdentity,
+  releaseIdentityLock,
+  type IdentitySlot,
+} from "../../core/identity-store.js";
 import { tryStartWebServer, type WebServerHandle } from "../user/web/server.js";
 import { ChatController } from "../user/controller.js";
 import { nanoid } from "../../core/nanoid.js";
@@ -41,8 +45,10 @@ function getWebPort(handle: WebServerHandle): number | undefined {
 }
 
 export default function (pi: ExtensionAPI) {
-  // Generate cryptographic identity and use TLS transport
-  const identity = generateIdentity();
+  // Persistent identity for this slot: a stable fingerprint means the agent
+  // ID survives restarts, so peers can keep targeting us
+  const identitySlot: IdentitySlot = { harness: "pi", cwd: process.cwd() };
+  const identity = loadOrCreateIdentity(identitySlot);
   const store = new MeshStore();
   store.peerId = identity.fingerprint;
   store.setTransport(new TlsTransport(store.events, identity));
@@ -177,6 +183,7 @@ export default function (pi: ExtensionAPI) {
     if (agentId) {
       await store.setAgentOffline(agentId);
     }
+    releaseIdentityLock(identitySlot);
     await store.shutdown();
   });
 
