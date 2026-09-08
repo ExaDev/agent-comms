@@ -1,3 +1,9 @@
+## [1.25.0](https://github.com/ExaDev/agent-comms/compare/v1.24.4...v1.25.0) (2026-09-08)
+
+### Features
+
+* **bridge:** persist bridge identity across restarts ([82b52b2](https://github.com/ExaDev/agent-comms/commit/82b52b2d7bbee946e3aeb37fc6ed39654047d230))
+
 ## [1.24.4](https://github.com/ExaDev/agent-comms/compare/v1.24.3...v1.24.4) (2026-09-08)
 
 ### Bug Fixes
