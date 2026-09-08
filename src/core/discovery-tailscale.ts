@@ -63,8 +63,7 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
   }
 
   /** No-op — nothing to stop. */
-  stopAdvertising(id: string): Promise<void> {
-    void id;
+  stopAdvertising(): Promise<void> {
     return Promise.resolve();
   }
 
@@ -79,9 +78,7 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
    * Discover meshes on the tailnet by probing peers.
    * Returns peers that respond to a TCP connection on port 19876.
    */
-  async discover(timeout?: number): Promise<DiscoveredMesh[]> {
-    void timeout;
-
+  async discover(): Promise<DiscoveredMesh[]> {
     const peers = await this.getPeers();
     if (peers.length === 0) return [];
 

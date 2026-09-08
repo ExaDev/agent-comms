@@ -518,7 +518,7 @@ export class TlsTransport {
     }
     this.pendingConnections.delete(handle.id);
 
-    const { socket, peerId, dataPort, name, fingerprint, policy } = pending;
+    const { socket, peerId, dataPort, policy } = pending;
 
     // Move to introConnections so send() can reach this peer
     this.introConnections.set(peerId, socket);
@@ -534,9 +534,6 @@ export class TlsTransport {
     // Fire onIntroduction so MeshStore processes the new peer normally
     const connHandle: ConnectionHandle = { id: peerId, policy };
     this.events.onIntroduction(connHandle, { peerId, dataPort });
-
-    void name;
-    void fingerprint;
   }
 
   async rejectConnection(

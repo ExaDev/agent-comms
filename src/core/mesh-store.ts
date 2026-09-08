@@ -413,10 +413,9 @@ export class MeshStore implements CommsStore {
         agent?.name ?? "",
         "",
       )
-      .catch((err: unknown) => {
+      .catch(() => {
         // Rejection is expected when the coordinator denies the connection.
         // Log silently — the calling tool already returned success.
-        void err;
       });
 
     return Promise.resolve();
