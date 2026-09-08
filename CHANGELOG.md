@@ -1,3 +1,11 @@
+## [1.25.1](https://github.com/ExaDev/agent-comms/compare/v1.25.0...v1.25.1) (2026-09-08)
+
+### Build
+
+* **deps:** bump @modelcontextprotocol/sdk from 1.29.0 to 1.30.0 ([0658895](https://github.com/ExaDev/agent-comms/commit/06588951338f22780acfb92a79ba7d329a8a3767))
+* **deps:** bump actions/checkout from 6 to 7 ([58ea7f6](https://github.com/ExaDev/agent-comms/commit/58ea7f632811204b1792aa54f1577bb8f6354840))
+* **deps:** bump actions/setup-node from 6 to 7 ([bddf7cf](https://github.com/ExaDev/agent-comms/commit/bddf7cfc402ceea31b346ec1ca039adf746f7f5a))
+
 ## [1.25.0](https://github.com/ExaDev/agent-comms/compare/v1.24.4...v1.25.0) (2026-09-08)
 
 ### Features
