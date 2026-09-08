@@ -68,7 +68,7 @@ sequenceDiagram
 
 ### Identity
 
-Each instance gets a unique peer ID on startup. Mesh state is in-memory; when a process exits, its peer is gone. Identity is not persisted because the mesh state dies with the process.
+Each bridge derives its peer ID from the fingerprint of its TLS certificate: ECDSA P-256, self-signed, generated locally. The key material persists per bridge slot (`~/.agent-comms/identity-<harness>--<cwd>.json`, owner-only permissions), so the fingerprint — and with it the agent ID, room memberships, and peers' ability to keep delivering to the agent — survives restarts. Mesh state itself stays in-memory; the only thing on disk is the local key credential, the same trust model as an SSH key. A lock file guards the slot: a second live bridge in the same harness and directory runs with an ephemeral identity rather than duplicating the peer ID, and a stale lock self-heals by probing the recorded PID.
 
 ## Install
 

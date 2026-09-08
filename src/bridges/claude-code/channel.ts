@@ -31,7 +31,11 @@ import {
   MCP_TOOL_PARAMS,
 } from "../../core/index.js";
 import { TlsTransport } from "../../core/tls-transport.js";
-import { generateIdentity } from "../../core/identity.js";
+import {
+  loadOrCreateIdentity,
+  releaseIdentityLock,
+  type IdentitySlot,
+} from "../../core/identity-store.js";
 import { tryStartWebServer } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
@@ -151,7 +155,13 @@ function drainPending(filePath: string): string[] {
 }
 
 export async function run(): Promise<void> {
-  const identity = generateIdentity();
+  // Persistent identity for this slot: a stable fingerprint means the agent
+  // ID survives restarts, so peers can keep targeting us
+  const identitySlot: IdentitySlot = {
+    harness: "claude-code",
+    cwd: process.cwd(),
+  };
+  const identity = loadOrCreateIdentity(identitySlot);
   const store = new MeshStore();
   store.peerId = identity.fingerprint;
   store.setTransport(new TlsTransport(store.events, identity));
@@ -283,6 +293,8 @@ export async function run(): Promise<void> {
       await store.shutdown();
     } catch {
       // best-effort — the process is exiting anyway
+    } finally {
+      releaseIdentityLock(identitySlot);
     }
   }
 
@@ -296,5 +308,7 @@ export async function run(): Promise<void> {
     // Synchronous fallback if async shutdown didn't complete in time.
     // store.shutdown() is async but the coordinator socket unref() in
     // MeshStore.init() means the process won't hang on the way out.
+    // Lock release is synchronous and pid-guarded, so it is safe to repeat.
+    releaseIdentityLock(identitySlot);
   });
 }

@@ -6,7 +6,9 @@
  * fingerprint of the certificate (DER-encoded, hex with colons), replacing
  * the previous nanoid(8) approach.
  *
- * Key material stays in memory only — never written to disk.
+ * Key material is generated in memory; bridges that need a stable identity
+ * across restarts persist it through identity-store.ts, which keeps the
+ * fingerprint (and therefore the peer/agent ID) stable.
  */
 
 import {
@@ -18,6 +20,9 @@ import {
 } from "node:crypto";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
+
+/** Self-signed certificate validity. Exported so identity persistence can derive its renewal margin. */
+export const CERTIFICATE_VALIDITY_MS = 365 * 24 * 60 * 60 * 1000;
 
 export interface PeerIdentity {
   /** PEM-encoded PKCS#8 private key. */
@@ -235,7 +240,9 @@ function buildExtensions(publicKeyDer: Buffer): Buffer {
  * Generate a fresh cryptographic identity: ECDSA P-256 keypair and self-signed
  * X.509 certificate. The fingerprint of the certificate serves as the peer ID.
  *
- * Key material stays in memory only — never written to disk.
+ * Key material is generated in memory; bridges that need a stable identity
+ * across restarts persist it through identity-store.ts, which keeps the
+ * fingerprint (and therefore the peer/agent ID) stable.
  */
 export function generateIdentity(): PeerIdentity {
   // When encoding options are specified, generateKeyPairSync returns
@@ -260,9 +267,9 @@ export function generateIdentity(): PeerIdentity {
   const firstSerialByte = serial[0];
   if (firstSerialByte !== undefined) serial[0] = firstSerialByte & 0x7f;
 
-  // Validity period: now through 365 days from now
+  // Validity period: now through CERTIFICATE_VALIDITY_MS from now
   const now = new Date();
-  const expires = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+  const expires = new Date(now.getTime() + CERTIFICATE_VALIDITY_MS);
 
   // Subject/Issuer Name: SEQUENCE { SET { SEQUENCE { OID, value } } }
   const subject = derSequence(
