@@ -56,7 +56,7 @@ async function main(): Promise<void> {
   console.log("Test: list agents from A...");
   const agentsA = await a.store.listAgents(a.store.peerId);
   console.log(`  A sees ${String(agentsA.length)} agent(s)`);
-  assert.ok(agentsA.length >= 1, "A should see at least 1 agent");
+  assert.ok(agentsA.length >= 2, "A should see both agents");
 
   // Wait for state sync
   await sleep(200);
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
   console.log("Test: list agents from B...");
   const agentsB = await b.store.listAgents(b.store.peerId);
   console.log(`  B sees ${String(agentsB.length)} agent(s)`);
-  assert.ok(agentsB.length >= 1, "B should see at least 1 agent");
+  assert.ok(agentsB.length >= 2, "B should see both agents");
 
   // --- Test: create room ---
   console.log("Test: create room...");
@@ -90,6 +90,15 @@ async function main(): Promise<void> {
   await b.store.joinRoom(room.id, b.store.peerId);
 
   await sleep(200);
+
+  // --- Test: room membership visible on both sides ---
+  console.log("Test: room membership on A and B...");
+  const roomA = await a.store.getRoom(room.id);
+  const roomB = await b.store.getRoom(room.id);
+  console.log(`  A sees ${String(roomA?.members.length)} member(s)`);
+  console.log(`  B sees ${String(roomB?.members.length)} member(s)`);
+  assert.ok(roomA?.members.length === 2, "A should see 2 room members");
+  assert.ok(roomB?.members.length === 2, "B should see 2 room members");
 
   // --- Test: A sends message, B receives delivery ---
   console.log("Test: A sends message to room...");
