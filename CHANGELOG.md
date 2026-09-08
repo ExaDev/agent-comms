@@ -1,3 +1,9 @@
+## [1.24.3](https://github.com/ExaDev/agent-comms/compare/v1.24.2...v1.24.3) (2026-09-08)
+
+### Bug Fixes
+
+* **build:** publish web frontend assets so the CLI doesn't crash on launch ([e0e08ff](https://github.com/ExaDev/agent-comms/commit/e0e08ffe0eb5937a7a1e604735c4105a616309d7)), closes [#18](https://github.com/ExaDev/agent-comms/issues/18)
+
 ## [1.24.2](https://github.com/ExaDev/agent-comms/compare/v1.24.1...v1.24.2) (2026-08-03)
 
 ### Bug Fixes
