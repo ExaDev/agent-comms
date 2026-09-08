@@ -1,3 +1,13 @@
+## [1.25.2](https://github.com/ExaDev/agent-comms/compare/v1.25.1...v1.25.2) (2026-09-08)
+
+### Refactoring
+
+* **core:** drop void-operator acknowledgements of unused values ([428188d](https://github.com/ExaDev/agent-comms/commit/428188dac7bf5c98770c5ec8187f48822241e944))
+
+### Build
+
+* **deps-dev:** bump typescript-eslint from 8.64.0 to 8.69.0 ([0d1c2a3](https://github.com/ExaDev/agent-comms/commit/0d1c2a30117907f4facad234ff0dc2625f5d21b3))
+
 ## [1.25.1](https://github.com/ExaDev/agent-comms/compare/v1.25.0...v1.25.1) (2026-09-08)
 
 ### Build
