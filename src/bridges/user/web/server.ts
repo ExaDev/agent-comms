@@ -193,7 +193,7 @@ class HandleRef {
 export async function runWeb(userName: string, port = 0): Promise<void> {
   const handle = await createWebServer(port);
   // Keep handle alive for cleanup — variable is intentionally unused
-  void new HandleRef(handle);
+  new HandleRef(handle);
 
   handle.server.on("listening", () => {
     const addr = handle.server.address();

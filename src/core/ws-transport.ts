@@ -380,7 +380,7 @@ export class WebSocketTransport implements MeshTransport {
     }
     this.pendingConnections.delete(handle.id);
 
-    const { ws, peerId, dataPort, name, fingerprint } = pending;
+    const { ws, peerId, dataPort } = pending;
 
     // Move to introConnections so send() can reach this peer
     this.introConnections.set(peerId, ws);
@@ -396,9 +396,6 @@ export class WebSocketTransport implements MeshTransport {
     // Fire onIntroduction so MeshStore processes the new peer normally
     const connHandle: ConnectionHandle = { id: peerId };
     this.events.onIntroduction(connHandle, { peerId, dataPort });
-
-    void name;
-    void fingerprint;
   }
 
   async rejectConnection(

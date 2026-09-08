@@ -63,9 +63,7 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
     return id;
   }
 
-  stopAdvertising(id: string): Promise<void> {
-    void id;
-
+  stopAdvertising(): Promise<void> {
     if (this.beaconTimer !== undefined) {
       clearInterval(this.beaconTimer);
       this.beaconTimer = undefined;

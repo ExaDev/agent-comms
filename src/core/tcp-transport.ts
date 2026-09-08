@@ -464,7 +464,7 @@ export class TcpTransport implements MeshTransport {
     }
     this.pendingConnections.delete(handle.id);
 
-    const { socket, peerId, dataPort, name, fingerprint, policy } = pending;
+    const { socket, peerId, dataPort, policy } = pending;
 
     // Move to introConnections so send() can reach this peer
     this.introConnections.set(peerId, socket);
@@ -480,10 +480,6 @@ export class TcpTransport implements MeshTransport {
     // Fire onIntroduction so MeshStore processes the new peer normally
     const connHandle: ConnectionHandle = { id: peerId, policy };
     this.events.onIntroduction(connHandle, { peerId, dataPort });
-
-    // Suppress unused-var warnings
-    void name;
-    void fingerprint;
   }
 
   async rejectConnection(
