@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .tool-versions
       - run: pnpm install --frozen-lockfile
@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .tool-versions
       - run: pnpm install --frozen-lockfile
@@ -43,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .tool-versions
       - run: pnpm install --frozen-lockfile
@@ -64,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .tool-versions
       - run: pnpm install --frozen-lockfile
@@ -91,7 +91,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .tool-versions
           # Do NOT set registry-url — it creates an .npmrc that overrides OIDC
