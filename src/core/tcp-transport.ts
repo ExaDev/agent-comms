@@ -40,6 +40,12 @@ const CONNECT_TIMEOUT_MS = 1000;
 // Async socket write helper (not exported)
 // ---------------------------------------------------------------------------
 
+/**
+ * Safety valve so a dial that never completes cannot grow its outbound queue
+ * unbounded; oldest entries are dropped first (#23).
+ */
+const MAX_PENDING_PER_PEER = 100;
+
 function writeAsync(socket: net.Socket, data: string): Promise<void> {
   return new Promise((resolve, reject) => {
     if (socket.destroyed) {
@@ -80,11 +86,18 @@ export class TcpTransport implements MeshTransport {
   // -- Coordinator client socket (connection to the coordinator) --
   private coordinatorSocket: net.Socket | undefined;
 
+  // -- Coordinator introduction handshake (resolved on the peer list) --
+  private resolveCoordinatorHandshake: (() => void) | undefined;
+  private coordinatorHandshakeTimer: ReturnType<typeof setTimeout> | undefined;
+
   // -- Peer data connections (peer ID → socket + buffer) --
   private peerConnections = new Map<
     string,
     { socket: net.Socket; buffer: MessageBuffer }
   >();
+
+  // -- Messages queued for peers whose dial is still in flight (#23) --
+  private pendingOutbound = new Map<string, MeshMessage[]>();
 
   // -- All sockets accepted by the data server (for shutdown cleanup) --
   private dataServerSockets = new Set<net.Socket>();
@@ -196,7 +209,16 @@ export class TcpTransport implements MeshTransport {
         });
 
         clearTimeout(timer);
-        resolve();
+        // Resolve on the coordinator's peer list rather than on sending the
+        // introduction: MeshStore.init() then returns only after the post-join
+        // peer dials have started, so the first broadcasts are queued for the
+        // dialling peers instead of dropped (#23). A timeout keeps today's
+        // degraded behaviour for a coordinator that never answers.
+        this.resolveCoordinatorHandshake = resolve;
+        this.coordinatorHandshakeTimer = setTimeout(() => {
+          this.resolveCoordinatorHandshake = undefined;
+          resolve();
+        }, CONNECT_TIMEOUT_MS);
       });
 
       const timer = setTimeout(() => {
@@ -387,6 +409,10 @@ export class TcpTransport implements MeshTransport {
   async connectToPeer(peer: PeerInfo, ownPeerId: string): Promise<void> {
     if (this.peerConnections.has(peer.id)) return;
 
+    // Queue broadcasts until the connection registers: messages sent in the
+    // dial window previously had nowhere to go and were silently dropped.
+    this.pendingOutbound.set(peer.id, this.pendingOutbound.get(peer.id) ?? []);
+
     await new Promise<void>((resolve) => {
       const socket = net.createConnection(
         { port: peer.port, host: COORDINATOR_HOST },
@@ -397,6 +423,8 @@ export class TcpTransport implements MeshTransport {
           // Identify ourselves
           const pong: MeshMessage = { method: "pong", peerId: ownPeerId };
           socket.write(encode(pong));
+
+          void this.flushPending(peer.id, socket);
 
           // Wire up ongoing message handling
           socket.on("data", (data) => {
@@ -428,6 +456,7 @@ export class TcpTransport implements MeshTransport {
 
       socket.on("close", onDisconnect);
       socket.on("error", () => {
+        this.pendingOutbound.delete(peer.id);
         onDisconnect();
         socket.destroy();
         resolve();
@@ -513,7 +542,28 @@ export class TcpTransport implements MeshTransport {
         }),
       );
     }
+    for (const queue of this.pendingOutbound.values()) {
+      queue.push(message);
+      if (queue.length > MAX_PENDING_PER_PEER) queue.shift();
+    }
     await Promise.all(writes);
+  }
+
+  /** Send messages queued while the peer's connection was being dialled. */
+  private async flushPending(
+    peerId: string,
+    socket: net.Socket,
+  ): Promise<void> {
+    const queue = this.pendingOutbound.get(peerId);
+    this.pendingOutbound.delete(peerId);
+    if (queue === undefined) return;
+    for (const message of queue) {
+      const sent = await writeAsync(socket, encode(message)).then(
+        () => true,
+        () => false,
+      );
+      if (!sent) return; // connection is dying; close/error listeners clean up
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -522,6 +572,11 @@ export class TcpTransport implements MeshTransport {
 
   shutdown(): Promise<void> {
     this.shutDown = true;
+    if (this.coordinatorHandshakeTimer !== undefined) {
+      clearTimeout(this.coordinatorHandshakeTimer);
+      this.coordinatorHandshakeTimer = undefined;
+    }
+    this.resolveCoordinatorHandshake = undefined;
 
     // Destroy the coordinator client socket
     this.coordinatorSocket?.unref();
@@ -598,12 +653,25 @@ export class TcpTransport implements MeshTransport {
     if (this.shutDown) return;
 
     if (msg.method === "peer_list") {
+      // Fire onPeerList first: it starts the post-join dials (and their
+      // broadcast queues) before init() resolves.
       this.events.onPeerList(msg.peers);
+      this.completeCoordinatorHandshake();
     } else if (msg.method === "peer_joined") {
       this.events.onPeerJoined(msg.peer);
     } else if (msg.method === "become_coordinator") {
       this.events.onBecomeCoordinator(msg.peerList);
     }
+  }
+
+  /** Complete connectToCoordinator's handshake after the peer list arrives. */
+  private completeCoordinatorHandshake(): void {
+    if (this.coordinatorHandshakeTimer !== undefined) {
+      clearTimeout(this.coordinatorHandshakeTimer);
+      this.coordinatorHandshakeTimer = undefined;
+    }
+    this.resolveCoordinatorHandshake?.();
+    this.resolveCoordinatorHandshake = undefined;
   }
 
   // -----------------------------------------------------------------------
@@ -717,6 +785,7 @@ export class TcpTransport implements MeshTransport {
             if (!this.peerConnections.has(peerId)) {
               this.peerConnections.set(peerId, { socket, buffer });
             }
+            void this.flushPending(peerId, socket);
             const handle: ConnectionHandle = { id: peerId };
             const info: PeerInfo = {
               id: peerId,

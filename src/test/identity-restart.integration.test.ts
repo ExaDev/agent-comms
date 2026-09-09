@@ -55,9 +55,6 @@ async function main(): Promise<void> {
   // Peer B is a normal ephemeral bridge that stays up throughout.
   const b = makePeer(generateIdentity());
   await b.store.init();
-  // Registration must wait for the TLS data connections to establish:
-  // patches broadcast in between are silently lost (#23).
-  await sleep(300);
   await b.store.registerAgent({
     name: "peer-b",
     harness: "claude-code",
@@ -75,7 +72,6 @@ async function main(): Promise<void> {
   const identityA = loadOrCreateIdentity(slot);
   const a1 = makePeer(identityA);
   await a1.store.init();
-  await sleep(300);
   await a1.store.registerAgent({
     name: "peer-a",
     harness: "pi",
@@ -108,7 +104,6 @@ async function main(): Promise<void> {
     a2.deliveries.push(ev);
   };
   await a2.store.init();
-  await sleep(300);
   await a2.store.registerAgent({
     name: "peer-a",
     harness: "pi",
