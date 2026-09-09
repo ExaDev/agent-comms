@@ -1,13 +1,14 @@
 /**
- * Federation integration test — verifies that two MeshStore instances on
- * different "machines" (simulated via separate TCP meshes) can federate
- * through coordinator-to-coordinator TLS links.
+ * Federation integration test — verifies that two MeshStore instances on different "machines" (simulated via separate TCP meshes) can federate through coordinator-to-coordinator TLS links, and that an inbound link presenting an untrusted certificate is rejected outright.
  *
  * Tests:
- *   1. Establish federation link between two meshes
- *   2. Agent presence propagates across federation
- *   3. Messages in federated rooms propagate across federation
- *   4. Non-federated rooms are isolated (messages never cross)
+ * 0. An inbound connection with no pinned fingerprint is rejected
+ * 1. Establish federation link between two meshes once both fingerprints are trusted
+ * 2. Agent presence propagates across federation
+ * 3. Messages in federated rooms propagate across federation
+ * 4. Non-federated rooms are isolated (messages never cross)
+ * 5. Federation link listing
+ * 6. Disconnect federation link
  *
  * Run: node dist/test/federation.integration.test.js
  */
@@ -20,7 +21,6 @@ import * as net from "node:net";
 // Use high ports to avoid collisions with real meshes
 const MESH_A_PORT = 28876;
 const MESH_B_PORT = 28877;
-const FED_PORT_A = 28878;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -30,10 +30,6 @@ function sleep(ms: number): Promise<void> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Create a mesh store that also listens on a second port for federation
- * inbound connections. Returns the store and the federation listener port.
- */
 async function createMesh(
   name: string,
   coordinatorPort: number,
@@ -60,9 +56,7 @@ async function createMesh(
   return { store, deliveries };
 }
 
-/**
- * Find a free port on localhost.
- */
+/** Find a free port on localhost. */
 function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -86,7 +80,6 @@ function findFreePort(): Promise<number> {
 async function main(): Promise<void> {
   console.log("=== Federation Integration Tests ===\n");
 
-  // Create two separate meshes (simulating two machines)
   console.log("Creating mesh A (coordinator)...");
   const a = await createMesh("mesh-a-agent", MESH_A_PORT);
   await sleep(100);
@@ -95,20 +88,39 @@ async function main(): Promise<void> {
   const b = await createMesh("mesh-b-agent", MESH_B_PORT);
   await sleep(100);
 
-  // Find a free port for the federation server
   const fedPort = await findFreePort();
   console.log(`Using federation port ${String(fedPort)}`);
 
-  // Start a TLS federation server on mesh A that the FederationManager
-  // can accept connections on. We use the federation manager's TLS identity.
-  const fedServer = await startFedServer(
-    a.store.federation.tlsIdentity,
-    fedPort,
-    a.store,
-  );
+  // Start A's real production federation listener (fedListen -> FederationManager.listen -> handleInbound, the same path a deployed coordinator uses — not a hand-rolled test-only TLS server).
+  await a.store.fedListen("127.0.0.1", fedPort);
   await sleep(100);
 
-  // --- Test 1: Establish federation link ---
+  // --- Test 0: untrusted inbound connection is rejected ---
+  console.log("\nTest 0: untrusted connection is rejected...");
+  await assert.rejects(
+    () => b.store.fedConnect("127.0.0.1", fedPort),
+    /rejected|not in the trusted-fingerprint allowlist/i,
+    "Connecting before either side has pinned the other's fingerprint should be rejected",
+  );
+  assert.strictEqual(
+    b.store.fedLinks().length,
+    0,
+    "B should have no federation links after a rejected attempt",
+  );
+  console.log("  Rejected as expected — no link was created.");
+
+  // --- Pin fingerprints on both sides, mirroring what an operator does out of band ---
+  console.log("\nPinning fingerprints on both sides...");
+  const fingerprintA = a.store.getFederationFingerprint();
+  const fingerprintB = b.store.getFederationFingerprint();
+  assert.ok(fingerprintA.length > 0, "A should report its own fingerprint");
+  assert.ok(fingerprintB.length > 0, "B should report its own fingerprint");
+  await a.store.fedTrust(fingerprintB);
+  await b.store.fedTrust(fingerprintA);
+  assert.deepStrictEqual(a.store.fedTrustedFingerprints(), [fingerprintB]);
+  assert.deepStrictEqual(b.store.fedTrustedFingerprints(), [fingerprintA]);
+
+  // --- Test 1: Establish federation link now that both sides trust each other ---
   console.log("\nTest 1: Establish federation link...");
   const linkId = await b.store.fedConnect("127.0.0.1", fedPort);
   console.log(`  Link established: ${linkId}`);
@@ -124,7 +136,6 @@ async function main(): Promise<void> {
 
   // --- Test 2: Agent presence propagates ---
   console.log("Test 2: Agent presence propagates...");
-  // After federation, B should see A's agent as a federated agent
   const agentsB = await b.store.listAgents(b.store.peerId);
   console.log(`  B sees ${String(agentsB.length)} agent(s)`);
   const fedAgentsB = agentsB.filter((ag) => ag.tags.includes("federated"));
@@ -133,7 +144,6 @@ async function main(): Promise<void> {
     "B should see at least 1 federated agent from A",
   );
 
-  // A should see B's agent as a federated agent
   const agentsA = await a.store.listAgents(a.store.peerId);
   console.log(`  A sees ${String(agentsA.length)} agent(s)`);
   const fedAgentsA = agentsA.filter((ag) => ag.tags.includes("federated"));
@@ -145,7 +155,6 @@ async function main(): Promise<void> {
   // --- Test 3: Federated room messages propagate ---
   console.log("Test 3: Federated room messages propagate...");
 
-  // Create a federated room on mesh A
   const fedRoomId = `fed-room-${String(Date.now())}`;
   const fedRoom = await a.store.createRoom({
     name: fedRoomId,
@@ -157,7 +166,6 @@ async function main(): Promise<void> {
   console.log(`  Created federated room: ${fedRoom.id}`);
   await sleep(200);
 
-  // Create the same federated room on mesh B (same ID)
   const fedRoomB = await b.store.createRoom({
     name: fedRoomId,
     type: "public",
@@ -168,11 +176,9 @@ async function main(): Promise<void> {
   console.log(`  Created matching federated room on B: ${fedRoomB.id}`);
   await sleep(200);
 
-  // Clear deliveries
   a.deliveries.length = 0;
   b.deliveries.length = 0;
 
-  // Send a message from A's agent in the federated room
   const msg = await a.store.sendRoomMessage(
     fedRoom.id,
     a.store.peerId,
@@ -181,7 +187,6 @@ async function main(): Promise<void> {
   console.log(`  A sent: "${msg.content}"`);
   await sleep(500);
 
-  // B should receive the federated message
   const fedMsgs = b.deliveries.filter(
     (e) =>
       e.type === "room_message" && e.message.content === "Hello from mesh A!",
@@ -192,7 +197,6 @@ async function main(): Promise<void> {
   // --- Test 4: Non-federated rooms are isolated ---
   console.log("Test 4: Non-federated rooms are isolated...");
 
-  // Create a non-federated room on mesh A
   const localRoomId = `local-room-${String(Date.now())}`;
   console.log(`  Creating non-federated room: ${localRoomId}`);
   const localRoom = await a.store.createRoom({
@@ -207,10 +211,8 @@ async function main(): Promise<void> {
   );
   await sleep(100);
 
-  // Clear deliveries
   b.deliveries.length = 0;
 
-  // Send a message in the non-federated room
   console.log("  Sending message in non-federated room...");
   await a.store.sendRoomMessage(
     localRoom.id,
@@ -220,7 +222,6 @@ async function main(): Promise<void> {
   console.log("  Message sent.");
   await sleep(100);
 
-  // B should NOT receive this message
   const leakedMsgs = b.deliveries.filter(
     (e) =>
       e.type === "room_message" && e.message.content === "Secret local message",
@@ -252,54 +253,11 @@ async function main(): Promise<void> {
 
   // --- Cleanup ---
   console.log("\nCleaning up...");
-  fedServer.close();
+  await a.store.fedStopListening();
   await a.store.shutdown();
   await b.store.shutdown();
 
   console.log("\n✓ All federation tests passed!");
-}
-
-// ---------------------------------------------------------------------------
-// Federation TLS server (simulates coordinator-to-coordinator link)
-// ---------------------------------------------------------------------------
-
-import * as tls from "node:tls";
-import type { PeerIdentity } from "../core/identity.js";
-import { encode, isMeshMessage, MessageBuffer } from "../core/wire-protocol.js";
-import type { MeshMessage } from "../core/wire-protocol.js";
-
-/**
- * Start a simple TLS server that accepts federation connections and
- * delegates them to the FederationManager on the given store.
- */
-function startFedServer(
-  identity: PeerIdentity,
-  port: number,
-  store: MeshStore,
-): Promise<tls.Server> {
-  return new Promise((resolve, reject) => {
-    const server = tls.createServer(
-      {
-        key: identity.privateKey,
-        cert: identity.certificate,
-        rejectUnauthorized: false,
-        requestCert: true,
-      },
-      (socket) => {
-        // Delegate to the FederationManager's inbound handler
-        void store.federation.handleInbound(socket).catch((err: unknown) => {
-          console.error("Fed inbound error:", err);
-          socket.destroy();
-        });
-      },
-    );
-
-    server.listen(port, "127.0.0.1", () => {
-      resolve(server);
-    });
-
-    server.on("error", reject);
-  });
 }
 
 main().catch((err: unknown) => {
