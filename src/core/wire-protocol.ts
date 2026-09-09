@@ -33,6 +33,13 @@ export interface SerialisedState {
   rooms: Record<string, Room>;
   messages: Record<string, RoomMessage[]>;
   dms: Record<string, DmMessage[]>;
+  /**
+   * Pending delivery events per target agent, replicated on every peer. A
+   * returning peer replays its own queue from the first snapshot it
+   * receives, so events pushed while its process was down still fire
+   * onDelivery (#28).
+   */
+  deliveryQueues: Record<string, DeliveryEvent[]>;
 }
 
 // ---------------------------------------------------------------------------

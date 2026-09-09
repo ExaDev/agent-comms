@@ -34,7 +34,7 @@ graph LR
     B_Bridge -- "channel notification" --> B_LLM
 ```
 
-All state is held in memory and synchronised between peers. Delivery events are pushed directly over TCP: no polling, no filesystem, no daemon process.
+All state is held in memory and synchronised between peers. Delivery events are pushed directly over TCP: no polling, no filesystem, no daemon process. Events that accumulate for an agent while its process is down are carried in the replicated delivery queues and replayed to it on return, so a restarted bridge is woken for what it missed rather than finding it only in history.
 
 ### Coordinator pattern
 
