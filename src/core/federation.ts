@@ -16,7 +16,7 @@ import { encode, isMeshMessage, MessageBuffer } from "./wire-protocol.js";
 import type { MeshMessage } from "./wire-protocol.js";
 import type { AgentIdentity, RoomMessage } from "./types.js";
 import { nanoid } from "./nanoid.js";
-import { generateIdentity } from "./identity.js";
+import { fingerprintDer, generateIdentity } from "./identity.js";
 import type { PeerIdentity } from "./identity.js";
 
 // ---------------------------------------------------------------------------
@@ -78,6 +78,11 @@ export class FederationManager {
   private pingTimers = new Map<string, ReturnType<typeof setInterval>>();
   private shutDown = false;
   private pendingPongs = new Map<string, ReturnType<typeof setTimeout>>();
+  /**
+   * Certificate fingerprints this instance will federate with, inbound or outbound. Empty by default — federation trusts nobody until an operator explicitly pins a remote mesh's fingerprint, the same no-CA, pin-the-key trust model ordinary peer connections already use.
+   */
+  private trustedFingerprints = new Set<string>();
+  private listener: tls.Server | undefined;
 
   constructor(meshId: string, meshName: string, callbacks: FedCallbacks) {
     this.meshId = meshId;
@@ -89,6 +94,45 @@ export class FederationManager {
   /** The TLS identity used for federation connections. */
   get tlsIdentity(): PeerIdentity {
     return this.identity;
+  }
+
+  // -----------------------------------------------------------------------
+  // Trust — which remote mesh fingerprints this instance will federate with
+  // -----------------------------------------------------------------------
+
+  /** Pin a remote mesh's certificate fingerprint as trusted for federation. */
+  addTrustedFingerprint(fingerprint: string): void {
+    this.trustedFingerprints.add(fingerprint);
+  }
+
+  /** Remove a previously pinned fingerprint. Existing links using it are not torn down. */
+  removeTrustedFingerprint(fingerprint: string): void {
+    this.trustedFingerprints.delete(fingerprint);
+  }
+
+  /** List currently trusted fingerprints. */
+  listTrustedFingerprints(): string[] {
+    return [...this.trustedFingerprints];
+  }
+
+  /**
+   * Verify the certificate a connected TLS socket presented against the trusted-fingerprint allowlist. Returns the presented fingerprint when trusted, `undefined` (and destroys the socket) otherwise.
+   *
+   * This is the check that was missing entirely before: the socket was accepted with `rejectUnauthorized: false` (required, since these are self-signed certs with no CA) but nothing then verified *which* self-signed cert was presented, so any certificate was accepted as a valid federation peer.
+   */
+  private verifyPeerOrDestroy(socket: tls.TLSSocket): string | undefined {
+    const cert = socket.getPeerCertificate();
+    // Node's types declare every PeerCertificate field non-optional, but the documented runtime behaviour when the peer presents no certificate at all is an empty object — not null/undefined, and not a Buffer-typed `raw`. Detect that real shape rather than trusting the declared type.
+    if (Object.keys(cert).length === 0) {
+      socket.destroy();
+      return undefined;
+    }
+    const fingerprint = fingerprintDer(cert.raw);
+    if (!this.trustedFingerprints.has(fingerprint)) {
+      socket.destroy();
+      return undefined;
+    }
+    return fingerprint;
   }
 
   // -----------------------------------------------------------------------
@@ -105,6 +149,13 @@ export class FederationManager {
     const linkId = nanoid(8);
 
     const socket = await this.tlsConnect(host, port);
+    if (this.verifyPeerOrDestroy(socket) === undefined) {
+      throw new Error(
+        `Federation connection to ${host}:${String(port)} rejected: ` +
+          "the presented certificate is not in the trusted-fingerprint allowlist. " +
+          "Call addTrustedFingerprint() with the remote mesh's fingerprint first.",
+      );
+    }
     const link: FedLink = {
       id: linkId,
       remoteMeshId: "",
@@ -145,6 +196,13 @@ export class FederationManager {
     if (this.shutDown) {
       socket.destroy();
       throw new Error("FederationManager is shut down");
+    }
+
+    if (this.verifyPeerOrDestroy(socket) === undefined) {
+      throw new Error(
+        "Inbound federation connection rejected: the presented certificate " +
+          "is not in the trusted-fingerprint allowlist.",
+      );
     }
 
     const linkId = nanoid(8);
@@ -236,11 +294,61 @@ export class FederationManager {
   }
 
   // -----------------------------------------------------------------------
+  // Inbound listener — accepts federation links from remote coordinators
+  // -----------------------------------------------------------------------
+
+  /**
+   * Start listening for inbound federation connections. Every accepted connection is routed through `handleInbound()`, which enforces the trusted-fingerprint check before a link is ever created — nothing here bypasses that check.
+   *
+   * Previously nothing in the shipped product called `handleInbound()` at all: it existed only as a function the integration test invoked directly against a hand-rolled `tls.createServer`. This is that server, promoted to real code.
+   */
+  listen(host: string, port: number): Promise<void> {
+    if (this.listener) {
+      throw new Error("FederationManager is already listening");
+    }
+    return new Promise((resolve, reject) => {
+      const server = tls.createServer(
+        {
+          key: this.identity.privateKey,
+          cert: this.identity.certificate,
+          // Same as the outbound side: no CA, so we don't ask Node to verify the chain. requestCert is what makes the connecting peer's own certificate available to verifyPeerOrDestroy() inside handleInbound() — without it there is nothing to check.
+          rejectUnauthorized: false,
+          requestCert: true,
+        },
+        (socket) => {
+          this.handleInbound(socket).catch(() => {
+            // Rejected (untrusted fingerprint, or shutting down) — the socket is already destroyed inside handleInbound/verifyPeerOrDestroy.
+          });
+        },
+      );
+
+      server.listen(port, host, () => {
+        this.listener = server;
+        resolve();
+      });
+      server.on("error", reject);
+    });
+  }
+
+  /** Stop accepting new inbound federation connections. Existing links are unaffected. */
+  stopListening(): Promise<void> {
+    const server = this.listener;
+    if (!server) return Promise.resolve();
+    this.listener = undefined;
+    return new Promise((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+  }
+
+  // -----------------------------------------------------------------------
   // Shutdown
   // -----------------------------------------------------------------------
 
   async shutdown(): Promise<void> {
     this.shutDown = true;
+    await this.stopListening();
     for (const linkId of [...this.links.keys()]) {
       await this.disconnect(linkId);
     }
