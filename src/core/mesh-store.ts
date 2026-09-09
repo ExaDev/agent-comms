@@ -373,9 +373,24 @@ export class MeshStore implements CommsStore {
         for (const event of events) {
           if (seen.has(JSON.stringify(event))) continue;
           this.queueDelivery(agentId, event);
-          // A returning peer replays its own pending queue: events pushed
-          // while its process was down fire onDelivery now (#28).
-          this.fireLocalDelivery(agentId, event);
+          // Replay fires only for events with consumption evidence (#28):
+          // messages are consumed by reading (readBy), invites by acceptance
+          // or decline (no longer in the invited list). Transient
+          // notifications (member_joined, room_members, connection_request,
+          // delivery status) carry no consumption evidence, so replaying
+          // them could only ever duplicate-notify; the state they describe
+          // arrives via the synced room and agent records instead. They
+          // still merge into the queue, so drain bridges see them.
+          if (event.type === "room_message" || event.type === "dm") {
+            this.fireLocalDelivery(agentId, event);
+          } else if (event.type === "room_invite") {
+            const stillInvited = this.rooms
+              .get(event.room)
+              ?.invited.includes(agentId);
+            if (stillInvited === true) {
+              this.fireLocalDelivery(agentId, event);
+            }
+          }
         }
       }
     }

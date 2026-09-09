@@ -70,8 +70,15 @@ void test("events queued while the target was down replay on its first snapshot"
     true,
   );
 
-  // A second snapshot of the same state does not duplicate any push (the
-  // join notification replays too, exactly once).
+  // Transient notifications carry no consumption evidence, so they merge into the queue (drain bridges still see them) but never replay-fire.
+  assert.equal(deliveries.filter((ev) => ev.type === "room_members").length, 0);
+  const queue = snapshotOf(returned).deliveryQueues[targetAgent.id] ?? [];
+  assert.equal(
+    queue.some((ev) => ev.type === "room_members"),
+    true,
+  );
+
+  // A second snapshot of the same state does not duplicate the push.
   returned.applyStateSync(snapshotOf(sender));
   assert.equal(
     deliveries.filter(
@@ -81,7 +88,6 @@ void test("events queued while the target was down replay on its first snapshot"
     ).length,
     1,
   );
-  assert.equal(deliveries.filter((ev) => ev.type === "room_members").length, 1);
 });
 
 void test("a queue is bounded oldest-first so downtime cannot grow it without limit", async () => {
@@ -122,4 +128,55 @@ void test("a queue is bounded oldest-first so downtime cannot grow it without li
       queued[0].message.content === "msg-20",
     true,
   );
+});
+
+void test("a pending invite replays until accepted or declined", async () => {
+  const sender = makeStore();
+  const author = await sender.registerAgent({
+    name: "owner",
+    harness: "pi",
+    cwd: "/tmp/p",
+    pid: process.pid,
+    visibility: "visible",
+    tags: [],
+  });
+  const target = makeStore();
+  const targetAgent = await target.registerAgent({
+    name: "invitee",
+    harness: "claude-code",
+    cwd: "/tmp/t",
+    pid: process.pid,
+    visibility: "visible",
+    tags: [],
+  });
+  sender.applyStateSync(target.serialise());
+  await sender.createRoom({
+    name: "private-room",
+    type: "private",
+    owner: author.id,
+    description: "x",
+  });
+  await sender.inviteToRoom("private-room", targetAgent.id, author.id);
+
+  const returned = makeStore();
+  const deliveries: DeliveryEvent[] = [];
+  returned.onDelivery = (_id, ev) => {
+    deliveries.push(ev);
+  };
+  returned.peerId = targetAgent.id;
+
+  // Still on the invited list: the invite replays.
+  returned.applyStateSync(snapshotOf(sender));
+  assert.equal(deliveries.filter((ev) => ev.type === "room_invite").length, 1);
+
+  // Declined (no longer invited): the same snapshot no longer replays it.
+  await sender.declineInvite("private-room", targetAgent.id, "not now");
+  const declined = makeStore();
+  const deliveries2: DeliveryEvent[] = [];
+  declined.onDelivery = (_id, ev) => {
+    deliveries2.push(ev);
+  };
+  declined.peerId = targetAgent.id;
+  declined.applyStateSync(snapshotOf(sender));
+  assert.equal(deliveries2.filter((ev) => ev.type === "room_invite").length, 0);
 });
