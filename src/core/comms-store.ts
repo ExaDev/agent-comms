@@ -105,6 +105,18 @@ export interface CommsStore {
   fedConnect(host: string, port: number, name?: string): Promise<string>;
   fedDisconnect(linkId: string): Promise<void>;
   fedLinks(): FedLink[];
+  /** This instance's own federation TLS fingerprint, to hand to an operator on the other side to pin. */
+  getFederationFingerprint(): string;
+  /** Pin a remote mesh's certificate fingerprint as trusted for federation, inbound or outbound. */
+  fedTrust(fingerprint: string): Promise<void>;
+  /** Remove a previously pinned federation fingerprint. */
+  fedUntrust(fingerprint: string): Promise<void>;
+  /** List currently trusted federation fingerprints. */
+  fedTrustedFingerprints(): string[];
+  /** Start accepting inbound federation links on host:port. Rejects any connection whose certificate isn't pinned via fedTrust(). */
+  fedListen(host: string, port: number): Promise<void>;
+  /** Stop accepting new inbound federation connections. Existing links are unaffected. */
+  fedStopListening(): Promise<void>;
   // -- Connection approval --
   acceptConnection(connectionId: string): Promise<void>;
   rejectConnection(connectionId: string, reason: string): Promise<void>;
