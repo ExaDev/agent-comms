@@ -405,12 +405,15 @@ export class TlsTransport {
       });
 
       server.listen(port, host, () => {
+        const addr = server.address();
+        const actualPort =
+          typeof addr === "object" && addr !== null ? addr.port : port;
         this._isCoordinator = true;
         this.coordinatorListeners.set(id, {
           server,
           policy: "full",
           host,
-          port,
+          port: actualPort,
           isDefault: true,
         });
         this.defaultListenerId = id;
