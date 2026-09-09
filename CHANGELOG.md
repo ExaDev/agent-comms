@@ -1,3 +1,10 @@
+## [1.26.0](https://github.com/ExaDev/agent-comms/compare/v1.25.7...v1.26.0) (2026-09-09)
+
+### Features
+
+* **mesh-store:** add per-agent membership operation maps to rooms ([2f95f9d](https://github.com/ExaDev/agent-comms/commit/2f95f9d122097b5f344cbe1e9debb13ba76a65e9))
+* **mesh-store:** converge room membership as a per-agent element set ([0dae92e](https://github.com/ExaDev/agent-comms/commit/0dae92ed66ce4bc9fe2397e05a2d65336eba5320))
+
 ## [1.25.7](https://github.com/ExaDev/agent-comms/compare/v1.25.6...v1.25.7) (2026-09-09)
 
 ### Bug Fixes
