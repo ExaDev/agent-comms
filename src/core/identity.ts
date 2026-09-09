@@ -321,6 +321,13 @@ export function generateIdentity(): PeerIdentity {
  */
 export function getCertificateFingerprint(certificate: string): string {
   const der = pemToDer(certificate);
+  return fingerprintDer(der);
+}
+
+/**
+ * Compute the SHA-256 fingerprint of a certificate already presented as raw DER bytes — the shape `tls.TLSSocket.getPeerCertificate().raw` returns for a live connection. Same hashing and formatting as `getCertificateFingerprint`, so a value pinned from a PEM certificate compares equal to the fingerprint of that same certificate presented live over a socket.
+ */
+export function fingerprintDer(der: Buffer): string {
   const hex = createHash("sha256").update(der).digest("hex").toUpperCase();
   const matched = hex.match(/.{2}/g);
   if (matched === null) return "";
