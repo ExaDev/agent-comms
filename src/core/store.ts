@@ -252,6 +252,10 @@ export class FileStore implements CommsStore {
       description: opts.description,
       members: [opts.owner],
       invited: [],
+      memberJoins: { [opts.owner]: 1 },
+      memberLeaves: {},
+      invitedJoins: {},
+      invitedLeaves: {},
     };
 
     await this.writeJsonFile(this.roomPath(id), room);
@@ -292,25 +296,24 @@ export class FileStore implements CommsStore {
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
 
-    if (room.type === "public") {
-      if (!room.members.includes(agentId)) {
-        room.members.push(agentId);
-      }
-    } else {
-      if (
-        !room.invited.includes(agentId) &&
-        room.owner !== agentId &&
-        !room.members.includes(agentId)
-      ) {
-        throw new CommsError(`Not invited to room ${roomId}`, "NOT_INVITED");
-      }
-      room.invited = room.invited.filter((id) => id !== agentId);
-      if (!room.members.includes(agentId)) {
-        room.members.push(agentId);
-      }
+    if (
+      room.type !== "public" &&
+      !room.invited.includes(agentId) &&
+      room.owner !== agentId &&
+      !room.members.includes(agentId)
+    ) {
+      throw new CommsError(`Not invited to room ${roomId}`, "NOT_INVITED");
     }
 
     room.version += 1;
+    room.memberJoins[agentId] = room.version;
+    room.invitedLeaves[agentId] = room.version;
+    room.members = Object.keys(room.memberJoins).filter(
+      (id) => (room.memberJoins[id] ?? 0) > (room.memberLeaves[id] ?? 0),
+    );
+    room.invited = Object.keys(room.invitedJoins).filter(
+      (id) => (room.invitedJoins[id] ?? 0) > (room.invitedLeaves[id] ?? 0),
+    );
     await this.writeJsonFile(this.roomPath(roomId), room);
 
     const agent = await this.getAgent(agentId);
@@ -333,8 +336,12 @@ export class FileStore implements CommsStore {
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
 
-    room.members = room.members.filter((id) => id !== agentId);
     room.version += 1;
+    room.memberLeaves[agentId] = room.version;
+    room.members = Object.keys(room.memberJoins).filter(
+      (id) => (room.memberJoins[id] ?? 0) > (room.memberLeaves[id] ?? 0),
+    );
+
     await this.writeJsonFile(this.roomPath(roomId), room);
 
     const agent = await this.getAgent(agentId);
@@ -422,9 +429,16 @@ export class FileStore implements CommsStore {
     if (room.owner !== kickerId)
       throw new CommsError("Only the room owner can kick", "NOT_OWNER");
 
-    room.members = room.members.filter((id) => id !== targetId);
-    room.invited = room.invited.filter((id) => id !== targetId);
     room.version += 1;
+    room.memberLeaves[targetId] = room.version;
+    room.invitedLeaves[targetId] = room.version;
+    room.members = Object.keys(room.memberJoins).filter(
+      (id) => (room.memberJoins[id] ?? 0) > (room.memberLeaves[id] ?? 0),
+    );
+    room.invited = Object.keys(room.invitedJoins).filter(
+      (id) => (room.invitedJoins[id] ?? 0) > (room.invitedLeaves[id] ?? 0),
+    );
+
     await this.writeJsonFile(this.roomPath(roomId), room);
   }
 
