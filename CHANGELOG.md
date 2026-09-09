@@ -1,3 +1,10 @@
+## [1.25.3](https://github.com/ExaDev/agent-comms/compare/v1.25.2...v1.25.3) (2026-09-09)
+
+### Bug Fixes
+
+* **core:** keep the certificate serial a minimal DER integer ([aff2031](https://github.com/ExaDev/agent-comms/commit/aff20314fe728c1533320a0f8aa319f4af42eb72))
+* **core:** stop dropping broadcasts sent while peer connections are still dialling ([e945458](https://github.com/ExaDev/agent-comms/commit/e9454588c3629d9c3b23e8814764237e033cdc42))
+
 ## [1.25.2](https://github.com/ExaDev/agent-comms/compare/v1.25.1...v1.25.2) (2026-09-08)
 
 ### Refactoring
