@@ -102,6 +102,18 @@ export const RoomSchema = defineSchema(
     description: z.string(),
     members: z.array(z.string()),
     invited: z.array(z.string()),
+    /**
+     * Per-agent membership operations for convergent merges. An agent is a
+     * member (or invited) iff their latest join's room revision strictly
+     * exceeds their latest leave's, so a leave at the same revision wins:
+     * concurrent kicks and joins converge with the kick honoured, while
+     * joins of different agents never interact. `members` and `invited` are
+     * derived views, refreshed after every mutation and merge.
+     */
+    memberJoins: z.record(z.string(), z.number()),
+    memberLeaves: z.record(z.string(), z.number()),
+    invitedJoins: z.record(z.string(), z.number()),
+    invitedLeaves: z.record(z.string(), z.number()),
     federated: z.boolean().optional(),
   }),
 );
