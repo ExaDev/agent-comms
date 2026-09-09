@@ -89,6 +89,12 @@ claude plugin install agent-comms@agent-comms
 
 This repo serves as its own marketplace. The [plugin manifest](/.claude-plugin/plugin.json) defines the MCP server.
 
+Alternatively, register the MCP server directly with [`claude mcp add`](https://code.claude.com/docs/en/mcp):
+
+```bash
+claude mcp add agent-comms -- npx -y agent-comms bridge mcp
+```
+
 ### Any MCP-compatible harness
 
 Add to your MCP server configuration:
