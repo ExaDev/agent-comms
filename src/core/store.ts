@@ -156,6 +156,7 @@ export class FileStore implements CommsStore {
     const id = nanoid(8);
     const agent: AgentIdentity = {
       id,
+      version: 1,
       name: opts.name,
       harness: opts.harness,
       cwd: opts.cwd,
@@ -193,6 +194,7 @@ export class FileStore implements CommsStore {
       throw new CommsError(`Agent ${id} not found`, "AGENT_NOT_FOUND");
 
     Object.assign(agent, patch);
+    agent.version += 1;
     await this.writeJsonFile(this.agentPath(id), agent);
     return agent;
   }
@@ -220,6 +222,7 @@ export class FileStore implements CommsStore {
     const agent = await this.getAgent(id);
     if (agent) {
       agent.status = "offline";
+      agent.version += 1;
       await this.writeJsonFile(this.agentPath(id), agent);
     }
   }
@@ -241,6 +244,7 @@ export class FileStore implements CommsStore {
 
     const room: Room = {
       id,
+      version: 1,
       name: opts.name,
       type: opts.type,
       owner: opts.owner,
@@ -306,6 +310,7 @@ export class FileStore implements CommsStore {
       }
     }
 
+    room.version += 1;
     await this.writeJsonFile(this.roomPath(roomId), room);
 
     const agent = await this.getAgent(agentId);
@@ -329,6 +334,7 @@ export class FileStore implements CommsStore {
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
 
     room.members = room.members.filter((id) => id !== agentId);
+    room.version += 1;
     await this.writeJsonFile(this.roomPath(roomId), room);
 
     const agent = await this.getAgent(agentId);
@@ -418,6 +424,7 @@ export class FileStore implements CommsStore {
 
     room.members = room.members.filter((id) => id !== targetId);
     room.invited = room.invited.filter((id) => id !== targetId);
+    room.version += 1;
     await this.writeJsonFile(this.roomPath(roomId), room);
   }
 
