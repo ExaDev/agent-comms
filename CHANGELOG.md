@@ -1,3 +1,9 @@
+## [1.25.6](https://github.com/ExaDev/agent-comms/compare/v1.25.5...v1.25.6) (2026-09-09)
+
+### Bug Fixes
+
+* **mesh-store:** replay pending deliveries to an agent returning from downtime ([39a2020](https://github.com/ExaDev/agent-comms/commit/39a202080350cea0239125769a8c75e21c92cb02))
+
 ## [1.25.5](https://github.com/ExaDev/agent-comms/compare/v1.25.4...v1.25.5) (2026-09-09)
 
 ### Bug Fixes
