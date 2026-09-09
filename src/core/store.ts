@@ -201,21 +201,27 @@ export class FileStore implements CommsStore {
 
   async listAgents(requesterId: string): Promise<AgentIdentity[]> {
     const dir = path.join(this.root, "registry", "agents");
+    let files: string[];
     try {
-      const files = await fs.readdir(dir);
-      const agents: AgentIdentity[] = [];
-      for (const file of files) {
-        if (!file.endsWith(".json")) continue;
-        const agent = AgentIdentitySchema.parse(
-          await this.readJsonFile(path.join(dir, file)),
-        );
-        if (agent.visibility === "ghost" && agent.id !== requesterId) continue;
-        agents.push(agent);
+      files = await fs.readdir(dir);
+    } catch (err) {
+      // A store with no registry yet legitimately lists no agents; a record
+      // that fails to parse is a real failure and must surface (#32).
+      if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+        return [];
       }
-      return agents;
-    } catch {
-      return [];
+      throw err;
     }
+    const agents: AgentIdentity[] = [];
+    for (const file of files) {
+      if (!file.endsWith(".json")) continue;
+      const agent = AgentIdentitySchema.parse(
+        await this.readJsonFile(path.join(dir, file)),
+      );
+      if (agent.visibility === "ghost" && agent.id !== requesterId) continue;
+      agents.push(agent);
+    }
+    return agents;
   }
 
   async setAgentOffline(id: string): Promise<void> {
@@ -375,7 +381,11 @@ export class FileStore implements CommsStore {
       throw new CommsError("Only the room owner can invite", "NOT_OWNER");
 
     if (!room.invited.includes(targetId) && !room.members.includes(targetId)) {
-      room.invited.push(targetId);
+      room.version += 1;
+      room.invitedJoins[targetId] = room.version;
+      room.invited = Object.keys(room.invitedJoins).filter(
+        (id) => (room.invitedJoins[id] ?? 0) > (room.invitedLeaves[id] ?? 0),
+      );
     }
     await this.writeJsonFile(this.roomPath(roomId), room);
 
@@ -405,7 +415,11 @@ export class FileStore implements CommsStore {
         "NOT_INVITED",
       );
 
-    room.invited = room.invited.filter((id) => id !== agentId);
+    room.version += 1;
+    room.invitedLeaves[agentId] = room.version;
+    room.invited = Object.keys(room.invitedJoins).filter(
+      (id) => (room.invitedJoins[id] ?? 0) > (room.invitedLeaves[id] ?? 0),
+    );
     await this.writeJsonFile(this.roomPath(roomId), room);
 
     const decliner = await this.getAgent(agentId);
