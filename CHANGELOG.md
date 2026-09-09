@@ -1,3 +1,9 @@
+## [1.27.2](https://github.com/ExaDev/agent-comms/compare/v1.27.1...v1.27.2) (2026-09-09)
+
+### Bug Fixes
+
+* **core:** verify a claimed peer ID against its presented certificate ([15113b0](https://github.com/ExaDev/agent-comms/commit/15113b0b902f5e7a4135f023fcb888864193fa29))
+
 ## [1.27.1](https://github.com/ExaDev/agent-comms/compare/v1.27.0...v1.27.1) (2026-09-09)
 
 ### Bug Fixes
