@@ -2,7 +2,8 @@
  * TlsTransport integration test — verifies that two MeshStore instances
  * can communicate over TLS with certificate pinning.
  *
- * Run: node dist/test/tls-transport.integration.test.js
+ * Run: node dist/test/tls-transport.integration.test.js [test-name]
+ * With no argument, every scenario runs in order.
  */
 
 import * as net from "node:net";
@@ -156,38 +157,42 @@ async function testFingerprintIsPeerId(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const testName = process.argv[2];
-if (testName === undefined) {
-  console.error("Usage: node tls-transport.integration.test.ts <test-name>");
-  process.exit(1);
-}
 
 const tests: Record<string, () => Promise<void>> = {
   "tls-communication": testTlsPeerCommunication,
   "tls-fingerprint": testFingerprintIsPeerId,
 };
 
-const fn = tests[testName];
-if (!fn) {
+const selected =
+  testName === undefined
+    ? Object.entries(tests)
+    : Object.entries(tests).filter(([name]) => name === testName);
+if (selected.length === 0) {
   console.error(`Unknown test: ${testName}`);
   console.error(`Available: ${Object.keys(tests).join(", ")}`);
   process.exit(1);
 }
 
-fn()
-  .then(async () => {
-    const maxWait = 2000;
-    const start = Date.now();
-    while (
-      ((
-        process as unknown as { _getActiveHandles?: () => unknown[] }
-      )._getActiveHandles?.()?.length ?? 0) > 0 &&
-      Date.now() - start < maxWait
-    ) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
-    }
-    process.exit(0);
-  })
-  .catch((err: unknown) => {
-    console.error(`FAIL [${testName}]:`, err);
-    process.exit(1);
-  });
+async function run(): Promise<void> {
+  for (const [name, fn] of selected) {
+    console.log(`Running ${name}:`);
+    await fn();
+  }
+
+  const maxWait = 2000;
+  const start = Date.now();
+  while (
+    ((
+      process as unknown as { _getActiveHandles?: () => unknown[] }
+    )._getActiveHandles?.()?.length ?? 0) > 0 &&
+    Date.now() - start < maxWait
+  ) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  }
+  process.exit(0);
+}
+
+run().catch((err: unknown) => {
+  console.error(`FAIL [${testName ?? "all"}]:`, err);
+  process.exit(1);
+});
