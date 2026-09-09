@@ -28,6 +28,7 @@ import type {
   TransportEvents,
 } from "./transport.js";
 import type { PeerIdentity } from "./identity.js";
+import { fingerprintDer } from "./identity.js";
 import { nanoid } from "./nanoid.js";
 
 // ---------------------------------------------------------------------------
@@ -188,8 +189,7 @@ export class TlsTransport {
     return {
       key: this.identity.privateKey,
       cert: this.identity.certificate,
-      // Do not reject unauthorized — we do our own fingerprint verification
-      // after the TLS handshake completes.
+      // Do not reject unauthorized — we do our own fingerprint verification after the TLS handshake completes, in verifyClaimedPeerId().
       rejectUnauthorized: false,
       requestCert: true,
     };
@@ -202,6 +202,43 @@ export class TlsTransport {
       rejectUnauthorized: false,
       // Don't verify server cert via CA — verify via fingerprint pinning
     };
+  }
+
+  // -----------------------------------------------------------------------
+  // Peer identity verification
+  // -----------------------------------------------------------------------
+
+  /**
+   * Verify a connected socket's presented certificate fingerprint matches the peer ID it claims via `introduce`/`pong` in the wire protocol, destroying the socket and returning false on any mismatch (including no certificate presented at all).
+   *
+   * Peer IDs are minted as the fingerprint of the peer's own certificate (identity.ts's `generateIdentity()`, wired up by every bridge as `store.peerId = identity.fingerprint`), so a claimed peer ID that doesn't match the certificate actually presented on this connection means the socket is not who it says it is — regardless of what it typed into the wire message.
+   */
+  private verifyClaimedPeerId(
+    socket: tls.TLSSocket,
+    claimedPeerId: string,
+  ): boolean {
+    const cert = socket.getPeerCertificate();
+    // Node's types declare every PeerCertificate field non-optional, but the documented runtime behaviour when the peer presents no certificate at all is an empty object — not null/undefined, and not a Buffer-typed `raw`. Detect that real shape rather than trusting the declared type.
+    if (Object.keys(cert).length === 0) {
+      socket.destroy();
+      this.events.onError?.(
+        new Error(
+          `Rejected connection claiming peer ID ${claimedPeerId}: no certificate presented`,
+        ),
+      );
+      return false;
+    }
+    const actualFingerprint = fingerprintDer(cert.raw);
+    if (actualFingerprint !== claimedPeerId) {
+      socket.destroy();
+      this.events.onError?.(
+        new Error(
+          `Rejected connection claiming peer ID ${claimedPeerId}: presented certificate fingerprint is ${actualFingerprint}`,
+        ),
+      );
+      return false;
+    }
+    return true;
   }
 
   // -----------------------------------------------------------------------
@@ -471,6 +508,12 @@ export class TlsTransport {
       const socket = tls.connect(
         { ...this.connectOptions, host: COORDINATOR_HOST, port: peer.port },
         () => {
+          if (!this.verifyClaimedPeerId(socket, peer.id)) {
+            this.pendingOutbound.delete(peer.id);
+            resolve();
+            return;
+          }
+
           const buffer = new MessageBuffer();
           this.peerConnections.set(peer.id, { socket, buffer });
 
@@ -770,6 +813,7 @@ export class TlsTransport {
         if (!isMeshMessage(item)) continue;
 
         if (item.method === "introduce") {
+          if (!this.verifyClaimedPeerId(socket, item.peerId)) continue;
           const handle: ConnectionHandle = { id: item.peerId, policy };
           this.introConnections.set(handle.id, socket);
           this.events.onIntroduction(handle, {
@@ -820,6 +864,7 @@ export class TlsTransport {
         if (isMeshMessage(item)) {
           if (item.method === "pong") {
             const peerId = item.peerId;
+            if (!this.verifyClaimedPeerId(socket, peerId)) continue;
             remotePeerId = peerId;
             if (!this.peerConnections.has(peerId)) {
               this.peerConnections.set(peerId, { socket, buffer });
