@@ -338,15 +338,7 @@ export class MeshStore implements CommsStore {
         if (existingVersion !== undefined && room.version < existingVersion) {
           continue;
         }
-        if (existingVersion === room.version) {
-          const existing = this.rooms.get(id);
-          if (existing) {
-            for (const m of existing.members) {
-              if (!room.members.includes(m)) room.members.push(m);
-            }
-          }
-        }
-        this.rooms.set(id, room);
+        this.mergeRoom(room);
       }
       for (const [id, msgs] of incoming.messages) {
         const existing = this.messages.get(id);
@@ -578,6 +570,90 @@ export class MeshStore implements CommsStore {
     this.deliveryQueues.set(agentId, arr);
   }
 
+  /**
+   * Merge an incoming room record into the local one. Scalar fields follow
+   * the version gate the caller already applied (an equal or higher version
+   * reaches here), while membership is always element-merged per agent by
+   * highest operation revision, so concurrent joins of different agents
+   * survive and a kick racing a join converges with the kick honoured
+   * (#27). The members and invited views are re-derived from the merged
+   * operations.
+   */
+  private mergeRoom(incoming: Room): void {
+    const existing = this.rooms.get(incoming.id);
+    if (existing === undefined) {
+      this.refreshMembership(incoming);
+      this.rooms.set(incoming.id, incoming);
+      return;
+    }
+    existing.version = Math.max(existing.version, incoming.version);
+    existing.name = incoming.name;
+    existing.type = incoming.type;
+    existing.owner = incoming.owner;
+    existing.createdAt = incoming.createdAt;
+    existing.description = incoming.description;
+    if (incoming.federated !== undefined)
+      existing.federated = incoming.federated;
+    existing.memberJoins = MeshStore.mergeMemberOps(
+      existing.memberJoins,
+      incoming.memberJoins,
+    );
+    existing.memberLeaves = MeshStore.mergeMemberOps(
+      existing.memberLeaves,
+      incoming.memberLeaves,
+    );
+    existing.invitedJoins = MeshStore.mergeMemberOps(
+      existing.invitedJoins,
+      incoming.invitedJoins,
+    );
+    existing.invitedLeaves = MeshStore.mergeMemberOps(
+      existing.invitedLeaves,
+      incoming.invitedLeaves,
+    );
+    this.refreshMembership(existing);
+  }
+
+  /**
+   * Derive the members and invited views from the per-agent operation maps.
+   * An agent is in the list when their latest join strictly outranks their
+   * latest leave; equal revisions mean the leave wins, so a kick racing a
+   * concurrent join converges with the kick honoured (#27).
+   */
+  private refreshMembership(room: Room): void {
+    room.members = Object.keys(room.memberJoins).filter(
+      (id) => (room.memberJoins[id] ?? 0) > (room.memberLeaves[id] ?? 0),
+    );
+    room.invited = Object.keys(room.invitedJoins).filter(
+      (id) => (room.invitedJoins[id] ?? 0) > (room.invitedLeaves[id] ?? 0),
+    );
+  }
+
+  /** Record a membership operation at the room's current revision. */
+  private recordMemberOp(
+    room: Room,
+    list: "member" | "invited",
+    op: "join" | "leave",
+    agentId: string,
+  ): void {
+    const joins = list === "member" ? room.memberJoins : room.invitedJoins;
+    const leaves = list === "member" ? room.memberLeaves : room.invitedLeaves;
+    const stamp = room.version;
+    if (op === "join") joins[agentId] = stamp;
+    else leaves[agentId] = stamp;
+  }
+
+  /** Merge per-agent operation maps by highest revision per agent. */
+  private static mergeMemberOps(
+    local: Record<string, number>,
+    incoming: Record<string, number>,
+  ): Record<string, number> {
+    const merged: Record<string, number> = { ...local };
+    for (const [id, stamp] of Object.entries(incoming)) {
+      if (stamp > (merged[id] ?? 0)) merged[id] = stamp;
+    }
+    return merged;
+  }
+
   /** Bump an entity's sync revision; call before broadcasting a local mutation. */
   private bump<T extends { version: number }>(entity: T): T {
     entity.version += 1;
@@ -625,17 +701,7 @@ export class MeshStore implements CommsStore {
           // Stale copy from a peer that missed updates (#27).
           break;
         }
-        const merged = patch.room;
-        if (existing?.version === patch.room.version) {
-          // Concurrent mutations from the same base: union members so
-          // simultaneous joins both survive. A strictly higher version
-          // replaces the record wholesale, which is what heals a leave or
-          // edit a lagging peer missed.
-          for (const m of existing.members) {
-            if (!merged.members.includes(m)) merged.members.push(m);
-          }
-        }
-        this.rooms.set(merged.id, merged);
+        this.mergeRoom(patch.room);
         break;
       }
       case "room_delete":
@@ -1075,6 +1141,10 @@ export class MeshStore implements CommsStore {
       description: opts.description,
       members: [opts.owner],
       invited: [],
+      memberJoins: { [opts.owner]: 1 },
+      memberLeaves: {},
+      invitedJoins: {},
+      invitedLeaves: {},
       federated: opts.federated ?? false,
     };
 
@@ -1105,21 +1175,20 @@ export class MeshStore implements CommsStore {
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
 
-    if (room.type === "public") {
-      if (!room.members.includes(agentId)) room.members.push(agentId);
-    } else {
-      if (
-        !room.invited.includes(agentId) &&
-        room.owner !== agentId &&
-        !room.members.includes(agentId)
-      ) {
+    const alreadyMember = room.members.includes(agentId);
+    if (!alreadyMember && room.type !== "public") {
+      if (!room.invited.includes(agentId) && room.owner !== agentId) {
         throw new CommsError(`Not invited to room ${roomId}`, "NOT_INVITED");
       }
-      room.invited = room.invited.filter((id) => id !== agentId);
-      if (!room.members.includes(agentId)) room.members.push(agentId);
     }
 
     this.bump(room);
+    this.recordMemberOp(room, "member", "join", agentId);
+    if (alreadyMember || room.type !== "public") {
+      // Consuming an invitation (or re-joining) retires the invited entry.
+      this.recordMemberOp(room, "invited", "leave", agentId);
+    }
+    this.refreshMembership(room);
     this.rooms.set(roomId, room);
 
     const agent = this.agents.get(agentId);
@@ -1175,8 +1244,9 @@ export class MeshStore implements CommsStore {
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
 
-    room.members = room.members.filter((id) => id !== agentId);
     this.bump(room);
+    this.recordMemberOp(room, "member", "leave", agentId);
+    this.refreshMembership(room);
     this.rooms.set(roomId, room);
 
     const agent = this.agents.get(agentId);
@@ -1216,10 +1286,11 @@ export class MeshStore implements CommsStore {
     if (room.owner !== inviterId)
       throw new CommsError("Only the room owner can invite", "NOT_OWNER");
 
-    if (!room.invited.includes(targetId) && !room.members.includes(targetId)) {
-      room.invited.push(targetId);
-    }
     this.bump(room);
+    if (!room.invited.includes(targetId) && !room.members.includes(targetId)) {
+      this.recordMemberOp(room, "invited", "join", targetId);
+    }
+    this.refreshMembership(room);
     this.rooms.set(roomId, room);
     await this.broadcastPatch({ type: "room_upsert", room });
 
@@ -1249,8 +1320,9 @@ export class MeshStore implements CommsStore {
         "NOT_INVITED",
       );
 
-    room.invited = room.invited.filter((id) => id !== agentId);
     this.bump(room);
+    this.recordMemberOp(room, "invited", "leave", agentId);
+    this.refreshMembership(room);
     this.rooms.set(roomId, room);
     await this.broadcastPatch({ type: "room_upsert", room });
 
@@ -1275,9 +1347,10 @@ export class MeshStore implements CommsStore {
     if (room.owner !== kickerId)
       throw new CommsError("Only the room owner can kick", "NOT_OWNER");
 
-    room.members = room.members.filter((id) => id !== targetId);
-    room.invited = room.invited.filter((id) => id !== targetId);
     this.bump(room);
+    this.recordMemberOp(room, "member", "leave", targetId);
+    this.recordMemberOp(room, "invited", "leave", targetId);
+    this.refreshMembership(room);
     this.rooms.set(roomId, room);
     await this.broadcastPatch({ type: "room_upsert", room });
   }
@@ -1633,8 +1706,9 @@ export class MeshStore implements CommsStore {
     const remoteId = `fed:${agentId}`;
 
     if (!room.members.includes(remoteId)) {
-      room.members.push(remoteId);
       this.bump(room);
+      this.recordMemberOp(room, "member", "join", remoteId);
+      this.refreshMembership(room);
       this.rooms.set(roomId, room);
       await this.broadcastPatch({ type: "room_upsert", room });
     }
@@ -1659,8 +1733,9 @@ export class MeshStore implements CommsStore {
     if (!room?.federated) return;
 
     const remoteId = `fed:${agentId}`;
-    room.members = room.members.filter((m) => m !== remoteId);
     this.bump(room);
+    this.recordMemberOp(room, "member", "leave", remoteId);
+    this.refreshMembership(room);
     this.rooms.set(roomId, room);
     await this.broadcastPatch({ type: "room_upsert", room });
 

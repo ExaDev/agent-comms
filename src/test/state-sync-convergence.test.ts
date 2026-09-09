@@ -156,3 +156,107 @@ void test("history sync adds unseen messages and unions read receipts", async ()
   );
   assert.equal(merged[0]?.readBy.includes("reader-elsewhere"), true);
 });
+
+void test("a kick racing a concurrent join converges with the kick honoured", async () => {
+  // Two holders of the same room base: one records X leaving (a kick), the
+  // other records X joining, both at the same revision because they mutated
+  // concurrently from the same base. Both directions of the sync must
+  // converge on X being out — the leave wins an exact tie (#27).
+  const base = makeStore();
+  const owner = await base.registerAgent({
+    name: "owner",
+    harness: "pi",
+    cwd: "/tmp/p",
+    pid: process.pid,
+    visibility: "visible",
+    tags: [],
+  });
+  const member = makeStore();
+  const x = await member.registerAgent({
+    name: "x",
+    harness: "claude-code",
+    cwd: "/tmp/x",
+    pid: process.pid,
+    visibility: "visible",
+    tags: [],
+  });
+  await base.createRoom({
+    name: "room",
+    type: "public",
+    owner: owner.id,
+    description: "x",
+  });
+  await base.joinRoom("room", x.id);
+
+  const kicker = makeStore();
+  const joiner = makeStore();
+  kicker.applyStateSync(snapshotOf(base));
+  joiner.applyStateSync(snapshotOf(base));
+
+  // Concurrent mutations from the same base: a kick on one holder, a
+  // re-join of X recorded on the other.
+  await kicker.leaveRoom("room", x.id);
+  await joiner.joinRoom("room", x.id);
+  assert.equal((await kicker.getRoom("room"))?.members.includes(x.id), false);
+  assert.equal((await joiner.getRoom("room"))?.members.includes(x.id), true);
+
+  // Exchange both ways: both converge on the kick.
+  kicker.applyStateSync(snapshotOf(joiner));
+  joiner.applyStateSync(snapshotOf(kicker));
+  assert.equal((await kicker.getRoom("room"))?.members.includes(x.id), false);
+  assert.equal((await joiner.getRoom("room"))?.members.includes(x.id), false);
+});
+
+void test("concurrent joins of different agents both survive the merge", async () => {
+  // The property the old version-tie union existed to protect: two peers
+  // each record a different agent joining from the same base, and the
+  // merged room holds both.
+  const base = makeStore();
+  const owner = await base.registerAgent({
+    name: "owner",
+    harness: "pi",
+    cwd: "/tmp/p",
+    pid: process.pid,
+    visibility: "visible",
+    tags: [],
+  });
+  const agents = makeStore();
+  const p = await agents.registerAgent({
+    name: "p",
+    harness: "claude-code",
+    cwd: "/tmp/1",
+    pid: process.pid,
+    visibility: "visible",
+    tags: [],
+  });
+  const q = await agents.registerAgent({
+    name: "q",
+    harness: "codex",
+    cwd: "/tmp/2",
+    pid: process.pid,
+    visibility: "visible",
+    tags: [],
+  });
+  await base.createRoom({
+    name: "room",
+    type: "public",
+    owner: owner.id,
+    description: "x",
+  });
+  base.applyStateSync(snapshotOf(agents));
+
+  const holderA = makeStore();
+  const holderB = makeStore();
+  holderA.applyStateSync(snapshotOf(base));
+  holderB.applyStateSync(snapshotOf(base));
+  await holderA.joinRoom("room", p.id);
+  await holderB.joinRoom("room", q.id);
+
+  holderA.applyStateSync(snapshotOf(holderB));
+  holderB.applyStateSync(snapshotOf(holderA));
+  const mergedA = await holderA.getRoom("room");
+  const mergedB = await holderB.getRoom("room");
+  assert.equal(mergedA?.members.includes(p.id), true);
+  assert.equal(mergedA?.members.includes(q.id), true);
+  assert.deepEqual(mergedB?.members, mergedA?.members);
+});
