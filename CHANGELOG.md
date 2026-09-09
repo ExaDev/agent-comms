@@ -1,3 +1,9 @@
+## [1.26.1](https://github.com/ExaDev/agent-comms/compare/v1.26.0...v1.26.1) (2026-09-09)
+
+### Documentation
+
+* add claude mcp add as alternative Claude Code install method ([eac9d0c](https://github.com/ExaDev/agent-comms/commit/eac9d0c4978142752183777a7e31a91493086478))
+
 ## [1.26.0](https://github.com/ExaDev/agent-comms/compare/v1.25.7...v1.26.0) (2026-09-09)
 
 ### Features
