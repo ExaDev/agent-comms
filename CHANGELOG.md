@@ -1,3 +1,9 @@
+## [1.25.5](https://github.com/ExaDev/agent-comms/compare/v1.25.4...v1.25.5) (2026-09-09)
+
+### Bug Fixes
+
+* **mesh-store:** converge state sync by per-entity version ([4ea4a73](https://github.com/ExaDev/agent-comms/commit/4ea4a7360fb18ccbb763e816ef0ee24de3467e96))
+
 ## [1.25.4](https://github.com/ExaDev/agent-comms/compare/v1.25.3...v1.25.4) (2026-09-09)
 
 ### Tests
