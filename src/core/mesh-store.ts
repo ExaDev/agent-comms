@@ -53,6 +53,13 @@ const DEFAULT_COORDINATOR_PORT = 19876;
 const COORDINATOR_HOST = "127.0.0.1";
 
 /**
+ * Bound on pending delivery events held per target agent. Events beyond the
+ * bound drop oldest-first: a long-offline agent's queue cannot grow without
+ * limit in memory or in synced snapshots (#28).
+ */
+const MAX_QUEUED_DELIVERIES_PER_AGENT = 100;
+
+/**
  * Merge an incoming append-only message history into the local one: add
  * entries the local list does not have and union read receipts on the ones
  * it does. Local ordering is preserved; unseen entries are appended.
@@ -125,6 +132,7 @@ export class MeshStore implements CommsStore {
       rooms: Object.fromEntries(this.rooms),
       messages: Object.fromEntries(this.messages),
       dms: Object.fromEntries(this.dms),
+      deliveryQueues: Object.fromEntries(this.deliveryQueues),
     };
   }
 
@@ -285,12 +293,7 @@ export class MeshStore implements CommsStore {
   ): Promise<void> {
     // If we have state and the peer doesn't, send state sync
     if (this.agents.size > 0) {
-      const state: SerialisedState = {
-        agents: Object.fromEntries(this.agents),
-        rooms: Object.fromEntries(this.rooms),
-        messages: Object.fromEntries(this.messages),
-        dms: Object.fromEntries(this.dms),
-      };
+      const state: SerialisedState = this.serialise();
       await this.transport.send(handle, {
         method: "state_sync",
         state,
@@ -361,6 +364,20 @@ export class MeshStore implements CommsStore {
         }
         mergeMessageHistories(existing, dmMsgs);
       }
+      for (const [agentId, events] of Object.entries(state.deliveryQueues)) {
+        const seen = new Set(
+          (this.deliveryQueues.get(agentId) ?? []).map((e) =>
+            JSON.stringify(e),
+          ),
+        );
+        for (const event of events) {
+          if (seen.has(JSON.stringify(event))) continue;
+          this.queueDelivery(agentId, event);
+          // A returning peer replays its own pending queue: events pushed
+          // while its process was down fire onDelivery now (#28).
+          this.fireLocalDelivery(agentId, event);
+        }
+      }
     }
   }
 
@@ -423,9 +440,7 @@ export class MeshStore implements CommsStore {
       name: request.name,
       fingerprint: request.fingerprint,
     };
-    const arr = this.deliveryQueues.get(this.peerId) ?? [];
-    arr.push(event);
-    this.deliveryQueues.set(this.peerId, arr);
+    this.queueDelivery(this.peerId, event);
     if (this.onDelivery) {
       void this.onDelivery(this.peerId, event);
     }
@@ -538,6 +553,16 @@ export class MeshStore implements CommsStore {
     };
   }
 
+  /** Append to a target agent's delivery queue, bounded oldest-first (#28). */
+  private queueDelivery(agentId: string, event: DeliveryEvent): void {
+    const arr = this.deliveryQueues.get(agentId) ?? [];
+    arr.push(event);
+    if (arr.length > MAX_QUEUED_DELIVERIES_PER_AGENT) {
+      arr.splice(0, arr.length - MAX_QUEUED_DELIVERIES_PER_AGENT);
+    }
+    this.deliveryQueues.set(agentId, arr);
+  }
+
   /** Bump an entity's sync revision; call before broadcasting a local mutation. */
   private bump<T extends { version: number }>(entity: T): T {
     entity.version += 1;
@@ -614,9 +639,7 @@ export class MeshStore implements CommsStore {
         break;
       }
       case "delivery": {
-        const arr = this.deliveryQueues.get(patch.agentId) ?? [];
-        arr.push(patch.event);
-        this.deliveryQueues.set(patch.agentId, arr);
+        this.queueDelivery(patch.agentId, patch.event);
         if (patch.agentId === this.peerId && this.onDelivery) {
           // Deduplicate against local deliveries
           const eventKey = JSON.stringify(patch.event);
@@ -672,9 +695,7 @@ export class MeshStore implements CommsStore {
     event: DeliveryEvent,
   ): Promise<void> {
     // Local delivery
-    const arr = this.deliveryQueues.get(agentId) ?? [];
-    arr.push(event);
-    this.deliveryQueues.set(agentId, arr);
+    this.queueDelivery(agentId, event);
 
     // Auto-emit delivered status for messages
     if (event.type === "room_message") {
@@ -688,35 +709,59 @@ export class MeshStore implements CommsStore {
       await this.emitDeliveryStatus(event.message.id, agentId, "delivered");
     }
 
-    if (agentId === this.peerId && this.onDelivery) {
-      // Deduplicate: skip if this exact event was already delivered locally.
-      // The mesh can echo delivery patches through multiple peer paths,
-      // causing applyPatch to fire onDelivery for the same event.
-      const eventKey = JSON.stringify(event);
-      if (this.localDeliveryKeys.has(eventKey)) return;
-      this.localDeliveryKeys.add(eventKey);
-      // Prevent unbounded growth — evict oldest when cap reached
-      if (this.localDeliveryKeys.size > 50) {
-        const oldest = this.localDeliveryKeys.values().next().value;
-        if (oldest !== undefined) this.localDeliveryKeys.delete(oldest);
-      }
-      void this.onDelivery(agentId, event);
-      // Auto-mark read — scheduled as a macrotask to yield to the event
-      // loop (see matching comment in applyPatch for rationale).
-      const timer = setTimeout(() => {
-        if (this.isShutDown) return;
-        if (event.type === "room_message") {
-          void this.markRead(event.message.id, agentId, event.message.room);
-        } else if (event.type === "dm") {
-          void this.markRead(event.message.id, agentId);
-        }
-      }, 0);
-      if (!this.isShutDown) this.pendingMarkReadTimers.push(timer);
-    }
+    this.fireLocalDelivery(agentId, event);
 
     // Remote delivery
     const patch: MeshStatePatch = { type: "delivery", agentId, event };
     await this.broadcastPatch(patch);
+  }
+
+  /**
+   * Fire onDelivery for an event targeting this peer's own agent, deduped
+   * against events already delivered in this process. Used both for live
+   * deliveries and for replays of events that accumulated while this
+   * process was down (#28): the dedup set is per-process, so a replayed
+   * event this process never saw fires, and one it already handled does
+   * not.
+   */
+  private fireLocalDelivery(agentId: string, event: DeliveryEvent): void {
+    if (agentId !== this.peerId || !this.onDelivery) return;
+    // A room message or DM this agent has already read was already pushed
+    // and consumed: read receipts mutate the event between snapshots, so a
+    // plain structural key would miss and re-fire on the next sync (#28).
+    if (
+      (event.type === "room_message" || event.type === "dm") &&
+      event.message.readBy.includes(agentId)
+    ) {
+      return;
+    }
+    const eventKey = JSON.stringify(event);
+    if (this.localDeliveryKeys.has(eventKey)) return;
+    this.localDeliveryKeys.add(eventKey);
+    // Prevent unbounded growth — evict oldest when cap reached
+    if (this.localDeliveryKeys.size > 50) {
+      const oldest = this.localDeliveryKeys.values().next().value;
+      if (oldest !== undefined) this.localDeliveryKeys.delete(oldest);
+    }
+    void this.onDelivery(agentId, event);
+    // Delivered to this process, so no longer pending for it. Peers that
+    // never fired the event keep their copies, which is what a restart
+    // replays from (#28). Key-based match: replayed events are JSON clones.
+    const queued = this.deliveryQueues.get(agentId);
+    if (queued !== undefined) {
+      const idx = queued.findIndex((e) => JSON.stringify(e) === eventKey);
+      if (idx !== -1) queued.splice(idx, 1);
+    }
+    // Auto-mark read — scheduled as a macrotask to yield to the event loop.
+    const timer = setTimeout(() => {
+      if (this.isShutDown) return;
+      if (event.type === "room_message") {
+        void this.markRead(event.message.id, agentId, event.message.room);
+      } else if (event.type === "dm") {
+        void this.markRead(event.message.id, agentId);
+      }
+    }, 0);
+    if (!this.isShutDown) this.pendingMarkReadTimers.push(timer);
   }
 
   private async deliverToRoom(
@@ -1423,6 +1468,7 @@ export class MeshStore implements CommsStore {
       this.agents.delete(id);
       this.peerInfo.delete(id);
       this.identityCache.delete(id);
+      this.deliveryQueues.delete(id);
     }
   }
 
