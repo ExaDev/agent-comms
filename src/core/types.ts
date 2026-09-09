@@ -384,6 +384,22 @@ export const CommsActionSchema = defineSchema(
       linkId: z.string(),
     }),
     z.object({ action: z.literal("mesh_fed_links") }),
+    z.object({ action: z.literal("mesh_fed_fingerprint") }),
+    z.object({
+      action: z.literal("mesh_fed_trust"),
+      fingerprint: z.string(),
+    }),
+    z.object({
+      action: z.literal("mesh_fed_untrust"),
+      fingerprint: z.string(),
+    }),
+    z.object({ action: z.literal("mesh_fed_trusted") }),
+    z.object({
+      action: z.literal("mesh_fed_listen"),
+      host: z.string(),
+      port: z.number(),
+    }),
+    z.object({ action: z.literal("mesh_fed_stop_listening") }),
   ]),
 );
 export type CommsAction = z.infer<typeof CommsActionSchema>;

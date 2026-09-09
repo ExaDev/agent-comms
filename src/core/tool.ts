@@ -108,6 +108,18 @@ export class CommsTool {
           return await this.meshFedDisconnect(ctx, action);
         case "mesh_fed_links":
           return this.meshFedLinks(ctx);
+        case "mesh_fed_fingerprint":
+          return this.meshFedFingerprint(ctx);
+        case "mesh_fed_trust":
+          return await this.meshFedTrust(ctx, action);
+        case "mesh_fed_untrust":
+          return await this.meshFedUntrust(ctx, action);
+        case "mesh_fed_trusted":
+          return this.meshFedTrusted(ctx);
+        case "mesh_fed_listen":
+          return await this.meshFedListen(ctx, action);
+        case "mesh_fed_stop_listening":
+          return await this.meshFedStopListening(ctx);
         default:
           return {
             content: `Unknown action: ${JSON.stringify(action).slice(0, 100)}`,
@@ -607,6 +619,93 @@ export class CommsTool {
       content: `Federation links:\n${lines.map((l) => `  ${l}`).join("\n")}`,
       isError: false,
     };
+  }
+
+  private meshFedFingerprint(_ctx: CommsContext): CommsResult {
+    const fingerprint = this.store.getFederationFingerprint();
+    return {
+      content: `This mesh's federation fingerprint: ${fingerprint}\nHand this to the operator on the other side so they can run mesh_fed_trust with it — and do the same in reverse before either side connects.`,
+      isError: false,
+    };
+  }
+
+  private async meshFedTrust(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "mesh_fed_trust" },
+  ): Promise<CommsResult> {
+    try {
+      await this.store.fedTrust(action.fingerprint);
+      return {
+        content: `Trusted federation fingerprint: ${action.fingerprint}`,
+        isError: false,
+      };
+    } catch (err) {
+      return {
+        content: `Failed to trust fingerprint: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  private async meshFedUntrust(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "mesh_fed_untrust" },
+  ): Promise<CommsResult> {
+    try {
+      await this.store.fedUntrust(action.fingerprint);
+      return {
+        content: `Untrusted federation fingerprint: ${action.fingerprint}`,
+        isError: false,
+      };
+    } catch (err) {
+      return {
+        content: `Failed to untrust fingerprint: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  private meshFedTrusted(_ctx: CommsContext): CommsResult {
+    const fingerprints = this.store.fedTrustedFingerprints();
+    if (fingerprints.length === 0)
+      return { content: "No trusted federation fingerprints.", isError: false };
+    return {
+      content: `Trusted federation fingerprints:\n${fingerprints.map((f) => `  ${f}`).join("\n")}`,
+      isError: false,
+    };
+  }
+
+  private async meshFedListen(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "mesh_fed_listen" },
+  ): Promise<CommsResult> {
+    try {
+      await this.store.fedListen(action.host, action.port);
+      return {
+        content: `Listening for inbound federation links on ${action.host}:${String(action.port)}. Only connections presenting a trusted fingerprint (mesh_fed_trust) will be accepted.`,
+        isError: false,
+      };
+    } catch (err) {
+      return {
+        content: `Failed to start federation listener: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  private async meshFedStopListening(_ctx: CommsContext): Promise<CommsResult> {
+    try {
+      await this.store.fedStopListening();
+      return {
+        content: "Stopped accepting inbound federation connections.",
+        isError: false,
+      };
+    } catch (err) {
+      return {
+        content: `Failed to stop federation listener: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
   }
 
   private async meshReject(
