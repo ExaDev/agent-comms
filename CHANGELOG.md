@@ -1,3 +1,13 @@
+## [1.27.3](https://github.com/ExaDev/agent-comms/compare/v1.27.2...v1.27.3) (2026-09-09)
+
+### Bug Fixes
+
+* read the OS-assigned port back from the listener in becomeCoordinator ([3876df5](https://github.com/ExaDev/agent-comms/commit/3876df553d53dd66f5be09147b53364c5a94741c))
+
+### Tests
+
+* cover becomeCoordinator's reported port against an OS-assigned bind ([c1c44ca](https://github.com/ExaDev/agent-comms/commit/c1c44caea84937caeb8e5f19b07aa34125b676a1))
+
 ## [1.27.2](https://github.com/ExaDev/agent-comms/compare/v1.27.1...v1.27.2) (2026-09-09)
 
 ### Bug Fixes
