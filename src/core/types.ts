@@ -71,6 +71,8 @@ export type StreamingBehavior = z.infer<typeof StreamingBehavior>;
 export const AgentIdentitySchema = defineSchema(
   z.object({
     id: z.string(),
+    /** Monotonic revision, bumped by the mutating store; sync merges take the higher value. */
+    version: z.number(),
     name: z.string(),
     harness: z.string(),
     cwd: z.string(),
@@ -91,6 +93,8 @@ export type AgentIdentity = z.infer<typeof AgentIdentitySchema>;
 export const RoomSchema = defineSchema(
   z.object({
     id: z.string(),
+    /** Monotonic revision, bumped by the mutating store; sync merges take the higher value. */
+    version: z.number(),
     name: z.string(),
     type: RoomType,
     owner: z.string(),

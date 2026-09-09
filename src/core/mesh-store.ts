@@ -52,6 +52,29 @@ import type { ListenerInfo, ListenerPolicy } from "./transport.js";
 const DEFAULT_COORDINATOR_PORT = 19876;
 const COORDINATOR_HOST = "127.0.0.1";
 
+/**
+ * Merge an incoming append-only message history into the local one: add
+ * entries the local list does not have and union read receipts on the ones
+ * it does. Local ordering is preserved; unseen entries are appended.
+ */
+function mergeMessageHistories<T extends { id: string; readBy: string[] }>(
+  local: T[],
+  incoming: T[],
+): void {
+  const byId = new Map(local.map((m) => [m.id, m]));
+  for (const msg of incoming) {
+    const existing = byId.get(msg.id);
+    if (existing === undefined) {
+      local.push(msg);
+      byId.set(msg.id, msg);
+      continue;
+    }
+    for (const reader of msg.readBy) {
+      if (!existing.readBy.includes(reader)) existing.readBy.push(reader);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // MeshStore
 // ---------------------------------------------------------------------------
@@ -275,30 +298,78 @@ export class MeshStore implements CommsStore {
     }
   }
 
+  /**
+   * Merge a peer's state snapshot into the local state. Agents and rooms
+   * accept the incoming copy when it carries a revision at least as high as
+   * the local one, so a peer holding stale entities converges when it
+   * receives a fresher snapshot, while its own stale copies are rejected by
+   * peers that stayed current (#27). Message and DM histories are
+   * append-only: add unseen entries and union read receipts.
+   */
+  applyStateSync(state: SerialisedState): void {
+    const incoming = {
+      agents: new Map(Object.entries(state.agents)),
+      rooms: new Map(Object.entries(state.rooms)),
+      messages: new Map(Object.entries(state.messages)),
+      dms: new Map(Object.entries(state.dms)),
+    };
+    {
+      for (const [id, agent] of incoming.agents) {
+        const existingVersion = this.agents.get(id)?.version;
+        if (existingVersion !== undefined && agent.version < existingVersion) {
+          continue;
+        }
+        if (existingVersion === agent.version) {
+          const existing = this.agents.get(id);
+          if (existing) {
+            for (const r of existing.subscribedRooms) {
+              if (!agent.subscribedRooms.includes(r))
+                agent.subscribedRooms.push(r);
+            }
+          }
+        }
+        this.agents.set(id, agent);
+      }
+      for (const [id, room] of incoming.rooms) {
+        const existingVersion = this.rooms.get(id)?.version;
+        if (existingVersion !== undefined && room.version < existingVersion) {
+          continue;
+        }
+        if (existingVersion === room.version) {
+          const existing = this.rooms.get(id);
+          if (existing) {
+            for (const m of existing.members) {
+              if (!room.members.includes(m)) room.members.push(m);
+            }
+          }
+        }
+        this.rooms.set(id, room);
+      }
+      for (const [id, msgs] of incoming.messages) {
+        const existing = this.messages.get(id);
+        if (existing === undefined) {
+          this.messages.set(id, msgs);
+          continue;
+        }
+        mergeMessageHistories(existing, msgs);
+      }
+      for (const [id, dmMsgs] of incoming.dms) {
+        const existing = this.dms.get(id);
+        if (existing === undefined) {
+          this.dms.set(id, dmMsgs);
+          continue;
+        }
+        mergeMessageHistories(existing, dmMsgs);
+      }
+    }
+  }
+
   private async handleDataMessage(
     handle: ConnectionHandle,
     msg: MeshMessage,
   ): Promise<void> {
     if (msg.method === "state_sync") {
-      // Merge — don't replace — so our own state isn't lost
-      const incoming = {
-        agents: new Map(Object.entries(msg.state.agents)),
-        rooms: new Map(Object.entries(msg.state.rooms)),
-        messages: new Map(Object.entries(msg.state.messages)),
-        dms: new Map(Object.entries(msg.state.dms)),
-      };
-      for (const [id, agent] of incoming.agents) {
-        if (!this.agents.has(id)) this.agents.set(id, agent);
-      }
-      for (const [id, room] of incoming.rooms) {
-        if (!this.rooms.has(id)) this.rooms.set(id, room);
-      }
-      for (const [id, msgs] of incoming.messages) {
-        if (!this.messages.has(id)) this.messages.set(id, msgs);
-      }
-      for (const [id, dmMsgs] of incoming.dms) {
-        if (!this.dms.has(id)) this.dms.set(id, dmMsgs);
-      }
+      this.applyStateSync(msg.state);
     } else if (msg.method === "state_update") {
       await this.applyPatch(msg.patch);
     }
@@ -467,6 +538,12 @@ export class MeshStore implements CommsStore {
     };
   }
 
+  /** Bump an entity's sync revision; call before broadcasting a local mutation. */
+  private bump<T extends { version: number }>(entity: T): T {
+    entity.version += 1;
+    return entity;
+  }
+
   // -----------------------------------------------------------------------
   // State patch application
   // -----------------------------------------------------------------------
@@ -474,18 +551,24 @@ export class MeshStore implements CommsStore {
   private async applyPatch(patch: MeshStatePatch): Promise<void> {
     switch (patch.type) {
       case "agent_upsert": {
-        // Merge subscribedRooms to avoid losing local room memberships.
         const existingAgent = this.agents.get(patch.agent.id);
-        if (existingAgent) {
-          const merged = patch.agent;
+        if (
+          existingAgent !== undefined &&
+          patch.agent.version < existingAgent.version
+        ) {
+          // Stale copy from a peer that missed updates (#27).
+          break;
+        }
+        const merged = patch.agent;
+        if (existingAgent?.version === patch.agent.version) {
+          // Concurrent mutations from the same base: keep subscriptions
+          // gained locally. A strictly higher version replaces the record.
           for (const r of existingAgent.subscribedRooms) {
             if (!merged.subscribedRooms.includes(r))
               merged.subscribedRooms.push(r);
           }
-          this.agents.set(merged.id, merged);
-        } else {
-          this.agents.set(patch.agent.id, patch.agent);
         }
+        this.agents.set(merged.id, merged);
         break;
       }
       case "agent_offline": {
@@ -497,18 +580,22 @@ export class MeshStore implements CommsStore {
         break;
       }
       case "room_upsert": {
-        // Merge members rather than overwriting — last-write-wins can lose
-        // members added locally when a remote patch arrives with a stale list.
         const existing = this.rooms.get(patch.room.id);
-        if (existing) {
-          const merged = patch.room;
+        if (existing !== undefined && patch.room.version < existing.version) {
+          // Stale copy from a peer that missed updates (#27).
+          break;
+        }
+        const merged = patch.room;
+        if (existing?.version === patch.room.version) {
+          // Concurrent mutations from the same base: union members so
+          // simultaneous joins both survive. A strictly higher version
+          // replaces the record wholesale, which is what heals a leave or
+          // edit a lagging peer missed.
           for (const m of existing.members) {
             if (!merged.members.includes(m)) merged.members.push(m);
           }
-          this.rooms.set(merged.id, merged);
-        } else {
-          this.rooms.set(patch.room.id, patch.room);
         }
+        this.rooms.set(merged.id, merged);
         break;
       }
       case "room_delete":
@@ -819,6 +906,7 @@ export class MeshStore implements CommsStore {
     const id = this.peerId;
     const agent: AgentIdentity = {
       id,
+      version: 1,
       name: opts.name,
       harness: opts.harness,
       cwd: opts.cwd,
@@ -858,6 +946,7 @@ export class MeshStore implements CommsStore {
     const oldStatus = agent.status;
     const oldName = agent.name;
     Object.assign(agent, patch);
+    this.bump(agent);
     this.agents.set(id, agent);
     await this.broadcastPatch({ type: "agent_upsert", agent });
 
@@ -891,6 +980,7 @@ export class MeshStore implements CommsStore {
     // Other stores learn about it via the agent_offline mesh patch.
     const isOwner = id === this.peerId;
     agent.status = "offline";
+    this.bump(agent);
     this.agents.set(id, agent);
 
     if (isOwner) {
@@ -917,6 +1007,7 @@ export class MeshStore implements CommsStore {
 
     const room: Room = {
       id,
+      version: 1,
       name: opts.name,
       type: opts.type,
       owner: opts.owner,
@@ -968,11 +1059,13 @@ export class MeshStore implements CommsStore {
       if (!room.members.includes(agentId)) room.members.push(agentId);
     }
 
+    this.bump(room);
     this.rooms.set(roomId, room);
 
     const agent = this.agents.get(agentId);
     if (agent && !agent.subscribedRooms.includes(roomId)) {
       agent.subscribedRooms.push(roomId);
+      this.bump(agent);
       this.agents.set(agentId, agent);
       await this.broadcastPatch({ type: "agent_upsert", agent });
     }
@@ -1023,6 +1116,7 @@ export class MeshStore implements CommsStore {
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
 
     room.members = room.members.filter((id) => id !== agentId);
+    this.bump(room);
     this.rooms.set(roomId, room);
 
     const agent = this.agents.get(agentId);
@@ -1065,6 +1159,7 @@ export class MeshStore implements CommsStore {
     if (!room.invited.includes(targetId) && !room.members.includes(targetId)) {
       room.invited.push(targetId);
     }
+    this.bump(room);
     this.rooms.set(roomId, room);
     await this.broadcastPatch({ type: "room_upsert", room });
 
@@ -1095,6 +1190,7 @@ export class MeshStore implements CommsStore {
       );
 
     room.invited = room.invited.filter((id) => id !== agentId);
+    this.bump(room);
     this.rooms.set(roomId, room);
     await this.broadcastPatch({ type: "room_upsert", room });
 
@@ -1121,6 +1217,7 @@ export class MeshStore implements CommsStore {
 
     room.members = room.members.filter((id) => id !== targetId);
     room.invited = room.invited.filter((id) => id !== targetId);
+    this.bump(room);
     this.rooms.set(roomId, room);
     await this.broadcastPatch({ type: "room_upsert", room });
   }
@@ -1476,6 +1573,7 @@ export class MeshStore implements CommsStore {
 
     if (!room.members.includes(remoteId)) {
       room.members.push(remoteId);
+      this.bump(room);
       this.rooms.set(roomId, room);
       await this.broadcastPatch({ type: "room_upsert", room });
     }
@@ -1501,6 +1599,7 @@ export class MeshStore implements CommsStore {
 
     const remoteId = `fed:${agentId}`;
     room.members = room.members.filter((m) => m !== remoteId);
+    this.bump(room);
     this.rooms.set(roomId, room);
     await this.broadcastPatch({ type: "room_upsert", room });
 
