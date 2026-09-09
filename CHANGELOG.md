@@ -1,3 +1,9 @@
+## [1.27.1](https://github.com/ExaDev/agent-comms/compare/v1.27.0...v1.27.1) (2026-09-09)
+
+### Bug Fixes
+
+* **core:** keep FileStore invites in the membership operation maps ([74c6162](https://github.com/ExaDev/agent-comms/commit/74c61621db3f1c79363d4681041ec87ca267e51a))
+
 ## [1.27.0](https://github.com/ExaDev/agent-comms/compare/v1.26.1...v1.27.0) (2026-09-09)
 
 ### Features
