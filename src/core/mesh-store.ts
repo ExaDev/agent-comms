@@ -22,6 +22,7 @@ import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
 import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
 import { FederationManager } from "./federation.js";
 import type { FedLink } from "./federation.js";
+import { getCertificateFingerprint } from "./identity.js";
 import type { MeshMessage, MeshStatePatch, PeerInfo } from "./wire-protocol.js";
 import type {
   ConnectionHandle,
@@ -1642,6 +1643,32 @@ export class MeshStore implements CommsStore {
 
   fedLinks(): FedLink[] {
     return this.federation.listLinks();
+  }
+
+  getFederationFingerprint(): string {
+    return getCertificateFingerprint(this.federation.tlsIdentity.certificate);
+  }
+
+  fedTrust(fingerprint: string): Promise<void> {
+    this.federation.addTrustedFingerprint(fingerprint);
+    return Promise.resolve();
+  }
+
+  fedUntrust(fingerprint: string): Promise<void> {
+    this.federation.removeTrustedFingerprint(fingerprint);
+    return Promise.resolve();
+  }
+
+  fedTrustedFingerprints(): string[] {
+    return this.federation.listTrustedFingerprints();
+  }
+
+  fedListen(host: string, port: number): Promise<void> {
+    return this.federation.listen(host, port);
+  }
+
+  fedStopListening(): Promise<void> {
+    return this.federation.stopListening();
   }
 
   // -----------------------------------------------------------------------

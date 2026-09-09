@@ -691,6 +691,39 @@ export class FileStore implements CommsStore {
   fedLinks(): FedLink[] {
     return [];
   }
+
+  getFederationFingerprint(): string {
+    return "";
+  }
+
+  fedTrust(): Promise<void> {
+    throw new CommsError(
+      "FileStore does not support federation",
+      "NOT_SUPPORTED",
+    );
+  }
+
+  fedUntrust(): Promise<void> {
+    throw new CommsError(
+      "FileStore does not support federation",
+      "NOT_SUPPORTED",
+    );
+  }
+
+  fedTrustedFingerprints(): string[] {
+    return [];
+  }
+
+  fedListen(): Promise<void> {
+    throw new CommsError(
+      "FileStore does not support federation",
+      "NOT_SUPPORTED",
+    );
+  }
+
+  fedStopListening(): Promise<void> {
+    return Promise.resolve();
+  }
   // Connection approval — not supported by FileStore
   // -----------------------------------------------------------------------
 
