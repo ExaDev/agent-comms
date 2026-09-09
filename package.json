@@ -52,7 +52,7 @@
     "generate:server-json": "tsx scripts/sync-release-metadata.ts",
     "publish:mcp-registry": "tsx scripts/publish-mcp-registry.ts",
     "lint": "eslint .",
-    "test": "node --test --test-concurrency=1 dist/test/coordinator-socket-error.integration.test.js dist/test/identity-store.test.js dist/test/identity-cert.test.js dist/test/broadcast-window.integration.test.js dist/test/identity-restart.integration.test.js dist/test/mesh-e2e.integration.test.js dist/test/ws-broadcast-window.integration.test.js dist/test/tls-transport.integration.test.js dist/test/state-sync-convergence.test.js dist/test/downtime-replay.test.js dist/test/downtime-replay.integration.test.js dist/test/filestore.test.js",
+    "test": "node --test --test-concurrency=1 dist/test/coordinator-socket-error.integration.test.js dist/test/identity-store.test.js dist/test/identity-cert.test.js dist/test/broadcast-window.integration.test.js dist/test/identity-restart.integration.test.js dist/test/mesh-e2e.integration.test.js dist/test/ws-broadcast-window.integration.test.js dist/test/tls-transport.integration.test.js dist/test/peer-id-verification.integration.test.js dist/test/state-sync-convergence.test.js dist/test/downtime-replay.test.js dist/test/downtime-replay.integration.test.js dist/test/filestore.test.js",
     "test:visibility": "node --test dist/test/visibility.integration.test.js",
     "test:delivery": "node dist/test/delivery-receipt.runner.js",
     "test:federation": "node dist/test/federation.integration.test.js",
