@@ -1,3 +1,10 @@
+## [1.25.4](https://github.com/ExaDev/agent-comms/compare/v1.25.3...v1.25.4) (2026-09-09)
+
+### Tests
+
+* **core:** run every tls-transport scenario when no test name is given ([8564519](https://github.com/ExaDev/agent-comms/commit/8564519f93d379f856ec06f4052f7cc44db247c8))
+* **core:** wire the mesh integration suites into CI and cover the ws queue ([76591a0](https://github.com/ExaDev/agent-comms/commit/76591a08404a376183e6afaf4e16a6b7172518cf))
+
 ## [1.25.3](https://github.com/ExaDev/agent-comms/compare/v1.25.2...v1.25.3) (2026-09-09)
 
 ### Bug Fixes
