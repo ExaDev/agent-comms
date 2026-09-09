@@ -266,6 +266,8 @@ export function generateIdentity(): PeerIdentity {
   const serial = Buffer.from(serialBytes);
   const firstSerialByte = serial[0];
   if (firstSerialByte !== undefined) serial[0] = firstSerialByte & 0x7f;
+  // DER INTEGERs are minimally encoded: a leading zero byte is only legal when the following byte's high bit is set. Clearing the sign bit above can leave 0x00 here, which OpenSSL rejects as illegal padding when the certificate is loaded (tls.createServer then fails despite retries), so pin it to a minimal non-zero value.
+  if (serial[0] === 0) serial[0] = 1;
 
   // Validity period: now through CERTIFICATE_VALIDITY_MS from now
   const now = new Date();
