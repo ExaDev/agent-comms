@@ -1,3 +1,9 @@
+## [1.25.7](https://github.com/ExaDev/agent-comms/compare/v1.25.6...v1.25.7) (2026-09-09)
+
+### Bug Fixes
+
+* **mesh-store:** replay only delivery events that carry consumption evidence ([57605c0](https://github.com/ExaDev/agent-comms/commit/57605c07050f5d858cd9d6691678ae652138b783))
+
 ## [1.25.6](https://github.com/ExaDev/agent-comms/compare/v1.25.5...v1.25.6) (2026-09-09)
 
 ### Bug Fixes
