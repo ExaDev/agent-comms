@@ -1,3 +1,16 @@
+## [1.27.0](https://github.com/ExaDev/agent-comms/compare/v1.26.1...v1.27.0) (2026-09-09)
+
+### Features
+
+* **core:** expose federation trust management through CommsStore ([b37ab5e](https://github.com/ExaDev/agent-comms/commit/b37ab5e755cef2c6b91e795b73a1d071b4ef684c))
+* **core:** pin certificate fingerprints for federation links ([537f4c9](https://github.com/ExaDev/agent-comms/commit/537f4c9c99ab5b0a4bdc402f9119c35935c40b85))
+* **core:** verify federation peer certificates against a trusted allowlist ([ae67382](https://github.com/ExaDev/agent-comms/commit/ae673825808eb27b50f727f1936019ac8ebb49a7))
+* **tool:** add MCP actions for managing federation trust ([29f6dd7](https://github.com/ExaDev/agent-comms/commit/29f6dd7a5dc05ef80ec93f3cd052262792366356))
+
+### Tests
+
+* **core:** cover federation fingerprint rejection and run the suite in CI ([6790898](https://github.com/ExaDev/agent-comms/commit/679089857e11fe1b4f322be3b6b85d8ec9ad1045))
+
 ## [1.26.1](https://github.com/ExaDev/agent-comms/compare/v1.26.0...v1.26.1) (2026-09-09)
 
 ### Documentation
