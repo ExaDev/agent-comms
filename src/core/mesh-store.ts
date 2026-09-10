@@ -15,7 +15,7 @@ import * as os from "node:os";
 import { nanoid } from "./nanoid.js";
 import { CommsError } from "./store.js";
 import { TcpTransport } from "./tcp-transport.js";
-import { dmKey } from "./wire-protocol.js";
+import { dmKey, normaliseWireState } from "./wire-protocol.js";
 import type { SerialisedState } from "./wire-protocol.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
@@ -394,7 +394,7 @@ export class MeshStore implements CommsStore {
     msg: MeshMessage,
   ): Promise<void> {
     if (msg.method === "state_sync") {
-      this.applyStateSync(msg.state);
+      this.applyStateSync(normaliseWireState(msg.state));
     } else if (msg.method === "state_update") {
       await this.applyPatch(msg.patch);
     }
