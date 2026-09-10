@@ -144,3 +144,42 @@ export function dmKey(a: string, b: string): string {
   const sorted = [a, b].sort();
   return `${sorted[0] ?? a}--${sorted[1] ?? b}`;
 }
+
+// ---------------------------------------------------------------------------
+// Wire evolution tolerance (#31 direction 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * The shape a state_sync payload actually has on the wire: `SerialisedState` with every field that predates #29/#30 -- and each entity's `version` within those fields -- optional, since nothing validates this JSON.parse'd message beyond `isMeshMessage`'s bare `method` check. `SerialisedState` itself stays the fully-populated type domain logic works with elsewhere; this is deliberately narrower than `Partial<SerialisedState>` so it models only the specific absences an older build can actually produce.
+ */
+export interface WireStateInput {
+  agents?: Record<
+    string,
+    Omit<AgentIdentity, "version"> & { version?: number }
+  >;
+  rooms?: Record<string, Omit<Room, "version"> & { version?: number }>;
+  messages?: SerialisedState["messages"];
+  dms?: SerialisedState["dms"];
+  deliveryQueues?: SerialisedState["deliveryQueues"];
+}
+
+/**
+ * Normalises a state_sync payload at the wire boundary so a snapshot from an older build — one predating the entity `version` fields (#29) or `deliveryQueues` (#30) — parses to a complete state instead of throwing in `applyStateSync`. Missing collections default to empty; missing entity versions default to 1 (a pre-versioning sender's records are treated as fresh, which is what they were when written — there was no older format). The handshake (handshake.ts) is the loud, forward-looking half of the #31 fix; this is the tolerant half for peers that never negotiate.
+ */
+export function normaliseWireState(state: WireStateInput): SerialisedState {
+  const agents: Record<string, AgentIdentity> = {};
+  for (const [id, agent] of Object.entries(state.agents ?? {})) {
+    agents[id] = { ...agent, version: agent.version ?? 1 };
+  }
+  const rooms: Record<string, Room> = {};
+  for (const [id, room] of Object.entries(state.rooms ?? {})) {
+    rooms[id] = { ...room, version: room.version ?? 1 };
+  }
+  return {
+    agents,
+    rooms,
+    messages: state.messages ?? {},
+    dms: state.dms ?? {},
+    deliveryQueues: state.deliveryQueues ?? {},
+  };
+}
