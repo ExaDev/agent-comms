@@ -20,6 +20,9 @@ importers:
 
   .:
     dependencies:
+      '@exadev/wire-mesh-core':
+        specifier: github:ExaDev/wire-mesh#path:ts/packages/core
+        version: https://codeload.github.com/ExaDev/wire-mesh/tar.gz/7c9445b750debb0e1e5272b6084e2f76ffe33a10#path:ts/packages/core
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
         version: 1.30.0(zod@4.4.3)
@@ -333,6 +336,10 @@ packages:
     resolution: {integrity: sha512-TzlTVpKPjaqW6qOYjQcYUDuGsLCNsvFHVBXkYGTAnf5V37jCWrE5haKNXzz0WZUtVHjrpV76L1buANjwXMfT8w==}
     engines: {node: '>=22'}
 
+  '@cto.af/wtf8@0.0.5':
+    resolution: {integrity: sha512-LfUFi+Vv4eDzj+XAtR89e3wwjXA/NZjUSwU5NhwbBrLecxPaBYFy3exCuc1j+D4UZeOVdqlsl8G7LmOt18V0tg==}
+    engines: {node: '>=20'}
+
   '@esbuild/aix-ppc64@0.28.1':
     resolution: {integrity: sha512-Svl7tq8k/08+p6CXPpRjQ1fKX+1odH/BQbb48fV6fj3CWHhsoIOoY87w1oHXm0qEpkIK3ZfVgp0hed3XBXzXMQ==}
     engines: {node: '>=18'}
@@ -532,6 +539,10 @@ packages:
   '@eslint/plugin-kit@0.7.2':
     resolution: {integrity: sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
+
+  '@exadev/wire-mesh-core@https://codeload.github.com/ExaDev/wire-mesh/tar.gz/7c9445b750debb0e1e5272b6084e2f76ffe33a10#path:ts/packages/core':
+    resolution: {path: ts/packages/core, tarball: https://codeload.github.com/ExaDev/wire-mesh/tar.gz/7c9445b750debb0e1e5272b6084e2f76ffe33a10}
+    version: 0.0.0
 
   '@google/genai@1.52.0':
     resolution: {integrity: sha512-gwSvbpiN/17O9TbsqSsE/OzZcpv5Fo4RQjdngGgogtuB9RsyJ8ZHhX5KjHj1bp5N9snN2eK8LDGXSaWW2hof8Q==}
@@ -1162,8 +1173,20 @@ packages:
     resolution: {integrity: sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==}
     engines: {node: '>=6'}
 
+  camelcase@9.0.0:
+    resolution: {integrity: sha512-TO9xmyXTZ9HUHI8M1OnvExxYB0eYVS/1e5s7IDMTAoIcwUd+aNcFODs6Xk83mobk0velyHFQgA1yIrvYc6wclw==}
+    engines: {node: '>=20'}
+
+  cbor2@2.3.0:
+    resolution: {integrity: sha512-76WB3hq8BoaGkMkBVJ27fW5LJU+qqDLEpgRNCG/SYKhODWXpVPOTD4UcUto3IEzYLA52nsvbhb0wabhHDn3qXg==}
+    engines: {node: '>=20'}
+
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
+
+  cddl.js@https://codeload.github.com/ExaDev/cddl.js/tar.gz/8de0f0cf0e8eb14e347894a55bdb655d5f332bc5:
+    resolution: {tarball: https://codeload.github.com/ExaDev/cddl.js/tar.gz/8de0f0cf0e8eb14e347894a55bdb655d5f332bc5}
+    version: 0.0.0
 
   chalk@2.4.2:
     resolution: {integrity: sha512-Mti+f9lpJNcwF4tWV8/OrTTtF1gZi+f8FqlyAdouralcFWFQWF2+NgCHShjkCb+IFBLq9buZwE1xckQU4peSuQ==}
@@ -3293,6 +3316,9 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
+  zod@4.5.4:
+    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
+
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
@@ -3629,6 +3655,8 @@ snapshots:
 
   '@conventional-changelog/template@1.2.1': {}
 
+  '@cto.af/wtf8@0.0.5': {}
+
   '@esbuild/aix-ppc64@0.28.1':
     optional: true
 
@@ -3764,6 +3792,12 @@ snapshots:
     dependencies:
       '@eslint/core': 1.2.1
       levn: 0.4.1
+
+  '@exadev/wire-mesh-core@https://codeload.github.com/ExaDev/wire-mesh/tar.gz/7c9445b750debb0e1e5272b6084e2f76ffe33a10#path:ts/packages/core':
+    dependencies:
+      cbor2: 2.3.0
+      cddl.js: https://codeload.github.com/ExaDev/cddl.js/tar.gz/8de0f0cf0e8eb14e347894a55bdb655d5f332bc5
+      zod: 4.5.4
 
   '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))':
     dependencies:
@@ -4509,7 +4543,19 @@ snapshots:
 
   callsites@3.1.0: {}
 
+  camelcase@9.0.0: {}
+
+  cbor2@2.3.0:
+    dependencies:
+      '@cto.af/wtf8': 0.0.5
+
   ccount@2.0.1: {}
+
+  cddl.js@https://codeload.github.com/ExaDev/cddl.js/tar.gz/8de0f0cf0e8eb14e347894a55bdb655d5f332bc5:
+    dependencies:
+      camelcase: 9.0.0
+      cbor2: 2.3.0
+      zod: 4.5.4
 
   chalk@2.4.2:
     dependencies:
@@ -6806,5 +6852,7 @@ snapshots:
       zod: 4.4.3
 
   zod@4.4.3: {}
+
+  zod@4.5.4: {}
 
   zwitch@2.0.4: {}
