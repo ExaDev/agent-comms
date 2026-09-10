@@ -17,6 +17,7 @@
 import * as net from "node:net";
 import { encode, isMeshMessage, MessageBuffer } from "./wire-protocol.js";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
+import { attachSocketHandshake } from "./handshake.js";
 import type {
   ConnectionHandle,
   ListenerInfo,
@@ -186,6 +187,22 @@ export class TcpTransport implements MeshTransport {
       const socket = net.createConnection({ port, host }, () => {
         this.coordinatorSocket = socket;
 
+        // Wire up the protocol handshake first (client role: sends its frame immediately as the connection's very first bytes) so the introduction below lands after it on the wire, not before.
+        const buffer = new MessageBuffer();
+        attachSocketHandshake(
+          socket,
+          "client",
+          (data) => {
+            const items = buffer.append(data.toString());
+            for (const item of items) {
+              if (isMeshMessage(item)) {
+                this.dispatchCoordinatorClientMessage(item);
+              }
+            }
+          },
+          (error) => this.events.onError?.(error),
+        );
+
         // Send introduction
         const intro: MeshMessage = {
           method: "introduce",
@@ -193,17 +210,6 @@ export class TcpTransport implements MeshTransport {
           dataPort: localDataPort,
         };
         socket.write(encode(intro));
-
-        // Wire up coordinator message handling
-        const buffer = new MessageBuffer();
-        socket.on("data", (data) => {
-          const items = buffer.append(data.toString());
-          for (const item of items) {
-            if (isMeshMessage(item)) {
-              this.dispatchCoordinatorClientMessage(item);
-            }
-          }
-        });
         socket.on("error", () => {
           /* ignore late errors on coordinator connection */
         });
@@ -251,6 +257,34 @@ export class TcpTransport implements MeshTransport {
       const socket = net.createConnection({ port, host }, () => {
         this.coordinatorSocket = socket;
 
+        // Wire up the protocol handshake first (client role) so connect_request below lands after it on the wire, pending: wait for connect_accepted/rejected, then normal dispatch
+        const buffer = new MessageBuffer();
+        let approved = false;
+        attachSocketHandshake(
+          socket,
+          "client",
+          (data) => {
+            const items = buffer.append(data.toString());
+            for (const item of items) {
+              if (!isMeshMessage(item)) continue;
+
+              if (!approved) {
+                if (item.method === "connect_accepted") {
+                  approved = true;
+                  resolve();
+                } else if (item.method === "connect_rejected") {
+                  socket.destroy();
+                  reject(new Error(`Connection rejected: ${item.reason}`));
+                  return;
+                }
+              } else {
+                this.dispatchCoordinatorClientMessage(item);
+              }
+            }
+          },
+          (error) => this.events.onError?.(error),
+        );
+
         // Send connect_request instead of introduce
         const req: MeshMessage = {
           method: "connect_request",
@@ -260,30 +294,6 @@ export class TcpTransport implements MeshTransport {
           fingerprint,
         };
         socket.write(encode(req));
-
-        // Wire up coordinator message handling
-        // Pending: wait for connect_accepted/rejected, then normal dispatch
-        const buffer = new MessageBuffer();
-        let approved = false;
-        socket.on("data", (data) => {
-          const items = buffer.append(data.toString());
-          for (const item of items) {
-            if (!isMeshMessage(item)) continue;
-
-            if (!approved) {
-              if (item.method === "connect_accepted") {
-                approved = true;
-                resolve();
-              } else if (item.method === "connect_rejected") {
-                socket.destroy();
-                reject(new Error(`Connection rejected: ${item.reason}`));
-                return;
-              }
-            } else {
-              this.dispatchCoordinatorClientMessage(item);
-            }
-          }
-        });
         socket.on("error", () => {
           /* ignore late errors on coordinator connection */
         });
@@ -423,22 +433,27 @@ export class TcpTransport implements MeshTransport {
           const buffer = new MessageBuffer();
           this.peerConnections.set(peer.id, { socket, buffer });
 
+          // Wire up the protocol handshake first (client role) so everything below lands after it on the wire, not before.
+          attachSocketHandshake(
+            socket,
+            "client",
+            (data) => {
+              const items = buffer.append(data.toString());
+              for (const item of items) {
+                if (isMeshMessage(item)) {
+                  const handle: ConnectionHandle = { id: peer.id };
+                  this.dispatchDataMessage(handle, item);
+                }
+              }
+            },
+            (error) => this.events.onError?.(error),
+          );
+
           // Identify ourselves
           const pong: MeshMessage = { method: "pong", peerId: ownPeerId };
           socket.write(encode(pong));
 
           void this.flushPending(peer.id, socket);
-
-          // Wire up ongoing message handling
-          socket.on("data", (data) => {
-            const items = buffer.append(data.toString());
-            for (const item of items) {
-              if (isMeshMessage(item)) {
-                const handle: ConnectionHandle = { id: peer.id };
-                this.dispatchDataMessage(handle, item);
-              }
-            }
-          });
 
           resolve();
         },
@@ -723,37 +738,42 @@ export class TcpTransport implements MeshTransport {
     socket.on("error", () => this.coordinatorServerSockets.delete(socket));
 
     const buffer = new MessageBuffer();
-    socket.on("data", (data) => {
-      const items = buffer.append(data.toString());
-      for (const item of items) {
-        if (!isMeshMessage(item)) continue;
+    attachSocketHandshake(
+      socket,
+      "server",
+      (data) => {
+        const items = buffer.append(data.toString());
+        for (const item of items) {
+          if (!isMeshMessage(item)) continue;
 
-        if (item.method === "introduce") {
-          const handle: ConnectionHandle = { id: item.peerId, policy };
-          this.introConnections.set(handle.id, socket);
-          this.events.onIntroduction(handle, {
-            peerId: item.peerId,
-            dataPort: item.dataPort,
-          });
-        } else if (item.method === "connect_request") {
-          const handle: ConnectionHandle = { id: item.peerId, policy };
-          this.pendingConnections.set(handle.id, {
-            socket,
-            peerId: item.peerId,
-            dataPort: item.dataPort,
-            name: item.name,
-            fingerprint: item.fingerprint,
-            policy,
-          });
-          this.events.onConnectionRequest(handle, {
-            peerId: item.peerId,
-            dataPort: item.dataPort,
-            name: item.name,
-            fingerprint: item.fingerprint,
-          });
+          if (item.method === "introduce") {
+            const handle: ConnectionHandle = { id: item.peerId, policy };
+            this.introConnections.set(handle.id, socket);
+            this.events.onIntroduction(handle, {
+              peerId: item.peerId,
+              dataPort: item.dataPort,
+            });
+          } else if (item.method === "connect_request") {
+            const handle: ConnectionHandle = { id: item.peerId, policy };
+            this.pendingConnections.set(handle.id, {
+              socket,
+              peerId: item.peerId,
+              dataPort: item.dataPort,
+              name: item.name,
+              fingerprint: item.fingerprint,
+              policy,
+            });
+            this.events.onConnectionRequest(handle, {
+              peerId: item.peerId,
+              dataPort: item.dataPort,
+              name: item.name,
+              fingerprint: item.fingerprint,
+            });
+          }
         }
-      }
-    });
+      },
+      (error) => this.events.onError?.(error),
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -778,31 +798,36 @@ export class TcpTransport implements MeshTransport {
     let remotePeerId: string | undefined;
     let disconnected = false;
 
-    socket.on("data", (data) => {
-      const items = buffer.append(data.toString());
-      for (const item of items) {
-        if (isMeshMessage(item)) {
-          if (item.method === "pong") {
-            const peerId = item.peerId;
-            remotePeerId = peerId;
-            if (!this.peerConnections.has(peerId)) {
-              this.peerConnections.set(peerId, { socket, buffer });
+    attachSocketHandshake(
+      socket,
+      "server",
+      (data) => {
+        const items = buffer.append(data.toString());
+        for (const item of items) {
+          if (isMeshMessage(item)) {
+            if (item.method === "pong") {
+              const peerId = item.peerId;
+              remotePeerId = peerId;
+              if (!this.peerConnections.has(peerId)) {
+                this.peerConnections.set(peerId, { socket, buffer });
+              }
+              void this.flushPending(peerId, socket);
+              const handle: ConnectionHandle = { id: peerId };
+              const info: PeerInfo = {
+                id: peerId,
+                port: 0,
+                startedAt: new Date().toISOString(),
+              };
+              this.events.onPeerConnected(handle, info);
+            } else if (remotePeerId !== undefined) {
+              const handle: ConnectionHandle = { id: remotePeerId };
+              this.dispatchDataMessage(handle, item);
             }
-            void this.flushPending(peerId, socket);
-            const handle: ConnectionHandle = { id: peerId };
-            const info: PeerInfo = {
-              id: peerId,
-              port: 0,
-              startedAt: new Date().toISOString(),
-            };
-            this.events.onPeerConnected(handle, info);
-          } else if (remotePeerId !== undefined) {
-            const handle: ConnectionHandle = { id: remotePeerId };
-            this.dispatchDataMessage(handle, item);
           }
         }
-      }
-    });
+      },
+      (error) => this.events.onError?.(error),
+    );
 
     const onDisconnect = (): void => {
       if (disconnected) return;
