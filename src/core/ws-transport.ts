@@ -13,6 +13,7 @@
 
 import { WebSocket, WebSocketServer } from "ws";
 import { isMeshMessage } from "./wire-protocol.js";
+import { attachWsHandshake } from "./handshake.js";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
 import type {
   ConnectionHandle,
@@ -181,6 +182,19 @@ export class WebSocketTransport implements MeshTransport {
       ws.on("open", () => {
         this.coordinatorWs = ws;
 
+        // Wire up the protocol handshake first (client role: attachWsHandshake sends its own binary frame immediately) so the introduction below lands after it on the wire, not before, and not duplicated.
+        attachWsHandshake(
+          ws,
+          "client",
+          (raw) => {
+            const msg = parseMessage(raw);
+            if (msg !== undefined) {
+              this.dispatchCoordinatorClientMessage(msg);
+            }
+          },
+          (error) => this.events.onError?.(error),
+        );
+
         // Send introduction
         const intro: MeshMessage = {
           method: "introduce",
@@ -188,14 +202,6 @@ export class WebSocketTransport implements MeshTransport {
           dataPort: localDataPort,
         };
         ws.send(JSON.stringify(intro));
-
-        // Wire up coordinator message handling
-        ws.on("message", (raw) => {
-          const msg = parseMessage(raw);
-          if (msg !== undefined) {
-            this.dispatchCoordinatorClientMessage(msg);
-          }
-        });
         ws.on("error", () => {
           /* ignore late errors on coordinator connection */
         });
@@ -252,6 +258,33 @@ export class WebSocketTransport implements MeshTransport {
       ws.on("open", () => {
         this.coordinatorWs = ws;
 
+        // Wire up the protocol handshake first (client role) so connect_request below lands after it on the wire, not duplicated. Wait for connect_accepted or connect_rejected.
+        let approved = false;
+        attachWsHandshake(
+          ws,
+          "client",
+          (raw) => {
+            const msg = parseMessage(raw);
+            if (msg === undefined) return;
+
+            if (!approved) {
+              if (msg.method === "connect_accepted") {
+                approved = true;
+                clearTimeout(timer);
+                resolve();
+              } else if (msg.method === "connect_rejected") {
+                clearTimeout(timer);
+                ws.terminate();
+                reject(new Error(`Connection rejected: ${msg.reason}`));
+                return;
+              }
+            } else {
+              this.dispatchCoordinatorClientMessage(msg);
+            }
+          },
+          (error) => this.events.onError?.(error),
+        );
+
         // Send connect_request instead of introduce
         const req: MeshMessage = {
           method: "connect_request",
@@ -261,28 +294,6 @@ export class WebSocketTransport implements MeshTransport {
           fingerprint,
         };
         ws.send(JSON.stringify(req));
-
-        // Wait for connect_accepted or connect_rejected
-        let approved = false;
-        ws.on("message", (raw) => {
-          const msg = parseMessage(raw);
-          if (msg === undefined) return;
-
-          if (!approved) {
-            if (msg.method === "connect_accepted") {
-              approved = true;
-              clearTimeout(timer);
-              resolve();
-            } else if (msg.method === "connect_rejected") {
-              clearTimeout(timer);
-              ws.terminate();
-              reject(new Error(`Connection rejected: ${msg.reason}`));
-              return;
-            }
-          } else {
-            this.dispatchCoordinatorClientMessage(msg);
-          }
-        });
         ws.on("error", () => {
           /* ignore late errors on coordinator connection */
         });
@@ -337,20 +348,25 @@ export class WebSocketTransport implements MeshTransport {
       ws.on("open", () => {
         this.peerConnections.set(peer.id, ws);
 
+        // Wire up the protocol handshake first (client role) so everything below lands after it on the wire, not duplicated.
+        attachWsHandshake(
+          ws,
+          "client",
+          (raw) => {
+            const msg = parseMessage(raw);
+            if (msg !== undefined) {
+              const handle: ConnectionHandle = { id: peer.id };
+              this.dispatchDataMessage(handle, msg);
+            }
+          },
+          (error) => this.events.onError?.(error),
+        );
+
         // Identify ourselves
         const pong: MeshMessage = { method: "pong", peerId: ownPeerId };
         ws.send(JSON.stringify(pong));
 
         void this.flushPending(peer.id, ws);
-
-        // Wire up ongoing message handling
-        ws.on("message", (raw) => {
-          const msg = parseMessage(raw);
-          if (msg !== undefined) {
-            const handle: ConnectionHandle = { id: peer.id };
-            this.dispatchDataMessage(handle, msg);
-          }
-        });
 
         resolve();
       });
@@ -630,34 +646,39 @@ export class WebSocketTransport implements MeshTransport {
     ws.on("close", () => this.coordinatorServerSockets.delete(ws));
     ws.on("error", () => this.coordinatorServerSockets.delete(ws));
 
-    ws.on("message", (raw) => {
-      const msg = parseMessage(raw);
-      if (msg === undefined) return;
+    attachWsHandshake(
+      ws,
+      "server",
+      (raw) => {
+        const msg = parseMessage(raw);
+        if (msg === undefined) return;
 
-      if (msg.method === "introduce") {
-        const handle: ConnectionHandle = { id: msg.peerId };
-        this.introConnections.set(handle.id, ws);
-        this.events.onIntroduction(handle, {
-          peerId: msg.peerId,
-          dataPort: msg.dataPort,
-        });
-      } else if (msg.method === "connect_request") {
-        const handle: ConnectionHandle = { id: msg.peerId };
-        this.pendingConnections.set(handle.id, {
-          ws,
-          peerId: msg.peerId,
-          dataPort: msg.dataPort,
-          name: msg.name,
-          fingerprint: msg.fingerprint,
-        });
-        this.events.onConnectionRequest(handle, {
-          peerId: msg.peerId,
-          dataPort: msg.dataPort,
-          name: msg.name,
-          fingerprint: msg.fingerprint,
-        });
-      }
-    });
+        if (msg.method === "introduce") {
+          const handle: ConnectionHandle = { id: msg.peerId };
+          this.introConnections.set(handle.id, ws);
+          this.events.onIntroduction(handle, {
+            peerId: msg.peerId,
+            dataPort: msg.dataPort,
+          });
+        } else if (msg.method === "connect_request") {
+          const handle: ConnectionHandle = { id: msg.peerId };
+          this.pendingConnections.set(handle.id, {
+            ws,
+            peerId: msg.peerId,
+            dataPort: msg.dataPort,
+            name: msg.name,
+            fingerprint: msg.fingerprint,
+          });
+          this.events.onConnectionRequest(handle, {
+            peerId: msg.peerId,
+            dataPort: msg.dataPort,
+            name: msg.name,
+            fingerprint: msg.fingerprint,
+          });
+        }
+      },
+      (error) => this.events.onError?.(error),
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -681,29 +702,34 @@ export class WebSocketTransport implements MeshTransport {
     let remotePeerId: string | undefined;
     let disconnected = false;
 
-    ws.on("message", (raw) => {
-      const msg = parseMessage(raw);
-      if (msg === undefined) return;
+    attachWsHandshake(
+      ws,
+      "server",
+      (raw) => {
+        const msg = parseMessage(raw);
+        if (msg === undefined) return;
 
-      if (msg.method === "pong") {
-        const peerId = msg.peerId;
-        remotePeerId = peerId;
-        if (!this.peerConnections.has(peerId)) {
-          this.peerConnections.set(peerId, ws);
+        if (msg.method === "pong") {
+          const peerId = msg.peerId;
+          remotePeerId = peerId;
+          if (!this.peerConnections.has(peerId)) {
+            this.peerConnections.set(peerId, ws);
+          }
+          void this.flushPending(peerId, ws);
+          const handle: ConnectionHandle = { id: peerId };
+          const info: PeerInfo = {
+            id: peerId,
+            port: 0,
+            startedAt: new Date().toISOString(),
+          };
+          this.events.onPeerConnected(handle, info);
+        } else if (remotePeerId !== undefined) {
+          const handle: ConnectionHandle = { id: remotePeerId };
+          this.dispatchDataMessage(handle, msg);
         }
-        void this.flushPending(peerId, ws);
-        const handle: ConnectionHandle = { id: peerId };
-        const info: PeerInfo = {
-          id: peerId,
-          port: 0,
-          startedAt: new Date().toISOString(),
-        };
-        this.events.onPeerConnected(handle, info);
-      } else if (remotePeerId !== undefined) {
-        const handle: ConnectionHandle = { id: remotePeerId };
-        this.dispatchDataMessage(handle, msg);
-      }
-    });
+      },
+      (error) => this.events.onError?.(error),
+    );
 
     const onDisconnect = (): void => {
       if (disconnected) return;
