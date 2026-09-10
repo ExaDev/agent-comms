@@ -1,3 +1,16 @@
+## [1.28.0](https://github.com/ExaDev/agent-comms/compare/v1.27.3...v1.28.0) (2026-09-10)
+
+### Features
+
+* **core:** add @exadev/wire-mesh-core as a workspace dependency ([ba04d2f](https://github.com/ExaDev/agent-comms/commit/ba04d2f54e48a18d2637b12123d4ef13290fd918))
+* **core:** negotiate wire-format version at connection start ([a261d98](https://github.com/ExaDev/agent-comms/commit/a261d986d19b6d4a94c3c61d4bdb3b12840456a2))
+
+### Bug Fixes
+
+* **core:** declare cbor2 as a direct dependency ([f112c77](https://github.com/ExaDev/agent-comms/commit/f112c770f2693ff7f6ab2b99c645382e4a3aa0d0))
+* **core:** gate every connection through the protocol handshake ([fd51bb0](https://github.com/ExaDev/agent-comms/commit/fd51bb0e5e558e7afff715de923258741c483233))
+* **core:** tolerate a pre-[#29](https://github.com/ExaDev/agent-comms/issues/29)/[#30](https://github.com/ExaDev/agent-comms/issues/30) state_sync snapshot on the wire ([d76b7d3](https://github.com/ExaDev/agent-comms/commit/d76b7d366c87525a56a91856673c93c3d3b9f0c5))
+
 ## [1.27.3](https://github.com/ExaDev/agent-comms/compare/v1.27.2...v1.27.3) (2026-09-09)
 
 ### Bug Fixes
