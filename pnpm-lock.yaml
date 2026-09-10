@@ -29,6 +29,9 @@ importers:
       '@sinclair/typebox':
         specifier: '*'
         version: 0.34.49
+      cbor2:
+        specifier: 2.3.0
+        version: 2.3.0
       preact:
         specifier: 10.29.7
         version: 10.29.7
