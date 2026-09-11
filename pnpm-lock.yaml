@@ -22,7 +22,7 @@ importers:
     dependencies:
       '@exadev/wire-mesh-core':
         specifier: github:ExaDev/wire-mesh#path:ts/packages/core
-        version: https://codeload.github.com/ExaDev/wire-mesh/tar.gz/7c9445b750debb0e1e5272b6084e2f76ffe33a10#path:ts/packages/core
+        version: https://codeload.github.com/ExaDev/wire-mesh/tar.gz/e2b984fcb29b102868b38eef8f45afe7b0a2118f#path:ts/packages/core
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
         version: 1.30.0(zod@4.4.3)
@@ -543,8 +543,8 @@ packages:
     resolution: {integrity: sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@exadev/wire-mesh-core@https://codeload.github.com/ExaDev/wire-mesh/tar.gz/7c9445b750debb0e1e5272b6084e2f76ffe33a10#path:ts/packages/core':
-    resolution: {path: ts/packages/core, tarball: https://codeload.github.com/ExaDev/wire-mesh/tar.gz/7c9445b750debb0e1e5272b6084e2f76ffe33a10}
+  '@exadev/wire-mesh-core@https://codeload.github.com/ExaDev/wire-mesh/tar.gz/e2b984fcb29b102868b38eef8f45afe7b0a2118f#path:ts/packages/core':
+    resolution: {path: ts/packages/core, tarball: https://codeload.github.com/ExaDev/wire-mesh/tar.gz/e2b984fcb29b102868b38eef8f45afe7b0a2118f}
     version: 0.0.0
 
   '@google/genai@1.52.0':
@@ -1187,9 +1187,8 @@ packages:
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
 
-  cddl.js@https://codeload.github.com/ExaDev/cddl.js/tar.gz/8de0f0cf0e8eb14e347894a55bdb655d5f332bc5:
-    resolution: {tarball: https://codeload.github.com/ExaDev/cddl.js/tar.gz/8de0f0cf0e8eb14e347894a55bdb655d5f332bc5}
-    version: 0.0.0
+  cddl.js@1.0.1:
+    resolution: {integrity: sha512-UTQZM1rCob6FFOxmYJh+csg9AaKyrFjFnp6Lar/1QicpHW77UxBZsuE2r4NOMaKuvZypIXyCSU+dhGOfhAJLVA==}
 
   chalk@2.4.2:
     resolution: {integrity: sha512-Mti+f9lpJNcwF4tWV8/OrTTtF1gZi+f8FqlyAdouralcFWFQWF2+NgCHShjkCb+IFBLq9buZwE1xckQU4peSuQ==}
@@ -3796,10 +3795,10 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@exadev/wire-mesh-core@https://codeload.github.com/ExaDev/wire-mesh/tar.gz/7c9445b750debb0e1e5272b6084e2f76ffe33a10#path:ts/packages/core':
+  '@exadev/wire-mesh-core@https://codeload.github.com/ExaDev/wire-mesh/tar.gz/e2b984fcb29b102868b38eef8f45afe7b0a2118f#path:ts/packages/core':
     dependencies:
       cbor2: 2.3.0
-      cddl.js: https://codeload.github.com/ExaDev/cddl.js/tar.gz/8de0f0cf0e8eb14e347894a55bdb655d5f332bc5
+      cddl.js: 1.0.1
       zod: 4.5.4
 
   '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))':
@@ -4554,7 +4553,7 @@ snapshots:
 
   ccount@2.0.1: {}
 
-  cddl.js@https://codeload.github.com/ExaDev/cddl.js/tar.gz/8de0f0cf0e8eb14e347894a55bdb655d5f332bc5:
+  cddl.js@1.0.1:
     dependencies:
       camelcase: 9.0.0
       cbor2: 2.3.0
