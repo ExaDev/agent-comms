@@ -19,6 +19,9 @@ import {
   randomBytes,
 } from "node:crypto";
 
+/** The uncompressed SEC1 point tag byte (RFC 5480 §2.2): 0x04 marks what follows as raw X||Y, never compressed or hybrid encoding. */
+const UNCOMPRESSED_POINT_TAG = 0x04;
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 /** Self-signed certificate validity. Exported so identity persistence can derive its renewal margin. */
@@ -31,6 +34,10 @@ export interface PeerIdentity {
   certificate: string;
   /** SHA-256 fingerprint of the certificate (DER), hex-encoded with colons. */
   fingerprint: string;
+  /**
+   * SHA-256 of the raw, uncompressed SEC1 public-key point -- wire-mesh's own device-id derivation (never the certificate's DER encoding, which embeds a serial number and validity window that change on every reissue even for an identical key; this is the exact instability fingerprint already has). Additive: nothing in this codebase reads it yet. `fingerprint` remains what MeshStore.peerId is set to until the substrate migration cuts over to this field instead.
+   */
+  deviceId: Uint8Array;
 }
 
 // ─── ASN.1 DER helpers ─────────────────────────────────────────────────────
@@ -312,6 +319,7 @@ export function generateIdentity(): PeerIdentity {
     privateKey: keyPair.privateKey,
     certificate,
     fingerprint: getCertificateFingerprint(certificate),
+    deviceId: deriveDeviceId(keyPair.privateKey),
   };
 }
 
@@ -343,6 +351,21 @@ function pemToDer(pem: string): Buffer {
     .replace(/-----END CERTIFICATE-----/, "")
     .replace(/\s/g, "");
   return Buffer.from(b64, "base64");
+}
+
+/** Derives wire-mesh's own device-id (SHA-256 of the raw, uncompressed SEC1 public-key point) from a PEM-encoded EC private key. */
+export function deriveDeviceId(privateKeyPem: string): Uint8Array {
+  const publicKey = createPublicKey(privateKeyPem);
+  const jwk = publicKey.export({ format: "jwk" });
+  if (jwk.x === undefined || jwk.y === undefined) {
+    throw new Error("expected an EC JWK with x/y coordinates");
+  }
+  const rawPublicKey = Buffer.concat([
+    Buffer.from([UNCOMPRESSED_POINT_TAG]),
+    Buffer.from(jwk.x, "base64url"),
+    Buffer.from(jwk.y, "base64url"),
+  ]);
+  return createHash("sha256").update(rawPublicKey).digest();
 }
 
 /** Encode DER bytes as a PEM certificate string. */

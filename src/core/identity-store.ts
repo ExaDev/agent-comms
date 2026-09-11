@@ -12,6 +12,7 @@ import * as path from "node:path";
 import {
   generateIdentity,
   getCertificateFingerprint,
+  deriveDeviceId,
   CERTIFICATE_VALIDITY_MS,
 } from "./identity.js";
 import type { PeerIdentity } from "./identity.js";
@@ -145,6 +146,7 @@ function loadStoredIdentity(identityFile: string): PeerIdentity | undefined {
       privateKey: parsed.privateKey,
       certificate: parsed.certificate,
       fingerprint: getCertificateFingerprint(parsed.certificate),
+      deviceId: deriveDeviceId(parsed.privateKey),
     };
   } catch (err) {
     console.error(
