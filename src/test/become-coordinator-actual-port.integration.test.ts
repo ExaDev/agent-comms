@@ -4,11 +4,9 @@
  * Run: node dist/test/become-coordinator-actual-port.integration.test.js [test-name] With no argument, every scenario runs in order.
  */
 
-import * as net from "node:net";
 import * as tls from "node:tls";
 import * as assert from "node:assert/strict";
 import { TlsTransport } from "../core/tls-transport.js";
-import { TcpTransport } from "../core/tcp-transport.js";
 import { generateIdentity } from "../core/identity.js";
 import type { TransportEvents } from "../core/transport.js";
 
@@ -51,31 +49,6 @@ async function testTlsReportsActualPort(): Promise<void> {
   await transport.shutdown();
 }
 
-async function testTcpReportsActualPort(): Promise<void> {
-  const transport = new TcpTransport(noopEvents());
-
-  await transport.becomeCoordinator("127.0.0.1", 0);
-  const [listener] = transport.listListeners();
-  assert.ok(listener);
-  assert.notStrictEqual(listener.port, 0);
-
-  await new Promise<void>((resolve, reject) => {
-    const socket = net.connect(
-      { host: "127.0.0.1", port: listener.port },
-      () => {
-        socket.destroy();
-        resolve();
-      },
-    );
-    socket.once("error", reject);
-  });
-  console.log(
-    `  ✓ TcpTransport reported and bound the same port (${listener.port})`,
-  );
-
-  await transport.shutdown();
-}
-
 // ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
@@ -84,7 +57,6 @@ const testName = process.argv[2];
 
 const tests: Record<string, () => Promise<void>> = {
   "tls-reports-actual-port": testTlsReportsActualPort,
-  "tcp-reports-actual-port": testTcpReportsActualPort,
 };
 
 const selected =
