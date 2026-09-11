@@ -68,7 +68,9 @@ sequenceDiagram
 
 ### Identity
 
-Each bridge derives its peer ID from the fingerprint of its TLS certificate: ECDSA P-256, self-signed, generated locally. The key material persists per bridge slot (`~/.agent-comms/identity-<harness>--<cwd>.json`, owner-only permissions), so the fingerprint — and with it the agent ID, room memberships, and peers' ability to keep delivering to the agent — survives restarts. Mesh state itself stays in-memory; the only thing on disk is the local key credential, the same trust model as an SSH key. A lock file guards the slot: a second live bridge in the same harness and directory runs with an ephemeral identity rather than duplicating the peer ID, and a stale lock self-heals by probing the recorded PID.
+Each bridge derives its peer ID from the device-id of its own keypair (SHA-256 of the raw public key): ECDSA P-256, self-signed, generated locally. The key material persists per bridge slot (`~/.agent-comms/identity-<harness>--<cwd>.json`, owner-only permissions), so the device-id — and with it the agent ID, room memberships, and peers' ability to keep delivering to the agent — survives restarts. Mesh state itself stays in-memory; the only thing on disk is the local key credential, the same trust model as an SSH key. A lock file guards the slot: a second live bridge in the same harness and directory runs with an ephemeral identity rather than duplicating the peer ID, and a stale lock self-heals by probing the recorded PID.
+
+**Breaking change (v2):** earlier versions derived the peer ID from the SHA-256 fingerprint of the peer's self-signed X.509 certificate rather than its raw public key. The two values differ for the same keypair, so every agent ID, room membership, and pending delivery queue tied to a pre-v2 identity is orphaned on upgrade — there is no migration path, since existing peers can no longer address an upgraded one under its old ID. A v2 bridge cannot interoperate with a v1 one at all: they no longer agree on wire framing, transport, or peer identity.
 
 ## Install
 
