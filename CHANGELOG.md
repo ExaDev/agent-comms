@@ -1,3 +1,21 @@
+## [2.0.0](https://github.com/ExaDev/agent-comms/compare/v1.33.1...v2.0.0) (2026-09-11)
+
+### ⚠ BREAKING CHANGES
+
+* peer IDs are now derived from SHA-256 of the raw public
+  key (device-id), not the SHA-256 fingerprint of the self-signed X.509
+  certificate. Every agent ID, room membership, and pending delivery queue
+  tied to a pre-v2 identity is orphaned on upgrade, with no migration path.
+  A v2 bridge cannot interoperate with a v1 one at all.
+
+### Documentation
+
+* correct identity description to device-id, flag the v2 breaking change ([8d52488](https://github.com/ExaDev/agent-comms/commit/8d524884e5d027fa658246114d276c7246e04c26))
+
+### Chores
+
+* stop pre-push from building and running a hardcoded compiled test ([e5bcf41](https://github.com/ExaDev/agent-comms/commit/e5bcf41e89f788d7dc89ede75b72fc86a7a57aa1))
+
 ## [1.33.1](https://github.com/ExaDev/agent-comms/compare/v1.33.0...v1.33.1) (2026-09-11)
 
 ### Bug Fixes
