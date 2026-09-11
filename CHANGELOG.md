@@ -1,3 +1,13 @@
+## [1.30.0](https://github.com/ExaDev/agent-comms/compare/v1.29.0...v1.30.0) (2026-09-11)
+
+### Features
+
+* **core:** adapt PeerIdentity into wire-mesh-core's IdentityPort ([bc83bd9](https://github.com/ExaDev/agent-comms/commit/bc83bd95809b70b5b8885196ef7efa00c1d80823))
+
+### Chores
+
+* **deps:** bump wire-mesh-core to pick up createTlsTransport ([d9a337c](https://github.com/ExaDev/agent-comms/commit/d9a337c9a89b5fb5d14d957917606f0598500151))
+
 ## [1.29.0](https://github.com/ExaDev/agent-comms/compare/v1.28.1...v1.29.0) (2026-09-11)
 
 ### Features
