@@ -12,18 +12,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import {
-  MeshStore,
-  CommsTool,
+  createBridgeMesh,
   buildAction,
   ensureRegistered,
   drainAndFormat,
   MCP_TOOL_PARAMS,
 } from "../../core/index.js";
-import { TlsTransport } from "../../core/tls-transport.js";
-import {
-  loadOrCreateIdentity,
-  type IdentitySlot,
-} from "../../core/identity-store.js";
+import type { IdentitySlot } from "../../core/identity-store.js";
 import { tryStartWebServer } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
@@ -32,15 +27,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export async function run(): Promise<void> {
-  // Persistent identity for this slot: a stable fingerprint means the agent
-  // ID survives restarts, so peers can keep targeting us. The stdio server
-  // has no graceful shutdown hook; a stale lock self-heals via the pid probe.
+  // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us. The stdio server has no graceful shutdown hook; a stale lock self-heals via the pid probe.
   const identitySlot: IdentitySlot = { harness: "mcp", cwd: process.cwd() };
-  const identity = loadOrCreateIdentity(identitySlot);
-  const store = new MeshStore();
-  store.peerId = identity.fingerprint;
-  store.setTransport(new TlsTransport(store.events, identity));
-  const tool = new CommsTool(store, store.discovery);
+  const { store, tool } = createBridgeMesh(identitySlot);
   let agentId: string | undefined;
 
   const mcp = new McpServer(
