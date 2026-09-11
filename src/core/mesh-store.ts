@@ -18,7 +18,7 @@ import * as os from "node:os";
 import { nanoid } from "./nanoid.js";
 import { CommsError } from "./store.js";
 import { normaliseWireState } from "./wire-protocol.js";
-import { dmRoomPath, ownerNamedRoomPath } from "./room-path.js";
+import { dmRoomPath, ownerNamedRoomPath, slugRoomName } from "./room-path.js";
 import type { SerialisedState } from "./wire-protocol.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
@@ -1150,7 +1150,9 @@ export class MeshStore implements CommsStore {
     description: string;
     federated?: boolean;
   }): Promise<Room> {
-    const localName = opts.type === "secret" ? `_${opts.name}` : opts.name;
+    // slugRoomName sanitises an arbitrary caller-supplied name (e.g. from a live create_room tool call, not just an internal cwd basename) into the room-path grammar's [A-Za-z0-9_-]+ charset -- createRoom is the one choke point every room creation goes through, so this is the right place to do it rather than trusting every caller to have pre-slugged, the way the old bare-name id never required at all.
+    const slugName = slugRoomName(opts.name);
+    const localName = opts.type === "secret" ? `_${slugName}` : slugName;
     const id = ownerNamedRoomPath(opts.owner, localName);
     if (this.rooms.has(id))
       throw new CommsError(`Room ${id} already exists`, "ROOM_EXISTS");
@@ -1158,7 +1160,7 @@ export class MeshStore implements CommsStore {
     const room: Room = {
       id,
       version: 1,
-      name: opts.name,
+      name: slugName,
       type: opts.type,
       owner: opts.owner,
       createdAt: new Date().toISOString(),
