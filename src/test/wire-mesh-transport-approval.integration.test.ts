@@ -5,8 +5,17 @@
 import * as assert from "node:assert/strict";
 import { test, describe } from "node:test";
 import * as net from "node:net";
+import { createTlsTransport } from "@exadev/wire-mesh-core/adapters/tls-transport";
+import { acceptMeshSession } from "@exadev/wire-mesh-core/domain/mesh-session";
 import { MeshStore } from "../core/mesh-store.js";
-import type { DeliveryEvent } from "../core/types.js";
+import { generateIdentity } from "../core/identity.js";
+import { toIdentityPort } from "../core/wire-mesh-identity.js";
+import {
+  DOMAIN,
+  FRAME_SCOPE,
+  buildCommand,
+} from "../core/wire-mesh-transport.js";
+import type { DeliveryEvent, AgentIdentity } from "../core/types.js";
 import { waitFor, wireWireMeshTestTransport } from "./test-transport.js";
 
 function findFreePort(): Promise<number> {
@@ -21,17 +30,15 @@ function findFreePort(): Promise<number> {
   });
 }
 
-let portOffset = 0;
-async function uniquePort(): Promise<number> {
-  portOffset += 10;
-  const base = await findFreePort();
-  return base + portOffset;
+/** Find a free port for a single test's use. An alias for findFreePort(): asking the OS for a fresh ephemeral port each call already guarantees distinctness from any other currently-bound port, so no arithmetic offset is layered on top -- a prior +offset scheme could push an already-high OS-assigned port past 65535 and fail with ERR_SOCKET_BAD_PORT. */
+function uniquePort(): Promise<number> {
+  return findFreePort();
 }
 
 describe("WireMeshTransport connection approval", () => {
   void test("accept establishes the peer connection", async () => {
     const portA = await uniquePort();
-    const portB = portA + 100;
+    const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
     wireWireMeshTestTransport(storeA);
@@ -105,7 +112,7 @@ describe("WireMeshTransport connection approval", () => {
 
   void test("reject closes with reason", async () => {
     const portA = await uniquePort();
-    const portB = portA + 100;
+    const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
     wireWireMeshTestTransport(storeA);
@@ -163,6 +170,73 @@ describe("WireMeshTransport connection approval", () => {
       );
     } finally {
       await storeB.shutdown();
+      await storeA.shutdown();
+    }
+  });
+
+  void test("a message other than introduce/connect_request from an unapproved connection is refused, not routed", async () => {
+    const portA = await uniquePort();
+    const storeA = new MeshStore(portA);
+    wireWireMeshTestTransport(storeA);
+    try {
+      await storeA.init();
+      await storeA.registerAgent({
+        name: "coordinator",
+        harness: "test",
+        cwd: "/test/a",
+        pid: process.pid,
+        visibility: "visible",
+        tags: [],
+      });
+
+      // A hostile client that completes a TLS handshake (proving only which key it holds, not that a human approved it) and skips connect_request entirely, going straight for a forged state_update.
+      const attackerIdentity = generateIdentity();
+      const attackerTransport = createTlsTransport({
+        certificatePem: attackerIdentity.certificate,
+        privateKeyPem: attackerIdentity.privateKey,
+      });
+      const connection = await attackerTransport.connect(
+        `127.0.0.1:${String(portA)}`,
+      );
+      const attackerIdentityPort = await toIdentityPort(attackerIdentity);
+      const session = await acceptMeshSession(
+        connection,
+        attackerIdentityPort,
+        [DOMAIN],
+      );
+
+      const forgedAgent: AgentIdentity = {
+        id: "forged-attacker-agent",
+        version: 1,
+        name: "forged",
+        harness: "test",
+        cwd: "/forged",
+        pid: 1,
+        startedAt: new Date().toISOString(),
+        visibility: "visible",
+        status: "active",
+        tags: [],
+        subscribedRooms: [],
+      };
+      const outcome = await session.sendManageRequest(
+        buildCommand({
+          method: "state_update",
+          patch: { type: "agent_upsert", agent: forgedAgent },
+        }),
+        FRAME_SCOPE,
+      );
+
+      assert.equal(
+        outcome.result,
+        "error",
+        "an unapproved connection's message must be refused, not routed",
+      );
+      assert.equal(
+        storeA.serialise().agents[forgedAgent.id],
+        undefined,
+        "a forged state_update from an unapproved connection must never reach mesh-store's own state",
+      );
+    } finally {
       await storeA.shutdown();
     }
   });

@@ -43,20 +43,22 @@ import { nanoid } from "./nanoid.js";
 
 const COORDINATOR_HOST = "127.0.0.1";
 
-/** This project's own namespaced domain (registrant "exadev.io", local name "agent-comms-v1"), matching namespaced-domain-id's "<registrant>/<local-name>" shape -- registry/core-domains.md's own recommended pattern for a third party. */
-const DOMAIN = "exadev.io/agent-comms-v1";
+/** This project's own namespaced domain (registrant "exadev.io", local name "agent-comms-v1"), matching namespaced-domain-id's "<registrant>/<local-name>" shape -- registry/core-domains.md's own recommended pattern for a third party. Exported for test use only: a security test simulating a hostile client that skips connect_request needs to construct a well-formed frame under the same domain/verb/scope this transport itself listens on, rather than duplicating these as separately-maintained magic strings that could silently drift from the real values. */
+export const DOMAIN = "exadev.io/agent-comms-v1";
 
 /** One verb for the entire MeshMessage union: this phase carries every message opaquely rather than modelling each arm as its own verb, which is core/room's own job once P3 gives this substrate real room semantics. */
-const FRAME_VERB = "exadev.io/agent-comms-v1:frame";
+export const FRAME_VERB = "exadev.io/agent-comms-v1:frame";
 
 /** No finer-grained authorisation model exists above "you're a TLS-authenticated member of this mesh" at this phase -- exactly today's TlsTransport model, which does no per-message authorisation either. */
-const FRAME_SCOPE: Readonly<CapabilityScope> = { kind: "agent-comms-mesh" };
+export const FRAME_SCOPE: Readonly<CapabilityScope> = {
+  kind: "agent-comms-mesh",
+};
 
 // ---------------------------------------------------------------------------
 // Message carriage
 // ---------------------------------------------------------------------------
 
-function buildCommand(message: MeshMessage): ManageCommand {
+export function buildCommand(message: MeshMessage): ManageCommand {
   return { verb: FRAME_VERB, params: { message } };
 }
 
@@ -74,12 +76,19 @@ function extractMessage(command: ManageCommand): MeshMessage | undefined {
 // Internal session bookkeeping
 // ---------------------------------------------------------------------------
 
+/** A human decision on a connect_request: "accept" resumes the still-blocked consumeQuarantined loop as a fully trusted session; "reject" (also used when the requester disconnects before a decision is made) unblocks it to close instead. */
+type ConnectionDecision = "accept" | "reject";
+
 interface PendingConnection {
   respond: IncomingManageRequest["respond"];
   dataPort: number;
   name: string;
   fingerprint: string;
   policy: ListenerPolicy | undefined;
+  /** Held so acceptConnection can trackSession it synchronously, before firing onIntroduction -- that event's own handler (mesh-store's handleIntroduction) sends a reply on this same handle immediately, which needs peerSessions already populated. Waiting for consumeQuarantined's own suspended loop to resume and do it would race: resolve() below only wakes that loop on a later microtask tick, after onIntroduction has already fired. */
+  session: AcceptedMeshSession;
+  /** Settles the Promise consumeQuarantined is blocked on for this connect_request -- the mechanism by which acceptConnection/rejectConnection resume a loop suspended mid-iteration, without ever needing to re-obtain (and so needing to reason about the identity of) a second iterator over the same session's incomingManageRequests. */
+  resolve: (decision: ConnectionDecision) => void;
 }
 
 interface TrackedListener {
@@ -169,6 +178,7 @@ export class WireMeshTransport implements MeshTransport {
     connection: Readonly<Connection>,
     policy: ListenerPolicy | undefined,
     fireOnPeerConnected: boolean,
+    requiresApproval: boolean,
   ): Promise<void> {
     if (this.shutDown) {
       await connection.close();
@@ -187,13 +197,21 @@ export class WireMeshTransport implements MeshTransport {
       await session.close();
       return;
     }
-    this.trackSession(deviceIdHex, session);
     // ConnectionHandle.policy is `?: ListenerPolicy`, not `?: ListenerPolicy | undefined` -- under exactOptionalPropertyTypes these are genuinely different types, so the key must be entirely absent rather than present-with-undefined-value when this listener has no policy of its own.
     const handle: ConnectionHandle = {
       id: deviceIdHex,
       ...(policy !== undefined ? { policy } : {}),
     };
 
+    if (requiresApproval) {
+      // A listener a stranger can dial cold (the coordinator port, or any addListener-created listener) must not hand out full routing on the strength of a TLS handshake alone -- that only proves which key the far side holds, never that a human has approved them as a mesh member. Quarantine every request from this session until it's either an `introduce` (the pre-existing, ungated coordinator-handoff path, unchanged from before this substrate swap) or an approved `connect_request`.
+      this.allSessions.add(session);
+      this.consumeQuarantined(session, handle);
+      this.watchForDisconnect(session, handle, deviceIdHex);
+      return;
+    }
+
+    this.trackSession(deviceIdHex, session);
     if (fireOnPeerConnected) {
       const info: PeerInfo = {
         id: deviceIdHex,
@@ -205,6 +223,69 @@ export class WireMeshTransport implements MeshTransport {
 
     this.consumeIncoming(session, handle);
     this.watchForDisconnect(session, handle, deviceIdHex);
+  }
+
+  /** Reads a not-yet-trusted session's requests until it's promoted (an `introduce`, handled and trusted immediately, matching the pre-existing coordinator-handoff trust boundary) or a `connect_request` arrives, at which point this same loop iteration blocks on the human decision Promise stored in pendingConnections -- resumed in place by acceptConnection/rejectConnection (or by watchForDisconnect, if the requester disconnects first) -- rather than ever stopping and later re-entering the session's incomingManageRequests from a second call, which would require assuming a fresh access yields a distinct, independently-advancing iterator rather than resuming the one already in progress. Anything else arriving before introduce/connect_request is a protocol violation from an unapproved peer and is refused and closed rather than routed. */
+  private consumeQuarantined(
+    session: AcceptedMeshSession,
+    handle: ConnectionHandle,
+  ): void {
+    void (async () => {
+      let approved = false;
+      for await (const request of session.incomingManageRequests) {
+        if (this.shutDown) break;
+        if (approved) {
+          await this.dispatchIncoming(request, handle);
+          continue;
+        }
+        const message = extractMessage(request.command);
+        if (message === undefined) {
+          await request.respond({ result: "ok" }).catch(() => undefined);
+          continue;
+        }
+        if (message.method === "introduce") {
+          this.trackSession(handle.id, session);
+          this.route(handle, message);
+          await request.respond({ result: "ok" }).catch(() => undefined);
+          approved = true;
+          continue;
+        }
+        if (message.method === "connect_request") {
+          // Held open deliberately -- see this file's own header comment. Answered later by acceptConnection/rejectConnection, not here.
+          const decision = await new Promise<ConnectionDecision>((resolve) => {
+            this.pendingConnections.set(handle.id, {
+              respond: request.respond,
+              dataPort: message.dataPort,
+              name: message.name,
+              fingerprint: message.fingerprint,
+              policy: handle.policy,
+              session,
+              resolve,
+            });
+            this.events.onConnectionRequest(handle, {
+              peerId: handle.id,
+              dataPort: message.dataPort,
+              name: message.name,
+              fingerprint: message.fingerprint,
+            });
+          });
+          if (decision === "reject") {
+            // Rejection can arrive via rejectConnection (session still open) or via shutdown/disconnect (session already closing) -- catch rather than assume which.
+            await session.close().catch(() => undefined);
+            return;
+          }
+          // acceptConnection has already called trackSession synchronously, before firing onIntroduction -- nothing left to do here beyond trusting subsequent requests on this same session.
+          approved = true;
+          continue;
+        }
+        // Any other message before introduce/connect_request is a protocol violation from an unapproved peer -- refuse and terminate rather than route it.
+        await request
+          .respond({ result: "error", code: "not_approved" })
+          .catch(() => undefined);
+        await session.close().catch(() => undefined);
+        return;
+      }
+    })();
   }
 
   private consumeIncoming(
@@ -228,25 +309,6 @@ export class WireMeshTransport implements MeshTransport {
       await request.respond({ result: "ok" }).catch(() => undefined);
       return;
     }
-
-    if (message.method === "connect_request") {
-      // Held open deliberately -- see this file's own header comment. Answered later by acceptConnection/rejectConnection, not here.
-      this.pendingConnections.set(handle.id, {
-        respond: request.respond,
-        dataPort: message.dataPort,
-        name: message.name,
-        fingerprint: message.fingerprint,
-        policy: handle.policy,
-      });
-      this.events.onConnectionRequest(handle, {
-        peerId: handle.id,
-        dataPort: message.dataPort,
-        name: message.name,
-        fingerprint: message.fingerprint,
-      });
-      return;
-    }
-
     this.route(handle, message);
     await request.respond({ result: "ok" }).catch(() => undefined);
   }
@@ -273,9 +335,10 @@ export class WireMeshTransport implements MeshTransport {
         this.events.onBecomeCoordinator(message.peerList);
         return;
       }
+      case "connect_request":
       case "connect_accepted":
       case "connect_rejected": {
-        // Never constructed by this transport -- connectToRemote's own sendManageRequest outcome carries this meaning directly. Dropped rather than treated as an error in case a future peer still sends one (forward compatibility with anything else speaking this same opaque-frame domain).
+        // connect_request only ever reaches route() if a session was somehow promoted without going through consumeQuarantined's own handling of it -- can't happen given every requiresApproval accept path routes through consumeQuarantined first, kept here only so an unrecognised-in-context method fails closed rather than falling to the default onMessage case below. connect_accepted/connect_rejected are never constructed by this transport at all -- connectToRemote's own sendManageRequest outcome carries that meaning directly.
         return;
       }
       default: {
@@ -295,6 +358,8 @@ export class WireMeshTransport implements MeshTransport {
           const wasTracked = this.peerSessions.get(deviceIdHex) === session;
           if (wasTracked) this.peerSessions.delete(deviceIdHex);
           this.allSessions.delete(session);
+          // A requester disconnecting before a human decides must unblock consumeQuarantined's own still-suspended loop iteration -- otherwise that promise, and the closure awaiting it, never settle.
+          this.pendingConnections.get(deviceIdHex)?.resolve("reject");
           this.pendingConnections.delete(deviceIdHex);
           // A no-op when this session was never a connectToPeer dial (e.g. the coordinator-client or an accepted connection) -- Set.delete on an absent key is always safe.
           this.dataDials.delete(deviceIdHex);
@@ -315,7 +380,7 @@ export class WireMeshTransport implements MeshTransport {
     this.dataListener = await this.wireTransport.listen(
       `${COORDINATOR_HOST}:0`,
       (connection) => {
-        void this.handleAcceptedConnection(connection, undefined, true);
+        void this.handleAcceptedConnection(connection, undefined, true, false);
       },
     );
     const port = this.dataListener.address.split(":").pop();
@@ -366,7 +431,12 @@ export class WireMeshTransport implements MeshTransport {
       `${host}:${String(port)}`,
       (connection) => {
         const tracked = this.coordinatorListeners.get(id);
-        void this.handleAcceptedConnection(connection, tracked?.policy, false);
+        void this.handleAcceptedConnection(
+          connection,
+          tracked?.policy,
+          false,
+          true,
+        );
       },
     );
     this._isCoordinator = true;
@@ -512,6 +582,8 @@ export class WireMeshTransport implements MeshTransport {
     }
     this.pendingConnections.delete(handle.id);
     await pending.respond({ result: "ok" });
+    // Must happen before onIntroduction fires below: mesh-store's own handleIntroduction sends a reply on this exact handle synchronously as part of handling that event, which needs peerSessions already populated -- waiting for consumeQuarantined's own suspended loop to resume (via resolve() below) would race, since that only happens on a later microtask tick.
+    this.trackSession(handle.id, pending.session);
     const acceptedHandle: ConnectionHandle = {
       id: handle.id,
       ...(pending.policy !== undefined ? { policy: pending.policy } : {}),
@@ -520,6 +592,8 @@ export class WireMeshTransport implements MeshTransport {
       peerId: handle.id,
       dataPort: pending.dataPort,
     });
+    // Resumes consumeQuarantined's own still-blocked loop iteration so it starts trusting subsequent requests on this same session.
+    pending.resolve("accept");
   }
 
   async rejectConnection(
@@ -536,9 +610,8 @@ export class WireMeshTransport implements MeshTransport {
       code: "rejected",
       message: reason,
     });
-    const session = this.peerSessions.get(handle.id);
-    this.peerSessions.delete(handle.id);
-    if (session !== undefined) await session.close();
+    // Resumes consumeQuarantined's blocked loop iteration, which closes the session itself -- it was never tracked anywhere else to close it from here.
+    pending.resolve("reject");
   }
 
   // -----------------------------------------------------------------------
@@ -554,7 +627,7 @@ export class WireMeshTransport implements MeshTransport {
     const listener = await this.wireTransport.listen(
       `${host}:${String(port)}`,
       (connection) => {
-        void this.handleAcceptedConnection(connection, policy, false);
+        void this.handleAcceptedConnection(connection, policy, false, true);
       },
     );
     this.coordinatorListeners.set(id, {
@@ -599,6 +672,8 @@ export class WireMeshTransport implements MeshTransport {
       await pending
         .respond({ result: "error", code: "shutting_down" })
         .catch(() => undefined);
+      // Unblocks consumeQuarantined's own suspended loop iteration for this session -- otherwise it never settles, even though the session itself is about to be closed below via allSessions.
+      pending.resolve("reject");
     }
     this.pendingConnections.clear();
 
