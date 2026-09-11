@@ -9,6 +9,13 @@ export function wireTestTransport(store: MeshStore): void {
   // Every real bridge sets peerId to the identity's own certificate fingerprint before wiring the transport -- TlsTransport's cert-pinning trust model means a peer's advertised ID and the fingerprint the other side actually authenticates the connection against must be the same value, or introduction/state-sync never recognises the peer as itself.
   store.peerId = identity.fingerprint;
   store.setTransport(new TlsTransport(store.events, identity));
+  // DIAGNOSTIC (temporary): surface transport-level errors that were previously silently swallowed (MeshStore.onError was never wired to anything until now), to find the real cause of a CI-only accept-flow failure.
+  store.onError = (e) => {
+    console.error(
+      `[DIAGNOSTIC transport error, peerId=${store.peerId}]`,
+      e.message,
+    );
+  };
 }
 
 // Generous on purpose: waitFor returns the instant its condition holds, so a long ceiling costs nothing on the happy path (a local run settles in well under a second) and only matters for the worst case -- a loaded CI runner working through a real, sequential chain of TLS handshakes (each one genuine X.509 certificate work, not instant) for the accept-flow's second connection direction, confirmed to need meaningfully more than 5s on at least one real CI run.
