@@ -17,7 +17,8 @@
 import * as os from "node:os";
 import { nanoid } from "./nanoid.js";
 import { CommsError } from "./store.js";
-import { dmKey, normaliseWireState } from "./wire-protocol.js";
+import { normaliseWireState } from "./wire-protocol.js";
+import { dmRoomPath, ownerNamedRoomPath } from "./room-path.js";
 import type { SerialisedState } from "./wire-protocol.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
@@ -1149,7 +1150,8 @@ export class MeshStore implements CommsStore {
     description: string;
     federated?: boolean;
   }): Promise<Room> {
-    const id = opts.type === "secret" ? `_${opts.name}` : opts.name;
+    const localName = opts.type === "secret" ? `_${opts.name}` : opts.name;
+    const id = ownerNamedRoomPath(opts.owner, localName);
     if (this.rooms.has(id))
       throw new CommsError(`Room ${id} already exists`, "ROOM_EXISTS");
 
@@ -1490,7 +1492,8 @@ export class MeshStore implements CommsStore {
       ...(streamingBehavior !== undefined && { streamingBehavior }),
     };
 
-    const key = dmKey(from, to);
+    // Self-DM is a purely local scratchpad note -- it never leaves the process, so it needs no room-path and dmRoomPath's own a===b refusal (a path naming the same device twice is not a valid DM path at all) correctly does not apply here.
+    const key = to === from ? `self:${from}` : dmRoomPath(from, to);
     const arr = this.dms.get(key) ?? [];
     arr.push(message);
     this.dms.set(key, arr);

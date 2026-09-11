@@ -1,10 +1,7 @@
 /**
  * Wire protocol — framing, encoding, and message types for the TCP mesh.
  *
- * Transport-agnostic: carries the protocol contract between peers without
- * depending on net.Socket or any specific transport implementation. Any
- * MeshTransport implementation (WireMeshTransport is the one production
- * transport today) uses these types.
+ * Transport-agnostic: carries the protocol contract between peers without depending on net.Socket or any specific transport implementation. Any MeshTransport implementation (WireMeshTransport is the one production transport today) uses these types.
  */
 
 import type {
@@ -35,10 +32,7 @@ export interface SerialisedState {
   messages: Record<string, RoomMessage[]>;
   dms: Record<string, DmMessage[]>;
   /**
-   * Pending delivery events per target agent, replicated on every peer. A
-   * returning peer replays its own queue from the first snapshot it
-   * receives, so events pushed while its process was down still fire
-   * onDelivery (#28).
+   * Pending delivery events per target agent, replicated on every peer. A returning peer replays its own queue from the first snapshot it receives, so events pushed while its process was down still fire onDelivery (#28).
    */
   deliveryQueues: Record<string, DeliveryEvent[]>;
 }
@@ -131,16 +125,6 @@ export function isMeshMessage(value: unknown): value is MeshMessage {
   if (typeof value !== "object" || value === null) return false;
   if (!("method" in value)) return false;
   return typeof value.method === "string";
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Deterministic key for a DM conversation between two agents. */
-export function dmKey(a: string, b: string): string {
-  const sorted = [a, b].sort();
-  return `${sorted[0] ?? a}--${sorted[1] ?? b}`;
 }
 
 // ---------------------------------------------------------------------------

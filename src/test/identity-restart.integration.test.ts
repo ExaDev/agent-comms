@@ -19,6 +19,7 @@ import {
   type IdentitySlot,
 } from "../core/identity-store.js";
 import type { DeliveryEvent } from "../core/types.js";
+import { ownerNamedRoomPath } from "../core/room-path.js";
 
 const TEST_PORT = 19889;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -81,9 +82,9 @@ async function main(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  const roomId = "restart-continuity";
+  const roomId = ownerNamedRoomPath(a1.store.peerId, "restart-continuity");
   await a1.store.createRoom({
-    name: roomId,
+    name: "restart-continuity",
     type: "public",
     owner: a1.store.peerId,
     description: "issue 14 acceptance",

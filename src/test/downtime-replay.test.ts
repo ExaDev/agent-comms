@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { MeshStore } from "../core/mesh-store.js";
 import type { SerialisedState } from "../core/wire-protocol.js";
 import type { DeliveryEvent } from "../core/types.js";
+import { ownerNamedRoomPath } from "../core/room-path.js";
 import { wireTestTransport } from "./test-transport.js";
 
 /** A wire-accurate snapshot: production always applies parsed (cloned) state. */
@@ -43,16 +44,17 @@ void test("events queued while the target was down replay on its first snapshot"
   });
   // Make the sender aware of the target, then take the target's store away.
   sender.applyStateSync(target.serialise());
+  const roomId = ownerNamedRoomPath(author.id, "room");
   await sender.createRoom({
     name: "room",
     type: "public",
     owner: author.id,
     description: "x",
   });
-  await sender.joinRoom("room", targetAgent.id);
+  await sender.joinRoom(roomId, targetAgent.id);
 
   // While the target is down, a room message is sent to it.
-  await sender.sendRoomMessage("room", author.id, "while you were away");
+  await sender.sendRoomMessage(roomId, author.id, "while you were away");
   const pending = snapshotOf(sender).deliveryQueues[targetAgent.id];
   assert.ok(pending !== undefined && pending.length > 0);
 
@@ -113,16 +115,17 @@ void test("a queue is bounded oldest-first so downtime cannot grow it without li
     tags: [],
   });
   sender.applyStateSync(target.serialise());
+  const roomId = ownerNamedRoomPath(author.id, "room");
   await sender.createRoom({
     name: "room",
     type: "public",
     owner: author.id,
     description: "x",
   });
-  await sender.joinRoom("room", targetAgent.id);
+  await sender.joinRoom(roomId, targetAgent.id);
 
   for (let i = 0; i < 120; i++) {
-    await sender.sendRoomMessage("room", author.id, `msg-${String(i)}`);
+    await sender.sendRoomMessage(roomId, author.id, `msg-${String(i)}`);
   }
   const queued = snapshotOf(sender).deliveryQueues[targetAgent.id] ?? [];
   assert.equal(queued.length, 100);
@@ -153,13 +156,14 @@ void test("a pending invite replays until accepted or declined", async () => {
     tags: [],
   });
   sender.applyStateSync(target.serialise());
+  const roomId = ownerNamedRoomPath(author.id, "private-room");
   await sender.createRoom({
     name: "private-room",
     type: "private",
     owner: author.id,
     description: "x",
   });
-  await sender.inviteToRoom("private-room", targetAgent.id, author.id);
+  await sender.inviteToRoom(roomId, targetAgent.id, author.id);
 
   const returned = makeStore();
   const deliveries: DeliveryEvent[] = [];
@@ -173,7 +177,7 @@ void test("a pending invite replays until accepted or declined", async () => {
   assert.equal(deliveries.filter((ev) => ev.type === "room_invite").length, 1);
 
   // Declined (no longer invited): the same snapshot no longer replays it.
-  await sender.declineInvite("private-room", targetAgent.id, "not now");
+  await sender.declineInvite(roomId, targetAgent.id, "not now");
   const declined = makeStore();
   const deliveries2: DeliveryEvent[] = [];
   declined.onDelivery = (_id, ev) => {
