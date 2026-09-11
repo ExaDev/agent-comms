@@ -530,6 +530,12 @@ export class TlsTransport {
   // -----------------------------------------------------------------------
 
   async connectToPeer(peer: PeerInfo, ownPeerId: string): Promise<void> {
+    // DIAGNOSTIC (temporary): confirm this call is actually reached, and with what target, before anything else can go wrong.
+    this.events.onError?.(
+      new Error(
+        `connectToPeer ENTRY: own=${ownPeerId} target=${peer.id}@${String(peer.port)} alreadyConnected=${String(this.peerConnections.has(peer.id))} shutDown=${String(this.shutDown)}`,
+      ),
+    );
     if (this.shutDown || this.peerConnections.has(peer.id)) return;
 
     // Queue broadcasts until the connection registers: messages sent in the dial window previously had nowhere to go and were silently dropped.
@@ -539,6 +545,11 @@ export class TlsTransport {
       const socket = tls.connect(
         { ...this.connectOptions, host: COORDINATOR_HOST, port: peer.port },
         () => {
+          this.events.onError?.(
+            new Error(
+              `connectToPeer CONNECTED: own=${ownPeerId} target=${peer.id}@${String(peer.port)}`,
+            ),
+          );
           this.pendingConnectSockets.delete(socket);
           if (this.shutDown) {
             this.pendingOutbound.delete(peer.id);

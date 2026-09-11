@@ -266,6 +266,12 @@ export class MeshStore implements CommsStore {
   // -----------------------------------------------------------------------
 
   private handlePeerList(peers: PeerInfo[]): void {
+    // DIAGNOSTIC (temporary): print exactly what a peer_list contained and what this store did with each entry, to find why a specific CI-only run never dials back the peer that introduced it.
+    this.onError?.(
+      new Error(
+        `handlePeerList: own=${this.peerId} received [${peers.map((p) => `${p.id}@${String(p.port)}`).join(", ")}]`,
+      ),
+    );
     for (const peer of peers) {
       this.peerInfo.set(peer.id, peer);
       // The list always includes this store's own entry — dialling yourself is a wasted connection attempt (and, on some platforms, an immediate self-inflicted ECONNRESET) that never needs to happen.
