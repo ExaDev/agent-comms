@@ -8,10 +8,13 @@ import * as assert from "node:assert/strict";
 import { test } from "node:test";
 import { MeshStore } from "../core/mesh-store.js";
 import type { SerialisedState } from "../core/wire-protocol.js";
+import { wireTestTransport } from "./test-transport.js";
 
-/** A local-only store: no transport start, so no ports and no flake. */
+/** A local-only store: transport is set (registerAgent's own broadcastPatch needs one) but never started, so no ports and no flake -- the stores in these tests never actually connect. */
 function makeStore(): MeshStore {
-  return new MeshStore();
+  const store = new MeshStore();
+  wireTestTransport(store);
+  return store;
 }
 
 function snapshotOf(store: MeshStore): SerialisedState {

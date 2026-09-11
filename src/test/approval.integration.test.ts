@@ -13,6 +13,7 @@ import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
 import type { DeliveryEvent } from "../core/types.js";
+import { wireTestTransport } from "./test-transport.js";
 
 /** Find a free port on localhost by binding to port 0. */
 function findFreePort(): Promise<number> {
@@ -48,6 +49,7 @@ describe("connection approval", () => {
 
     // Set up coordinator (store A)
     const storeA = new MeshStore(portA);
+    wireTestTransport(storeA);
     const receivedRequests: Extract<
       DeliveryEvent,
       { type: "connection_request" }
@@ -71,6 +73,7 @@ describe("connection approval", () => {
 
     // Set up connecting peer (store B) that uses connectToRemote
     const storeB = new MeshStore(portB);
+    wireTestTransport(storeB);
     await storeB.startDataServerOnly();
     await storeB.registerAgent({
       name: "connector",
@@ -116,6 +119,7 @@ describe("connection approval", () => {
     const portB = portA + 100;
 
     const storeA = new MeshStore(portA);
+    wireTestTransport(storeA);
     const receivedRequests: Extract<
       DeliveryEvent,
       { type: "connection_request" }
@@ -138,6 +142,7 @@ describe("connection approval", () => {
     await sleep(100);
 
     const storeB = new MeshStore(portB);
+    wireTestTransport(storeB);
     await storeB.startDataServerOnly();
     await storeB.registerAgent({
       name: "connector",
@@ -188,6 +193,7 @@ describe("connection approval", () => {
     const portB = portA + 100;
 
     const storeA = new MeshStore(portA);
+    wireTestTransport(storeA);
     const receivedRequests: Extract<
       DeliveryEvent,
       { type: "connection_request" }
@@ -210,6 +216,7 @@ describe("connection approval", () => {
     await sleep(100);
 
     const storeB = new MeshStore(portB);
+    wireTestTransport(storeB);
     await storeB.startDataServerOnly();
     await storeB.registerAgent({
       name: "connector",
@@ -254,6 +261,7 @@ describe("connection approval", () => {
     const portB = portA + 100;
 
     const storeA = new MeshStore(portA);
+    wireTestTransport(storeA);
     storeA.onDelivery = () => {};
     await storeA.init();
     await storeA.registerAgent({
@@ -268,6 +276,7 @@ describe("connection approval", () => {
     await sleep(100);
 
     const storeB = new MeshStore(portB);
+    wireTestTransport(storeB);
     await storeB.startDataServerOnly();
     await storeB.registerAgent({
       name: "connector",
@@ -330,6 +339,7 @@ describe("connection approval", () => {
     const portB = portA + 100;
 
     const storeA = new MeshStore(portA);
+    wireTestTransport(storeA);
     storeA.onDelivery = () => {};
     await storeA.init();
     await storeA.registerAgent({
@@ -345,6 +355,7 @@ describe("connection approval", () => {
     await sleep(100);
 
     const storeB = new MeshStore(portB);
+    wireTestTransport(storeB);
     await storeB.startDataServerOnly();
     await storeB.registerAgent({
       name: "connector",
@@ -463,6 +474,7 @@ describe("connection approval", () => {
     const portB = portA + 100;
 
     const storeA = new MeshStore(portA);
+    wireTestTransport(storeA);
     storeA.onDelivery = () => {};
     await storeA.init();
     await storeA.registerAgent({
@@ -478,6 +490,7 @@ describe("connection approval", () => {
     await sleep(100);
 
     const storeB = new MeshStore(portB);
+    wireTestTransport(storeB);
     await storeB.startDataServerOnly();
     await storeB.registerAgent({
       name: "connector",

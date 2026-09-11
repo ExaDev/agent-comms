@@ -7,14 +7,16 @@
  * Delivery events are pushed directly over the transport — no polling,
  * no filesystem.
  *
- * Transport is injected via the constructor. TcpTransport for localhost
- * TCP, TlsTransport for encrypted connections, etc.
+ * Transport is set via setTransport() (e.g. TlsTransport for encrypted
+ * connections) before init() or any other transport-using method is called
+ * -- there is no default, since every real bridge builds its own transport
+ * from this store's own events getter, which needs the store to already
+ * exist.
  */
 
 import * as os from "node:os";
 import { nanoid } from "./nanoid.js";
 import { CommsError } from "./store.js";
-import { TcpTransport } from "./tcp-transport.js";
 import { dmKey, normaliseWireState } from "./wire-protocol.js";
 import type { SerialisedState } from "./wire-protocol.js";
 import { DiscoveryManager } from "./discovery.js";
@@ -99,7 +101,7 @@ export class MeshStore implements CommsStore {
   private deliveryQueues = new Map<string, DeliveryEvent[]>();
   private identityCache = new Map<string, { id: string }>();
 
-  private transport: MeshTransport;
+  private transport: MeshTransport | undefined;
   private peerInfo = new Map<string, PeerInfo>();
   private staleCheckTimer: ReturnType<typeof setInterval> | undefined;
   private isShutDown = false;
@@ -109,7 +111,8 @@ export class MeshStore implements CommsStore {
   /** Whether the mesh has a live coordinator connection. */
   get connected(): boolean {
     return (
-      this.transport.isCoordinator || this.transport.hasCoordinatorConnection
+      this.requireTransport().isCoordinator ||
+      this.requireTransport().hasCoordinatorConnection
     );
   }
 
@@ -147,9 +150,6 @@ export class MeshStore implements CommsStore {
     this.peerId = nanoid(8);
     this.startedAt = new Date().toISOString();
     this.coordinatorPort = coordinatorPort;
-    // Wire up transport with this store's event handlers.
-    // TcpTransport is the default; callers can replace via setTransport().
-    this.transport = new TcpTransport(this.events);
 
     // Discovery manager — registers available backends
     this.discovery = new DiscoveryManager();
@@ -176,9 +176,19 @@ export class MeshStore implements CommsStore {
     );
   }
 
-  /** Replace the transport (e.g. with TlsTransport for encrypted connections). */
+  /** Sets the transport (e.g. TlsTransport for encrypted connections). Must be called before init() or any other transport-using method. */
   setTransport(transport: MeshTransport): void {
     this.transport = transport;
+  }
+
+  /** The set transport, or throws if setTransport() hasn't been called yet -- the single place every transport-using method reads through, so the "must call setTransport() first" contract is enforced at one boundary rather than checked ad hoc at each call site. */
+  private requireTransport(): MeshTransport {
+    if (this.transport === undefined) {
+      throw new Error(
+        "MeshStore: no transport set; call setTransport() before using the store",
+      );
+    }
+    return this.transport;
   }
 
   // -----------------------------------------------------------------------
@@ -188,12 +198,12 @@ export class MeshStore implements CommsStore {
   async init(): Promise<void> {
     if (this.initialised) return;
     this.initialised = true;
-    await this.transport.startDataServer();
+    await this.requireTransport().startDataServer();
 
     // Register our own peer info
     this.peerInfo.set(this.peerId, {
       id: this.peerId,
-      port: this.transport.dataPort,
+      port: this.requireTransport().dataPort,
       startedAt: this.startedAt,
     });
 
@@ -208,16 +218,16 @@ export class MeshStore implements CommsStore {
     let connected = false;
 
     try {
-      await this.transport.connectToCoordinator(
+      await this.requireTransport().connectToCoordinator(
         COORDINATOR_HOST,
         this.coordinatorPort,
         this.peerId,
-        this.transport.dataPort,
+        this.requireTransport().dataPort,
       );
       connected = true;
     } catch {
       try {
-        await this.transport.becomeCoordinator(
+        await this.requireTransport().becomeCoordinator(
           COORDINATOR_HOST,
           this.coordinatorPort,
         );
@@ -243,7 +253,7 @@ export class MeshStore implements CommsStore {
       return;
     }
 
-    this.transport.unref();
+    this.requireTransport().unref();
   }
 
   // -----------------------------------------------------------------------
@@ -253,13 +263,13 @@ export class MeshStore implements CommsStore {
   private handlePeerList(peers: PeerInfo[]): void {
     for (const peer of peers) {
       this.peerInfo.set(peer.id, peer);
-      void this.transport.connectToPeer(peer, this.peerId);
+      void this.requireTransport().connectToPeer(peer, this.peerId);
     }
   }
 
   private handlePeerJoined(peer: PeerInfo): void {
     this.peerInfo.set(peer.id, peer);
-    void this.transport.connectToPeer(peer, this.peerId);
+    void this.requireTransport().connectToPeer(peer, this.peerId);
   }
 
   private async handleIntroduction(
@@ -278,14 +288,14 @@ export class MeshStore implements CommsStore {
       method: "peer_list",
       peers: [...this.peerInfo.values()],
     };
-    await this.transport.send(handle, peerList);
+    await this.requireTransport().send(handle, peerList);
 
     // Broadcast arrival to all existing peers
     const joined: MeshMessage = { method: "peer_joined", peer: newPeer };
-    await this.transport.broadcast(joined);
+    await this.requireTransport().broadcast(joined);
 
     // Connect to the new peer's data server
-    void this.transport.connectToPeer(newPeer, this.peerId);
+    void this.requireTransport().connectToPeer(newPeer, this.peerId);
   }
 
   private async handlePeerConnected(
@@ -295,7 +305,7 @@ export class MeshStore implements CommsStore {
     // If we have state and the peer doesn't, send state sync
     if (this.agents.size > 0) {
       const state: SerialisedState = this.serialise();
-      await this.transport.send(handle, {
+      await this.requireTransport().send(handle, {
         method: "state_sync",
         state,
       });
@@ -402,14 +412,14 @@ export class MeshStore implements CommsStore {
 
   private async handleBecomeCoordinator(peerList: PeerInfo[]): Promise<void> {
     // Take over as coordinator using the data server we already have
-    await this.transport.becomeCoordinator(
+    await this.requireTransport().becomeCoordinator(
       COORDINATOR_HOST,
       this.coordinatorPort,
     );
     this.peerInfo.clear();
     for (const peer of peerList) {
       this.peerInfo.set(peer.id, peer);
-      void this.transport.connectToPeer(peer, this.peerId);
+      void this.requireTransport().connectToPeer(peer, this.peerId);
     }
     this.startStaleCheck();
   }
@@ -462,7 +472,7 @@ export class MeshStore implements CommsStore {
     }
     this.pendingInboundConnections.delete(connectionId);
     const handle: ConnectionHandle = { id: connectionId };
-    await this.transport.acceptConnection(handle);
+    await this.requireTransport().acceptConnection(handle);
   }
 
   /** Reject a pending inbound connection. */
@@ -473,7 +483,7 @@ export class MeshStore implements CommsStore {
     }
     this.pendingInboundConnections.delete(connectionId);
     const handle: ConnectionHandle = { id: connectionId };
-    await this.transport.rejectConnection(handle, reason);
+    await this.requireTransport().rejectConnection(handle, reason);
   }
 
   /** List all pending inbound connections awaiting approval. */
@@ -498,12 +508,12 @@ export class MeshStore implements CommsStore {
     // Fire-and-forget: don't await the full approval handshake.
     // The coordinator will either accept (triggering normal introduction flow)
     // or reject (closing the socket). Handle rejection to avoid unhandled rejection.
-    this.transport
+    this.requireTransport()
       .connectToRemote(
         host,
         port,
         this.peerId,
-        this.transport.dataPort,
+        this.requireTransport().dataPort,
         agent?.name ?? "",
         "",
       )
@@ -518,13 +528,13 @@ export class MeshStore implements CommsStore {
   /** Start only the data server without connecting to a coordinator.
    *  Used for testing scenarios where the peer connects via connectToRemote. */
   async startDataServerOnly(): Promise<void> {
-    await this.transport.startDataServer();
+    await this.requireTransport().startDataServer();
     this.peerInfo.set(this.peerId, {
       id: this.peerId,
-      port: this.transport.dataPort,
+      port: this.requireTransport().dataPort,
       startedAt: this.startedAt,
     });
-    this.transport.unref();
+    this.requireTransport().unref();
   }
 
   // -----------------------------------------------------------------------
@@ -766,7 +776,7 @@ export class MeshStore implements CommsStore {
   // -----------------------------------------------------------------------
 
   private async broadcastPatch(patch: MeshStatePatch): Promise<void> {
-    await this.transport.broadcast({ method: "state_update", patch });
+    await this.requireTransport().broadcast({ method: "state_update", patch });
     if (this.onPatch) {
       await this.onPatch(patch);
     }
@@ -1601,15 +1611,15 @@ export class MeshStore implements CommsStore {
     if (!isListenerPolicy(policy)) {
       throw new CommsError(`Invalid policy "${policy}"`, "INVALID_POLICY");
     }
-    return this.transport.addListener(host, port, policy);
+    return this.requireTransport().addListener(host, port, policy);
   }
 
   async removeListener(id: string): Promise<void> {
-    return this.transport.removeListener(id);
+    return this.requireTransport().removeListener(id);
   }
 
   listListeners(): ListenerInfo[] {
-    return this.transport.listListeners();
+    return this.requireTransport().listListeners();
   }
 
   getNetworkInterfaces(): NetworkInterface[] {
@@ -1822,6 +1832,6 @@ export class MeshStore implements CommsStore {
 
     this.stopStaleCheck();
     await this.federation.shutdown();
-    await this.transport.shutdown();
+    await this.requireTransport().shutdown();
   }
 }
