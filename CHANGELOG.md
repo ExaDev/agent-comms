@@ -1,3 +1,9 @@
+## [1.31.0](https://github.com/ExaDev/agent-comms/compare/v1.30.0...v1.31.0) (2026-09-11)
+
+### Features
+
+* **core:** implement WireMeshTransport over wire-mesh-core ([ba21335](https://github.com/ExaDev/agent-comms/commit/ba21335b5135b040cd722909166948c195963102))
+
 ## [1.30.0](https://github.com/ExaDev/agent-comms/compare/v1.29.0...v1.30.0) (2026-09-11)
 
 ### Features
