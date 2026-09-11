@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { deviceIdToHex } from "@exadev/wire-mesh-core/domain/device-id";
+import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createBridgeMesh } from "../core/bridge-mesh.js";
 import {
   loadOrCreateIdentity,

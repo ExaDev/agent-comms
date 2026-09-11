@@ -3,8 +3,8 @@
  */
 
 import { webcrypto } from "node:crypto";
-import { createNodeIdentity } from "@exadev/wire-mesh-core/adapters/node-identity";
-import type { IdentityPort } from "@exadev/wire-mesh-core/ports/identity";
+import { createNodeIdentity } from "wire-mesh-core/adapters/node-identity";
+import type { IdentityPort } from "wire-mesh-core/ports/identity";
 import type { PeerIdentity } from "./identity.js";
 import { rawPublicKeyFromPrivateKey } from "./identity.js";
 

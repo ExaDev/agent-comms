@@ -7,8 +7,8 @@
  */
 
 import * as net from "node:net";
-import { createTlsTransport } from "@exadev/wire-mesh-core/adapters/tls-transport";
-import { acceptMeshSession } from "@exadev/wire-mesh-core/domain/mesh-session";
+import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
+import { acceptMeshSession } from "wire-mesh-core/domain/mesh-session";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";

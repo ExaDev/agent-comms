@@ -2,7 +2,7 @@
 
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import { generateIdentity } from "../core/identity.js";
-import { deviceIdToHex } from "@exadev/wire-mesh-core/domain/device-id";
+import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import type { MeshStore } from "../core/mesh-store.js";
 
 export function wireTestTransport(store: MeshStore): void {

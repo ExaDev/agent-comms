@@ -15,7 +15,7 @@ import {
 import {
   negotiate,
   type NegotiationResult,
-} from "@exadev/wire-mesh-core/domain/handshake";
+} from "wire-mesh-core/domain/handshake";
 
 /** agent-comms' own wire-format version. 1 = the current format (entity revision fields, deliveryQueues). */
 export const MESH_PROTOCOL_VERSION = 1;

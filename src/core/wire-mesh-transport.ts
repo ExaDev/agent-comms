@@ -1,5 +1,5 @@
 /**
- * WireMeshTransport — MeshTransport implemented over @exadev/wire-mesh-core, carrying the existing MeshMessage union as an opaque payload rather than inventing new wire semantics. This is the P2 substrate swap's own deliverable: MeshStore, CommsTool, and every existing agent/room/message behaviour above the transport are completely unaffected -- only how bytes move between peers changes.
+ * WireMeshTransport — MeshTransport implemented over wire-mesh-core, carrying the existing MeshMessage union as an opaque payload rather than inventing new wire semantics. This is the P2 substrate swap's own deliverable: MeshStore, CommsTool, and every existing agent/room/message behaviour above the transport are completely unaffected -- only how bytes move between peers changes.
  *
  * Every agent-comms MeshMessage rides as a single namespaced manage-command verb (FRAME_VERB) under one flat scope (FRAME_SCOPE); the message itself is carried opaquely in the command's own params.message field. This needs no spec/CDDL change: manage-command-params is already an open `{* tstr => any}` socket for exactly this purpose.
  *
@@ -8,22 +8,22 @@
  * connect_request's accept/reject flow maps onto sendManageRequest's own request/response round trip directly, rather than a separate pair of connect_accepted/connect_rejected messages: manage-request-frame already tolerates arbitrary latency between a request and its response, so "waiting for a human to approve" is simply a manage-response that hasn't been sent yet, not a protocol gap needing its own mechanism. connect_request therefore holds its own IncomingManageRequest open (rather than responding immediately) until acceptConnection/rejectConnection is actually called.
  */
 
-import { createTlsTransport } from "@exadev/wire-mesh-core/adapters/tls-transport";
+import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
   type IncomingManageRequest,
-} from "@exadev/wire-mesh-core/domain/mesh-session";
-import { deviceIdToHex } from "@exadev/wire-mesh-core/domain/device-id";
+} from "wire-mesh-core/domain/mesh-session";
+import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import type {
   CapabilityScope,
   ManageCommand,
-} from "@exadev/wire-mesh-core/generated/protocol";
+} from "wire-mesh-core/generated/protocol";
 import type {
   Connection,
   Listener,
   Transport,
-} from "@exadev/wire-mesh-core/ports/transport";
+} from "wire-mesh-core/ports/transport";
 import { isMeshMessage } from "./wire-protocol.js";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
 import type {

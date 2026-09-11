@@ -5,8 +5,8 @@
  */
 
 import * as assert from "node:assert/strict";
-import { createTlsTransport } from "@exadev/wire-mesh-core/adapters/tls-transport";
-import { acceptMeshSession } from "@exadev/wire-mesh-core/domain/mesh-session";
+import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
+import { acceptMeshSession } from "wire-mesh-core/domain/mesh-session";
 import { WireMeshTransport, DOMAIN } from "../core/wire-mesh-transport.js";
 import { generateIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";

@@ -111,7 +111,7 @@ function buildScript(name: string, actions: string): string {
     `const { CommsTool } = require("./dist/core/tool.js");`,
     `const { WireMeshTransport } = require("./dist/core/wire-mesh-transport.js");`,
     `const { generateIdentity } = require("./dist/core/identity.js");`,
-    `const { deviceIdToHex } = require("@exadev/wire-mesh-core/domain/device-id");`,
+    `const { deviceIdToHex } = require("wire-mesh-core/domain/device-id");`,
     `function log(msg) { process.stdout.write(JSON.stringify(msg) + "\\n"); }`,
     `(async () => {`,
     `  const store = new MeshStore(${String(SMOKE_PORT)});`,

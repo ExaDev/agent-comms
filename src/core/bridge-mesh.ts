@@ -4,7 +4,7 @@
  * peerId is deviceIdToHex(identity.deviceId), not identity.fingerprint -- WireMeshTransport's own session bookkeeping is keyed by device-id, so MeshStore's own notion of "this peer's id" has to be the same value for the two to correlate. Every existing agent id changes the first time a bridge starts through this factory: there is no migration path, since the value is a hash of genuinely different bytes (device-id is SHA-256(raw public key); fingerprint is SHA-256(certificate DER)) -- a hard cutover, already established as correct when identity.ts first grew deviceId, not relitigated here.
  */
 
-import { deviceIdToHex } from "@exadev/wire-mesh-core/domain/device-id";
+import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { MeshStore } from "./mesh-store.js";
 import { CommsTool } from "./tool.js";
 import { WireMeshTransport } from "./wire-mesh-transport.js";
