@@ -1,3 +1,13 @@
+## [1.33.0](https://github.com/ExaDev/agent-comms/compare/v1.32.1...v1.33.0) (2026-09-11)
+
+### Features
+
+* **core:** cut the remaining five bridges over to createBridgeMesh ([a985426](https://github.com/ExaDev/agent-comms/commit/a985426544943c3d6e96dc99e907a2baefe995ff))
+
+### Tests
+
+* stop deriving a second test port by adding an offset to the first ([84613af](https://github.com/ExaDev/agent-comms/commit/84613af02aaf7fffc587c455e376c4575b8a6181))
+
 ## [1.32.1](https://github.com/ExaDev/agent-comms/compare/v1.32.0...v1.32.1) (2026-09-11)
 
 ### Bug Fixes
