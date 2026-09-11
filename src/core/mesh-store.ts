@@ -7,7 +7,7 @@
  * Delivery events are pushed directly over the transport — no polling,
  * no filesystem.
  *
- * Transport is set via setTransport() (e.g. TlsTransport for encrypted
+ * Transport is set via setTransport() (e.g. WireMeshTransport for encrypted
  * connections) before init() or any other transport-using method is called
  * -- there is no default, since every real bridge builds its own transport
  * from this store's own events getter, which needs the store to already
@@ -181,7 +181,7 @@ export class MeshStore implements CommsStore {
     );
   }
 
-  /** Sets the transport (e.g. TlsTransport for encrypted connections). Must be called before init() or any other transport-using method. */
+  /** Sets the transport (e.g. WireMeshTransport for encrypted connections). Must be called before init() or any other transport-using method. */
   setTransport(transport: MeshTransport): void {
     this.transport = transport;
   }

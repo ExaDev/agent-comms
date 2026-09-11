@@ -7,11 +7,19 @@
  */
 
 import * as net from "node:net";
-import * as tls from "node:tls";
+import { createTlsTransport } from "@exadev/wire-mesh-core/adapters/tls-transport";
+import { acceptMeshSession } from "@exadev/wire-mesh-core/domain/mesh-session";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
 import { generateIdentity } from "../core/identity.js";
+import { toIdentityPort } from "../core/wire-mesh-identity.js";
+import {
+  DOMAIN,
+  FRAME_SCOPE,
+  buildCommand,
+  WireMeshTransport,
+} from "../core/wire-mesh-transport.js";
 import type { ConnectionHandle, TransportEvents } from "../core/transport.js";
 import * as assert from "node:assert/strict";
 import { test, describe } from "node:test";
@@ -329,74 +337,63 @@ describe("listener policy", () => {
   });
 
   void test("connections via non-default listener carry policy in handle", async () => {
-    const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    // Constructed directly rather than through MeshStore: MeshStore.events is a getter that builds a fresh TransportEvents object on every access, so there's no way to observe what the transport itself passed to onIntroduction without either reaching into the transport by an unsafe cast or, as here, supplying our own TransportEvents object the transport calls directly.
+    let receivedPolicy: string | undefined = "not-called";
+    const events: TransportEvents = {
+      onMessage: () => undefined,
+      onPeerConnected: () => undefined,
+      onPeerDisconnected: () => undefined,
+      onIntroduction: (handle) => {
+        receivedPolicy = handle.policy;
+      },
+      onConnectionRequest: () => undefined,
+      onPeerList: () => undefined,
+      onPeerJoined: () => undefined,
+      onBecomeCoordinator: () => undefined,
+    };
+    const identity = generateIdentity();
+    const transport = new WireMeshTransport(events, identity);
     try {
-      await store.init();
+      await transport.becomeCoordinator("127.0.0.1", 0);
 
-      // Add an observe listener
-      const listenerId = await store.addListener("127.0.0.1", 0, "observe");
-      const listeners = store.listListeners();
+      const listenerId = await transport.addListener("127.0.0.1", 0, "observe");
+      const listeners = transport.listListeners();
       const observeListener = listeners.find((l) => l.id === listenerId);
       assert.ok(observeListener, "Should find the observe listener");
 
-      // Connect to the observe listener and send an introduce message over a real TLS client connection -- the listener is a TlsTransport server, which requires an actual TLS handshake before any application bytes are readable, and separately verifies the introduce message's claimed peerId against the client certificate's own fingerprint, so the probe needs a real generated identity, not an arbitrary string. The transport should tag the connection handle with policy="observe"
-      //
-      // We intercept at the transport.events level because store.events is a getter that creates a fresh object each call.
+      // Connect to the observe listener and send an introduce message over a real WireMeshTransport client session -- the transport should tag the resulting connection handle with policy="observe".
       const probeIdentity = generateIdentity();
-      const receivedHandle = await new Promise<{
-        policy: string | undefined;
-      } | null>((resolve) => {
-        const timeout = setTimeout(() => resolve(null), 3000);
-
-        const transport = (
-          store as unknown as { transport: { events: TransportEvents } }
-        ).transport;
-        // Captured by value (bound, so eslint doesn't flag an unsafely-detached method reference), not by a closure that re-reads transport.events.onIntroduction at call time -- a lazy re-lookup would resolve to the wrapper itself once the assignment below replaces it, recursing forever on the very first introduction.
-        const originalOnIntroduction = transport.events.onIntroduction.bind(
-          transport.events,
-        );
-        transport.events.onIntroduction = (handle, msg) => {
-          // Capture the handle's policy
-          resolve({ policy: handle.policy });
-          clearTimeout(timeout);
-          // Call the original handler
-          originalOnIntroduction(handle, msg);
-        };
-
-        const socket = tls.connect({
-          port: observeListener.port,
-          host: "127.0.0.1",
-          key: probeIdentity.privateKey,
-          cert: probeIdentity.certificate,
-          rejectUnauthorized: false,
-        });
-
-        socket.on("secureConnect", () => {
-          socket.write(
-            JSON.stringify({
-              method: "introduce",
-              peerId: probeIdentity.fingerprint,
-              dataPort: 19999,
-            }) + "\n",
-          );
-        });
-
-        socket.on("error", () => {
-          socket.destroy();
-          clearTimeout(timeout);
-          resolve(null);
-        });
+      const probeTransport = createTlsTransport({
+        certificatePem: probeIdentity.certificate,
+        privateKeyPem: probeIdentity.privateKey,
       });
-
-      assert.ok(receivedHandle, "Should receive an introduction");
-      assert.equal(
-        receivedHandle.policy,
-        "observe",
-        "Handle should carry observe policy",
+      const connection = await probeTransport.connect(
+        `127.0.0.1:${String(observeListener.port)}`,
       );
+      const probeIdentityPort = await toIdentityPort(probeIdentity);
+      const session = await acceptMeshSession(connection, probeIdentityPort, [
+        DOMAIN,
+      ]);
+      try {
+        const outcome = await session.sendManageRequest(
+          buildCommand({
+            method: "introduce",
+            peerId: "probe",
+            dataPort: 19999,
+          }),
+          FRAME_SCOPE,
+        );
+        assert.equal(outcome.result, "ok", "introduce should be accepted");
+        assert.equal(
+          receivedPolicy,
+          "observe",
+          "Handle should carry observe policy",
+        );
+      } finally {
+        await session.close();
+      }
     } finally {
-      await store.shutdown();
+      await transport.shutdown();
     }
   });
 });

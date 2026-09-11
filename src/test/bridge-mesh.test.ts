@@ -37,7 +37,7 @@ void test("createBridgeMesh sets peerId to deviceIdToHex(identity.deviceId), not
   }
 });
 
-void test("createBridgeMesh wires a WireMeshTransport, not TlsTransport", async () => {
+void test("createBridgeMesh wires a WireMeshTransport", async () => {
   const slot = tempSlot("test-harness");
   const { store } = createBridgeMesh(slot);
   try {

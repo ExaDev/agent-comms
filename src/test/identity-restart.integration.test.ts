@@ -1,15 +1,16 @@
 /**
  * Integration test for issue #14: a bridge restarted with a persisted identity must keep its agent ID, room membership, and push delivery.
  *
- * Before persistent identities, every restart generated a fresh TLS certificate, so the fingerprint-derived agent ID changed and peers kept targeting the old ID: their messages queued for an agent whose local handler (gated on agentId === peerId) never fired again.
+ * Before persistent identities, every restart generated a fresh keypair, so the device-id-derived agent ID changed and peers kept targeting the old ID: their messages queued for an agent whose local handler (gated on agentId === peerId) never fired again.
  */
 
 import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { deviceIdToHex } from "@exadev/wire-mesh-core/domain/device-id";
 import { MeshStore } from "../core/mesh-store.js";
-import { TlsTransport } from "../core/tls-transport.js";
+import { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import { generateIdentity } from "../core/identity.js";
 import type { PeerIdentity } from "../core/identity.js";
 import {
@@ -27,11 +28,11 @@ interface Peer {
   deliveries: DeliveryEvent[];
 }
 
-/** A peer wired like a real bridge: TLS transport, fingerprint peer ID. */
+/** A peer wired like a real bridge: WireMeshTransport, device-id peer ID. */
 function makePeer(identity: PeerIdentity): Peer {
   const store = new MeshStore(TEST_PORT);
-  store.peerId = identity.fingerprint;
-  store.setTransport(new TlsTransport(store.events, identity));
+  store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
+  store.setTransport(new WireMeshTransport(store.events, identity));
   const deliveries: DeliveryEvent[] = [];
   return { store, deliveries };
 }
@@ -98,7 +99,10 @@ async function main(): Promise<void> {
 
   // A restarts in the same slot: same key material, same agent ID.
   const identityA2 = loadOrCreateIdentity(slot);
-  assert.equal(identityA2.fingerprint, identityA.fingerprint);
+  assert.equal(
+    deviceIdToHex(Uint8Array.from(identityA2.deviceId)),
+    deviceIdToHex(Uint8Array.from(identityA.deviceId)),
+  );
   const a2 = makePeer(identityA2);
   a2.store.onDelivery = (_id, ev) => {
     a2.deliveries.push(ev);
