@@ -166,6 +166,9 @@ export class TlsTransport {
     }
   >();
 
+  // -- Outbound connectToPeer sockets still mid-dial, not yet in peerConnections or already failed — tracked so shutdown() can destroy an in-flight dial rather than leaving it running in the background indefinitely, long after this transport is gone --
+  private pendingConnectSockets = new Set<tls.TLSSocket>();
+
   // -- Shutdown sentinel — prevents callbacks after shutdown() --
   private shutDown = false;
 
@@ -527,16 +530,22 @@ export class TlsTransport {
   // -----------------------------------------------------------------------
 
   async connectToPeer(peer: PeerInfo, ownPeerId: string): Promise<void> {
-    if (this.peerConnections.has(peer.id)) return;
+    if (this.shutDown || this.peerConnections.has(peer.id)) return;
 
-    // Queue broadcasts until the connection registers: messages sent in the
-    // dial window previously had nowhere to go and were silently dropped.
+    // Queue broadcasts until the connection registers: messages sent in the dial window previously had nowhere to go and were silently dropped.
     this.pendingOutbound.set(peer.id, this.pendingOutbound.get(peer.id) ?? []);
 
     await new Promise<void>((resolve) => {
       const socket = tls.connect(
         { ...this.connectOptions, host: COORDINATOR_HOST, port: peer.port },
         () => {
+          this.pendingConnectSockets.delete(socket);
+          if (this.shutDown) {
+            this.pendingOutbound.delete(peer.id);
+            socket.destroy();
+            resolve();
+            return;
+          }
           if (!this.verifyClaimedPeerId(socket, peer.id)) {
             this.pendingOutbound.delete(peer.id);
             resolve();
@@ -571,6 +580,8 @@ export class TlsTransport {
           resolve();
         },
       );
+      // Tracked from the moment tls.connect() returns (before the connect callback above ever fires) so shutdown() can destroy a dial that's still mid-handshake — otherwise it keeps running in the background with nothing to cancel it, eventually erroring out (or not) long after this transport, and the test or process that started it, are gone.
+      this.pendingConnectSockets.add(socket);
 
       const handle: ConnectionHandle = { id: peer.id };
       let disconnected = false;
@@ -578,6 +589,7 @@ export class TlsTransport {
       const onDisconnect = (): void => {
         if (disconnected) return;
         disconnected = true;
+        this.pendingConnectSockets.delete(socket);
         const wasConnected = this.peerConnections.has(peer.id);
         this.peerConnections.delete(peer.id);
         if (wasConnected && !this.shutDown) {
@@ -587,12 +599,13 @@ export class TlsTransport {
 
       socket.on("close", onDisconnect);
       socket.on("error", (err) => {
-        // DIAGNOSTIC (temporary)
-        this.events.onError?.(
-          new Error(
-            `connectToPeer(${peer.id}, port ${String(peer.port)}) socket error: ${err.message}`,
-          ),
-        );
+        if (!this.shutDown) {
+          this.events.onError?.(
+            new Error(
+              `connectToPeer(${peer.id}, port ${String(peer.port)}) socket error: ${err.message}`,
+            ),
+          );
+        }
         this.pendingOutbound.delete(peer.id);
         onDisconnect();
         socket.destroy();
@@ -743,6 +756,13 @@ export class TlsTransport {
       pending.socket.destroy();
     }
     this.pendingConnections.clear();
+
+    // Destroy any outbound connectToPeer dials still mid-flight — without this they keep retrying/erroring out in the background indefinitely, long after this transport (and whatever test or process started it) is gone.
+    for (const socket of this.pendingConnectSockets) {
+      socket.unref();
+      socket.destroy();
+    }
+    this.pendingConnectSockets.clear();
 
     // Close data server
     this.dataServer?.unref();
