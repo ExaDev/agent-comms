@@ -19,8 +19,7 @@ import { Type } from "typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 
 import {
-  MeshStore,
-  CommsTool,
+  createBridgeMesh,
   buildAction,
   ensureProjectRoom,
   ensureRegistered,
@@ -28,9 +27,7 @@ import {
   formatDeliveryEvent,
   isActionableEvent,
 } from "../../core/index.js";
-import { TlsTransport } from "../../core/tls-transport.js";
 import {
-  loadOrCreateIdentity,
   releaseIdentityLock,
   type IdentitySlot,
 } from "../../core/identity-store.js";
@@ -45,14 +42,9 @@ function getWebPort(handle: WebServerHandle): number | undefined {
 }
 
 export default function (pi: ExtensionAPI) {
-  // Persistent identity for this slot: a stable fingerprint means the agent
-  // ID survives restarts, so peers can keep targeting us
+  // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us
   const identitySlot: IdentitySlot = { harness: "pi", cwd: process.cwd() };
-  const identity = loadOrCreateIdentity(identitySlot);
-  const store = new MeshStore();
-  store.peerId = identity.fingerprint;
-  store.setTransport(new TlsTransport(store.events, identity));
-  const tool = new CommsTool(store, store.discovery);
+  const { store, tool } = createBridgeMesh(identitySlot);
 
   let agentId: string | undefined;
   let webHandle: WebServerHandle | undefined;
