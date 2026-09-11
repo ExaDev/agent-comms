@@ -9,12 +9,9 @@ export function wireTestTransport(store: MeshStore): void {
   // Every real bridge sets peerId to the identity's own certificate fingerprint before wiring the transport -- TlsTransport's cert-pinning trust model means a peer's advertised ID and the fingerprint the other side actually authenticates the connection against must be the same value, or introduction/state-sync never recognises the peer as itself.
   store.peerId = identity.fingerprint;
   store.setTransport(new TlsTransport(store.events, identity));
-  // DIAGNOSTIC (temporary): surface transport-level errors that were previously silently swallowed (MeshStore.onError was never wired to anything until now), to find the real cause of a CI-only accept-flow failure.
+  // Surface transport-level errors instead of leaving them silent — a genuine socket failure during a test run is signal worth seeing even when the test's own assertions still pass, since it can point at a real race the assertions don't happen to catch.
   store.onError = (e) => {
-    console.error(
-      `[DIAGNOSTIC transport error, peerId=${store.peerId}]`,
-      e.message,
-    );
+    console.error(`[transport error, peerId=${store.peerId}]`, e.message);
   };
 }
 
