@@ -2,8 +2,9 @@
  * Wire protocol — framing, encoding, and message types for the TCP mesh.
  *
  * Transport-agnostic: carries the protocol contract between peers without
- * depending on net.Socket or any specific transport implementation.
- * TcpTransport, TlsTransport, and WebSocketTransport all use these types.
+ * depending on net.Socket or any specific transport implementation. Any
+ * MeshTransport implementation (TlsTransport is the one production
+ * transport today) uses these types.
  */
 
 import type {

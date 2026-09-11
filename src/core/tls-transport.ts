@@ -1,20 +1,21 @@
 /**
- * TlsTransport — TLS-encrypted transport for the peer mesh.
+ * TlsTransport — TLS-encrypted transport for the peer mesh, the one
+ * production MeshTransport implementation.
  *
- * Same wire protocol as TcpTransport, but all connections are wrapped in TLS
- * with certificate fingerprint authentication. Each peer generates an ECDSA
- * P-256 keypair and self-signed X.509 certificate on startup. The peer ID
- * is the certificate fingerprint — verifying a peer's identity is simply
- * checking that the presented certificate's fingerprint matches the known ID.
+ * All connections are wrapped in TLS with certificate fingerprint
+ * authentication. Each peer generates an ECDSA P-256 keypair and self-signed
+ * X.509 certificate on startup. The peer ID is the certificate fingerprint —
+ * verifying a peer's identity is simply checking that the presented
+ * certificate's fingerprint matches the known ID.
  *
  * This is the Syncthing trust model: no CA, no PKI, just certificate pinning.
  * Overlay networks (Tailscale, WireGuard) are still recommended for NAT
  * traversal but are not required for security — TLS handles encryption and
  * authentication at the protocol level.
  *
- * The transport is a drop-in replacement for TcpTransport. Same interface,
- * same wire protocol, same event callbacks. MeshStore cannot tell the
- * difference.
+ * Implements the same MeshTransport interface every transport does. Same
+ * wire protocol, same event callbacks — MeshStore only ever sees the
+ * interface, never a concrete transport.
  */
 
 import * as net from "node:net";

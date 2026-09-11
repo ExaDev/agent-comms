@@ -1,9 +1,7 @@
 /**
- * Multi-process smoke test for MeshStore TCP mesh.
+ * Multi-process smoke test for the MeshStore mesh.
  *
- * Spawns two separate Node.js processes running MeshStore instances,
- * verifies they discover each other via the coordinator, exchange
- * messages, and receive push delivery.
+ * Spawns two separate Node.js processes running MeshStore instances over TlsTransport, verifies they discover each other via the coordinator, exchange messages, and receive push delivery.
  */
 
 import * as assert from "node:assert/strict";
@@ -87,9 +85,14 @@ function buildScript(name: string, actions: string): string {
   return [
     `const { MeshStore } = require("./dist/core/mesh-store.js");`,
     `const { CommsTool } = require("./dist/core/tool.js");`,
+    `const { TlsTransport } = require("./dist/core/tls-transport.js");`,
+    `const { generateIdentity } = require("./dist/core/identity.js");`,
     `function log(msg) { process.stdout.write(JSON.stringify(msg) + "\\n"); }`,
     `(async () => {`,
     `  const store = new MeshStore(${String(SMOKE_PORT)});`,
+    `  const identity = generateIdentity();`,
+    `  store.peerId = identity.fingerprint;`,
+    `  store.setTransport(new TlsTransport(store.events, identity));`,
     `  const tool = new CommsTool(store);`,
     `  const deliveries = [];`,
     `  store.onDelivery = (_id, event) => {`,

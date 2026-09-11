@@ -9,6 +9,7 @@ import * as net from "node:net";
 import { MeshStore } from "../core/mesh-store.js";
 import * as assert from "node:assert/strict";
 import { test } from "node:test";
+import { wireTestTransport } from "./test-transport.js";
 
 const TEST_PORT = 19879;
 
@@ -22,6 +23,7 @@ const TEST_PORT = 19879;
  */
 void test("coordinator survives ECONNRESET on accepted socket", async () => {
   const store = new MeshStore(TEST_PORT);
+  wireTestTransport(store);
   await store.init();
 
   // Connect a raw socket to the coordinator port

@@ -7,15 +7,18 @@ import { test } from "node:test";
 import { MeshStore } from "../core/mesh-store.js";
 import type { SerialisedState } from "../core/wire-protocol.js";
 import type { DeliveryEvent } from "../core/types.js";
+import { wireTestTransport } from "./test-transport.js";
 
 /** A wire-accurate snapshot: production always applies parsed (cloned) state. */
 function snapshotOf(store: MeshStore): SerialisedState {
   return structuredClone(store.serialise());
 }
 
-/** A local-only store: no transport start, so no ports and no flake. */
+/** A local-only store: transport is set (registerAgent's own broadcastPatch needs one) but never started, so no ports and no flake -- the stores in these tests never actually connect. */
 function makeStore(): MeshStore {
-  return new MeshStore();
+  const store = new MeshStore();
+  wireTestTransport(store);
+  return store;
 }
 
 void test("events queued while the target was down replay on its first snapshot", async () => {

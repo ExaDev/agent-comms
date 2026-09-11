@@ -10,6 +10,7 @@ import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
 import type { DeliveryEvent } from "../core/types.js";
 import * as assert from "node:assert/strict";
+import { wireTestTransport } from "./test-transport.js";
 
 const E2E_PORT = 19878;
 
@@ -18,6 +19,7 @@ async function createStore(
   harness: string,
 ): Promise<{ store: MeshStore; tool: CommsTool; deliveries: DeliveryEvent[] }> {
   const store = new MeshStore(E2E_PORT);
+  wireTestTransport(store);
 
   const deliveries: DeliveryEvent[] = [];
   store.onDelivery = (_agentId: string, event: DeliveryEvent) => {

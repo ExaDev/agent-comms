@@ -17,6 +17,7 @@ import { MeshStore } from "../core/mesh-store.js";
 import type { DeliveryEvent, RoomMessage } from "../core/types.js";
 import * as assert from "node:assert/strict";
 import * as net from "node:net";
+import { wireTestTransport } from "./test-transport.js";
 
 // Use high ports to avoid collisions with real meshes
 const MESH_A_PORT = 28876;
@@ -38,6 +39,7 @@ async function createMesh(
   deliveries: DeliveryEvent[];
 }> {
   const store = new MeshStore(coordinatorPort);
+  wireTestTransport(store);
   const deliveries: DeliveryEvent[] = [];
   store.onDelivery = (_agentId: string, event: DeliveryEvent) => {
     deliveries.push(event);
