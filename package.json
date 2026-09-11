@@ -54,7 +54,8 @@
     "lint": "eslint .",
     "test": "tsx --test --test-concurrency=1 'src/test/**/*.test.ts'",
     "test:delivery": "tsx src/test/delivery-receipt.runner.ts",
-    "test:all": "pnpm test && pnpm test:delivery",
+    "test:smoke": "pnpm build && tsx --test src/test/mesh-smoke.runner.ts",
+    "test:all": "pnpm test && pnpm test:delivery && pnpm test:smoke",
     "test:frontend": "tsx --test src/bridges/user/web/frontend/test/**/*.unit.test.ts",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit"
