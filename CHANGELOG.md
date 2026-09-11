@@ -1,3 +1,9 @@
+## [2.0.1](https://github.com/ExaDev/agent-comms/compare/v2.0.0...v2.0.1) (2026-09-11)
+
+### Build
+
+* depend on the real published wire-mesh-core npm package ([7b0bf19](https://github.com/ExaDev/agent-comms/commit/7b0bf19ac35298e40cdccdc5c694dab356b0f6f2))
+
 ## [2.0.0](https://github.com/ExaDev/agent-comms/compare/v1.33.1...v2.0.0) (2026-09-11)
 
 ### ⚠ BREAKING CHANGES
