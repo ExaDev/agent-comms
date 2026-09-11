@@ -10,3 +10,27 @@ export function wireTestTransport(store: MeshStore): void {
   store.peerId = identity.fingerprint;
   store.setTransport(new TlsTransport(store.events, identity));
 }
+
+const DEFAULT_WAIT_FOR_TIMEOUT_MS = 5000;
+const WAIT_FOR_POLL_INTERVAL_MS = 20;
+
+/**
+ * Polls condition() until it returns true or timeoutMs elapses, rather than a fixed sleep() before a single check. A real TLS handshake plus the peer_list -> connectToPeer -> state_sync -> handlePeerConnected round trip genuinely takes variable, load-dependent wall-clock time -- comfortably inside a fixed sleep on a fast local machine, not reliably so under a throttled CI runner. Throws with a descriptive message on timeout rather than letting the caller's own assertion fail with a less specific one.
+ */
+export async function waitFor(
+  condition: () => boolean,
+  description: string,
+  timeoutMs = DEFAULT_WAIT_FOR_TIMEOUT_MS,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `waitFor timed out after ${String(timeoutMs)}ms: ${description}`,
+      );
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, WAIT_FOR_POLL_INTERVAL_MS),
+    );
+  }
+}

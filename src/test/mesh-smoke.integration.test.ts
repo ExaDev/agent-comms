@@ -21,6 +21,9 @@ interface PeerHandle {
   exit: Promise<void>;
 }
 
+// A hung child (a mesh operation that never resolves) must not hang this process indefinitely -- the child is killed and the promise rejects with a clear reason instead of Promise.all([...]) waiting forever.
+const PEER_EXIT_TIMEOUT_MS = 15_000;
+
 // -----------------------------------------------------------------------
 // Child process peer
 // -----------------------------------------------------------------------
@@ -51,11 +54,30 @@ function spawnPeer(name: string, actions: string): PeerHandle {
 
   const exit = new Promise<void>((resolve, reject) => {
     let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      reject(
+        new Error(
+          `${name} did not exit within ${String(PEER_EXIT_TIMEOUT_MS)}ms:\n${stderr}`,
+        ),
+      );
+    }, PEER_EXIT_TIMEOUT_MS);
     child.stderr.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
-    child.on("error", reject);
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
     child.on("exit", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       if (buffer.trim()) {
         try {
           const parsed: unknown = JSON.parse(buffer);
