@@ -91,6 +91,19 @@ function writeAsync(
   });
 }
 
+/**
+ * writeAsync(), but a failed write (the peer disconnected, or its own shutdown destroyed the socket mid-write) resolves instead of rejecting -- cleanup is already handled by the socket's own close/error listeners wherever it's registered, exactly the same ordinary-and-expected outcome broadcast() already treats this way. A caller that genuinely needs to know whether the write landed gets that back as a boolean rather than an exception, since a write racing a legitimate connection teardown is not itself a program error and must never surface as an unhandled rejection.
+ */
+async function writeBestEffort(
+  socket: net.Socket | tls.TLSSocket,
+  data: string,
+): Promise<boolean> {
+  return writeAsync(socket, data).then(
+    () => true,
+    () => false,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // TlsTransport
 // ---------------------------------------------------------------------------
@@ -590,14 +603,14 @@ export class TlsTransport {
     // Check data connections first
     const peerConn = this.peerConnections.get(handle.id);
     if (peerConn) {
-      await writeAsync(peerConn.socket, encode(message));
+      await writeBestEffort(peerConn.socket, encode(message));
       return;
     }
 
     // Check coordinator introduction connections
     const introSocket = this.introConnections.get(handle.id);
     if (introSocket) {
-      await writeAsync(introSocket, encode(message));
+      await writeBestEffort(introSocket, encode(message));
       return;
     }
 
@@ -616,13 +629,13 @@ export class TlsTransport {
     // Move to introConnections so send() can reach this peer
     this.introConnections.set(peerId, socket);
 
-    // Send acceptance to the connecting peer
+    // Send acceptance to the connecting peer -- best-effort: the peer having already vanished (or this side's own concurrent shutdown destroying the socket mid-write) is an ordinary disconnect, not a program error, and must not surface as an unhandled rejection once onIntroduction's own downstream state-sync work below is already in flight.
     const accepted: MeshMessage = {
       method: "connect_accepted",
       peerId: this._peerId,
       dataPort: this._dataPort,
     };
-    await writeAsync(socket, encode(accepted));
+    await writeBestEffort(socket, encode(accepted));
 
     // Fire onIntroduction so MeshStore processes the new peer normally
     const connHandle: ConnectionHandle = { id: peerId, policy };
@@ -646,7 +659,7 @@ export class TlsTransport {
       peerId: handle.id,
       reason,
     };
-    await writeAsync(socket, encode(rejected));
+    await writeBestEffort(socket, encode(rejected));
     socket.destroy();
   }
 
@@ -654,11 +667,7 @@ export class TlsTransport {
     const data = encode(message);
     const writes: Promise<void>[] = [];
     for (const [, peer] of this.peerConnections) {
-      writes.push(
-        writeAsync(peer.socket, data).catch(() => {
-          /* broken connection — cleanup handled by close/error listeners */
-        }),
-      );
+      writes.push(writeBestEffort(peer.socket, data).then(() => undefined));
     }
     for (const queue of this.pendingOutbound.values()) {
       queue.push(message);
@@ -676,10 +685,7 @@ export class TlsTransport {
     this.pendingOutbound.delete(peerId);
     if (queue === undefined) return;
     for (const message of queue) {
-      const sent = await writeAsync(socket, encode(message)).then(
-        () => true,
-        () => false,
-      );
+      const sent = await writeBestEffort(socket, encode(message));
       if (!sent) return; // connection is dying; close/error listeners clean up
     }
   }
