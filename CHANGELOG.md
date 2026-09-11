@@ -1,3 +1,9 @@
+## [1.29.0](https://github.com/ExaDev/agent-comms/compare/v1.28.1...v1.29.0) (2026-09-11)
+
+### Features
+
+* **core:** add wire-mesh's device-id derivation to PeerIdentity ([8d1c8de](https://github.com/ExaDev/agent-comms/commit/8d1c8de701d2d0aa1c8e48fae67e1d0a956e150d))
+
 ## [1.28.1](https://github.com/ExaDev/agent-comms/compare/v1.28.0...v1.28.1) (2026-09-11)
 
 ### Bug Fixes
