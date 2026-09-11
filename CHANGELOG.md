@@ -1,3 +1,17 @@
+## [2.1.0](https://github.com/ExaDev/agent-comms/compare/v2.0.1...v2.1.0) (2026-09-11)
+
+### Features
+
+* **core:** re-key rooms and DMs onto core/room's path grammar ([a6b9be5](https://github.com/ExaDev/agent-comms/commit/a6b9be5e90c6370412413d0b5b8cc2c7c381f12a))
+
+### Bug Fixes
+
+* **core:** sanitise createRoom's name before constructing its path ([d57da03](https://github.com/ExaDev/agent-comms/commit/d57da0308a3147b78bb4bb2fecabbb71c604efef))
+
+### Refactoring
+
+* retire the browser-mesh-relay prototype ([e768f39](https://github.com/ExaDev/agent-comms/commit/e768f39073e7945a6ad54cf1313cdb1a43799257))
+
 ## [2.0.1](https://github.com/ExaDev/agent-comms/compare/v2.0.0...v2.0.1) (2026-09-11)
 
 ### Build
