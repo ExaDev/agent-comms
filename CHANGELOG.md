@@ -1,3 +1,13 @@
+## [1.33.1](https://github.com/ExaDev/agent-comms/compare/v1.33.0...v1.33.1) (2026-09-11)
+
+### Bug Fixes
+
+* **core:** report the OS-assigned port from becomeCoordinator and addListener ([a674834](https://github.com/ExaDev/agent-comms/commit/a674834bbad14223b6013087283c4e15abef6855))
+
+### Refactoring
+
+* **core:** delete TlsTransport now that every bridge runs on WireMeshTransport ([2a8d759](https://github.com/ExaDev/agent-comms/commit/2a8d759e2a162ec821a5a08331e1ed106169b37f))
+
 ## [1.33.0](https://github.com/ExaDev/agent-comms/compare/v1.32.1...v1.33.0) (2026-09-11)
 
 ### Features
