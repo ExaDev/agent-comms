@@ -586,7 +586,13 @@ export class TlsTransport {
       };
 
       socket.on("close", onDisconnect);
-      socket.on("error", () => {
+      socket.on("error", (err) => {
+        // DIAGNOSTIC (temporary)
+        this.events.onError?.(
+          new Error(
+            `connectToPeer(${peer.id}, port ${String(peer.port)}) socket error: ${err.message}`,
+          ),
+        );
         this.pendingOutbound.delete(peer.id);
         onDisconnect();
         socket.destroy();
