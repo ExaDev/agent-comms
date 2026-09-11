@@ -1,3 +1,13 @@
+## [1.32.1](https://github.com/ExaDev/agent-comms/compare/v1.32.0...v1.32.1) (2026-09-11)
+
+### Bug Fixes
+
+* **core:** quarantine WireMeshTransport sessions until connection approval ([8ea3b3f](https://github.com/ExaDev/agent-comms/commit/8ea3b3f95f98af4ab57a5c5c2ffe3b79b7db6fdf))
+
+### Tests
+
+* give mesh-smoke's own dist-requiring subprocess a dedicated script ([003bba3](https://github.com/ExaDev/agent-comms/commit/003bba3ad18547cab469de4295d0b556d4670157))
+
 ## [1.32.0](https://github.com/ExaDev/agent-comms/compare/v1.31.0...v1.32.0) (2026-09-11)
 
 ### Features
