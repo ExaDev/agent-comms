@@ -169,6 +169,9 @@ export class TlsTransport {
   // -- Outbound connectToPeer sockets still mid-dial, not yet in peerConnections or already failed — tracked so shutdown() can destroy an in-flight dial rather than leaving it running in the background indefinitely, long after this transport is gone --
   private pendingConnectSockets = new Set<tls.TLSSocket>();
 
+  // -- Peers this side has dialled out to (in flight or established) — deliberately separate from peerConnections, which also holds sockets THIS side merely accepted an inbound dial from and identified via pong. A peer can legitimately be dialling us at the same time we need to dial them (mesh formation establishes one connection in each direction so each side's acceptor can push its own state), so connectToPeer's own "don't dial twice" guard must not be satisfied by an inbound connection that happens to share the same peer ID. --
+  private outboundDials = new Set<string>();
+
   // -- Shutdown sentinel — prevents callbacks after shutdown() --
   private shutDown = false;
 
@@ -530,13 +533,8 @@ export class TlsTransport {
   // -----------------------------------------------------------------------
 
   async connectToPeer(peer: PeerInfo, ownPeerId: string): Promise<void> {
-    // DIAGNOSTIC (temporary): confirm this call is actually reached, and with what target, before anything else can go wrong.
-    this.events.onError?.(
-      new Error(
-        `connectToPeer ENTRY: own=${ownPeerId} target=${peer.id}@${String(peer.port)} alreadyConnected=${String(this.peerConnections.has(peer.id))} shutDown=${String(this.shutDown)}`,
-      ),
-    );
-    if (this.shutDown || this.peerConnections.has(peer.id)) return;
+    if (this.shutDown || this.outboundDials.has(peer.id)) return;
+    this.outboundDials.add(peer.id);
 
     // Queue broadcasts until the connection registers: messages sent in the dial window previously had nowhere to go and were silently dropped.
     this.pendingOutbound.set(peer.id, this.pendingOutbound.get(peer.id) ?? []);
@@ -545,11 +543,6 @@ export class TlsTransport {
       const socket = tls.connect(
         { ...this.connectOptions, host: COORDINATOR_HOST, port: peer.port },
         () => {
-          this.events.onError?.(
-            new Error(
-              `connectToPeer CONNECTED: own=${ownPeerId} target=${peer.id}@${String(peer.port)}`,
-            ),
-          );
           this.pendingConnectSockets.delete(socket);
           if (this.shutDown) {
             this.pendingOutbound.delete(peer.id);
@@ -559,6 +552,7 @@ export class TlsTransport {
           }
           if (!this.verifyClaimedPeerId(socket, peer.id)) {
             this.pendingOutbound.delete(peer.id);
+            this.outboundDials.delete(peer.id);
             resolve();
             return;
           }
@@ -601,8 +595,11 @@ export class TlsTransport {
         if (disconnected) return;
         disconnected = true;
         this.pendingConnectSockets.delete(socket);
-        const wasConnected = this.peerConnections.has(peer.id);
-        this.peerConnections.delete(peer.id);
+        this.outboundDials.delete(peer.id);
+        // Only remove peerConnections' entry if it still points at THIS socket -- the peer may also have dialled us independently (a second, inbound connection for the same peer ID), and that connection's own close must never delete a live entry this one already replaced, or vice versa.
+        const current = this.peerConnections.get(peer.id);
+        const wasConnected = current?.socket === socket;
+        if (wasConnected) this.peerConnections.delete(peer.id);
         if (wasConnected && !this.shutDown) {
           this.events.onPeerDisconnected(handle);
         }
@@ -963,7 +960,11 @@ export class TlsTransport {
       if (disconnected) return;
       disconnected = true;
       if (remotePeerId !== undefined) {
-        this.peerConnections.delete(remotePeerId);
+        // Only remove peerConnections' entry if it still points at THIS socket -- an outbound dial to the same peer ID can register its own, separate connection there, and this accepted socket closing must never delete that live entry.
+        const current = this.peerConnections.get(remotePeerId);
+        if (current?.socket === socket) {
+          this.peerConnections.delete(remotePeerId);
+        }
         if (!this.shutDown) {
           this.events.onPeerDisconnected({ id: remotePeerId });
         }
