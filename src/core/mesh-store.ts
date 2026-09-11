@@ -129,6 +129,11 @@ export class MeshStore implements CommsStore {
   /** Fires for every state patch — both locally generated and remote. */
   onPatch: ((patch: MeshStatePatch) => void | Promise<void>) | undefined;
 
+  /**
+   * Fires for a transport-level error a caller may want to observe (a connection rejected for presenting a certificate that doesn't match its claimed peer ID, this store's own inability to join or create a mesh, etc). Previously wired to `this.events.onError` inside this class's own methods, but the `events` getter never actually implemented `onError` on the object it returns, so every one of those calls was silently a no-op -- this store had no way to observe its own transport failures at all. Left undefined by default (matching onDelivery/onPatch): a caller that wants visibility sets it, exactly like those two.
+   */
+  onError: ((error: Error) => void) | undefined;
+
   /** Serialise the full mesh state for state_sync messages. */
   serialise(): SerialisedState {
     return {
@@ -567,6 +572,9 @@ export class MeshStore implements CommsStore {
       },
       onConnectionRequest: (handle, request) => {
         this.handleConnectionRequest(handle, request);
+      },
+      onError: (error) => {
+        this.onError?.(error);
       },
     };
   }
