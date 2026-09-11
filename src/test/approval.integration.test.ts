@@ -28,14 +28,9 @@ function findFreePort(): Promise<number> {
   });
 }
 
-/** Unique port counter to avoid reusing ports across sequential tests. */
-let portOffset = 0;
-
-/** Find a free port with a unique offset to avoid conflicts. */
-async function uniquePort(): Promise<number> {
-  portOffset += 10;
-  const base = await findFreePort();
-  return base + portOffset;
+/** Find a free port for a single test's use. An alias for findFreePort(): asking the OS for a fresh ephemeral port each call already guarantees distinctness from any other currently-bound port, so no arithmetic offset is layered on top -- a prior +offset scheme could push an already-high OS-assigned port past 65535 and fail with ERR_SOCKET_BAD_PORT. */
+function uniquePort(): Promise<number> {
+  return findFreePort();
 }
 
 function sleep(ms: number): Promise<void> {
@@ -45,7 +40,7 @@ function sleep(ms: number): Promise<void> {
 describe("connection approval", () => {
   void test("coordinator receives connection_request from connecting peer", async () => {
     const portA = await uniquePort();
-    const portB = portA + 100;
+    const portB = await uniquePort();
 
     // Set up coordinator (store A)
     const storeA = new MeshStore(portA);
@@ -121,7 +116,7 @@ describe("connection approval", () => {
 
   void test("accept establishes the peer connection", async () => {
     const portA = await uniquePort();
-    const portB = portA + 100;
+    const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
     wireTestTransport(storeA);
@@ -200,7 +195,7 @@ describe("connection approval", () => {
 
   void test("reject closes with reason", async () => {
     const portA = await uniquePort();
-    const portB = portA + 100;
+    const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
     wireTestTransport(storeA);
@@ -273,7 +268,7 @@ describe("connection approval", () => {
 
   void test("mesh_pending lists pending connections", async () => {
     const portA = await uniquePort();
-    const portB = portA + 100;
+    const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
     wireTestTransport(storeA);
@@ -351,7 +346,7 @@ describe("connection approval", () => {
 
   void test("tool handles mesh_connect/mesh_accept/mesh_reject/mesh_pending actions", async () => {
     const portA = await uniquePort();
-    const portB = portA + 100;
+    const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
     wireTestTransport(storeA);
@@ -503,7 +498,7 @@ describe("connection approval", () => {
 
   void test("tool mesh_reject returns error message", async () => {
     const portA = await uniquePort();
-    const portB = portA + 100;
+    const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
     wireTestTransport(storeA);
