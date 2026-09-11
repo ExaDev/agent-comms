@@ -26,7 +26,6 @@ import type {
   AgentIdentity,
   DeliveryEvent,
   DmMessage,
-  NetworkInterface,
   Room,
   RoomMessage,
   RoomType,
@@ -34,8 +33,6 @@ import type {
   Visibility,
 } from "./types.js";
 import type { CommsStore } from "./comms-store.js";
-import type { ListenerInfo } from "./transport.js";
-import type { FedLink } from "./federation.js";
 
 // ---------------------------------------------------------------------------
 // CommsError
@@ -656,126 +653,5 @@ export class FileStore implements CommsStore {
     for (const dir of dirs) {
       await fs.mkdir(dir, { recursive: true });
     }
-  }
-
-  // -----------------------------------------------------------------------
-  // Listener management — not supported by FileStore
-  // -----------------------------------------------------------------------
-
-  addListener(): Promise<string> {
-    throw new CommsError(
-      "FileStore does not support listener management",
-      "NOT_SUPPORTED",
-    );
-  }
-
-  removeListener(): Promise<void> {
-    throw new CommsError(
-      "FileStore does not support listener management",
-      "NOT_SUPPORTED",
-    );
-  }
-
-  listListeners(): ListenerInfo[] {
-    return [];
-  }
-
-  getNetworkInterfaces(): NetworkInterface[] {
-    return [];
-  }
-
-  // -----------------------------------------------------------------------
-  // Federation — not supported by FileStore
-  // -----------------------------------------------------------------------
-
-  fedConnect(): Promise<string> {
-    throw new CommsError(
-      "FileStore does not support federation",
-      "NOT_SUPPORTED",
-    );
-  }
-
-  fedDisconnect(): Promise<void> {
-    throw new CommsError(
-      "FileStore does not support federation",
-      "NOT_SUPPORTED",
-    );
-  }
-
-  fedLinks(): FedLink[] {
-    return [];
-  }
-
-  getFederationFingerprint(): string {
-    return "";
-  }
-
-  fedTrust(): Promise<void> {
-    throw new CommsError(
-      "FileStore does not support federation",
-      "NOT_SUPPORTED",
-    );
-  }
-
-  fedUntrust(): Promise<void> {
-    throw new CommsError(
-      "FileStore does not support federation",
-      "NOT_SUPPORTED",
-    );
-  }
-
-  fedTrustedFingerprints(): string[] {
-    return [];
-  }
-
-  fedListen(): Promise<void> {
-    throw new CommsError(
-      "FileStore does not support federation",
-      "NOT_SUPPORTED",
-    );
-  }
-
-  fedStopListening(): Promise<void> {
-    return Promise.resolve();
-  }
-  // Connection approval — not supported by FileStore
-  // -----------------------------------------------------------------------
-
-  acceptConnection(): Promise<void> {
-    throw new CommsError(
-      "FileStore does not support connection approval",
-      "NOT_SUPPORTED",
-    );
-  }
-
-  rejectConnection(): Promise<void> {
-    throw new CommsError(
-      "FileStore does not support connection approval",
-      "NOT_SUPPORTED",
-    );
-  }
-
-  listPendingConnections(): {
-    connectionId: string;
-    peerId: string;
-    dataPort: number;
-    name: string;
-    fingerprint: string;
-  }[] {
-    return [];
-  }
-
-  connectToRemote(): Promise<void> {
-    throw new CommsError(
-      "FileStore does not support remote connections",
-      "NOT_SUPPORTED",
-    );
-  }
-
-  startDataServerOnly(): Promise<void> {
-    throw new CommsError(
-      "FileStore does not support network operations",
-      "NOT_SUPPORTED",
-    );
   }
 }

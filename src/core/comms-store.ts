@@ -1,26 +1,23 @@
 /**
  * CommsStore — abstract interface for the agent communication store.
  *
- * Two implementations:
- *   FileStore — filesystem-backed, no server process (fallback)
- *   MeshStore — TCP peer mesh, in-memory, real-time push (preferred)
+ * Two implementations: FileStore — filesystem-backed, no server process (fallback) MeshStore — TCP peer mesh, in-memory, real-time push (preferred)
  *
  * Bridges depend on this interface, not on a specific implementation.
+ *
+ * Deliberately excludes listener management, federation, and connection approval: those are transport concerns MeshStore alone can support -- FileStore has no network transport to manage listeners on, federate through, or approve inbound connections for. Widening this interface to cover them (as it once did, via always-throwing FileStore stubs) is what forced server.ts and the bridge controller to reach past CommsStore into the concrete MeshStore anyway; CommsTool, the one consumer that genuinely needs to expose these when a MeshStore backs it, takes them as an optional extension (see MeshOnlyFeatures in tool.ts) rather than the shared interface pretending every implementation supports them.
  */
 
 import type {
   AgentIdentity,
   DeliveryEvent,
   DmMessage,
-  NetworkInterface,
   Room,
   RoomMessage,
   RoomType,
   StreamingBehavior,
   Visibility,
 } from "./types.js";
-import type { ListenerInfo } from "./transport.js";
-import type { FedLink } from "./federation.js";
 
 export interface CommsStore {
   // -- Identity --
@@ -94,43 +91,6 @@ export interface CommsStore {
   // -- Delivery --
   deliver(agentId: string, event: DeliveryEvent): Promise<void>;
   drainDelivery(agentId: string): Promise<DeliveryEvent[]>;
-
-  // -- Listener management (coordinator only) --
-  addListener(host: string, port: number, policy: string): Promise<string>;
-  removeListener(id: string): Promise<void>;
-  listListeners(): ListenerInfo[];
-  getNetworkInterfaces(): NetworkInterface[];
-
-  // -- Federation (coordinator-to-coordinator) --
-  fedConnect(host: string, port: number, name?: string): Promise<string>;
-  fedDisconnect(linkId: string): Promise<void>;
-  fedLinks(): FedLink[];
-  /** This instance's own federation TLS fingerprint, to hand to an operator on the other side to pin. */
-  getFederationFingerprint(): string;
-  /** Pin a remote mesh's certificate fingerprint as trusted for federation, inbound or outbound. */
-  fedTrust(fingerprint: string): Promise<void>;
-  /** Remove a previously pinned federation fingerprint. */
-  fedUntrust(fingerprint: string): Promise<void>;
-  /** List currently trusted federation fingerprints. */
-  fedTrustedFingerprints(): string[];
-  /** Start accepting inbound federation links on host:port. Rejects any connection whose certificate isn't pinned via fedTrust(). */
-  fedListen(host: string, port: number): Promise<void>;
-  /** Stop accepting new inbound federation connections. Existing links are unaffected. */
-  fedStopListening(): Promise<void>;
-  // -- Connection approval --
-  acceptConnection(connectionId: string): Promise<void>;
-  rejectConnection(connectionId: string, reason: string): Promise<void>;
-  listPendingConnections(): {
-    connectionId: string;
-    peerId: string;
-    dataPort: number;
-    name: string;
-    fingerprint: string;
-  }[];
-  connectToRemote(host: string, port: number): Promise<void>;
-
-  /** Start only the data server without connecting to a coordinator. */
-  startDataServerOnly(): Promise<void>;
 
   // -- Lifecycle --
   init(): Promise<void>;

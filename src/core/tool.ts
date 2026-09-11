@@ -19,6 +19,7 @@ import type {
 import type { ListenerInfo } from "./transport.js";
 import type { CommsStore } from "./comms-store.js";
 import type { DiscoveryManager } from "./discovery.js";
+import type { FedLink } from "./federation.js";
 import { CommsError } from "./store.js";
 
 export interface CommsContext {
@@ -34,12 +35,48 @@ export interface CommsResult {
   isError: boolean;
 }
 
+/**
+ * Listener management, federation, and connection approval: transport concerns CommsStore deliberately excludes (see comms-store.ts's own header) since only MeshStore, never FileStore, can support them. Every method here is optional for exactly that reason -- a CommsTool backed by a FileStore simply doesn't have them, and each call site below reports that as an ordinary CommsResult error rather than assuming they exist.
+ */
+export interface MeshOnlyFeatures {
+  addListener?(host: string, port: number, policy: string): Promise<string>;
+  removeListener?(id: string): Promise<void>;
+  listListeners?(): ListenerInfo[];
+  getNetworkInterfaces?(): NetworkInterface[];
+  fedConnect?(host: string, port: number, name?: string): Promise<string>;
+  fedDisconnect?(linkId: string): Promise<void>;
+  fedLinks?(): FedLink[];
+  getFederationFingerprint?(): string;
+  fedTrust?(fingerprint: string): Promise<void>;
+  fedUntrust?(fingerprint: string): Promise<void>;
+  fedTrustedFingerprints?(): string[];
+  fedListen?(host: string, port: number): Promise<void>;
+  fedStopListening?(): Promise<void>;
+  acceptConnection?(connectionId: string): Promise<void>;
+  rejectConnection?(connectionId: string, reason: string): Promise<void>;
+  listPendingConnections?(): {
+    connectionId: string;
+    peerId: string;
+    dataPort: number;
+    name: string;
+    fingerprint: string;
+  }[];
+  connectToRemote?(host: string, port: number): Promise<void>;
+  setVisibility?(level: MeshVisibility, adapter?: string): Promise<void>;
+  getVisibility?(adapter?: string): MeshVisibility;
+}
+
+/** Uniform "this bridge isn't backed by a mesh transport" result for a MeshOnlyFeatures method that isn't present on the current store. */
+function notMeshBacked(action: string): CommsResult {
+  return {
+    isError: true,
+    content: `${action} requires a mesh-backed store (this session is running on FileStore)`,
+  };
+}
+
 export class CommsTool {
   constructor(
-    private readonly store: CommsStore & {
-      setVisibility?(level: MeshVisibility, adapter?: string): Promise<void>;
-      getVisibility?(adapter?: string): MeshVisibility;
-    },
+    private readonly store: CommsStore & MeshOnlyFeatures,
     private readonly discovery?: DiscoveryManager,
   ) {}
 
@@ -410,6 +447,8 @@ export class CommsTool {
   }
 
   private meshInterfaces(): CommsResult {
+    if (!this.store.getNetworkInterfaces)
+      return notMeshBacked("mesh_interfaces");
     const interfaces = this.store.getNetworkInterfaces();
     if (interfaces.length === 0)
       return { content: "No network interfaces found.", isError: false };
@@ -449,6 +488,7 @@ export class CommsTool {
         isError: true,
       };
     }
+    if (!this.store.addListener) return notMeshBacked("mesh_listen");
     try {
       const id = await this.store.addListener(
         action.host,
@@ -471,6 +511,7 @@ export class CommsTool {
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_unlisten" },
   ): Promise<CommsResult> {
+    if (!this.store.removeListener) return notMeshBacked("mesh_unlisten");
     try {
       await this.store.removeListener(action.id);
       return { content: `Listener ${action.id} removed.`, isError: false };
@@ -483,6 +524,7 @@ export class CommsTool {
   }
 
   private meshListeners(_ctx: CommsContext): CommsResult {
+    if (!this.store.listListeners) return notMeshBacked("mesh_listeners");
     const listeners = this.store.listListeners();
     if (listeners.length === 0)
       return { content: "No listeners (not coordinator).", isError: false };
@@ -534,6 +576,7 @@ export class CommsTool {
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_fed_connect" },
   ): Promise<CommsResult> {
+    if (!this.store.fedConnect) return notMeshBacked("mesh_fed_connect");
     try {
       const linkId = await this.store.fedConnect(
         action.host,
@@ -556,6 +599,7 @@ export class CommsTool {
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_connect" },
   ): Promise<CommsResult> {
+    if (!this.store.connectToRemote) return notMeshBacked("mesh_connect");
     try {
       await this.store.connectToRemote(action.host, action.port);
       return {
@@ -574,6 +618,7 @@ export class CommsTool {
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_fed_disconnect" },
   ): Promise<CommsResult> {
+    if (!this.store.fedDisconnect) return notMeshBacked("mesh_fed_disconnect");
     try {
       await this.store.fedDisconnect(action.linkId);
       return {
@@ -592,6 +637,7 @@ export class CommsTool {
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_accept" },
   ): Promise<CommsResult> {
+    if (!this.store.acceptConnection) return notMeshBacked("mesh_accept");
     try {
       await this.store.acceptConnection(action.connectionId);
       return {
@@ -607,6 +653,7 @@ export class CommsTool {
   }
 
   private meshFedLinks(_ctx: CommsContext): CommsResult {
+    if (!this.store.fedLinks) return notMeshBacked("mesh_fed_links");
     const links = this.store.fedLinks();
     if (links.length === 0)
       return { content: "No federation links.", isError: false };
@@ -622,6 +669,8 @@ export class CommsTool {
   }
 
   private meshFedFingerprint(_ctx: CommsContext): CommsResult {
+    if (!this.store.getFederationFingerprint)
+      return notMeshBacked("mesh_fed_fingerprint");
     const fingerprint = this.store.getFederationFingerprint();
     return {
       content: `This mesh's federation fingerprint: ${fingerprint}\nHand this to the operator on the other side so they can run mesh_fed_trust with it — and do the same in reverse before either side connects.`,
@@ -633,6 +682,7 @@ export class CommsTool {
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_fed_trust" },
   ): Promise<CommsResult> {
+    if (!this.store.fedTrust) return notMeshBacked("mesh_fed_trust");
     try {
       await this.store.fedTrust(action.fingerprint);
       return {
@@ -651,6 +701,7 @@ export class CommsTool {
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_fed_untrust" },
   ): Promise<CommsResult> {
+    if (!this.store.fedUntrust) return notMeshBacked("mesh_fed_untrust");
     try {
       await this.store.fedUntrust(action.fingerprint);
       return {
@@ -666,6 +717,8 @@ export class CommsTool {
   }
 
   private meshFedTrusted(_ctx: CommsContext): CommsResult {
+    if (!this.store.fedTrustedFingerprints)
+      return notMeshBacked("mesh_fed_trusted");
     const fingerprints = this.store.fedTrustedFingerprints();
     if (fingerprints.length === 0)
       return { content: "No trusted federation fingerprints.", isError: false };
@@ -679,6 +732,7 @@ export class CommsTool {
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_fed_listen" },
   ): Promise<CommsResult> {
+    if (!this.store.fedListen) return notMeshBacked("mesh_fed_listen");
     try {
       await this.store.fedListen(action.host, action.port);
       return {
@@ -694,6 +748,8 @@ export class CommsTool {
   }
 
   private async meshFedStopListening(_ctx: CommsContext): Promise<CommsResult> {
+    if (!this.store.fedStopListening)
+      return notMeshBacked("mesh_fed_stop_listening");
     try {
       await this.store.fedStopListening();
       return {
@@ -712,6 +768,7 @@ export class CommsTool {
     _ctx: CommsContext,
     action: CommsAction & { action: "mesh_reject" },
   ): Promise<CommsResult> {
+    if (!this.store.rejectConnection) return notMeshBacked("mesh_reject");
     try {
       await this.store.rejectConnection(action.connectionId, action.reason);
       return {
@@ -727,6 +784,8 @@ export class CommsTool {
   }
 
   private meshPending(_ctx: CommsContext): CommsResult {
+    if (!this.store.listPendingConnections)
+      return notMeshBacked("mesh_pending");
     const pending = this.store.listPendingConnections();
     if (pending.length === 0)
       return { content: "No pending connections.", isError: false };
