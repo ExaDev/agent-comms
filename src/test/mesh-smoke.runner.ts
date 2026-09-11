@@ -1,7 +1,9 @@
 /**
  * Multi-process smoke test for the MeshStore mesh.
  *
- * Spawns two separate Node.js processes running MeshStore instances over TlsTransport, verifies they discover each other via the coordinator, exchange messages, and receive push delivery.
+ * Spawns two separate Node.js processes running MeshStore instances over TlsTransport, verifies they discover each other via the coordinator, exchange messages, and receive push delivery. Each spawned process requires() compiled dist/ output directly (the point is exercising the real built artifact across a genuine process boundary, not re-testing TS source logic already covered elsewhere), so this runs via its own pnpm test:smoke script rather than the plain pnpm test glob -- unlike every other *.test.ts file, it needs a build to have happened first.
+ *
+ * Usage: pnpm test:smoke
  */
 
 import * as assert from "node:assert/strict";
