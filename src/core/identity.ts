@@ -353,19 +353,25 @@ function pemToDer(pem: string): Buffer {
   return Buffer.from(b64, "base64");
 }
 
-/** Derives wire-mesh's own device-id (SHA-256 of the raw, uncompressed SEC1 public-key point) from a PEM-encoded EC private key. */
-export function deriveDeviceId(privateKeyPem: string): Uint8Array {
+/** The raw, uncompressed SEC1 public-key point (0x04 || X || Y) for a PEM-encoded EC private key -- what wire-mesh's own device-id and identity-key.public-key are both derived from, never a certificate's DER encoding. */
+export function rawPublicKeyFromPrivateKey(privateKeyPem: string): Uint8Array {
   const publicKey = createPublicKey(privateKeyPem);
   const jwk = publicKey.export({ format: "jwk" });
   if (jwk.x === undefined || jwk.y === undefined) {
     throw new Error("expected an EC JWK with x/y coordinates");
   }
-  const rawPublicKey = Buffer.concat([
+  return Buffer.concat([
     Buffer.from([UNCOMPRESSED_POINT_TAG]),
     Buffer.from(jwk.x, "base64url"),
     Buffer.from(jwk.y, "base64url"),
   ]);
-  return createHash("sha256").update(rawPublicKey).digest();
+}
+
+/** Derives wire-mesh's own device-id (SHA-256 of the raw, uncompressed SEC1 public-key point) from a PEM-encoded EC private key. */
+export function deriveDeviceId(privateKeyPem: string): Uint8Array {
+  return createHash("sha256")
+    .update(rawPublicKeyFromPrivateKey(privateKeyPem))
+    .digest();
 }
 
 /** Encode DER bytes as a PEM certificate string. */
