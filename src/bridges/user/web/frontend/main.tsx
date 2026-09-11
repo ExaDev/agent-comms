@@ -13,9 +13,7 @@ import { requireElement } from "./dom.js";
 import { parseInput, routeAction } from "./input.js";
 import { State } from "./state.js";
 import { MeshClient } from "./mesh-client.js";
-import { RelayClient } from "./relay-client.js";
 import type { Action, DisplayMessage, WsFrame } from "./types.js";
-import type { RelayStatus } from "./relay-client.js";
 
 import { isLocalHost, hasConnectedBefore } from "./boot-logic.js";
 
@@ -59,19 +57,6 @@ meshClient.subscribe((meshState) => {
 // The user must explicitly connect to avoid Chrome's "access device"
 // prompt appearing before the user understands the UI.
 // meshClient.connect() is called from onConnectToMesh().
-
-// ---------------------------------------------------------------------------
-// Relay client — P2P mesh relay
-// ---------------------------------------------------------------------------
-
-const relayClient = new RelayClient();
-let relayStatus: RelayStatus = relayClient.get();
-
-relayClient.connect();
-
-relayClient.subscribe((status) => {
-  relayStatus = status;
-});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -257,7 +242,6 @@ function rerender(): void {
       dmTarget={s.dmTarget}
       messages={s.messages}
       connected={s.connected}
-      relayStatus={relayStatus}
       onJoinRoom={(roomId) => {
         void onJoinRoom(roomId);
       }}
@@ -267,12 +251,6 @@ function rerender(): void {
       onSendAction={handleSendAction}
       onCreateRoom={onCreateRoom}
       onJoinRoomInput={onJoinRoomInput}
-      onRelayConnect={(urlA, urlB) => {
-        relayClient.connectRelay(urlA, urlB);
-      }}
-      onRelayDisconnect={() => {
-        relayClient.disconnect();
-      }}
       onConnectToMesh={() => {
         localStorage.setItem("agent-comms-connected", "true");
         meshClient.connect();

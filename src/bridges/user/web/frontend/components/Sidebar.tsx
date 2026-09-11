@@ -4,18 +4,15 @@
 
 import { useState } from "preact/hooks";
 import type { Agent, Room } from "../types.js";
-import type { RelayStatus } from "../relay-client.js";
 import { buildProjectTree } from "../project-tree.js";
 import { CreateRoomForm } from "./CreateRoomForm.js";
 import { JoinForm } from "./JoinForm.js";
 import { ProjectTree } from "./ProjectTree.js";
-import { RelayPanel } from "./RelayPanel.js";
 
 interface SidebarProps {
   rooms: Room[];
   agents: Agent[];
   currentRoom: string | undefined;
-  relayStatus: RelayStatus;
   collapsed: boolean;
   onJoinRoom: (roomId: string) => void;
   onSelectAgent: (agentId: string) => void;
@@ -26,23 +23,18 @@ interface SidebarProps {
     description: string,
   ) => void;
   onJoinRoomInput: (roomName: string) => void;
-  onRelayConnect: (urlA: string, urlB: string) => void;
-  onRelayDisconnect: () => void;
 }
 
 export function Sidebar({
   rooms,
   agents,
   currentRoom,
-  relayStatus,
   collapsed,
   onJoinRoom,
   onSelectAgent,
   onRenameAgent,
   onCreateRoom,
   onJoinRoomInput,
-  onRelayConnect,
-  onRelayDisconnect,
 }: SidebarProps) {
   const [createFormVisible, setCreateFormVisible] = useState(false);
   const [joinFormVisible, setJoinFormVisible] = useState(false);
@@ -116,11 +108,6 @@ export function Sidebar({
           onCancel={() => {
             setJoinFormVisible(false);
           }}
-        />
-        <RelayPanel
-          status={relayStatus}
-          onConnect={onRelayConnect}
-          onDisconnect={onRelayDisconnect}
         />
       </div>
     </div>
