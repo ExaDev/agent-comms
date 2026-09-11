@@ -9,26 +9,17 @@
  */
 
 import {
-  MeshStore,
+  createBridgeMesh,
   ensureRegistered,
   formatDeliveryEvent,
 } from "../../core/index.js";
-import { TlsTransport } from "../../core/tls-transport.js";
-import {
-  loadOrCreateIdentity,
-  type IdentitySlot,
-} from "../../core/identity-store.js";
+import type { IdentitySlot } from "../../core/identity-store.js";
 import { tryStartWebServer } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
-// Persistent identity for this slot: a stable fingerprint means the agent
-// ID survives restarts, so peers can keep targeting us. A plugin unload has
-// no hook here; a stale lock self-heals via the pid probe.
+// Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us. A plugin unload has no hook here; a stale lock self-heals via the pid probe.
 const identitySlot: IdentitySlot = { harness: "opencode", cwd: process.cwd() };
-const identity = loadOrCreateIdentity(identitySlot);
-const store = new MeshStore();
-store.peerId = identity.fingerprint;
-store.setTransport(new TlsTransport(store.events, identity));
+const { store } = createBridgeMesh(identitySlot);
 
 // Minimal interface for the OpenCode SDK client we actually use
 interface OpenCodeClient {

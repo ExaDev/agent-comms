@@ -9,12 +9,11 @@ import { EventEmitter } from "node:events";
 import {
   MeshStore,
   CommsTool,
+  createBridgeMesh,
   ensureRegistered,
   formatDeliveryEvent,
 } from "../../core/index.js";
-import { TlsTransport } from "../../core/tls-transport.js";
 import {
-  loadOrCreateIdentity,
   releaseIdentityLock,
   type IdentitySlot,
 } from "../../core/identity-store.js";
@@ -48,15 +47,12 @@ export class ChatController extends EventEmitter {
     coordinatorPort?: number,
   ) {
     super();
-    // Persistent identity for the web user's slot so the chat identity
-    // survives relaunches of the standalone web CLI
+    // Persistent identity for the web user's slot so the chat identity survives relaunches of the standalone web CLI
     const identitySlot: IdentitySlot = { harness: "user", cwd: process.cwd() };
     this.ownedIdentitySlot = identitySlot;
-    const identity = loadOrCreateIdentity(identitySlot);
-    this.store = new MeshStore(coordinatorPort);
-    this.store.peerId = identity.fingerprint;
-    this.store.setTransport(new TlsTransport(this.store.events, identity));
-    this.tool = new CommsTool(this.store, this.store.discovery);
+    const { store, tool } = createBridgeMesh(identitySlot, coordinatorPort);
+    this.store = store;
+    this.tool = tool;
 
     // Push delivery events to UIs
     this.store.onDelivery = (_agentId: string, event: DeliveryEvent) => {

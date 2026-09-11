@@ -21,8 +21,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import {
-  MeshStore,
-  CommsTool,
+  createBridgeMesh,
   buildAction,
   ensureRegistered,
   extractStreamingBehavior,
@@ -30,9 +29,7 @@ import {
   isActionableEvent,
   MCP_TOOL_PARAMS,
 } from "../../core/index.js";
-import { TlsTransport } from "../../core/tls-transport.js";
 import {
-  loadOrCreateIdentity,
   releaseIdentityLock,
   type IdentitySlot,
 } from "../../core/identity-store.js";
@@ -155,17 +152,12 @@ function drainPending(filePath: string): string[] {
 }
 
 export async function run(): Promise<void> {
-  // Persistent identity for this slot: a stable fingerprint means the agent
-  // ID survives restarts, so peers can keep targeting us
+  // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us
   const identitySlot: IdentitySlot = {
     harness: "claude-code",
     cwd: process.cwd(),
   };
-  const identity = loadOrCreateIdentity(identitySlot);
-  const store = new MeshStore();
-  store.peerId = identity.fingerprint;
-  store.setTransport(new TlsTransport(store.events, identity));
-  const tool = new CommsTool(store, store.discovery);
+  const { store, tool } = createBridgeMesh(identitySlot);
   let agentId: string | undefined;
 
   const claudeCodePid = findClaudeCodePid();
