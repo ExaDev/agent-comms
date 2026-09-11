@@ -9,10 +9,19 @@
 import * as net from "node:net";
 import * as assert from "node:assert/strict";
 import { test, describe } from "node:test";
+import { createTlsTransport } from "@exadev/wire-mesh-core/adapters/tls-transport";
+import { acceptMeshSession } from "@exadev/wire-mesh-core/domain/mesh-session";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
-import type { DeliveryEvent } from "../core/types.js";
+import { generateIdentity } from "../core/identity.js";
+import { toIdentityPort } from "../core/wire-mesh-identity.js";
+import {
+  DOMAIN,
+  FRAME_SCOPE,
+  buildCommand,
+} from "../core/wire-mesh-transport.js";
+import type { DeliveryEvent, AgentIdentity } from "../core/types.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 
 /** Find a free port on localhost by binding to port 0. */
@@ -338,6 +347,12 @@ describe("connection approval", () => {
         () => storeA.listPendingConnections().length === 0,
         "pending connection is cleared after accept",
       );
+
+      // connectToRemote (storeB) and acceptConnection's own introduction handling (storeA) both continue asynchronously after this point (state_sync's own connectToPeer round trip) -- shutting down before that settles races storeB's still-in-flight session setup against its own teardown, leaving a session that gets tracked into an already-shut-down transport and never closed. Wait for real convergence first, the same way "accept establishes the peer connection" above already does.
+      await waitFor(
+        () => storeB.serialise().agents[storeA.peerId] !== undefined,
+        "connector sees the coordinator agent",
+      );
     } finally {
       await storeB.shutdown();
       await storeA.shutdown();
@@ -570,6 +585,73 @@ describe("connection approval", () => {
       assert.equal(pending.length, 0, "No pending connections after reject");
     } finally {
       await storeB.shutdown();
+      await storeA.shutdown();
+    }
+  });
+
+  void test("a message other than introduce/connect_request from an unapproved connection is refused, not routed", async () => {
+    const portA = await uniquePort();
+    const storeA = new MeshStore(portA);
+    wireTestTransport(storeA);
+    try {
+      await storeA.init();
+      await storeA.registerAgent({
+        name: "coordinator",
+        harness: "test",
+        cwd: "/test/a",
+        pid: process.pid,
+        visibility: "visible",
+        tags: [],
+      });
+
+      // A hostile client that completes a TLS handshake (proving only which key it holds, not that a human approved it) and skips connect_request entirely, going straight for a forged state_update.
+      const attackerIdentity = generateIdentity();
+      const attackerTransport = createTlsTransport({
+        certificatePem: attackerIdentity.certificate,
+        privateKeyPem: attackerIdentity.privateKey,
+      });
+      const connection = await attackerTransport.connect(
+        `127.0.0.1:${String(portA)}`,
+      );
+      const attackerIdentityPort = await toIdentityPort(attackerIdentity);
+      const session = await acceptMeshSession(
+        connection,
+        attackerIdentityPort,
+        [DOMAIN],
+      );
+
+      const forgedAgent: AgentIdentity = {
+        id: "forged-attacker-agent",
+        version: 1,
+        name: "forged",
+        harness: "test",
+        cwd: "/forged",
+        pid: 1,
+        startedAt: new Date().toISOString(),
+        visibility: "visible",
+        status: "active",
+        tags: [],
+        subscribedRooms: [],
+      };
+      const outcome = await session.sendManageRequest(
+        buildCommand({
+          method: "state_update",
+          patch: { type: "agent_upsert", agent: forgedAgent },
+        }),
+        FRAME_SCOPE,
+      );
+
+      assert.equal(
+        outcome.result,
+        "error",
+        "an unapproved connection's message must be refused, not routed",
+      );
+      assert.equal(
+        storeA.serialise().agents[forgedAgent.id],
+        undefined,
+        "a forged state_update from an unapproved connection must never reach mesh-store's own state",
+      );
+    } finally {
       await storeA.shutdown();
     }
   });

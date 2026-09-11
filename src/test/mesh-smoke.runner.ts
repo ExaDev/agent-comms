@@ -1,7 +1,7 @@
 /**
  * Multi-process smoke test for the MeshStore mesh.
  *
- * Spawns two separate Node.js processes running MeshStore instances over TlsTransport, verifies they discover each other via the coordinator, exchange messages, and receive push delivery. Each spawned process requires() compiled dist/ output directly (the point is exercising the real built artifact across a genuine process boundary, not re-testing TS source logic already covered elsewhere), so this runs via its own pnpm test:smoke script rather than the plain pnpm test glob -- unlike every other *.test.ts file, it needs a build to have happened first.
+ * Spawns two separate Node.js processes running MeshStore instances over WireMeshTransport, verifies they discover each other via the coordinator, exchange messages, and receive push delivery. Each spawned process requires() compiled dist/ output directly (the point is exercising the real built artifact across a genuine process boundary, not re-testing TS source logic already covered elsewhere), so this runs via its own pnpm test:smoke script rather than the plain pnpm test glob -- unlike every other *.test.ts file, it needs a build to have happened first.
  *
  * Usage: pnpm test:smoke
  */
@@ -109,14 +109,15 @@ function buildScript(name: string, actions: string): string {
   return [
     `const { MeshStore } = require("./dist/core/mesh-store.js");`,
     `const { CommsTool } = require("./dist/core/tool.js");`,
-    `const { TlsTransport } = require("./dist/core/tls-transport.js");`,
+    `const { WireMeshTransport } = require("./dist/core/wire-mesh-transport.js");`,
     `const { generateIdentity } = require("./dist/core/identity.js");`,
+    `const { deviceIdToHex } = require("@exadev/wire-mesh-core/domain/device-id");`,
     `function log(msg) { process.stdout.write(JSON.stringify(msg) + "\\n"); }`,
     `(async () => {`,
     `  const store = new MeshStore(${String(SMOKE_PORT)});`,
     `  const identity = generateIdentity();`,
-    `  store.peerId = identity.fingerprint;`,
-    `  store.setTransport(new TlsTransport(store.events, identity));`,
+    `  store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));`,
+    `  store.setTransport(new WireMeshTransport(store.events, identity));`,
     `  const tool = new CommsTool(store);`,
     `  const deliveries = [];`,
     `  store.onDelivery = (_id, event) => {`,

@@ -1,23 +1,24 @@
 /**
- * Integration test for issue #23: state patches broadcast before the TLS data connections are established must not be silently lost.
+ * Integration test for issue #23: state patches broadcast before the mesh data connections are established must not be silently lost.
  *
- * Every production bridge calls registerAgent() immediately after store.init() returns, while the fire-and-forget peer dials are still in flight. Broadcasts landing in that window used to have nowhere to go, so the joining peer stayed invisible in established peers' list_agents until some later patch happened to arrive. The transports now queue broadcasts for dialling peers and flush them when the connection registers.
+ * Every production bridge calls registerAgent() immediately after store.init() returns, while the fire-and-forget peer dials are still in flight. Broadcasts landing in that window used to have nowhere to go, so the joining peer stayed invisible in established peers' list_agents until some later patch happened to arrive. The transport now queues broadcasts for dialling peers and flushes them when the connection registers.
  */
 
 import * as assert from "node:assert/strict";
+import { deviceIdToHex } from "@exadev/wire-mesh-core/domain/device-id";
 import { MeshStore } from "../core/mesh-store.js";
-import { TlsTransport } from "../core/tls-transport.js";
+import { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import { generateIdentity } from "../core/identity.js";
 import type { PeerIdentity } from "../core/identity.js";
 
 const TEST_PORT = 19890;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** A peer wired like a real bridge: TLS transport, fingerprint peer ID. */
+/** A peer wired like a real bridge: WireMeshTransport, device-id peer ID. */
 function makePeer(identity: PeerIdentity): MeshStore {
   const store = new MeshStore(TEST_PORT);
-  store.peerId = identity.fingerprint;
-  store.setTransport(new TlsTransport(store.events, identity));
+  store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
+  store.setTransport(new WireMeshTransport(store.events, identity));
   return store;
 }
 
