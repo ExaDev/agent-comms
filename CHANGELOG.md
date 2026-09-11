@@ -1,3 +1,30 @@
+## [1.28.1](https://github.com/ExaDev/agent-comms/compare/v1.28.0...v1.28.1) (2026-09-11)
+
+### Bug Fixes
+
+* **core:** guard TlsTransport writes against a peer vanishing mid-write ([979aae1](https://github.com/ExaDev/agent-comms/commit/979aae16642e4c1f7f6ee9e92b55fa9683220b79))
+* **core:** remove MeshStore's implicit TcpTransport default ([4c9f377](https://github.com/ExaDev/agent-comms/commit/4c9f37761a027058fb3b7d645508a747a0eba4d3))
+* **core:** stop an inbound dial from suppressing the reciprocal outbound one ([2b0b293](https://github.com/ExaDev/agent-comms/commit/2b0b29334c78e6a3cf87549c7dd21c77ce301f48))
+* **core:** surface connectToPeer's own socket errors via onError ([ca5413c](https://github.com/ExaDev/agent-comms/commit/ca5413c9e24183326b99ac4d664d1e90283f4727))
+* give waitFor a 20s ceiling, not 5s ([ee742f4](https://github.com/ExaDev/agent-comms/commit/ee742f4afc4bb7b5693dd110a33eea3c148b3d50))
+* **mesh-store:** destroy in-flight connectToPeer dials on shutdown ([4c087bd](https://github.com/ExaDev/agent-comms/commit/4c087bd3f427909461c03b08d2db11584a2b6a6f))
+* **mesh-store:** skip dialling yourself when handling a gossiped peer list ([de2435b](https://github.com/ExaDev/agent-comms/commit/de2435b4775177ea1216ab25da04186613b9a699))
+* **mesh-store:** wire onError so transport-level failures are observable ([b22df4e](https://github.com/ExaDev/agent-comms/commit/b22df4eccb8a9f6b9e5615fc919287322c0c81e4))
+
+### Refactoring
+
+* **core:** narrow CommsStore to exclude MeshStore-only features ([8d41880](https://github.com/ExaDev/agent-comms/commit/8d41880194239d6a7471f5a5ed223afd34143811))
+
+### Tests
+
+* poll for real conditions, guarantee store cleanup, bound child waits ([2ca5cb8](https://github.com/ExaDev/agent-comms/commit/2ca5cb83020b8c75b467c525465fda851f0e117d))
+* rewire two raw-socket probes for TlsTransport, fix a recursion bug ([62481da](https://github.com/ExaDev/agent-comms/commit/62481da95491a1a24e127c4be6c9e8f767494f83)), references [#42](https://github.com/ExaDev/agent-comms/issues/42)
+
+### Chores
+
+* **ci:** run approval, listener-policy, and mesh-smoke suites ([f864283](https://github.com/ExaDev/agent-comms/commit/f864283a2e72ea42b2e234764bd85baa7466a041))
+* **core:** trace peer_list handling and connectToPeer entry ([bd7749d](https://github.com/ExaDev/agent-comms/commit/bd7749d6f3adbca666720e3084dc94761975f709))
+
 ## [1.28.0](https://github.com/ExaDev/agent-comms/compare/v1.27.3...v1.28.0) (2026-09-10)
 
 ### Features
