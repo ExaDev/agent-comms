@@ -11,7 +11,8 @@ export function wireTestTransport(store: MeshStore): void {
   store.setTransport(new TlsTransport(store.events, identity));
 }
 
-const DEFAULT_WAIT_FOR_TIMEOUT_MS = 5000;
+// Generous on purpose: waitFor returns the instant its condition holds, so a long ceiling costs nothing on the happy path (a local run settles in well under a second) and only matters for the worst case -- a loaded CI runner working through a real, sequential chain of TLS handshakes (each one genuine X.509 certificate work, not instant) for the accept-flow's second connection direction, confirmed to need meaningfully more than 5s on at least one real CI run.
+const DEFAULT_WAIT_FOR_TIMEOUT_MS = 20_000;
 const WAIT_FOR_POLL_INTERVAL_MS = 20;
 
 /**
