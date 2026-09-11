@@ -18,6 +18,7 @@ import type {
   StreamingBehavior,
   Visibility,
 } from "./types.js";
+import { ownerNamedRoomPath, slugRoomName } from "./room-path.js";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -475,36 +476,37 @@ export async function ensureRegistered(opts: {
 // ---------------------------------------------------------------------------
 
 /**
- * Ensure a project room exists for the given cwd and the agent is a member.
- * Creates the room if needed and joins the agent. No-op if already a member.
- * Returns the room ID.
+ * Ensure a project room exists for the given cwd and the agent is a member. Creates the room if needed and joins the agent. No-op if already a member. Returns the room ID.
+ *
+ * Every agent computes an owner-rooted path with itself as owner, so two agents in the same cwd do not currently converge on one shared room -- a real, deliberately deferred regression from the pre-core/room behaviour (see the design doc's OQ-2: deterministic lowest-device-id ownership is P3.4's own responsibility, once gossiped presence data is wired up here).
  */
 export async function ensureProjectRoom(
   store: CommsStore,
   agentId: string,
   cwd: string,
 ): Promise<string> {
-  const basename = path.basename(cwd);
+  const localName = slugRoomName(path.basename(cwd));
+  const id = ownerNamedRoomPath(agentId, localName);
 
   // Check if the room already exists
-  const existing = await store.getRoom(basename);
+  const existing = await store.getRoom(id);
   if (existing) {
     // Room exists — verify it's a project room (description matches pattern)
     if (!existing.members.includes(agentId)) {
-      await store.joinRoom(basename, agentId);
+      await store.joinRoom(id, agentId);
     }
-    return basename;
+    return id;
   }
 
   // Create — createRoom auto-joins the owner
   await store.createRoom({
-    name: basename,
+    name: localName,
     type: "public",
     owner: agentId,
     description: `Project room for ${cwd}`,
   });
 
-  return basename;
+  return id;
 }
 
 // ---------------------------------------------------------------------------

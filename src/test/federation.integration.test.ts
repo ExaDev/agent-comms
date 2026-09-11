@@ -168,14 +168,17 @@ async function main(): Promise<void> {
   console.log(`  Created federated room: ${fedRoom.id}`);
   await sleep(200);
 
+  // Federation matches a room across the two separate meshes by literal id equality (handleFedRoomMessage/Join/Leave all key off the incoming roomId string directly) -- an owner-rooted path only coincides on both sides when both sides construct it from the same owner, so B's mirror of A's room is created with A's own peerId as owner, not B's.
   const fedRoomB = await b.store.createRoom({
     name: fedRoomId,
     type: "public",
-    owner: b.store.peerId,
+    owner: a.store.peerId,
     description: "Federated test room",
     federated: true,
   });
   console.log(`  Created matching federated room on B: ${fedRoomB.id}`);
+  // createRoom's default members is [owner] -- since owner is A's peerId (to make the id match), B's own local agent must explicitly join its mirror for handleFedRoomMessage's local-delivery loop to reach it.
+  await b.store.joinRoom(fedRoomB.id, b.store.peerId);
   await sleep(200);
 
   a.deliveries.length = 0;

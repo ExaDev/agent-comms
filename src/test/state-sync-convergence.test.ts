@@ -8,6 +8,7 @@ import * as assert from "node:assert/strict";
 import { test } from "node:test";
 import { MeshStore } from "../core/mesh-store.js";
 import type { SerialisedState } from "../core/wire-protocol.js";
+import { ownerNamedRoomPath } from "../core/room-path.js";
 import { wireTestTransport } from "./test-transport.js";
 
 /** A local-only store: transport is set (registerAgent's own broadcastPatch needs one) but never started, so no ports and no flake -- the stores in these tests never actually connect. */
@@ -89,6 +90,7 @@ void test("room membership changes converge and stale member lists are rejected"
     visibility: "visible",
     tags: [],
   });
+  const roomId = ownerNamedRoomPath(owner.id, "room");
   await a.createRoom({
     name: "room",
     type: "public",
@@ -96,31 +98,28 @@ void test("room membership changes converge and stale member lists are rejected"
     description: "x",
   });
 
-  // A holds the room before the join; the joiner lives on B, so the join
-  // mutates B's copy and syncs back (one MeshStore is one peer identity, so
-  // a second agent cannot be registered on A).
+  // A holds the room before the join; the joiner lives on B, so the join mutates B's copy and syncs back (one MeshStore is one peer identity, so a second agent cannot be registered on A).
   a.applyStateSync(snapshotOf(b));
   b.applyStateSync(snapshotOf(a));
-  assert.equal((await a.getRoom("room"))?.members.includes(joiner.id), false);
+  assert.equal((await a.getRoom(roomId))?.members.includes(joiner.id), false);
 
-  await b.joinRoom("room", joiner.id);
+  await b.joinRoom(roomId, joiner.id);
   a.applyStateSync(snapshotOf(b));
-  assert.equal((await a.getRoom("room"))?.members.includes(joiner.id), true);
+  assert.equal((await a.getRoom(roomId))?.members.includes(joiner.id), true);
 
-  // The joiner leaves; A (now current) must drop them — the union-only merge
-  // could never remove a leaver.
-  await b.leaveRoom("room", joiner.id);
+  // The joiner leaves; A (now current) must drop them — the union-only merge could never remove a leaver.
+  await b.leaveRoom(roomId, joiner.id);
   a.applyStateSync(snapshotOf(b));
-  assert.equal((await a.getRoom("room"))?.members.includes(joiner.id), false);
+  assert.equal((await a.getRoom(roomId))?.members.includes(joiner.id), false);
 
   // A stale member list that still contains them is rejected.
   const stale = snapshotOf(b);
-  const staleRoom = stale.rooms.room;
+  const staleRoom = stale.rooms[roomId];
   if (staleRoom === undefined) throw new Error("room missing from snapshot");
   staleRoom.members.push(joiner.id);
   staleRoom.version -= 1;
   a.applyStateSync(stale);
-  assert.equal((await a.getRoom("room"))?.members.includes(joiner.id), false);
+  assert.equal((await a.getRoom(roomId))?.members.includes(joiner.id), false);
 });
 
 void test("history sync adds unseen messages and unions read receipts", async () => {
@@ -134,25 +133,26 @@ void test("history sync adds unseen messages and unions read receipts", async ()
     visibility: "visible",
     tags: [],
   });
+  const roomId = ownerNamedRoomPath(agent.id, "room");
   await a.createRoom({
     name: "room",
     type: "public",
     owner: agent.id,
     description: "x",
   });
-  await a.sendRoomMessage("room", agent.id, "one");
+  await a.sendRoomMessage(roomId, agent.id, "one");
   b.applyStateSync(snapshotOf(a));
 
   // While B is away, a second message arrives and the first gains a reader elsewhere on the mesh; B's next sync takes both.
-  await a.sendRoomMessage("room", agent.id, "two");
+  await a.sendRoomMessage(roomId, agent.id, "two");
   const fresh = snapshotOf(a);
-  const history = fresh.messages.room;
+  const history = fresh.messages[roomId];
   if (history?.[0] === undefined)
     throw new Error("messages missing from snapshot");
   history[0].readBy.push("reader-elsewhere");
   b.applyStateSync(fresh);
 
-  const merged = await b.readRoomMessages("room");
+  const merged = await b.readRoomMessages(roomId);
   assert.deepEqual(
     merged.map((m) => m.content),
     ["one", "two"],
@@ -183,31 +183,31 @@ void test("a kick racing a concurrent join converges with the kick honoured", as
     visibility: "visible",
     tags: [],
   });
+  const roomId = ownerNamedRoomPath(owner.id, "room");
   await base.createRoom({
     name: "room",
     type: "public",
     owner: owner.id,
     description: "x",
   });
-  await base.joinRoom("room", x.id);
+  await base.joinRoom(roomId, x.id);
 
   const kicker = makeStore();
   const joiner = makeStore();
   kicker.applyStateSync(snapshotOf(base));
   joiner.applyStateSync(snapshotOf(base));
 
-  // Concurrent mutations from the same base: a kick on one holder, a
-  // re-join of X recorded on the other.
-  await kicker.leaveRoom("room", x.id);
-  await joiner.joinRoom("room", x.id);
-  assert.equal((await kicker.getRoom("room"))?.members.includes(x.id), false);
-  assert.equal((await joiner.getRoom("room"))?.members.includes(x.id), true);
+  // Concurrent mutations from the same base: a kick on one holder, a re-join of X recorded on the other.
+  await kicker.leaveRoom(roomId, x.id);
+  await joiner.joinRoom(roomId, x.id);
+  assert.equal((await kicker.getRoom(roomId))?.members.includes(x.id), false);
+  assert.equal((await joiner.getRoom(roomId))?.members.includes(x.id), true);
 
   // Exchange both ways: both converge on the kick.
   kicker.applyStateSync(snapshotOf(joiner));
   joiner.applyStateSync(snapshotOf(kicker));
-  assert.equal((await kicker.getRoom("room"))?.members.includes(x.id), false);
-  assert.equal((await joiner.getRoom("room"))?.members.includes(x.id), false);
+  assert.equal((await kicker.getRoom(roomId))?.members.includes(x.id), false);
+  assert.equal((await joiner.getRoom(roomId))?.members.includes(x.id), false);
 });
 
 void test("concurrent joins of different agents both survive the merge", async () => {
@@ -240,6 +240,7 @@ void test("concurrent joins of different agents both survive the merge", async (
     visibility: "visible",
     tags: [],
   });
+  const roomId = ownerNamedRoomPath(owner.id, "room");
   await base.createRoom({
     name: "room",
     type: "public",
@@ -252,13 +253,13 @@ void test("concurrent joins of different agents both survive the merge", async (
   const holderB = makeStore();
   holderA.applyStateSync(snapshotOf(base));
   holderB.applyStateSync(snapshotOf(base));
-  await holderA.joinRoom("room", p.id);
-  await holderB.joinRoom("room", q.id);
+  await holderA.joinRoom(roomId, p.id);
+  await holderB.joinRoom(roomId, q.id);
 
   holderA.applyStateSync(snapshotOf(holderB));
   holderB.applyStateSync(snapshotOf(holderA));
-  const mergedA = await holderA.getRoom("room");
-  const mergedB = await holderB.getRoom("room");
+  const mergedA = await holderA.getRoom(roomId);
+  const mergedB = await holderB.getRoom(roomId);
   assert.equal(mergedA?.members.includes(p.id), true);
   assert.equal(mergedA?.members.includes(q.id), true);
   assert.deepEqual(mergedB?.members, mergedA?.members);

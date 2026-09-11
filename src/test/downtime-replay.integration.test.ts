@@ -19,6 +19,7 @@ import {
 } from "../core/identity-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import type { PeerIdentity } from "../core/identity.js";
+import { ownerNamedRoomPath } from "../core/room-path.js";
 
 const TEST_PORT = 19896;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -64,6 +65,7 @@ async function main(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
+  const roomId = ownerNamedRoomPath(a.store.peerId, "downtime");
   await a.store.createRoom({
     name: "downtime",
     type: "public",
@@ -88,11 +90,11 @@ async function main(): Promise<void> {
   });
   await waitFor("the room to reach the joiner", async () => {
     const rooms = await b1.store.listRooms(b1.store.peerId);
-    return rooms.some((room) => room.id === "downtime");
+    return rooms.some((room) => room.id === roomId);
   });
-  await b1.store.joinRoom("downtime", b1.store.peerId);
+  await b1.store.joinRoom(roomId, b1.store.peerId);
   await waitFor("membership to reach the sender", async () => {
-    const room = await a.store.getRoom("downtime");
+    const room = await a.store.getRoom(roomId);
     return room?.members.includes(b1.store.peerId) === true;
   });
 
@@ -101,11 +103,7 @@ async function main(): Promise<void> {
   await sleep(200);
 
   // A sends a room message while B is down.
-  await a.store.sendRoomMessage(
-    "downtime",
-    a.store.peerId,
-    "while you were down",
-  );
+  await a.store.sendRoomMessage(roomId, a.store.peerId, "while you were down");
   await sleep(200);
 
   // B restarts in the same slot: same identity, same agent ID.
