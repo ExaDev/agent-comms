@@ -7,18 +7,22 @@
  */
 
 import * as net from "node:net";
+import * as tls from "node:tls";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
+import { generateIdentity } from "../core/identity.js";
 import type { ConnectionHandle, TransportEvents } from "../core/transport.js";
 import * as assert from "node:assert/strict";
 import { test, describe } from "node:test";
+import { wireTestTransport } from "./test-transport.js";
 
 const TEST_PORT = 19880;
 
 describe("listener policy", () => {
   void test("coordinator starts with a single default localhost listener", async () => {
     const store = new MeshStore(TEST_PORT);
+    wireTestTransport(store);
     await store.init();
 
     const listeners = store.listListeners();
@@ -49,6 +53,7 @@ describe("listener policy", () => {
 
   void test("addListener creates an additional listener", async () => {
     const store = new MeshStore(TEST_PORT);
+    wireTestTransport(store);
     await store.init();
 
     const id = await store.addListener("127.0.0.1", 0, "observe");
@@ -76,6 +81,7 @@ describe("listener policy", () => {
 
   void test("removeListener removes a non-default listener", async () => {
     const store = new MeshStore(TEST_PORT);
+    wireTestTransport(store);
     await store.init();
 
     const id = await store.addListener("127.0.0.1", 0, "observe");
@@ -95,6 +101,7 @@ describe("listener policy", () => {
 
   void test("removeListener rejects removing the default listener", async () => {
     const store = new MeshStore(TEST_PORT);
+    wireTestTransport(store);
     await store.init();
 
     const listeners = store.listListeners();
@@ -112,6 +119,7 @@ describe("listener policy", () => {
 
   void test("observe listener accepts connections but enforces policy", async () => {
     const store = new MeshStore(TEST_PORT);
+    wireTestTransport(store);
     await store.init();
 
     const id = await store.addListener("127.0.0.1", 0, "observe");
@@ -141,6 +149,7 @@ describe("listener policy", () => {
 
   void test("mesh_listeners action returns all listeners via CommsTool", async () => {
     const store = new MeshStore(TEST_PORT);
+    wireTestTransport(store);
     await store.init();
 
     const agent = await store.registerAgent({
@@ -175,6 +184,7 @@ describe("listener policy", () => {
 
   void test("mesh_interfaces action returns available network adapters", async () => {
     const store = new MeshStore(TEST_PORT);
+    wireTestTransport(store);
     await store.init();
 
     const agent = await store.registerAgent({
@@ -203,6 +213,7 @@ describe("listener policy", () => {
 
   void test("mesh_unlisten removes listener via CommsTool", async () => {
     const store = new MeshStore(TEST_PORT);
+    wireTestTransport(store);
     await store.init();
 
     const agent = await store.registerAgent({
@@ -233,6 +244,7 @@ describe("listener policy", () => {
 
   void test("mesh_listen adds listener via CommsTool", async () => {
     const store = new MeshStore(TEST_PORT);
+    wireTestTransport(store);
     await store.init();
 
     const agent = await store.registerAgent({
@@ -300,6 +312,7 @@ describe("listener policy", () => {
 
   void test("connections via non-default listener carry policy in handle", async () => {
     const store = new MeshStore(TEST_PORT);
+    wireTestTransport(store);
     await store.init();
 
     // Add an observe listener
@@ -308,11 +321,10 @@ describe("listener policy", () => {
     const observeListener = listeners.find((l) => l.id === listenerId);
     assert.ok(observeListener, "Should find the observe listener");
 
-    // Connect to the observe listener and send an introduce message
-    // The transport should tag the connection handle with policy="observe"
+    // Connect to the observe listener and send an introduce message over a real TLS client connection -- the listener is a TlsTransport server, which requires an actual TLS handshake before any application bytes are readable, and separately verifies the introduce message's claimed peerId against the client certificate's own fingerprint, so the probe needs a real generated identity, not an arbitrary string. The transport should tag the connection handle with policy="observe"
     //
-    // We intercept at the transport.events level because store.events
-    // is a getter that creates a fresh object each call.
+    // We intercept at the transport.events level because store.events is a getter that creates a fresh object each call.
+    const probeIdentity = generateIdentity();
     const receivedHandle = await new Promise<{
       policy: string | undefined;
     } | null>((resolve) => {
@@ -321,10 +333,10 @@ describe("listener policy", () => {
       const transport = (
         store as unknown as { transport: { events: TransportEvents } }
       ).transport;
-      const originalOnIntroduction = (
-        handle: ConnectionHandle,
-        msg: { peerId: string; dataPort: number },
-      ) => transport.events.onIntroduction(handle, msg);
+      // Captured by value (bound, so eslint doesn't flag an unsafely-detached method reference), not by a closure that re-reads transport.events.onIntroduction at call time -- a lazy re-lookup would resolve to the wrapper itself once the assignment below replaces it, recursing forever on the very first introduction.
+      const originalOnIntroduction = transport.events.onIntroduction.bind(
+        transport.events,
+      );
       transport.events.onIntroduction = (handle, msg) => {
         // Capture the handle's policy
         resolve({ policy: handle.policy });
@@ -333,16 +345,19 @@ describe("listener policy", () => {
         originalOnIntroduction(handle, msg);
       };
 
-      const socket = net.createConnection({
+      const socket = tls.connect({
         port: observeListener.port,
         host: "127.0.0.1",
+        key: probeIdentity.privateKey,
+        cert: probeIdentity.certificate,
+        rejectUnauthorized: false,
       });
 
-      socket.on("connect", () => {
+      socket.on("secureConnect", () => {
         socket.write(
           JSON.stringify({
             method: "introduce",
-            peerId: "test-observe-peer",
+            peerId: probeIdentity.fingerprint,
             dataPort: 19999,
           }) + "\n",
         );
