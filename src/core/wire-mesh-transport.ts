@@ -49,7 +49,7 @@ export const DOMAIN = "exadev.io/agent-comms-v1";
 /** One verb for the entire MeshMessage union: this phase carries every message opaquely rather than modelling each arm as its own verb, which is core/room's own job once P3 gives this substrate real room semantics. */
 export const FRAME_VERB = "exadev.io/agent-comms-v1:frame";
 
-/** No finer-grained authorisation model exists above "you're a TLS-authenticated member of this mesh" at this phase -- exactly today's TlsTransport model, which does no per-message authorisation either. */
+/** No finer-grained authorisation model exists above "you're an approved member of this mesh" at this phase -- once a session is past the quarantine gate (see handleAcceptedConnection), it's trusted for every message this domain carries. */
 export const FRAME_SCOPE: Readonly<CapabilityScope> = {
   kind: "agent-comms-mesh",
 };
@@ -70,6 +70,12 @@ function extractMessage(command: ManageCommand): MeshMessage | undefined {
   if (!("message" in params)) return undefined;
   const message: unknown = params.message;
   return isMeshMessage(message) ? message : undefined;
+}
+
+/** Reads the port a listener actually bound, from its own reported address -- never the port it was asked to bind, which is 0 whenever the caller wanted the OS to assign a free one. Bookkeeping that stores the requested port instead silently reports 0 for every OS-assigned listener. */
+function listenerPort(listener: Readonly<Listener>): number {
+  const port = listener.address.split(":").pop();
+  return port === undefined ? 0 : Number(port);
 }
 
 // ---------------------------------------------------------------------------
@@ -335,10 +341,8 @@ export class WireMeshTransport implements MeshTransport {
         this.events.onBecomeCoordinator(message.peerList);
         return;
       }
-      case "connect_request":
-      case "connect_accepted":
-      case "connect_rejected": {
-        // connect_request only ever reaches route() if a session was somehow promoted without going through consumeQuarantined's own handling of it -- can't happen given every requiresApproval accept path routes through consumeQuarantined first, kept here only so an unrecognised-in-context method fails closed rather than falling to the default onMessage case below. connect_accepted/connect_rejected are never constructed by this transport at all -- connectToRemote's own sendManageRequest outcome carries that meaning directly.
+      case "connect_request": {
+        // Only ever reaches route() if a session was somehow promoted without going through consumeQuarantined's own handling of it -- can't happen given every requiresApproval accept path routes through consumeQuarantined first, kept here only so an unrecognised-in-context method fails closed rather than falling to the default onMessage case below.
         return;
       }
       default: {
@@ -383,8 +387,7 @@ export class WireMeshTransport implements MeshTransport {
         void this.handleAcceptedConnection(connection, undefined, true, false);
       },
     );
-    const port = this.dataListener.address.split(":").pop();
-    this._dataPort = port === undefined ? 0 : Number(port);
+    this._dataPort = listenerPort(this.dataListener);
   }
 
   // -----------------------------------------------------------------------
@@ -444,7 +447,7 @@ export class WireMeshTransport implements MeshTransport {
       listener,
       policy: "full",
       host,
-      port,
+      port: listenerPort(listener),
       isDefault: true,
     });
     this.defaultListenerId = id;
@@ -634,7 +637,7 @@ export class WireMeshTransport implements MeshTransport {
       listener,
       policy,
       host,
-      port,
+      port: listenerPort(listener),
       isDefault: false,
     });
     return id;

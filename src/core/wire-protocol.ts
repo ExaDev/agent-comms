@@ -3,7 +3,7 @@
  *
  * Transport-agnostic: carries the protocol contract between peers without
  * depending on net.Socket or any specific transport implementation. Any
- * MeshTransport implementation (TlsTransport is the one production
+ * MeshTransport implementation (WireMeshTransport is the one production
  * transport today) uses these types.
  */
 
@@ -72,13 +72,10 @@ export type MeshMessage =
       name: string;
       fingerprint: string;
     }
-  | { method: "connect_accepted"; peerId: string; dataPort: number }
-  | { method: "connect_rejected"; peerId: string; reason: string }
   | { method: "peer_list"; peers: PeerInfo[] }
   | { method: "peer_joined"; peer: PeerInfo }
   | { method: "peer_left"; peerId: string }
   | { method: "become_coordinator"; peerList: PeerInfo[] }
-  | { method: "pong"; peerId: string }
   // Federation wire messages (coordinator-to-coordinator only)
   | { method: "fed_handshake"; meshId: string; name: string; version: string }
   | { method: "fed_ack"; meshId: string; name: string; version: string }
