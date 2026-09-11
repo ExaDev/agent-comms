@@ -268,12 +268,15 @@ export class MeshStore implements CommsStore {
   private handlePeerList(peers: PeerInfo[]): void {
     for (const peer of peers) {
       this.peerInfo.set(peer.id, peer);
+      // The list always includes this store's own entry — dialling yourself is a wasted connection attempt (and, on some platforms, an immediate self-inflicted ECONNRESET) that never needs to happen.
+      if (peer.id === this.peerId) continue;
       void this.requireTransport().connectToPeer(peer, this.peerId);
     }
   }
 
   private handlePeerJoined(peer: PeerInfo): void {
     this.peerInfo.set(peer.id, peer);
+    if (peer.id === this.peerId) return;
     void this.requireTransport().connectToPeer(peer, this.peerId);
   }
 
