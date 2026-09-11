@@ -1,3 +1,13 @@
+## [1.32.0](https://github.com/ExaDev/agent-comms/compare/v1.31.0...v1.32.0) (2026-09-11)
+
+### Features
+
+* **core:** cut the mcp bridge over to WireMeshTransport via createBridgeMesh ([091d497](https://github.com/ExaDev/agent-comms/commit/091d497b5411503c6e918c186547b3e3f74731f0))
+
+### Tests
+
+* run the suite directly against TypeScript source via tsx, no build step ([198c9e4](https://github.com/ExaDev/agent-comms/commit/198c9e48ed40341c42ce3a4838e17695175384d2))
+
 ## [1.31.0](https://github.com/ExaDev/agent-comms/compare/v1.30.0...v1.31.0) (2026-09-11)
 
 ### Features
