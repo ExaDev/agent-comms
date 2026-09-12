@@ -179,7 +179,7 @@ describe("verifyRoomToken", () => {
     if (!verdict.ok) assert.equal(verdict.reason, "wrong_scope_path");
   });
 
-  it("refuses a token scoped to a non-room capability", async () => {
+  it("refuses a token with an unrelated capability and an unrelated scope kind", async () => {
     const owner = await generateEs256Identity();
     const member = await generateEs256Identity();
     const roomPath = ownerNamedRoomPath(
@@ -206,7 +206,38 @@ describe("verifyRoomToken", () => {
     });
 
     assert.equal(verdict.ok, false);
-    if (!verdict.ok) assert.equal(verdict.reason, "wrong_scope_kind");
+    if (!verdict.ok) assert.equal(verdict.reason, "wrong_capability");
+  });
+
+  it("refuses a token with the wrong capability even when its scope is correctly shaped for the room", async () => {
+    const owner = await generateEs256Identity();
+    const member = await generateEs256Identity();
+    const roomPath = ownerNamedRoomPath(
+      deviceIdToHex(owner.deviceId),
+      "general",
+    );
+    // Nonsensical, but not structurally prevented at mint time: capability and scope disagree about what this token actually grants. Neither scope.kind nor scope.path alone can catch this -- only checking the capability itself can.
+    const verdict1 = await mintCapabilityToken({
+      identity: owner,
+      clock: fixedClock(NOW_MS),
+      tokenId: nextTokenId(),
+      bearer: member.deviceId,
+      capability: "exec:pty",
+      scope: { kind: "room", path: roomPath },
+      expires: EXPIRES_MS,
+    });
+    if (!verdict1.ok) throw new Error(`mint failed: ${verdict1.reason}`);
+
+    const verdict = await verifyRoomToken(verdict1.token, {
+      identity: owner,
+      clock: fixedClock(NOW_MS),
+      revocation: createRevocationView(),
+      expectedBearer: member.deviceId,
+      roomPath,
+    });
+
+    assert.equal(verdict.ok, false);
+    if (!verdict.ok) assert.equal(verdict.reason, "wrong_capability");
   });
 
   it("refuses a token bearing a different device than the authenticated connection", async () => {
