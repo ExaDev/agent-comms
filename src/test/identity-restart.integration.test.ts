@@ -108,7 +108,17 @@ async function main(): Promise<void> {
     description: "issue 14 acceptance",
   });
   await sleep(200);
-  await b.store.joinRoom(roomId, b.store.peerId);
+  // The room already replicated to B via legacy full-state-sync, but knowing about a room is not the same as holding a room:member token for it -- B's own join still goes through real wire-level admission, held open until A approves it.
+  const joinPromise = b.store.joinRoom(roomId, b.store.peerId);
+  await waitFor("A to see B's pending join request", async () =>
+    Promise.resolve(
+      a1.store
+        .listPendingRoomJoins()
+        .some((p) => p.roomPath === roomId && p.requesterId === b.store.peerId),
+    ),
+  );
+  a1.store.acceptRoomJoin(roomId, b.store.peerId);
+  await joinPromise;
   await sleep(200);
   const agentIdA = a1.store.peerId;
 
@@ -152,7 +162,22 @@ async function main(): Promise<void> {
     ),
   );
 
-  // DMs targeted at the persisted ID must deliver too.
+  // DMs targeted at the persisted ID must deliver too -- the two-round consent flow first.
+  const dmAccessPromise = b.store.requestDmAccess(agentIdA);
+  await waitFor("restarted A to see B's pending DM request", async () =>
+    Promise.resolve(
+      a2.store
+        .listPendingRoomJoins()
+        .some((p) => p.requesterId === b.store.peerId),
+    ),
+  );
+  const pendingDm = a2.store
+    .listPendingRoomJoins()
+    .find((p) => p.requesterId === b.store.peerId);
+  assert.ok(pendingDm);
+  a2.store.acceptRoomJoin(pendingDm.roomPath, b.store.peerId);
+  await dmAccessPromise;
+
   await b.store.sendDm(b.store.peerId, agentIdA, "dm after restart");
   await waitFor("the DM to push to restarted A", async () =>
     a2.deliveries.some(

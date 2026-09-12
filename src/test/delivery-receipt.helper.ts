@@ -56,6 +56,59 @@ async function cleanup(...stores: MeshStore[]): Promise<void> {
   }
 }
 
+/** Polls until predicate holds or a fixed budget elapses -- these helpers wait on a real, cross-process wire round trip (admission, DM consent), not a fixed sleep. */
+async function pollUntil(
+  predicate: () => boolean | Promise<boolean>,
+  what: string,
+): Promise<void> {
+  const deadline = Date.now() + 5000;
+  while (!(await predicate())) {
+    if (Date.now() >= deadline) {
+      throw new Error(`timed out waiting for ${what}`);
+    }
+    await sleep(50);
+  }
+}
+
+/**
+ * member's own real, admitted room.join: the room already replicated to member via legacy full-state-sync, but knowing about a room is not the same as holding a room:member token for it -- member's own join still goes through real wire-level admission, held open until owner approves it. Also waits for owner's own local membership record to actually reflect the join before returning: acceptRoomJoin only resolves the held-open request's promise, and its continuation (minting the token, updating the room) runs on a later tick, so a caller sending immediately afterward could otherwise read owner's room.members before that update lands.
+ */
+async function joinAndAccept(
+  owner: MeshStore,
+  member: MeshStore,
+  roomId: string,
+): Promise<void> {
+  const joinPromise = member.joinRoom(roomId, member.peerId);
+  await pollUntil(
+    () =>
+      owner
+        .listPendingRoomJoins()
+        .some((p) => p.roomPath === roomId && p.requesterId === member.peerId),
+    "owner to see member's pending join request",
+  );
+  owner.acceptRoomJoin(roomId, member.peerId);
+  await joinPromise;
+  await pollUntil(async () => {
+    const room = await owner.getRoom(roomId);
+    return room?.members.includes(member.peerId) ?? false;
+  }, "owner's own room record to reflect the join");
+}
+
+/** The two-round DM consent flow (section 6): from's own outbound room.join is what authorises the DM, and to (the party contacted first) still needs a human decision. */
+async function dmConsent(from: MeshStore, to: MeshStore): Promise<void> {
+  const accessPromise = from.requestDmAccess(to.peerId);
+  await pollUntil(
+    () => to.listPendingRoomJoins().some((p) => p.requesterId === from.peerId),
+    "to see from's pending DM request",
+  );
+  const pending = to
+    .listPendingRoomJoins()
+    .find((p) => p.requesterId === from.peerId);
+  if (pending === undefined) throw new Error("pending DM request vanished");
+  to.acceptRoomJoin(pending.roomPath, from.peerId);
+  await accessPromise;
+}
+
 // ---------------------------------------------------------------------------
 // Test implementations
 // ---------------------------------------------------------------------------
@@ -103,8 +156,7 @@ async function testPushRoom(): Promise<void> {
     description: "Push delivery test",
   });
   await sleep(200);
-  await b.joinRoom(room.id, b.peerId);
-  await sleep(200);
+  await joinAndAccept(a, b, room.id);
 
   deliveriesB.length = 0;
   await a.sendRoomMessage(room.id, a.peerId, "Hello push!");
@@ -161,6 +213,8 @@ async function testPushDm(): Promise<void> {
   });
   await sleep(300);
 
+  await dmConsent(a, b);
+
   deliveriesB.length = 0;
   await a.sendDm(a.peerId, b.peerId, "Direct push!");
   await sleep(300);
@@ -213,8 +267,7 @@ async function testDrainRoom(): Promise<void> {
     description: "Drain delivery test",
   });
   await sleep(200);
-  await b.joinRoom(room.id, b.peerId);
-  await sleep(200);
+  await joinAndAccept(a, b, room.id);
 
   await a.sendRoomMessage(room.id, a.peerId, "Hello drain!");
   await sleep(300);
@@ -269,6 +322,7 @@ async function testDrainDm(): Promise<void> {
   });
   await sleep(300);
 
+  await dmConsent(a, b);
   await a.sendDm(a.peerId, b.peerId, "Direct drain!");
   await sleep(300);
 
@@ -327,8 +381,7 @@ async function testReadReceiptPush(): Promise<void> {
     description: "Read receipt push test",
   });
   await sleep(200);
-  await b.joinRoom(room.id, b.peerId);
-  await sleep(200);
+  await joinAndAccept(a, b, room.id);
 
   deliveriesA.length = 0;
   await a.sendRoomMessage(room.id, a.peerId, "Read me");
@@ -384,8 +437,7 @@ async function testReadReceiptDrain(): Promise<void> {
     description: "Read receipt drain test",
   });
   await sleep(200);
-  await b.joinRoom(room.id, b.peerId);
-  await sleep(200);
+  await joinAndAccept(a, b, room.id);
 
   deliveriesA.length = 0;
   await a.sendRoomMessage(room.id, a.peerId, "Drain then read");
@@ -447,8 +499,7 @@ async function testReadbyArray(): Promise<void> {
     description: "readBy test",
   });
   await sleep(200);
-  await b.joinRoom(room.id, b.peerId);
-  await sleep(200);
+  await joinAndAccept(a, b, room.id);
 
   const msg = await a.sendRoomMessage(room.id, a.peerId, "Check readBy");
   await sleep(800);
