@@ -16,14 +16,14 @@ function snapshotOf(store: MeshStore): SerialisedState {
 }
 
 /** A local-only store: transport is set (registerAgent's own broadcastPatch needs one) but never started, so no ports and no flake -- the stores in these tests never actually connect. */
-function makeStore(): MeshStore {
+async function makeStore(): Promise<MeshStore> {
   const store = new MeshStore();
-  wireTestTransport(store);
+  await wireTestTransport(store);
   return store;
 }
 
 void test("events queued while the target was down replay on its first snapshot", async () => {
-  const sender = makeStore();
+  const sender = await makeStore();
   const author = await sender.registerAgent({
     name: "author",
     harness: "pi",
@@ -33,7 +33,7 @@ void test("events queued while the target was down replay on its first snapshot"
     tags: [],
   });
   // The target exists on the mesh (known to the sender) but its process is "down": modelled by only ever syncing snapshots into a future store.
-  const target = makeStore();
+  const target = await makeStore();
   const targetAgent = await target.registerAgent({
     name: "target",
     harness: "claude-code",
@@ -59,7 +59,7 @@ void test("events queued while the target was down replay on its first snapshot"
   assert.ok(pending !== undefined && pending.length > 0);
 
   // The target returns (fresh process, same agent id) and receives the sender's snapshot: the pending event must fire onDelivery.
-  const returned = makeStore();
+  const returned = await makeStore();
   const deliveries: DeliveryEvent[] = [];
   returned.onDelivery = (_id, ev) => {
     deliveries.push(ev);
@@ -96,7 +96,7 @@ void test("events queued while the target was down replay on its first snapshot"
 });
 
 void test("a queue is bounded oldest-first so downtime cannot grow it without limit", async () => {
-  const sender = makeStore();
+  const sender = await makeStore();
   const author = await sender.registerAgent({
     name: "author",
     harness: "pi",
@@ -105,7 +105,7 @@ void test("a queue is bounded oldest-first so downtime cannot grow it without li
     visibility: "visible",
     tags: [],
   });
-  const target = makeStore();
+  const target = await makeStore();
   const targetAgent = await target.registerAgent({
     name: "target",
     harness: "claude-code",
@@ -137,7 +137,7 @@ void test("a queue is bounded oldest-first so downtime cannot grow it without li
 });
 
 void test("a pending invite replays until accepted or declined", async () => {
-  const sender = makeStore();
+  const sender = await makeStore();
   const author = await sender.registerAgent({
     name: "owner",
     harness: "pi",
@@ -146,7 +146,7 @@ void test("a pending invite replays until accepted or declined", async () => {
     visibility: "visible",
     tags: [],
   });
-  const target = makeStore();
+  const target = await makeStore();
   const targetAgent = await target.registerAgent({
     name: "invitee",
     harness: "claude-code",
@@ -165,7 +165,7 @@ void test("a pending invite replays until accepted or declined", async () => {
   });
   await sender.inviteToRoom(roomId, targetAgent.id, author.id);
 
-  const returned = makeStore();
+  const returned = await makeStore();
   const deliveries: DeliveryEvent[] = [];
   returned.onDelivery = (_id, ev) => {
     deliveries.push(ev);
@@ -178,7 +178,7 @@ void test("a pending invite replays until accepted or declined", async () => {
 
   // Declined (no longer invited): the same snapshot no longer replays it.
   await sender.declineInvite(roomId, targetAgent.id, "not now");
-  const declined = makeStore();
+  const declined = await makeStore();
   const deliveries2: DeliveryEvent[] = [];
   declined.onDelivery = (_id, ev) => {
     deliveries2.push(ev);

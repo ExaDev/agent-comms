@@ -8,14 +8,14 @@ import { MeshStore } from "../core/mesh-store.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
 import { wireTestTransport } from "./test-transport.js";
 
-function makeStore(): MeshStore {
+async function makeStore(): Promise<MeshStore> {
   const store = new MeshStore();
-  wireTestTransport(store);
+  await wireTestTransport(store);
   return store;
 }
 
 void test("createRoom sanitises a name containing spaces and dots instead of throwing", async () => {
-  const store = makeStore();
+  const store = await makeStore();
   const owner = await store.registerAgent({
     name: "owner",
     harness: "pi",
@@ -37,7 +37,7 @@ void test("createRoom sanitises a name containing spaces and dots instead of thr
 });
 
 void test("createRoom's sanitised id is what getRoom must be looked up by", async () => {
-  const store = makeStore();
+  const store = await makeStore();
   const owner = await store.registerAgent({
     name: "owner",
     harness: "pi",

@@ -30,7 +30,7 @@ const TEST_PORT = 19880;
 describe("listener policy", () => {
   void test("coordinator starts with a single default localhost listener", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     try {
       await store.init();
 
@@ -63,7 +63,7 @@ describe("listener policy", () => {
 
   void test("addListener creates an additional listener", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     try {
       await store.init();
 
@@ -93,7 +93,7 @@ describe("listener policy", () => {
 
   void test("removeListener removes a non-default listener", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     try {
       await store.init();
 
@@ -115,7 +115,7 @@ describe("listener policy", () => {
 
   void test("removeListener rejects removing the default listener", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     try {
       await store.init();
 
@@ -135,7 +135,7 @@ describe("listener policy", () => {
 
   void test("observe listener accepts connections but enforces policy", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     try {
       await store.init();
 
@@ -167,7 +167,7 @@ describe("listener policy", () => {
 
   void test("mesh_listeners action returns all listeners via CommsTool", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     try {
       await store.init();
 
@@ -204,7 +204,7 @@ describe("listener policy", () => {
 
   void test("mesh_interfaces action returns available network adapters", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     try {
       await store.init();
 
@@ -235,7 +235,7 @@ describe("listener policy", () => {
 
   void test("mesh_unlisten removes listener via CommsTool", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     try {
       await store.init();
 
@@ -268,7 +268,7 @@ describe("listener policy", () => {
 
   void test("mesh_listen adds listener via CommsTool", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     try {
       await store.init();
 

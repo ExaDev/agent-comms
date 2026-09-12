@@ -1,19 +1,41 @@
-/** Wires a real WireMeshTransport with a freshly generated identity onto a freshly constructed MeshStore -- the same setTransport() call every production bridge makes immediately after construction (via createBridgeMesh). MeshStore has no default transport, so every test that constructs one needs this (or an equivalent explicit setTransport() call) before init() or any other transport-using method runs. */
+/** Wires a real WireMeshTransport plus a persisted identity slot onto a freshly constructed MeshStore -- the same setTransport()/setIdentity() calls every production bridge makes immediately after construction (via createBridgeMesh). MeshStore has no default transport or identity, so every test that constructs one needs this (or an equivalent explicit wiring) before init(), createRoom(), or any other transport- or identity-using method runs. */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { tmpdir } from "node:os";
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
-import { generateIdentity } from "../core/identity.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
+import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
+import { loadOrCreateIdentity } from "../core/identity-store.js";
+import type { IdentitySlot } from "../core/identity-store.js";
+import { toIdentityPort } from "../core/wire-mesh-identity.js";
+import { nanoid } from "../core/nanoid.js";
 import type { MeshStore } from "../core/mesh-store.js";
 
-export function wireTestTransport(store: MeshStore): void {
-  const identity = generateIdentity();
+/** Wires store onto a fresh WireMeshTransport and a persisted identity slot, returning the slot so a test can inspect (or reuse) the persisted room tokens directly via loadRoomTokens(). Defaults to a throwaway temp-dir slot per call -- pass an explicit slot when a test needs the same identity to survive across more than one wireTestTransport call (e.g. simulating a restart). */
+export async function wireTestTransport(
+  store: MeshStore,
+  slot?: Readonly<IdentitySlot>,
+): Promise<IdentitySlot> {
+  const resolvedSlot: IdentitySlot = slot ?? {
+    harness: "test",
+    cwd: nanoid(8),
+    dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-identity-")),
+  };
+  const identity = loadOrCreateIdentity(resolvedSlot);
   // Every real bridge sets peerId to deviceIdToHex(identity.deviceId) before wiring the transport (createBridgeMesh) -- WireMeshTransport's own session bookkeeping is keyed by device-id, so a peer's advertised ID and the identity the other side actually authenticates the connection against must be the same value, or introduction/state-sync never recognises the peer as itself.
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   store.setTransport(new WireMeshTransport(store.events, identity));
+  store.setIdentity({
+    identity: await toIdentityPort(identity),
+    clock: createSystemClock(),
+    slot: resolvedSlot,
+  });
   // Surface transport-level errors instead of leaving them silent — a genuine socket failure during a test run is signal worth seeing even when the test's own assertions still pass, since it can point at a real race the assertions don't happen to catch.
   store.onError = (e) => {
     console.error(`[transport error, peerId=${store.peerId}]`, e.message);
   };
+  return resolvedSlot;
 }
 
 // Generous on purpose: waitFor returns the instant its condition holds, so a long ceiling costs nothing on the happy path (a local run settles in well under a second) and only matters for the worst case -- a loaded CI runner working through a real, sequential chain of TLS handshakes (each one genuine X.509 certificate work, not instant) for the accept-flow's second connection direction, confirmed to need meaningfully more than 5s on at least one real CI run.

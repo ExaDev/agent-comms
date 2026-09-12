@@ -19,7 +19,7 @@ async function createStore(
   harness: string,
 ): Promise<{ store: MeshStore; tool: CommsTool; deliveries: DeliveryEvent[] }> {
   const store = new MeshStore(E2E_PORT);
-  wireTestTransport(store);
+  await wireTestTransport(store);
 
   const deliveries: DeliveryEvent[] = [];
   store.onDelivery = (_agentId: string, event: DeliveryEvent) => {

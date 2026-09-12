@@ -63,7 +63,7 @@ async function cleanup(...stores: MeshStore[]): Promise<void> {
 async function testPushRoom(): Promise<void> {
   const port = await allocFreePort();
   const a = new MeshStore(port);
-  wireTestTransport(a);
+  await wireTestTransport(a);
   const deliveriesA: unknown[] = [];
   a.onDelivery = () => {
     deliveriesA.push(1);
@@ -80,7 +80,7 @@ async function testPushRoom(): Promise<void> {
   await sleep(100);
 
   const b = new MeshStore(port);
-  wireTestTransport(b);
+  await wireTestTransport(b);
   const deliveriesB: DeliveryEvent[] = [];
   b.onDelivery = (_id: string, ev: DeliveryEvent) => {
     deliveriesB.push(ev);
@@ -128,7 +128,7 @@ async function testPushRoom(): Promise<void> {
 async function testPushDm(): Promise<void> {
   const port = await allocFreePort();
   const a = new MeshStore(port);
-  wireTestTransport(a);
+  await wireTestTransport(a);
   const deliveriesA: unknown[] = [];
   a.onDelivery = () => {
     deliveriesA.push(1);
@@ -145,7 +145,7 @@ async function testPushDm(): Promise<void> {
   await sleep(100);
 
   const b = new MeshStore(port);
-  wireTestTransport(b);
+  await wireTestTransport(b);
   const deliveriesB: DeliveryEvent[] = [];
   b.onDelivery = (_id: string, ev: DeliveryEvent) => {
     deliveriesB.push(ev);
@@ -180,7 +180,7 @@ async function testPushDm(): Promise<void> {
 async function testDrainRoom(): Promise<void> {
   const port = await allocFreePort();
   const a = new MeshStore(port);
-  wireTestTransport(a);
+  await wireTestTransport(a);
   await a.init();
   await a.registerAgent({
     name: "a",
@@ -194,7 +194,7 @@ async function testDrainRoom(): Promise<void> {
 
   // B has NO onDelivery — events queue for drain
   const b = new MeshStore(port);
-  wireTestTransport(b);
+  await wireTestTransport(b);
   await b.init();
   await b.registerAgent({
     name: "b",
@@ -244,7 +244,7 @@ async function testDrainRoom(): Promise<void> {
 async function testDrainDm(): Promise<void> {
   const port = await allocFreePort();
   const a = new MeshStore(port);
-  wireTestTransport(a);
+  await wireTestTransport(a);
   await a.init();
   await a.registerAgent({
     name: "a",
@@ -257,7 +257,7 @@ async function testDrainDm(): Promise<void> {
   await sleep(100);
 
   const b = new MeshStore(port);
-  wireTestTransport(b);
+  await wireTestTransport(b);
   await b.init();
   await b.registerAgent({
     name: "b",
@@ -288,7 +288,7 @@ async function testDrainDm(): Promise<void> {
 async function testReadReceiptPush(): Promise<void> {
   const port = await allocFreePort();
   const a = new MeshStore(port);
-  wireTestTransport(a);
+  await wireTestTransport(a);
   const deliveriesA: DeliveryEvent[] = [];
   a.onDelivery = (_id: string, ev: DeliveryEvent) => {
     deliveriesA.push(ev);
@@ -305,7 +305,7 @@ async function testReadReceiptPush(): Promise<void> {
   await sleep(100);
 
   const b = new MeshStore(port);
-  wireTestTransport(b);
+  await wireTestTransport(b);
   b.onDelivery = () => {
     /* intentionally empty — dummy handler for drain delivery */
   };
@@ -347,7 +347,7 @@ async function testReadReceiptPush(): Promise<void> {
 async function testReadReceiptDrain(): Promise<void> {
   const port = await allocFreePort();
   const a = new MeshStore(port);
-  wireTestTransport(a);
+  await wireTestTransport(a);
   const deliveriesA: DeliveryEvent[] = [];
   a.onDelivery = (_id: string, ev: DeliveryEvent) => {
     deliveriesA.push(ev);
@@ -365,7 +365,7 @@ async function testReadReceiptDrain(): Promise<void> {
 
   // B has NO onDelivery — drain triggers markRead
   const b = new MeshStore(port);
-  wireTestTransport(b);
+  await wireTestTransport(b);
   await b.init();
   await b.registerAgent({
     name: "b",
@@ -409,7 +409,7 @@ async function testReadReceiptDrain(): Promise<void> {
 async function testReadbyArray(): Promise<void> {
   const port = await allocFreePort();
   const a = new MeshStore(port);
-  wireTestTransport(a);
+  await wireTestTransport(a);
   a.onDelivery = () => {
     /* intentionally empty — dummy handler for drain delivery */
   };
@@ -425,7 +425,7 @@ async function testReadbyArray(): Promise<void> {
   await sleep(100);
 
   const b = new MeshStore(port);
-  wireTestTransport(b);
+  await wireTestTransport(b);
   b.onDelivery = () => {
     /* intentionally empty — dummy handler for drain delivery */
   };
