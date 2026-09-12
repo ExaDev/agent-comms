@@ -1,3 +1,9 @@
+## [2.8.0](https://github.com/ExaDev/agent-comms/compare/v2.7.0...v2.8.0) (2026-09-12)
+
+### Features
+
+* **core:** implement the two-round DM consent flow ([481ec2a](https://github.com/ExaDev/agent-comms/commit/481ec2a2273d021fca79c5a5e7a51acd6aa42a16))
+
 ## [2.7.0](https://github.com/ExaDev/agent-comms/compare/v2.6.0...v2.7.0) (2026-09-12)
 
 ### Features
