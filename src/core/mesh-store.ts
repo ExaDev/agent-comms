@@ -1745,7 +1745,8 @@ export class MeshStore implements CommsStore {
     saveRoomToken(slot, roomPath, token);
 
     const parsed = parseRoomPath(roomPath);
-    const inviterId = parsed.kind === "owner-named" ? parsed.owner : this.peerId;
+    const inviterId =
+      parsed.kind === "owner-named" ? parsed.owner : this.peerId;
     const roomState = MeshStore.parseRoomStateExtension(
       parsedParams.data["room-state"],
     );
