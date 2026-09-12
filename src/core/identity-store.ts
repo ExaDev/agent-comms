@@ -42,6 +42,8 @@ interface StoredIdentity {
   certificate: string;
   expiresAt: string;
   roomTokens?: Record<string, SerializedCapabilityToken>;
+  /** The token-id (base64) of each room:member grant this identity has itself issued to another device, keyed by "roomPath::memberDeviceHex" -- the bookkeeping a room owner needs to revoke a specific member's own grant later (kickFromRoom), distinct from roomTokens above (which holds tokens this identity BEARS, not ones it issued). */
+  issuedGrants?: Record<string, string>;
 }
 
 function isSerializedCapabilityToken(
@@ -73,10 +75,19 @@ function isStoredIdentity(value: unknown): value is StoredIdentity {
     typeof value.expiresAt !== "string"
   )
     return false;
-  if (!("roomTokens" in value)) return true;
-  const { roomTokens } = value;
-  if (typeof roomTokens !== "object" || roomTokens === null) return false;
-  return Object.values(roomTokens).every(isSerializedCapabilityToken);
+  if ("roomTokens" in value) {
+    const { roomTokens } = value;
+    if (typeof roomTokens !== "object" || roomTokens === null) return false;
+    if (!Object.values(roomTokens).every(isSerializedCapabilityToken))
+      return false;
+  }
+  if ("issuedGrants" in value) {
+    const { issuedGrants } = value;
+    if (typeof issuedGrants !== "object" || issuedGrants === null) return false;
+    if (!Object.values(issuedGrants).every((v) => typeof v === "string"))
+      return false;
+  }
+  return true;
 }
 
 function serializeToken(token: CapabilityToken): SerializedCapabilityToken {
@@ -310,4 +321,65 @@ export function deleteRoomToken(slot: IdentitySlot, roomPath: string): void {
     Object.entries(stored.roomTokens).filter(([path]) => path !== roomPath),
   );
   writeStoredIdentity(identityFile, { ...stored, roomTokens });
+}
+
+function issuedGrantKey(roomPath: string, memberDeviceHex: string): string {
+  return `${roomPath}::${memberDeviceHex}`;
+}
+
+/**
+ * The token-id this identity itself minted for the given member's room:member grant, or undefined if none is on record (the slot has never admitted this member, or the record predates this bookkeeping). A room owner consults this to revoke a specific member's own grant later -- a token-id, unlike the token itself, is never presented on the wire and so is never obtainable except from this identity's own memory of having minted it.
+ */
+export function loadIssuedRoomGrant(
+  slot: IdentitySlot,
+  roomPath: string,
+  memberDeviceHex: string,
+): Uint8Array<ArrayBuffer> | undefined {
+  const { identityFile } = slotPaths(slot);
+  const stored = readStoredIdentity(identityFile);
+  const encoded =
+    stored?.issuedGrants?.[issuedGrantKey(roomPath, memberDeviceHex)];
+  return encoded === undefined
+    ? undefined
+    : Uint8Array.from(Buffer.from(encoded, "base64"));
+}
+
+/**
+ * Records the token-id of a room:member grant this identity has just minted for memberDeviceHex in roomPath, surviving a restart the same way roomTokens does. Overwrites any earlier record for the same (roomPath, member) pair -- a fresh join/invite always supersedes the grant it replaces, so only the current token-id is ever worth revoking.
+ */
+export function saveIssuedRoomGrant(
+  slot: IdentitySlot,
+  roomPath: string,
+  memberDeviceHex: string,
+  tokenId: Uint8Array,
+): void {
+  const { identityFile } = slotPaths(slot);
+  const stored = readStoredIdentity(identityFile);
+  if (stored === undefined) {
+    throw new Error(
+      `no identity persisted for this slot yet -- call loadOrCreateIdentity first (${identityFile})`,
+    );
+  }
+  const issuedGrants = {
+    ...stored.issuedGrants,
+    [issuedGrantKey(roomPath, memberDeviceHex)]:
+      Buffer.from(tokenId).toString("base64"),
+  };
+  writeStoredIdentity(identityFile, { ...stored, issuedGrants });
+}
+
+/** Removes the recorded token-id for one (roomPath, member) grant, if any -- called once a kick has revoked it, so a later re-join mints and records a genuinely fresh one rather than leaving a stale entry alongside it. A no-op if none was recorded. */
+export function deleteIssuedRoomGrant(
+  slot: IdentitySlot,
+  roomPath: string,
+  memberDeviceHex: string,
+): void {
+  const { identityFile } = slotPaths(slot);
+  const stored = readStoredIdentity(identityFile);
+  if (stored?.issuedGrants === undefined) return;
+  const key = issuedGrantKey(roomPath, memberDeviceHex);
+  const issuedGrants = Object.fromEntries(
+    Object.entries(stored.issuedGrants).filter(([k]) => k !== key),
+  );
+  writeStoredIdentity(identityFile, { ...stored, issuedGrants });
 }
