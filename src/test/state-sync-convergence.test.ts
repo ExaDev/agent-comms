@@ -6,9 +6,14 @@
 
 import * as assert from "node:assert/strict";
 import { test } from "node:test";
+import { deviceIdFromHex } from "wire-mesh-core/domain/device-id";
+import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
+import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
 import { MeshStore } from "../core/mesh-store.js";
 import type { SerialisedState } from "../core/wire-protocol.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
+import { loadOrCreateIdentity, saveRoomToken } from "../core/identity-store.js";
+import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { wireTestTransport } from "./test-transport.js";
 
 /** A local-only store: transport is set (registerAgent's own broadcastPatch needs one) but never started, so no ports and no flake -- the stores in these tests never actually connect. */
@@ -73,7 +78,8 @@ void test("a current holder rejects a stale snapshot instead of regressing", asy
 
 void test("room membership changes converge and stale member lists are rejected", async () => {
   const a = await makeStore();
-  const b = await makeStore();
+  const b = new MeshStore();
+  const bSlot = await wireTestTransport(b);
   const owner = await a.registerAgent({
     name: "owner",
     harness: "pi",
@@ -102,6 +108,22 @@ void test("room membership changes converge and stale member lists are rejected"
   a.applyStateSync(snapshotOf(b));
   b.applyStateSync(snapshotOf(a));
   assert.equal((await a.getRoom(roomId))?.members.includes(joiner.id), false);
+
+  // joiner.id is B's own peerId (registerAgent's own id is always this.peerId), so this is a real self-join as far as joinRoom's own admission gate is concerned -- give B a token for the room first so the gate sees an already-admitted member and exercises the CRDT membership-merge logic this test actually targets, not a real (and here, transport-free, therefore impossible) wire-level join.
+  const bClock = createSystemClock();
+  const bIdentity = await toIdentityPort(loadOrCreateIdentity(bSlot));
+  const grantVerdict = await mintCapabilityToken({
+    identity: bIdentity,
+    clock: bClock,
+    tokenId: new Uint8Array([1]),
+    bearer: deviceIdFromHex(joiner.id),
+    capability: "room:member",
+    scope: { kind: "room", path: roomId },
+    expires: bClock.now() + 60_000,
+    delegationsRemaining: 0,
+  });
+  assert.ok(grantVerdict.ok, "expected the fixture grant to mint successfully");
+  if (grantVerdict.ok) saveRoomToken(bSlot, roomId, grantVerdict.token);
 
   await b.joinRoom(roomId, joiner.id);
   a.applyStateSync(snapshotOf(b));
