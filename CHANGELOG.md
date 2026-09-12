@@ -1,3 +1,9 @@
+## [2.3.0](https://github.com/ExaDev/agent-comms/compare/v2.2.0...v2.3.0) (2026-09-12)
+
+### Features
+
+* **core:** persist a per-room capability token set in the identity slot ([a5601da](https://github.com/ExaDev/agent-comms/commit/a5601dad1b931a913fe97aca60346e4cb2f8708b)), references [#68](https://github.com/ExaDev/agent-comms/issues/68)
+
 ## [2.2.0](https://github.com/ExaDev/agent-comms/compare/v2.1.0...v2.2.0) (2026-09-12)
 
 ### Features
