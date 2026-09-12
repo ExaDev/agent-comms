@@ -44,7 +44,10 @@ import type {
   IncomingManageRequest,
   ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
-import { roomJoinOkSchema, roomSendSchema } from "wire-mesh-core/generated/protocol";
+import {
+  roomJoinOkSchema,
+  roomSendSchema,
+} from "wire-mesh-core/generated/protocol";
 import type { RoomVerbHandler } from "./room-router.js";
 import {
   ROOM_MEMBER_CAPABILITY,
