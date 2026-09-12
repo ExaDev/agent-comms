@@ -37,7 +37,9 @@ async function makePeer(
 ): Promise<Peer> {
   const store = new MeshStore(TEST_PORT);
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
-  store.setTransport(new WireMeshTransport(store.events, identity));
+  store.setTransport(
+    new WireMeshTransport(store.events, identity, store.roomVerbHandlers),
+  );
   store.setIdentity({
     identity: await toIdentityPort(identity),
     clock: createSystemClock(),

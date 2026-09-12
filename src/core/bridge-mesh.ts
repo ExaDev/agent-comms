@@ -33,7 +33,9 @@ export function createBridgeMeshSync(
   const identity = loadOrCreateIdentity(slot);
   const store = new MeshStore(coordinatorPort);
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
-  store.setTransport(new WireMeshTransport(store.events, identity));
+  store.setTransport(
+    new WireMeshTransport(store.events, identity, store.roomVerbHandlers),
+  );
   const tool = new CommsTool(store, store.discovery);
   return {
     store,

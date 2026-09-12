@@ -18,6 +18,12 @@
  */
 
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
+import type {
+  CapabilityScope,
+  CapabilityToken,
+  ManageCommand,
+} from "wire-mesh-core/generated/protocol";
+import type { ManageOutcome } from "wire-mesh-core/domain/mesh-session";
 
 // ---------------------------------------------------------------------------
 // Connection handle — opaque reference to a specific peer connection
@@ -197,6 +203,16 @@ export interface MeshTransport {
    * Broadcast a wire message to all connected peer data connections.
    */
   broadcast(message: MeshMessage): Promise<void>;
+
+  /**
+   * Sends a real core/room manage-request to a specific member's own established session, returning its outcome (e.g. a room.join request's granted-token, or a room.send's delivery receipt) rather than swallowing it the way send() does for the legacy opaque-frame path. Resolves to a not_connected error outcome if no live session to that member exists, rather than throwing -- the caller (currently room-join, and P3.5's directed fan-out once it lands) decides how to react to an unreachable member.
+   */
+  sendRoomRequest(
+    memberId: string,
+    command: ManageCommand,
+    scope: Readonly<CapabilityScope>,
+    token?: CapabilityToken,
+  ): Promise<ManageOutcome>;
 
   /**
    * Add a coordinator listener on a specific adapter.

@@ -25,7 +25,9 @@ export async function wireTestTransport(
   const identity = loadOrCreateIdentity(resolvedSlot);
   // Every real bridge sets peerId to deviceIdToHex(identity.deviceId) before wiring the transport (createBridgeMesh) -- WireMeshTransport's own session bookkeeping is keyed by device-id, so a peer's advertised ID and the identity the other side actually authenticates the connection against must be the same value, or introduction/state-sync never recognises the peer as itself.
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
-  store.setTransport(new WireMeshTransport(store.events, identity));
+  store.setTransport(
+    new WireMeshTransport(store.events, identity, store.roomVerbHandlers),
+  );
   store.setIdentity({
     identity: await toIdentityPort(identity),
     clock: createSystemClock(),

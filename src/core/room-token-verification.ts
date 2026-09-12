@@ -15,8 +15,8 @@ import type {
 } from "wire-mesh-core/generated/protocol";
 import { parseRoomPath } from "./room-path.js";
 
-/** The one capability that authorises every ordinary room-membership verb (room.send/read/leave/members) -- "one resource, not several", the same pattern exec:pty already uses for its own four inner verbs. room.join/room.invite are deliberately ungated and never reach this check at all. */
-const ROOM_MEMBER_CAPABILITY = "room:member";
+/** The one capability that authorises every ordinary room-membership verb (room.send/read/leave/members) -- "one resource, not several", the same pattern exec:pty already uses for its own four inner verbs. room.join/room.invite are deliberately ungated and never reach this check at all. This same string is also the outer manage-command's own verb for every room-domain command (gated or ungated): core/room's own convention puts the specific action in params.verb, with command.verb fixed to this capability name -- exported so wire-level command construction (see wire-mesh-transport.ts/mesh-store.ts) shares this one constant rather than a second, independently-typed copy of the same literal. */
+export const ROOM_MEMBER_CAPABILITY = "room:member";
 
 export type RoomTokenVerdictReason =
   | TokenVerdictReason

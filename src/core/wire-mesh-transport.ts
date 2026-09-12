@@ -13,10 +13,12 @@ import {
   acceptMeshSession,
   type AcceptedMeshSession,
   type IncomingManageRequest,
+  type ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import type {
   CapabilityScope,
+  CapabilityToken,
   ManageCommand,
 } from "wire-mesh-core/generated/protocol";
 import type {
@@ -39,6 +41,7 @@ import {
   createRoomRouter,
   extractMessage,
   type RoomRouter,
+  type RoomVerbHandler,
 } from "./room-router.js";
 
 // ---------------------------------------------------------------------------
@@ -150,14 +153,21 @@ export class WireMeshTransport implements MeshTransport {
   // -- The single consumer of every approved session's incomingManageRequests, once quarantine (if any) is past. Owns verb dispatch (the legacy opaque frame, plus whichever real core/room verbs later phases register handlers for) -- this transport itself no longer decodes or routes a MeshMessage at all beyond handing a session off here.
   private readonly roomRouter: RoomRouter;
 
-  constructor(events: TransportEvents, identity: Readonly<PeerIdentity>) {
+  constructor(
+    events: TransportEvents,
+    identity: Readonly<PeerIdentity>,
+    roomVerbHandlers?: Partial<Record<string, RoomVerbHandler>>,
+  ) {
     this.events = events;
     this.wireTransport = createTlsTransport({
       certificatePem: identity.certificate,
       privateKeyPem: identity.privateKey,
     });
     this.identityReady = toIdentityPort(identity);
-    this.roomRouter = createRoomRouter({ events });
+    this.roomRouter = createRoomRouter({
+      events,
+      ...(roomVerbHandlers !== undefined ? { handlers: roomVerbHandlers } : {}),
+    });
   }
 
   // -- Public getters --
@@ -486,6 +496,19 @@ export class WireMeshTransport implements MeshTransport {
         session.sendManageRequest(command, FRAME_SCOPE).catch(() => undefined),
       ),
     );
+  }
+
+  async sendRoomRequest(
+    memberId: string,
+    command: ManageCommand,
+    scope: Readonly<CapabilityScope>,
+    token?: CapabilityToken,
+  ): Promise<ManageOutcome> {
+    const session = this.peerSessions.get(memberId);
+    if (session === undefined) {
+      return { result: "error", code: "not_connected" };
+    }
+    return session.sendManageRequest(command, scope, undefined, token);
   }
 
   // -----------------------------------------------------------------------

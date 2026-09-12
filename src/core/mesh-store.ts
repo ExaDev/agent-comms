@@ -18,7 +18,12 @@ import * as os from "node:os";
 import { nanoid } from "./nanoid.js";
 import { CommsError } from "./store.js";
 import { normaliseWireState } from "./wire-protocol.js";
-import { dmRoomPath, ownerNamedRoomPath, slugRoomName } from "./room-path.js";
+import {
+  dmRoomPath,
+  ownerNamedRoomPath,
+  parseRoomPath,
+  slugRoomName,
+} from "./room-path.js";
 import type { SerialisedState } from "./wire-protocol.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
@@ -26,10 +31,20 @@ import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
 import { FederationManager } from "./federation.js";
 import type { FedLink } from "./federation.js";
 import { getCertificateFingerprint } from "./identity.js";
-import { deviceIdFromHex } from "wire-mesh-core/domain/device-id";
+import {
+  deviceIdFromHex,
+  deviceIdToHex,
+} from "wire-mesh-core/domain/device-id";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
 import type { IdentityPort } from "wire-mesh-core/ports/identity";
 import type { Clock } from "wire-mesh-core/ports/clock";
+import type {
+  IncomingManageRequest,
+  ManageOutcome,
+} from "wire-mesh-core/domain/mesh-session";
+import { roomJoinOkSchema } from "wire-mesh-core/generated/protocol";
+import type { RoomVerbHandler } from "./room-router.js";
+import { ROOM_MEMBER_CAPABILITY } from "./room-token-verification.js";
 import { saveRoomToken } from "./identity-store.js";
 import type { IdentitySlot } from "./identity-store.js";
 import { randomTokenId } from "./token-id.js";
@@ -141,6 +156,16 @@ export class MeshStore implements CommsStore {
   private pendingInboundConnections = new Map<
     string,
     { peerId: string; dataPort: number; name: string; fingerprint: string }
+  >();
+
+  // -- Pending room.join requests awaiting owner approval, keyed by `${roomPath}::${requesterId}` -- the held-open manage-request's own resolve() function is stored here so acceptRoomJoin/rejectRoomJoin can settle it in place, mirroring pendingInboundConnections' own pattern one layer up (room admission, not mesh admission).
+  private pendingRoomJoins = new Map<
+    string,
+    {
+      roomPath: string;
+      requesterId: string;
+      resolve: (decision: "accept" | "reject") => void;
+    }
   >();
 
   onDelivery:
@@ -1204,6 +1229,110 @@ export class MeshStore implements CommsStore {
     saveRoomToken(slot, roomPath, verdict.token);
   }
 
+  /**
+   * Room verb handlers this store registers with its own WireMeshTransport, keyed by params.verb per room-router.ts's own dispatch discipline. A getter (not a plain field) so every access reads through the current `this` binding without needing a constructor-time closure -- mirrors the `events` getter's own reasoning below.
+   */
+  get roomVerbHandlers(): Partial<Record<string, RoomVerbHandler>> {
+    return {
+      "room.join": (request, handle) => this.handleRoomJoin(request, handle),
+    };
+  }
+
+  /**
+   * Owner-side admission for an incoming room.join request against a named room this store owns. Holds the request open (mirroring WireMeshTransport.consumeQuarantined's own connect_request pattern) until acceptRoomJoin/rejectRoomJoin settles it, then mints the requester a fresh, independent, parent-less room:member grant -- see mintOwnerRootGrant's own comment for why this is NOT chained through the owner's root grant. Refuses outright, with no pending entry created, for anything this phase doesn't yet handle: a DM path (section 6's own two-round consent flow, not built here) or a named room this store isn't the owner of.
+   */
+  private async handleRoomJoin(
+    request: IncomingManageRequest,
+    handle: ConnectionHandle,
+  ): Promise<ManageOutcome> {
+    const roomPath = request.scope.path;
+    if (roomPath === undefined) {
+      return { result: "error", code: "missing_scope_path" };
+    }
+    const parsed = parseRoomPath(roomPath);
+    if (parsed.kind !== "owner-named") {
+      return { result: "error", code: "unsupported_room_kind" };
+    }
+    if (parsed.owner !== this.peerId) {
+      return { result: "error", code: "not_owner" };
+    }
+
+    const key = `${roomPath}::${handle.id}`;
+    const decision = await new Promise<"accept" | "reject">((resolve) => {
+      this.pendingRoomJoins.set(key, {
+        roomPath,
+        requesterId: handle.id,
+        resolve,
+      });
+    });
+    this.pendingRoomJoins.delete(key);
+    if (decision === "reject") {
+      return { result: "error", code: "denied" };
+    }
+
+    // Only identity/clock are needed here: the granted token belongs to the requester's own node, which persists it itself once it receives this response, not this store's own identity slot.
+    const { identity, clock } = this.requireIdentity();
+    const verdict = await mintCapabilityToken({
+      identity,
+      clock,
+      tokenId: randomTokenId(),
+      bearer: deviceIdFromHex(handle.id),
+      capability: "room:member",
+      scope: { kind: "room", path: roomPath },
+      expires: clock.now() + ROOM_TOKEN_LIFETIME_MS,
+      delegationsRemaining: 0,
+    });
+    if (!verdict.ok) {
+      return { result: "error", code: "mint_failed" };
+    }
+
+    const room = this.rooms.get(roomPath);
+    if (room !== undefined) {
+      this.bump(room);
+      this.recordMemberOp(room, "member", "join", handle.id);
+      this.refreshMembership(room);
+      this.rooms.set(roomPath, room);
+    }
+
+    const members = (room?.members ?? [this.peerId, handle.id]).map(
+      (memberId) => ({ device: deviceIdFromHex(memberId) }),
+    );
+    return { result: "ok", "granted-token": verdict.token, members };
+  }
+
+  /** Every room.join request currently held open awaiting this store's own accept/reject decision. */
+  listPendingRoomJoins(): { roomPath: string; requesterId: string }[] {
+    return [...this.pendingRoomJoins.values()].map(
+      ({ roomPath, requesterId }) => ({ roomPath, requesterId }),
+    );
+  }
+
+  /** Approves a pending room.join request, resuming handleRoomJoin's own suspended mint-and-respond continuation. */
+  acceptRoomJoin(roomPath: string, requesterId: string): void {
+    const key = `${roomPath}::${requesterId}`;
+    const pending = this.pendingRoomJoins.get(key);
+    if (pending === undefined) {
+      throw new CommsError(
+        `No pending room.join for ${requesterId} on ${roomPath}`,
+        "NOT_PENDING",
+      );
+    }
+    pending.resolve("accept");
+  }
+
+  /** Denies a pending room.join request. */
+  rejectRoomJoin(roomPath: string, requesterId: string): void {
+    const key = `${roomPath}::${requesterId}`;
+    const pending = this.pendingRoomJoins.get(key);
+    if (pending === undefined) {
+      throw new CommsError(
+        `No pending room.join for ${requesterId} on ${roomPath}`,
+        "NOT_PENDING",
+      );
+    }
+    pending.resolve("reject");
+  }
+
   async createRoom(opts: {
     name: string;
     type: RoomType;
@@ -1260,10 +1389,71 @@ export class MeshStore implements CommsStore {
     return result;
   }
 
+  /**
+   * The remote-join path: roomPath names an owner-named room this store has never seen replicated, so joining it means sending a real wire-level room.join request to the room's own owner and persisting whatever grant comes back, rather than mutating already-known local state. Only ever called for this store's own local agent (one bridge is one agent is one device, per the design's own organising fact) -- there is no wire mechanism by which this node could join a room on a different local agent's behalf.
+   */
+  private async joinRemoteRoom(
+    roomPath: string,
+    agentId: string,
+  ): Promise<Room> {
+    if (agentId !== this.peerId) {
+      throw new CommsError(`Room ${roomPath} not found`, "ROOM_NOT_FOUND");
+    }
+    const parsed = parseRoomPath(roomPath);
+    if (parsed.kind !== "owner-named") {
+      throw new CommsError(`Room ${roomPath} not found`, "ROOM_NOT_FOUND");
+    }
+
+    const outcome = await this.requireTransport().sendRoomRequest(
+      parsed.owner,
+      { verb: ROOM_MEMBER_CAPABILITY, params: { verb: "room.join" } },
+      { kind: "room", path: roomPath },
+    );
+    if (outcome.result !== "ok") {
+      throw new CommsError(
+        `Join request for ${roomPath} was refused (${outcome.code})`,
+        "JOIN_REFUSED",
+      );
+    }
+    const parsedOutcome = roomJoinOkSchema.safeParse(outcome);
+    if (!parsedOutcome.success) {
+      throw new CommsError(
+        `Join response for ${roomPath} was malformed`,
+        "MALFORMED_RESPONSE",
+      );
+    }
+    const { "granted-token": grantedToken, members: memberList } =
+      parsedOutcome.data;
+
+    const { slot } = this.requireIdentity();
+    saveRoomToken(slot, roomPath, grantedToken);
+
+    const members = memberList.map((member) => deviceIdToHex(member.device));
+    const room: Room = {
+      id: roomPath,
+      version: 1,
+      name: parsed.localName,
+      // The wire-level room.join response carries no room type or description -- that metadata is P3.6's own job (the room.members response's namespaced room-state extension). "public" is inert here rather than a real classification: the one place type is read (listRooms' secret-room filter) never hides a room from its own member, and this joiner is always in `members` by construction.
+      type: "public",
+      owner: parsed.owner,
+      createdAt: new Date().toISOString(),
+      description: "",
+      members,
+      invited: [],
+      memberJoins: Object.fromEntries(members.map((member) => [member, 1])),
+      memberLeaves: {},
+      invitedJoins: {},
+      invitedLeaves: {},
+      federated: false,
+    };
+    this.rooms.set(roomPath, room);
+    this.messages.set(roomPath, []);
+    return room;
+  }
+
   async joinRoom(roomId: string, agentId: string): Promise<Room> {
     const room = this.rooms.get(roomId);
-    if (!room)
-      throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
+    if (!room) return this.joinRemoteRoom(roomId, agentId);
 
     const alreadyMember = room.members.includes(agentId);
     if (!alreadyMember && room.type !== "public") {
