@@ -1,3 +1,21 @@
+## [2.10.0](https://github.com/ExaDev/agent-comms/compare/v2.9.0...v2.10.0) (2026-09-12)
+
+### Features
+
+* **core:** fan out room.send to every member over directed wire sends ([be4e933](https://github.com/ExaDev/agent-comms/commit/be4e93381e4edd0b94363f15270e435eb5f63108))
+
+### Bug Fixes
+
+* **deps:** bump wire-mesh-core to 1.1.0 for bytesFromHex ([c0c5964](https://github.com/ExaDev/agent-comms/commit/c0c59645c9ab89548c5436296c459026500ba20d)), references [ExaDev/wire-mesh#90](https://github.com/ExaDev/wire-mesh/issues/90)
+
+### Tests
+
+* admit real room joins before sending across integration tests ([5d2925f](https://github.com/ExaDev/agent-comms/commit/5d2925f7e8a0aea4f14a83df0737abc2c37501da))
+* **core:** cover the directed room.send retry queue ([cbba2a6](https://github.com/ExaDev/agent-comms/commit/cbba2a6c6c007dad3b54a13b944b40672df5e299))
+* give the self-join CRDT-merge test a token before joinRoom ([6e72948](https://github.com/ExaDev/agent-comms/commit/6e729483854d2a6eda957c01bb14f6a41edef0d9))
+* replace downtime-replay.integration.test.ts with the retry-queue version ([39ef09d](https://github.com/ExaDev/agent-comms/commit/39ef09db48faabeaa97b8b01535140a7185c299d)), references [#28](https://github.com/ExaDev/agent-comms/issues/28)
+* split invite replay out of downtime-replay.test.ts ([0a41a07](https://github.com/ExaDev/agent-comms/commit/0a41a07870c9a7110b4e6dead49f2518f1160660))
+
 ## [2.9.0](https://github.com/ExaDev/agent-comms/compare/v2.8.0...v2.9.0) (2026-09-12)
 
 ### Features
