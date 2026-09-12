@@ -212,6 +212,7 @@ describe("joinRoom (requester side, remote path)", () => {
       rejectConnection: async () => {},
       connectToRemote: async () => {},
       broadcast: async () => {},
+      broadcastRevocation: async () => {},
       sendRoomRequest: async (_memberId, command, scope) => {
         capturedRoomPath = scope.path;
         assert.deepEqual(command.params, { verb: "room.join" });

@@ -20,6 +20,7 @@ import type {
   CapabilityScope,
   CapabilityToken,
   ManageCommand,
+  RevocationEntry,
 } from "wire-mesh-core/generated/protocol";
 import type {
   Connection,
@@ -305,12 +306,22 @@ export class WireMeshTransport implements MeshTransport {
     })();
   }
 
-  /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. */
+  /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch. */
   private consumeIncoming(
     session: AcceptedMeshSession,
     handle: ConnectionHandle,
   ): void {
     this.roomRouter.drainSession(session, handle);
+    this.drainRevocationAnnouncements(session);
+  }
+
+  /** Reads every revocation-entry this session's peer announces, for as long as the session lives, handing each one to MeshStore via onRevocationAnnounce -- one call per entry, matching revocationAnnouncements' own per-entry flattening of a revocation-announce frame's entries array. */
+  private drainRevocationAnnouncements(session: AcceptedMeshSession): void {
+    void (async () => {
+      for await (const entry of session.revocationAnnouncements) {
+        this.events.onRevocationAnnounce(entry);
+      }
+    })();
   }
 
   private watchForDisconnect(
@@ -494,6 +505,16 @@ export class WireMeshTransport implements MeshTransport {
     await Promise.all(
       [...this.peerSessions.values()].map((session) =>
         session.sendManageRequest(command, FRAME_SCOPE).catch(() => undefined),
+      ),
+    );
+  }
+
+  async broadcastRevocation(
+    entries: readonly RevocationEntry[],
+  ): Promise<void> {
+    await Promise.all(
+      [...this.peerSessions.values()].map((session) =>
+        session.sendRevocationAnnounce(entries).catch(() => undefined),
       ),
     );
   }
