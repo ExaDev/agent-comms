@@ -1,3 +1,13 @@
+## [2.12.0](https://github.com/ExaDev/agent-comms/compare/v2.11.0...v2.12.0) (2026-09-12)
+
+### Features
+
+* **core:** sync real room name, description, and type on join ([c42e3d8](https://github.com/ExaDev/agent-comms/commit/c42e3d87c3bd877eeecc2f44401fca2be3b88247))
+
+### Tests
+
+* **core:** cover room-state sync on join and refresh ([6e53365](https://github.com/ExaDev/agent-comms/commit/6e53365e32ac152fef22fc0b6a8345f0579924a5))
+
 ## [2.11.0](https://github.com/ExaDev/agent-comms/compare/v2.10.0...v2.11.0) (2026-09-12)
 
 ### Features
