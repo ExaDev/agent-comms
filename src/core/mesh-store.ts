@@ -47,6 +47,7 @@ import type {
 } from "wire-mesh-core/domain/mesh-session";
 import {
   roomJoinOkSchema,
+  roomMembersOkSchema,
   roomReadSchema,
   roomSendSchema,
 } from "wire-mesh-core/generated/protocol";
@@ -69,7 +70,7 @@ import type {
   TransportEvents,
 } from "./transport.js";
 import type { CommsStore } from "./comms-store.js";
-import { StreamingBehavior } from "./types.js";
+import { RoomType, StreamingBehavior } from "./types.js";
 import type {
   AgentIdentity,
   AgentStatus,
@@ -80,7 +81,6 @@ import type {
   NetworkInterface,
   Room,
   RoomMessage,
-  RoomType,
   Visibility,
 } from "./types.js";
 import type { ListenerInfo, ListenerPolicy } from "./transport.js";
@@ -1253,6 +1253,8 @@ export class MeshStore implements CommsStore {
       "room.join": (request, handle) => this.handleRoomJoin(request, handle),
       "room.send": (request, handle) => this.handleRoomSend(request, handle),
       "room.read": (request, handle) => this.handleRoomRead(request, handle),
+      "room.members": (request, handle) =>
+        this.handleRoomMembers(request, handle),
     };
   }
 
@@ -1404,6 +1406,50 @@ export class MeshStore implements CommsStore {
     }
 
     return { result: "ok" };
+  }
+
+  /**
+   * Receiving side of room.members (P3.6): a plain membership + room-state refresh for an already-admitted member, verified the same way handleRoomSend/handleRoomRead are -- room.members grants nothing new, it just answers "who's here, and what's this room called" on demand, the same information room.join's own response already carries at admission time. A DM path has no Room record (this.rooms never holds one for a dm-shaped path) and no name/description/type to report, so its own members list is derived directly from the path's own two participants instead.
+   */
+  private async handleRoomMembers(
+    request: IncomingManageRequest,
+    handle: ConnectionHandle,
+  ): Promise<ManageOutcome> {
+    const roomPath = request.scope.path;
+    if (roomPath === undefined) {
+      return { result: "error", code: "missing_scope_path" };
+    }
+    if (request.token === undefined) {
+      return { result: "error", code: "unauthorized" };
+    }
+    const { identity, clock, revocation } = this.requireIdentity();
+    const verdict = await verifyRoomToken(request.token, {
+      identity,
+      clock,
+      revocation,
+      expectedBearer: deviceIdFromHex(handle.id),
+      roomPath,
+    });
+    if (!verdict.ok) {
+      return { result: "error", code: "unauthorized" };
+    }
+
+    const parsedPath = parseRoomPath(roomPath);
+    const room = this.rooms.get(roomPath);
+    const members =
+      parsedPath.kind === "dm"
+        ? parsedPath.participants.map((device) => ({
+            device: deviceIdFromHex(device),
+          }))
+        : (room?.members ?? []).map((memberId) => ({
+            device: deviceIdFromHex(memberId),
+          }));
+
+    return {
+      result: "ok",
+      members,
+      ...MeshStore.roomStateExtension(room),
+    };
   }
 
   /**
@@ -1582,7 +1628,46 @@ export class MeshStore implements CommsStore {
     const members = (room?.members ?? [this.peerId, handle.id]).map(
       (memberId) => ({ device: deviceIdFromHex(memberId) }),
     );
-    return { result: "ok", "granted-token": verdict.token, members };
+    return {
+      result: "ok",
+      "granted-token": verdict.token,
+      members,
+      ...MeshStore.roomStateExtension(room),
+    };
+  }
+
+  /**
+   * Room metadata (name/description/type) riding room-join-ok/room-members-ok's own open extension tail (P3.6), agent-comms' own convention for the "namespaced room-state extension" the design names -- core/room itself has no concept of a display name or description, so this is application data, not a wire-level field. Absent entirely for a DM path (room is undefined there; a DM has no name/description/type to report) rather than a hollow placeholder.
+   */
+  private static roomStateExtension(room: Readonly<Room> | undefined): {
+    "room-state"?: { name: string; description: string; type: RoomType };
+  } {
+    if (room === undefined) return {};
+    return {
+      "room-state": {
+        name: room.name,
+        description: room.description,
+        type: room.type,
+      },
+    };
+  }
+
+  /** The receiving-side counterpart of roomStateExtension: narrows an incoming response's own "room-state" field (an unknown, since it rides the wire schema's open catchall tail) to the shape this store's own convention actually sends, or undefined for a peer running without it (an older version, or a DM's own room-join-ok, which never carries one). */
+  private static parseRoomStateExtension(
+    value: unknown,
+  ): { name: string; description: string; type: RoomType } | undefined {
+    if (typeof value !== "object" || value === null) return undefined;
+    if (!("name" in value) || !("description" in value) || !("type" in value))
+      return undefined;
+    if (typeof value.name !== "string" || typeof value.description !== "string")
+      return undefined;
+    const parsedType = RoomType.safeParse(value.type);
+    if (!parsedType.success) return undefined;
+    return {
+      name: value.name,
+      description: value.description,
+      type: parsedType.data,
+    };
   }
 
   /** Every room.join request currently held open awaiting this store's own accept/reject decision. */
@@ -1717,15 +1802,18 @@ export class MeshStore implements CommsStore {
     saveRoomToken(slot, roomPath, grantedToken);
 
     const members = memberList.map((member) => deviceIdToHex(member.device));
+    const roomState = MeshStore.parseRoomStateExtension(
+      parsedOutcome.data["room-state"],
+    );
     const room: Room = {
       id: roomPath,
       version: 1,
-      name: parsed.localName,
-      // The wire-level room.join response carries no room type or description -- that metadata is P3.6's own job (the room.members response's namespaced room-state extension). "public" is inert here rather than a real classification: the one place type is read (listRooms' secret-room filter) never hides a room from its own member, and this joiner is always in `members` by construction.
-      type: "public",
+      name: roomState?.name ?? parsed.localName,
+      // Falls back to "public" only against a peer running without the room-state extension (an older version); this joiner is always in `members` by construction regardless, so a stale "public" classification here never hides the room from its own member -- the one place type is read (listRooms' secret-room filter).
+      type: roomState?.type ?? "public",
       owner: parsed.owner,
       createdAt: new Date().toISOString(),
-      description: "",
+      description: roomState?.description ?? "",
       members,
       invited: [],
       memberJoins: Object.fromEntries(members.map((member) => [member, 1])),
@@ -1736,6 +1824,70 @@ export class MeshStore implements CommsStore {
     };
     this.rooms.set(roomPath, room);
     this.messages.set(roomPath, []);
+    return room;
+  }
+
+  /**
+   * Refreshes this store's own local copy of a named room's membership and room-state via a real room.members request (P3.6): the same information room.join's own response carries at admission time, available on demand for a member whose local copy may have drifted (a kick, an invite, a rename since it joined). Sent to the room's own owner, the authoritative source for that room's real state. Named rooms only, matching joinRemoteRoom's own restriction -- a DM's "membership" is already fully known from the path itself (the sorted pair of exactly two participants), and this codebase has no Room-object representation for a DM to refresh into (DM state lives in this.dms, keyed by message history, not this.rooms). Throws if this store holds no room:member token for roomPath -- refreshing membership presupposes already being a member, the same NOT_A_MEMBER contract sendRoomMessageDirected already uses.
+   */
+  async refreshRoomMembers(roomPath: string): Promise<Room> {
+    const parsed = parseRoomPath(roomPath);
+    if (parsed.kind !== "owner-named") {
+      throw new CommsError(`Room ${roomPath} not found`, "ROOM_NOT_FOUND");
+    }
+    const { slot } = this.requireIdentity();
+    const token = loadRoomTokens(slot)[roomPath];
+    if (token === undefined) {
+      throw new CommsError(
+        `No room:member token for ${roomPath}`,
+        "NOT_MEMBER",
+      );
+    }
+
+    const outcome = await this.requireTransport().sendRoomRequest(
+      parsed.owner,
+      { verb: ROOM_MEMBER_CAPABILITY, params: { verb: "room.members" } },
+      { kind: "room", path: roomPath },
+      token,
+    );
+    if (outcome.result !== "ok") {
+      throw new CommsError(
+        `room.members refresh for ${roomPath} failed (${outcome.code})`,
+        "REFRESH_FAILED",
+      );
+    }
+    const parsedOutcome = roomMembersOkSchema.safeParse(outcome);
+    if (!parsedOutcome.success) {
+      throw new CommsError(
+        `room.members response for ${roomPath} was malformed`,
+        "MALFORMED_RESPONSE",
+      );
+    }
+    const members = parsedOutcome.data.members.map((member) =>
+      deviceIdToHex(member.device),
+    );
+    const roomState = MeshStore.parseRoomStateExtension(
+      parsedOutcome.data["room-state"],
+    );
+
+    const existing = this.rooms.get(roomPath);
+    const room: Room = {
+      id: roomPath,
+      version: (existing?.version ?? 0) + 1,
+      name: roomState?.name ?? existing?.name ?? parsed.localName,
+      type: roomState?.type ?? existing?.type ?? "public",
+      owner: parsed.owner,
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      description: roomState?.description ?? existing?.description ?? "",
+      members,
+      invited: existing?.invited ?? [],
+      memberJoins: Object.fromEntries(members.map((member) => [member, 1])),
+      memberLeaves: {},
+      invitedJoins: existing?.invitedJoins ?? {},
+      invitedLeaves: existing?.invitedLeaves ?? {},
+      federated: existing?.federated ?? false,
+    };
+    this.rooms.set(roomPath, room);
     return room;
   }
 
