@@ -32,22 +32,27 @@ import { FederationManager } from "./federation.js";
 import type { FedLink } from "./federation.js";
 import { getCertificateFingerprint } from "./identity.js";
 import {
+  bytesToHex,
   deviceIdFromHex,
   deviceIdToHex,
 } from "wire-mesh-core/domain/device-id";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
+import type { RevocationCheck } from "wire-mesh-core/domain/tokens";
 import type { IdentityPort } from "wire-mesh-core/ports/identity";
 import type { Clock } from "wire-mesh-core/ports/clock";
 import type {
   IncomingManageRequest,
   ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
-import { roomJoinOkSchema } from "wire-mesh-core/generated/protocol";
+import { roomJoinOkSchema, roomSendSchema } from "wire-mesh-core/generated/protocol";
 import type { RoomVerbHandler } from "./room-router.js";
-import { ROOM_MEMBER_CAPABILITY } from "./room-token-verification.js";
-import { saveRoomToken } from "./identity-store.js";
+import {
+  ROOM_MEMBER_CAPABILITY,
+  verifyRoomToken,
+} from "./room-token-verification.js";
+import { loadRoomTokens, saveRoomToken } from "./identity-store.js";
 import type { IdentitySlot } from "./identity-store.js";
-import { randomTokenId } from "./token-id.js";
+import { randomId } from "./random-id.js";
 import type { MeshMessage, MeshStatePatch, PeerInfo } from "./wire-protocol.js";
 import type {
   ConnectionHandle,
@@ -83,6 +88,7 @@ export interface MeshStoreIdentity {
   identity: IdentityPort;
   clock: Clock;
   slot: IdentitySlot;
+  revocation: RevocationCheck;
 }
 
 /**
@@ -1221,7 +1227,7 @@ export class MeshStore implements CommsStore {
     const verdict = await mintCapabilityToken({
       identity,
       clock,
-      tokenId: randomTokenId(),
+      tokenId: randomId(),
       bearer: deviceIdFromHex(owner),
       capability: "room:member",
       scope: { kind: "room", path: roomPath },
@@ -1242,7 +1248,97 @@ export class MeshStore implements CommsStore {
   get roomVerbHandlers(): Partial<Record<string, RoomVerbHandler>> {
     return {
       "room.join": (request, handle) => this.handleRoomJoin(request, handle),
+      "room.send": (request, handle) => this.handleRoomSend(request, handle),
     };
+  }
+
+  /**
+   * Receiving side of a directed room.send (P3.5): verifies the presented token against all six of core/room's own obligations, then delivers the message locally exactly once -- the manage-response this returns IS the delivery receipt, so there is no separate "delivered" event to emit the way the legacy broadcastPatch path needed one.
+   */
+  private async handleRoomSend(
+    request: IncomingManageRequest,
+    handle: ConnectionHandle,
+  ): Promise<ManageOutcome> {
+    const roomPath = request.scope.path;
+    if (roomPath === undefined) {
+      return { result: "error", code: "missing_scope_path" };
+    }
+    if (request.token === undefined) {
+      return { result: "error", code: "unauthorized" };
+    }
+    const { identity, clock, revocation } = this.requireIdentity();
+    const verdict = await verifyRoomToken(request.token, {
+      identity,
+      clock,
+      revocation,
+      expectedBearer: deviceIdFromHex(handle.id),
+      roomPath,
+    });
+    if (!verdict.ok) {
+      return { result: "error", code: "unauthorized" };
+    }
+
+    const parsedParams = roomSendSchema.safeParse(request.command.params);
+    if (!parsedParams.success) {
+      return { result: "error", code: "malformed_params" };
+    }
+    const params = parsedParams.data;
+
+    const message: RoomMessage = {
+      id: bytesToHex(params["message-id"]),
+      from: handle.id,
+      room: roomPath,
+      content: params.text,
+      timestamp: new Date(params["sent-at"]).toISOString(),
+      readBy: [handle.id],
+    };
+    const history = this.messages.get(roomPath) ?? [];
+    history.push(message);
+    this.messages.set(roomPath, history);
+
+    const event: DeliveryEvent = { type: "room_message", message };
+    this.queueDelivery(this.peerId, event);
+    this.fireLocalDelivery(this.peerId, event);
+
+    return { result: "ok" };
+  }
+
+  /**
+   * Sends one directed room.send to a single member's own session, attaching this store's own persisted room:member token for the given room path -- the primitive P3.5's own directed fan-out (deliverToRoom) will loop over per member once it replaces the legacy broadcastPatch path this store still uses for message delivery today. Throws if this store holds no token for the room: never a member, or a token that expired or was revoked with nothing fresh persisted in its place.
+   */
+  async sendRoomMessageDirected(
+    roomPath: string,
+    memberId: string,
+    text: string,
+  ): Promise<void> {
+    const { slot, clock } = this.requireIdentity();
+    const token = loadRoomTokens(slot)[roomPath];
+    if (token === undefined) {
+      throw new CommsError(
+        `No room:member token for ${roomPath}`,
+        "NOT_A_MEMBER",
+      );
+    }
+    const outcome = await this.requireTransport().sendRoomRequest(
+      memberId,
+      {
+        verb: ROOM_MEMBER_CAPABILITY,
+        params: {
+          verb: "room.send",
+          "message-id": randomId(),
+          "sent-at": clock.now(),
+          text,
+        },
+      },
+      { kind: "room", path: roomPath },
+      token,
+    );
+    if (outcome.result !== "ok") {
+      throw new CommsError(
+        `room.send to ${memberId} for ${roomPath} failed (${outcome.code})`,
+        "SEND_FAILED",
+      );
+    }
   }
 
   /**
@@ -1302,7 +1398,7 @@ export class MeshStore implements CommsStore {
     const verdict = await mintCapabilityToken({
       identity,
       clock,
-      tokenId: randomTokenId(),
+      tokenId: randomId(),
       bearer: deviceIdFromHex(handle.id),
       capability: "room:member",
       scope: { kind: "room", path: roomPath },

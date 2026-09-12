@@ -18,6 +18,7 @@ import {
   deviceIdToHex,
 } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
+import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
 import { MeshStore } from "../core/mesh-store.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
@@ -174,6 +175,7 @@ describe("joinRoom (requester side, remote path)", () => {
       identity: identityPort,
       clock: createSystemClock(),
       slot,
+      revocation: createRevocationView(),
     });
 
     const ownerId = "f".repeat(64);

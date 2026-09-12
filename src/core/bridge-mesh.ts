@@ -8,6 +8,7 @@
 
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
+import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
 import { MeshStore } from "./mesh-store.js";
 import { CommsTool } from "./tool.js";
 import { WireMeshTransport } from "./wire-mesh-transport.js";
@@ -37,6 +38,7 @@ export function createBridgeMeshSync(
     new WireMeshTransport(store.events, identity, store.roomVerbHandlers),
   );
   const tool = new CommsTool(store, store.discovery);
+  const revocation = createRevocationView();
   return {
     store,
     tool,
@@ -45,6 +47,7 @@ export function createBridgeMeshSync(
         identity: await toIdentityPort(identity),
         clock: createSystemClock(),
         slot,
+        revocation,
       });
     },
   };
