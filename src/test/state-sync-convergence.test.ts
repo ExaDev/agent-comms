@@ -129,9 +129,9 @@ void test("room membership changes converge and stale member lists are rejected"
   a.applyStateSync(snapshotOf(b));
   assert.equal((await a.getRoom(roomId))?.members.includes(joiner.id), true);
 
-  // The joiner leaves; A (now current) must drop them — the union-only merge could never remove a leaver.
-  await b.leaveRoom(roomId, joiner.id);
-  a.applyStateSync(snapshotOf(b));
+  // The joiner leaves. Unlike the join step above, there is no token-presence gate to skip here: any genuine member always already holds one, so leaveRoom's own self-leave gate (P3.8) always routes joiner.id === b.peerId through a real, and here impossible, wire round trip to the room's owner. Run the leave on A (the room's real owner) instead -- joiner.id !== a.peerId there, so it takes the same pure local CRDT branch the "kicker" test below already exercises -- and let B converge to A's own now-current state, exactly mirroring the join step's own direction reversed.
+  await a.leaveRoom(roomId, joiner.id);
+  b.applyStateSync(snapshotOf(a));
   assert.equal((await a.getRoom(roomId))?.members.includes(joiner.id), false);
 
   // A stale member list that still contains them is rejected.
