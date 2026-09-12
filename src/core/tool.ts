@@ -61,6 +61,9 @@ export interface MeshOnlyFeatures {
     name: string;
     fingerprint: string;
   }[];
+  acceptRoomJoin?(roomPath: string, requesterId: string): void;
+  rejectRoomJoin?(roomPath: string, requesterId: string, reason?: string): void;
+  listPendingRoomJoins?(): { roomPath: string; requesterId: string }[];
   connectToRemote?(host: string, port: number): Promise<void>;
   setVisibility?(level: MeshVisibility, adapter?: string): Promise<void>;
   getVisibility?(adapter?: string): MeshVisibility;
@@ -121,6 +124,12 @@ export class CommsTool {
           return await this.meshReject(ctx, action);
         case "mesh_pending":
           return this.meshPending(ctx);
+        case "room_accept":
+          return this.roomAccept(ctx, action);
+        case "room_reject":
+          return this.roomReject(ctx, action);
+        case "room_pending":
+          return this.roomPending(ctx);
         case "mesh_discover":
           return await this.meshDiscover(action);
         case "mesh_advertise":
@@ -796,6 +805,57 @@ export class CommsTool {
     );
     return {
       content: `Pending connections:\n${lines.join("\n")}`,
+      isError: false,
+    };
+  }
+
+  private roomAccept(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "room_accept" },
+  ): CommsResult {
+    if (!this.store.acceptRoomJoin) return notMeshBacked("room_accept");
+    try {
+      this.store.acceptRoomJoin(action.room, action.requesterId);
+      return {
+        content: `Accepted ${action.requesterId}'s request to join ${action.room}.`,
+        isError: false,
+      };
+    } catch (err) {
+      return {
+        content: `Failed to accept: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  private roomReject(
+    _ctx: CommsContext,
+    action: CommsAction & { action: "room_reject" },
+  ): CommsResult {
+    if (!this.store.rejectRoomJoin) return notMeshBacked("room_reject");
+    try {
+      this.store.rejectRoomJoin(action.room, action.requesterId, action.reason);
+      return {
+        content: `Rejected ${action.requesterId}'s request to join ${action.room}.`,
+        isError: false,
+      };
+    } catch (err) {
+      return {
+        content: `Failed to reject: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+  }
+
+  private roomPending(_ctx: CommsContext): CommsResult {
+    if (!this.store.listPendingRoomJoins) return notMeshBacked("room_pending");
+    const pending = this.store.listPendingRoomJoins();
+    if (pending.length === 0)
+      return { content: "No pending room join requests.", isError: false };
+
+    const lines = pending.map((p) => `${p.roomPath}  ${p.requesterId}`);
+    return {
+      content: `Pending room join requests:\n${lines.join("\n")}`,
       isError: false,
     };
   }

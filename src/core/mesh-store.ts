@@ -90,6 +90,10 @@ export interface MeshStoreIdentity {
  */
 const ROOM_TOKEN_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** A human's decision on a pending room.join request -- reject carries an optional reason, mirroring rejectConnection's own equivalent room-independent decision. */
+type RoomJoinDecision =
+  { kind: "accept" } | { kind: "reject"; reason?: string };
+
 /**
  * Bound on pending delivery events held per target agent. Events beyond the
  * bound drop oldest-first: a long-offline agent's queue cannot grow without
@@ -164,7 +168,7 @@ export class MeshStore implements CommsStore {
     {
       roomPath: string;
       requesterId: string;
-      resolve: (decision: "accept" | "reject") => void;
+      resolve: (decision: RoomJoinDecision) => void;
     }
   >();
 
@@ -1258,7 +1262,7 @@ export class MeshStore implements CommsStore {
     }
 
     const key = `${roomPath}::${handle.id}`;
-    const decision = await new Promise<"accept" | "reject">((resolve) => {
+    const decision = await new Promise<RoomJoinDecision>((resolve) => {
       this.pendingRoomJoins.set(key, {
         roomPath,
         requesterId: handle.id,
@@ -1266,8 +1270,12 @@ export class MeshStore implements CommsStore {
       });
     });
     this.pendingRoomJoins.delete(key);
-    if (decision === "reject") {
-      return { result: "error", code: "denied" };
+    if (decision.kind === "reject") {
+      return {
+        result: "error",
+        code: "denied",
+        ...(decision.reason !== undefined ? { message: decision.reason } : {}),
+      };
     }
 
     // Only identity/clock are needed here: the granted token belongs to the requester's own node, which persists it itself once it receives this response, not this store's own identity slot.
@@ -1317,11 +1325,11 @@ export class MeshStore implements CommsStore {
         "NOT_PENDING",
       );
     }
-    pending.resolve("accept");
+    pending.resolve({ kind: "accept" });
   }
 
-  /** Denies a pending room.join request. */
-  rejectRoomJoin(roomPath: string, requesterId: string): void {
+  /** Denies a pending room.join request, optionally with a reason surfaced to the requester in the resulting manage-error's own message field. */
+  rejectRoomJoin(roomPath: string, requesterId: string, reason?: string): void {
     const key = `${roomPath}::${requesterId}`;
     const pending = this.pendingRoomJoins.get(key);
     if (pending === undefined) {
@@ -1330,7 +1338,10 @@ export class MeshStore implements CommsStore {
         "NOT_PENDING",
       );
     }
-    pending.resolve("reject");
+    pending.resolve({
+      kind: "reject",
+      ...(reason !== undefined ? { reason } : {}),
+    });
   }
 
   async createRoom(opts: {
