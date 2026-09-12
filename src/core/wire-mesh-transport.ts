@@ -24,7 +24,6 @@ import type {
   Listener,
   Transport,
 } from "wire-mesh-core/ports/transport";
-import { isMeshMessage } from "./wire-protocol.js";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
 import type {
   ConnectionHandle,
@@ -36,6 +35,11 @@ import type {
 import type { PeerIdentity } from "./identity.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
 import { nanoid } from "./nanoid.js";
+import {
+  createRoomRouter,
+  extractMessage,
+  type RoomRouter,
+} from "./room-router.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -60,16 +64,6 @@ export const FRAME_SCOPE: Readonly<CapabilityScope> = {
 
 export function buildCommand(message: MeshMessage): ManageCommand {
   return { verb: FRAME_VERB, params: { message } };
-}
-
-/** Extracts and validates the carried MeshMessage from an incoming command. Returns undefined for anything that isn't a well-formed frame -- an unrecognised or malformed payload is dropped, not thrown, the same tolerance TlsTransport's own frame parser already extends to input it can't make sense of. */
-function extractMessage(command: ManageCommand): MeshMessage | undefined {
-  if (command.verb !== FRAME_VERB) return undefined;
-  const params: unknown = command.params;
-  if (typeof params !== "object" || params === null) return undefined;
-  if (!("message" in params)) return undefined;
-  const message: unknown = params.message;
-  return isMeshMessage(message) ? message : undefined;
 }
 
 /** Reads the port a listener actually bound, from its own reported address -- never the port it was asked to bind, which is 0 whenever the caller wanted the OS to assign a free one. Bookkeeping that stores the requested port instead silently reports 0 for every OS-assigned listener. */
@@ -153,6 +147,9 @@ export class WireMeshTransport implements MeshTransport {
   // -- connect_request frames awaiting a human accept/reject decision, keyed by the requester's device-id hex --
   private pendingConnections = new Map<string, PendingConnection>();
 
+  // -- The single consumer of every approved session's incomingManageRequests, once quarantine (if any) is past. Owns verb dispatch (the legacy opaque frame, plus whichever real core/room verbs later phases register handlers for) -- this transport itself no longer decodes or routes a MeshMessage at all beyond handing a session off here.
+  private readonly roomRouter: RoomRouter;
+
   constructor(events: TransportEvents, identity: Readonly<PeerIdentity>) {
     this.events = events;
     this.wireTransport = createTlsTransport({
@@ -160,6 +157,7 @@ export class WireMeshTransport implements MeshTransport {
       privateKeyPem: identity.privateKey,
     });
     this.identityReady = toIdentityPort(identity);
+    this.roomRouter = createRoomRouter({ events });
   }
 
   // -- Public getters --
@@ -241,7 +239,7 @@ export class WireMeshTransport implements MeshTransport {
       for await (const request of session.incomingManageRequests) {
         if (this.shutDown) break;
         if (approved) {
-          await this.dispatchIncoming(request, handle);
+          await this.roomRouter.handleRequest(request, handle);
           continue;
         }
         const message = extractMessage(request.command);
@@ -251,7 +249,10 @@ export class WireMeshTransport implements MeshTransport {
         }
         if (message.method === "introduce") {
           this.trackSession(handle.id, session);
-          this.route(handle, message);
+          this.events.onIntroduction(handle, {
+            peerId: handle.id,
+            dataPort: message.dataPort,
+          });
           await request.respond({ result: "ok" }).catch(() => undefined);
           approved = true;
           continue;
@@ -294,61 +295,12 @@ export class WireMeshTransport implements MeshTransport {
     })();
   }
 
+  /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. */
   private consumeIncoming(
     session: AcceptedMeshSession,
     handle: ConnectionHandle,
   ): void {
-    void (async () => {
-      for await (const request of session.incomingManageRequests) {
-        if (this.shutDown) break;
-        await this.dispatchIncoming(request, handle);
-      }
-    })();
-  }
-
-  private async dispatchIncoming(
-    request: IncomingManageRequest,
-    handle: ConnectionHandle,
-  ): Promise<void> {
-    const message = extractMessage(request.command);
-    if (message === undefined) {
-      await request.respond({ result: "ok" }).catch(() => undefined);
-      return;
-    }
-    this.route(handle, message);
-    await request.respond({ result: "ok" }).catch(() => undefined);
-  }
-
-  /** Routes an already-decoded MeshMessage to the matching TransportEvents callback -- the same dispatch regardless of which listener (coordinator or data) accepted the connection it arrived on, since the message's own method, not the port it arrived on, is what determines meaning. */
-  private route(handle: ConnectionHandle, message: MeshMessage): void {
-    switch (message.method) {
-      case "introduce": {
-        this.events.onIntroduction(handle, {
-          peerId: handle.id,
-          dataPort: message.dataPort,
-        });
-        return;
-      }
-      case "peer_list": {
-        this.events.onPeerList(message.peers);
-        return;
-      }
-      case "peer_joined": {
-        this.events.onPeerJoined(message.peer);
-        return;
-      }
-      case "become_coordinator": {
-        this.events.onBecomeCoordinator(message.peerList);
-        return;
-      }
-      case "connect_request": {
-        // Only ever reaches route() if a session was somehow promoted without going through consumeQuarantined's own handling of it -- can't happen given every requiresApproval accept path routes through consumeQuarantined first, kept here only so an unrecognised-in-context method fails closed rather than falling to the default onMessage case below.
-        return;
-      }
-      default: {
-        this.events.onMessage(handle, message);
-      }
-    }
+    this.roomRouter.drainSession(session, handle);
   }
 
   private watchForDisconnect(
