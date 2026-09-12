@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
+import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
 import { loadOrCreateIdentity } from "../core/identity-store.js";
 import type { IdentitySlot } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
@@ -32,6 +33,7 @@ export async function wireTestTransport(
     identity: await toIdentityPort(identity),
     clock: createSystemClock(),
     slot: resolvedSlot,
+    revocation: createRevocationView(),
   });
   // Surface transport-level errors instead of leaving them silent — a genuine socket failure during a test run is signal worth seeing even when the test's own assertions still pass, since it can point at a real race the assertions don't happen to catch.
   store.onError = (e) => {

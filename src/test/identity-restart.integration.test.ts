@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
+import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
 import { MeshStore } from "../core/mesh-store.js";
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import type { PeerIdentity } from "../core/identity.js";
@@ -44,6 +45,7 @@ async function makePeer(
     identity: await toIdentityPort(identity),
     clock: createSystemClock(),
     slot,
+    revocation: createRevocationView(),
   });
   const deliveries: DeliveryEvent[] = [];
   return { store, deliveries };
