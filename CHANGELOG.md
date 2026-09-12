@@ -1,3 +1,9 @@
+## [2.7.0](https://github.com/ExaDev/agent-comms/compare/v2.6.0...v2.7.0) (2026-09-12)
+
+### Features
+
+* **core:** expose room.join admission through room_accept/room_reject/room_pending ([08d91da](https://github.com/ExaDev/agent-comms/commit/08d91daa3e9b1f8debed34546d50ea8e454c8cba))
+
 ## [2.6.0](https://github.com/ExaDev/agent-comms/compare/v2.5.0...v2.6.0) (2026-09-12)
 
 ### Features
