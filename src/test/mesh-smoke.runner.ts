@@ -110,14 +110,21 @@ function buildScript(name: string, actions: string): string {
     `const { MeshStore } = require("./dist/core/mesh-store.js");`,
     `const { CommsTool } = require("./dist/core/tool.js");`,
     `const { WireMeshTransport } = require("./dist/core/wire-mesh-transport.js");`,
-    `const { generateIdentity } = require("./dist/core/identity.js");`,
+    `const { loadOrCreateIdentity } = require("./dist/core/identity-store.js");`,
+    `const { toIdentityPort } = require("./dist/core/wire-mesh-identity.js");`,
     `const { deviceIdToHex } = require("wire-mesh-core/domain/device-id");`,
+    `const { createSystemClock } = require("wire-mesh-core/adapters/system-clock");`,
+    `const os = require("node:os");`,
+    `const path = require("node:path");`,
+    `const fs = require("node:fs");`,
     `function log(msg) { process.stdout.write(JSON.stringify(msg) + "\\n"); }`,
     `(async () => {`,
     `  const store = new MeshStore(${String(SMOKE_PORT)});`,
-    `  const identity = generateIdentity();`,
+    `  const slot = { harness: "smoke-${name}", cwd: "/test/${name}", dir: fs.mkdtempSync(path.join(os.tmpdir(), "agent-comms-smoke-${name}-")) };`,
+    `  const identity = loadOrCreateIdentity(slot);`,
     `  store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));`,
     `  store.setTransport(new WireMeshTransport(store.events, identity));`,
+    `  store.setIdentity({ identity: await toIdentityPort(identity), clock: createSystemClock(), slot });`,
     `  const tool = new CommsTool(store);`,
     `  const deliveries = [];`,
     `  store.onDelivery = (_id, event) => {`,
@@ -149,21 +156,33 @@ function buildScript(name: string, actions: string): string {
 // Helpers
 // -----------------------------------------------------------------------
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const WAIT_FOR_PORT_TIMEOUT_MS = 15_000;
+const WAIT_FOR_PORT_RETRY_MS = 50;
 
+/** Retries a single connection attempt until the port accepts one or the deadline passes, rather than a single attempt after a flat sleep -- binding the port now waits on real, load-dependent work (identity load/generation, then an async WebCrypto key import for the room-token identity) before the coordinator listener opens, so a fixed pre-sleep is exactly the fragile pattern this codebase's own waitFor helpers already avoid elsewhere. */
 function waitForPort(port: number, host: string): Promise<void> {
+  const deadline = Date.now() + WAIT_FOR_PORT_TIMEOUT_MS;
   return new Promise((resolve, reject) => {
-    const socket = new net.Socket();
-    socket.connect(port, host, () => {
-      socket.destroy();
-      resolve();
-    });
-    socket.on("error", () => {
-      socket.destroy();
-      reject(new Error(`Port ${String(port)} not listening`));
-    });
+    function attempt(): void {
+      const socket = new net.Socket();
+      socket.connect(port, host, () => {
+        socket.destroy();
+        resolve();
+      });
+      socket.on("error", () => {
+        socket.destroy();
+        if (Date.now() >= deadline) {
+          reject(
+            new Error(
+              `Port ${String(port)} not listening after ${String(WAIT_FOR_PORT_TIMEOUT_MS)}ms`,
+            ),
+          );
+          return;
+        }
+        setTimeout(attempt, WAIT_FOR_PORT_RETRY_MS);
+      });
+    }
+    attempt();
   });
 }
 
@@ -197,8 +216,7 @@ async function main(): Promise<void> {
     ].join("\n    "),
   );
 
-  // Wait for A to bind coordinator port
-  await sleep(500);
+  // Wait for A to bind coordinator port -- waitForPort itself retries until bound or its own timeout, so no fixed pre-sleep is needed.
   await waitForPort(SMOKE_PORT, SMOKE_HOST);
   console.log("  Coordinator bound on port " + String(SMOKE_PORT));
 
