@@ -18,7 +18,10 @@ function freshPort(): number {
 async function makeRegisteredStore(
   port: number,
   name: string,
-): Promise<{ store: MeshStore; slot: Awaited<ReturnType<typeof wireTestTransport>> }> {
+): Promise<{
+  store: MeshStore;
+  slot: Awaited<ReturnType<typeof wireTestTransport>>;
+}> {
   const store = new MeshStore(port);
   const slot = await wireTestTransport(store);
   await store.init();
@@ -86,7 +89,8 @@ void test("a member leaving revokes its own grant and notifies the other members
     await waitFor(
       () =>
         ownerDeliveries.some(
-          (event) => event.type === "member_left" && event.agent === memberA.peerId,
+          (event) =>
+            event.type === "member_left" && event.agent === memberA.peerId,
         ),
       "owner is notified that A left",
     );

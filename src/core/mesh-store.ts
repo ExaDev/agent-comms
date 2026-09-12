@@ -2221,7 +2221,10 @@ export class MeshStore implements CommsStore {
     const { slot } = this.requireIdentity();
     const token = loadRoomTokens(slot)[roomPath];
     if (token === undefined) {
-      throw new CommsError(`No room:member token for ${roomPath}`, "NOT_MEMBER");
+      throw new CommsError(
+        `No room:member token for ${roomPath}`,
+        "NOT_MEMBER",
+      );
     }
     const params: Record<string, unknown> = {
       verb: "room.leave",
