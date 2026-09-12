@@ -32,6 +32,7 @@ import { FederationManager } from "./federation.js";
 import type { FedLink } from "./federation.js";
 import { getCertificateFingerprint } from "./identity.js";
 import {
+  bytesFromHex,
   bytesToHex,
   deviceIdFromHex,
   deviceIdToHex,
@@ -48,6 +49,10 @@ import {
   roomJoinOkSchema,
   roomSendSchema,
 } from "wire-mesh-core/generated/protocol";
+import type {
+  CapabilityToken,
+  MessageRef,
+} from "wire-mesh-core/generated/protocol";
 import type { RoomVerbHandler } from "./room-router.js";
 import {
   ROOM_MEMBER_CAPABILITY,
@@ -63,6 +68,7 @@ import type {
   TransportEvents,
 } from "./transport.js";
 import type { CommsStore } from "./comms-store.js";
+import { StreamingBehavior } from "./types.js";
 import type {
   AgentIdentity,
   AgentStatus,
@@ -74,7 +80,6 @@ import type {
   Room,
   RoomMessage,
   RoomType,
-  StreamingBehavior,
   Visibility,
 } from "./types.js";
 import type { ListenerInfo, ListenerPolicy } from "./transport.js";
@@ -148,6 +153,11 @@ export class MeshStore implements CommsStore {
   private dms = new Map<string, DmMessage[]>();
   private deliveryQueues = new Map<string, DeliveryEvent[]>();
   private identityCache = new Map<string, { id: string }>();
+  /** Directed room.send requests that failed because their target member wasn't reachable at send time, held for retry when that member's own connection is (re)established -- the wire-authenticated fan-out's substitute for the legacy full-state-sync's own automatic eventual consistency, since a direct request to a disconnected peer fails immediately with no protocol-level retry of its own. Keyed by member device-id hex, bounded oldest-first per member with the same cap ordinary delivery queues use. */
+  private pendingRoomSends = new Map<
+    string,
+    { roomPath: string; params: Record<string, unknown> }[]
+  >();
 
   private transport: MeshTransport | undefined;
   private storeIdentity: MeshStoreIdentity | undefined;
@@ -395,6 +405,7 @@ export class MeshStore implements CommsStore {
         state,
       });
     }
+    await this.flushPendingRoomSends(handle.id);
   }
 
   /**
@@ -1255,8 +1266,26 @@ export class MeshStore implements CommsStore {
     };
   }
 
+  /** Reads the "reply" message-ref out of a room.send's own params (if any) and returns the hex id it names -- room.send's replyTo carries a single parent message, so the first reply-relation ref is the one that matters; any further refs are a future relation this handler doesn't yet act on. */
+  private static replyToFromRefs(
+    refs: readonly MessageRef[] | undefined,
+  ): string | undefined {
+    const reply = refs?.find((ref) => ref.relation === "reply");
+    return reply === undefined ? undefined : bytesToHex(reply.id);
+  }
+
+  /** Reads room.send's own "streaming-behavior" extension field (open params tail, not a named schema field) and validates it against the same StreamingBehavior contract every other delivery path already enforces -- an unrecognised or malformed value is dropped rather than rejecting the whole send, matching core/room's own obligation to ignore what it doesn't understand instead of failing closed on an extension field. */
+  private static streamingBehaviorFromParams(
+    params: Readonly<Record<string, unknown>>,
+  ): StreamingBehavior | undefined {
+    const raw = params["streaming-behavior"];
+    if (raw === undefined) return undefined;
+    const result = StreamingBehavior.safeParse(raw);
+    return result.success ? result.data : undefined;
+  }
+
   /**
-   * Receiving side of a directed room.send (P3.5): verifies the presented token against all six of core/room's own obligations, then delivers the message locally exactly once -- the manage-response this returns IS the delivery receipt, so there is no separate "delivered" event to emit the way the legacy broadcastPatch path needed one.
+   * Receiving side of a directed room.send (P3.5): verifies the presented token against all six of core/room's own obligations, then delivers the message locally exactly once -- the manage-response this returns IS the delivery receipt, so there is no separate "delivered" event to emit the way the legacy broadcastPatch path needed one. Branches on the room-path's own shape: an owner-named path stores a RoomMessage in this room's own history and fires a room_message event; a DM path stores a DmMessage keyed by the same dm-path sendDm already uses and fires a dm event -- both ride the identical room:member-gated verb, since a DM is just a room-path variant, not a separate verb.
    */
   private async handleRoomSend(
     request: IncomingManageRequest,
@@ -1286,20 +1315,44 @@ export class MeshStore implements CommsStore {
       return { result: "error", code: "malformed_params" };
     }
     const params = parsedParams.data;
+    const replyTo = MeshStore.replyToFromRefs(params.refs);
+    const streamingBehavior = MeshStore.streamingBehaviorFromParams(params);
+    const id = bytesToHex(params["message-id"]);
+    const timestamp = new Date(params["sent-at"]).toISOString();
 
-    const message: RoomMessage = {
-      id: bytesToHex(params["message-id"]),
-      from: handle.id,
-      room: roomPath,
-      content: params.text,
-      timestamp: new Date(params["sent-at"]).toISOString(),
-      readBy: [handle.id],
-    };
-    const history = this.messages.get(roomPath) ?? [];
-    history.push(message);
-    this.messages.set(roomPath, history);
+    const parsedPath = parseRoomPath(roomPath);
+    let event: DeliveryEvent;
+    if (parsedPath.kind === "dm") {
+      const message: DmMessage = {
+        id,
+        from: handle.id,
+        to: this.peerId,
+        content: params.text,
+        timestamp,
+        readBy: [handle.id],
+        ...(streamingBehavior !== undefined && { streamingBehavior }),
+      };
+      const history = this.dms.get(roomPath) ?? [];
+      history.push(message);
+      this.dms.set(roomPath, history);
+      event = { type: "dm", message };
+    } else {
+      const message: RoomMessage = {
+        id,
+        from: handle.id,
+        room: roomPath,
+        content: params.text,
+        timestamp,
+        readBy: [handle.id],
+        ...(replyTo !== undefined && { replyTo }),
+        ...(streamingBehavior !== undefined && { streamingBehavior }),
+      };
+      const history = this.messages.get(roomPath) ?? [];
+      history.push(message);
+      this.messages.set(roomPath, history);
+      event = { type: "room_message", message };
+    }
 
-    const event: DeliveryEvent = { type: "room_message", message };
     this.queueDelivery(this.peerId, event);
     this.fireLocalDelivery(this.peerId, event);
 
@@ -1340,6 +1393,58 @@ export class MeshStore implements CommsStore {
       throw new CommsError(
         `room.send to ${memberId} for ${roomPath} failed (${outcome.code})`,
         "SEND_FAILED",
+      );
+    }
+  }
+
+  /** Records a room.send that couldn't reach memberId right now, for a later flushPendingRoomSends to retry once that member reconnects. Bounded oldest-first with the same cap ordinary delivery queues use, so an indefinitely-offline member cannot grow this without limit. */
+  private queuePendingRoomSend(
+    memberId: string,
+    roomPath: string,
+    params: Record<string, unknown>,
+  ): void {
+    const queue = this.pendingRoomSends.get(memberId) ?? [];
+    queue.push({ roomPath, params });
+    if (queue.length > MAX_QUEUED_DELIVERIES_PER_AGENT) {
+      queue.splice(0, queue.length - MAX_QUEUED_DELIVERIES_PER_AGENT);
+    }
+    this.pendingRoomSends.set(memberId, queue);
+  }
+
+  /**
+   * Sends one directed room.send to a single member, queuing it for retry instead of throwing when the member isn't currently reachable -- the fan-out's own per-recipient primitive, distinct from sendRoomMessageDirected's deliberate throw-on-failure contract for a caller sending to one specific, known recipient. Silently drops a send this store no longer holds a token for (no longer a member of the room) rather than queuing something that will only fail again on retry.
+   */
+  private async deliverRoomSendToMember(
+    memberId: string,
+    roomPath: string,
+    token: CapabilityToken,
+    params: Record<string, unknown>,
+  ): Promise<void> {
+    const outcome = await this.requireTransport().sendRoomRequest(
+      memberId,
+      { verb: ROOM_MEMBER_CAPABILITY, params },
+      { kind: "room", path: roomPath },
+      token,
+    );
+    if (outcome.result !== "ok") {
+      this.queuePendingRoomSend(memberId, roomPath, params);
+    }
+  }
+
+  /** Retries every room.send queued for memberId since it was last reachable, dropping (not re-queuing) any whose room this store no longer holds a token for. Called once a connection to memberId is (re)established -- handlePeerConnected fires for both a fresh introduction and a reconnection after downtime, exactly the two cases a queued send needs to be retried on. */
+  private async flushPendingRoomSends(memberId: string): Promise<void> {
+    const queue = this.pendingRoomSends.get(memberId);
+    if (queue === undefined || queue.length === 0) return;
+    this.pendingRoomSends.delete(memberId);
+    const { slot } = this.requireIdentity();
+    for (const pending of queue) {
+      const token = loadRoomTokens(slot)[pending.roomPath];
+      if (token === undefined) continue;
+      await this.deliverRoomSendToMember(
+        memberId,
+        pending.roomPath,
+        token,
+        pending.params,
       );
     }
   }
@@ -1608,7 +1713,16 @@ export class MeshStore implements CommsStore {
     saveRoomToken(slot, dmPath, parsedOutcome.data["granted-token"]);
   }
 
+  /**
+   * Joins a room. For this store's own identity, "already known locally" is not the right gate for skipping real admission: the legacy full-state-sync replicates a room's metadata to every mesh-connected peer the moment it's created, well before that peer has ever been admitted, so a room already present in this.rooms says nothing about whether this store actually holds a valid room:member token for it. The real gate is that token's presence -- absent, this always goes through joinRemoteRoom's real wire-level admission regardless of what this.rooms already knows, so a peer that merely heard about a room never mistakes hearing about it for having joined it. Joining on behalf of a DIFFERENT agentId (this store's own convergence/admin bookkeeping, exercised directly by state-sync-convergence.test.ts) is untouched -- that's a pure local CRDT mutation with no admission concept at all.
+   */
   async joinRoom(roomId: string, agentId: string): Promise<Room> {
+    if (agentId === this.peerId) {
+      const { slot } = this.requireIdentity();
+      if (loadRoomTokens(slot)[roomId] === undefined) {
+        return this.joinRemoteRoom(roomId, agentId);
+      }
+    }
     const room = this.rooms.get(roomId);
     if (!room) return this.joinRemoteRoom(roomId, agentId);
 
@@ -1819,6 +1933,9 @@ export class MeshStore implements CommsStore {
   // CommsStore — Messages
   // -----------------------------------------------------------------------
 
+  /**
+   * Sends a room message via a real, wire-authenticated room.send fan-out (P3.5): one directed request per member, each carrying this sender's own persisted room:member token, rather than the legacy broadcastPatch's full-state replication. A member unreachable right now is queued for retry (see deliverRoomSendToMember/flushPendingRoomSends) instead of blocking or failing the whole send -- delivery to any one recipient is independent of every other.
+   */
   async sendRoomMessage(
     roomId: string,
     from: string,
@@ -1832,34 +1949,50 @@ export class MeshStore implements CommsStore {
     if (!room.members.includes(from))
       throw new CommsError(`Not a member of ${roomId}`, "NOT_MEMBER");
 
-    const id = `${String(Date.now())}-${nanoid(6)}`;
+    const { slot, clock } = this.requireIdentity();
+    const token = loadRoomTokens(slot)[roomId];
+    if (token === undefined) {
+      throw new CommsError(`No room:member token for ${roomId}`, "NOT_MEMBER");
+    }
+
+    const messageId = randomId();
+    const id = bytesToHex(messageId);
     const message: RoomMessage = {
       id,
       from,
       room: roomId,
       content,
       timestamp: new Date().toISOString(),
-      replyTo,
       readBy: [from],
+      ...(replyTo !== undefined && { replyTo }),
       ...(streamingBehavior !== undefined && { streamingBehavior }),
     };
 
     const arr = this.messages.get(roomId) ?? [];
     arr.push(message);
     this.messages.set(roomId, arr);
-    await this.broadcastPatch({ type: "message_add", roomId, message });
 
     // Forward to federated links if the room is federated
     if (room.federated) {
       await this.federation.forwardRoomMessage(roomId, message);
     }
 
+    const params: Record<string, unknown> = {
+      verb: "room.send",
+      "message-id": messageId,
+      "sent-at": clock.now(),
+      text: content,
+      ...(replyTo !== undefined && {
+        refs: [{ id: bytesFromHex(replyTo), relation: "reply" }],
+      }),
+      ...(streamingBehavior !== undefined && {
+        "streaming-behavior": streamingBehavior,
+      }),
+    };
+
     for (const memberId of room.members) {
       if (memberId !== from) {
-        await this.deliverLocallyAndBroadcast(memberId, {
-          type: "room_message",
-          message,
-        });
+        await this.deliverRoomSendToMember(memberId, roomId, token, params);
       }
     }
 
@@ -1880,6 +2013,9 @@ export class MeshStore implements CommsStore {
   // CommsStore — DMs
   // -----------------------------------------------------------------------
 
+  /**
+   * Sends a DM via the same wire-authenticated room.send fan-out sendRoomMessage uses (P3.5): a DM is just a dm-shaped room path with exactly one other member, so it rides the identical mechanism rather than a separate one. Self-DM is the one exception -- a purely local scratchpad note that never leaves the process, so it needs no token and no wire round trip at all.
+   */
   async sendDm(
     from: string,
     to: string,
@@ -1894,7 +2030,8 @@ export class MeshStore implements CommsStore {
         throw new CommsError(`Cannot DM agent ${to}`, "AGENT_NOT_FOUND");
     }
 
-    const id = `${String(Date.now())}-${nanoid(6)}`;
+    const messageId = randomId();
+    const id = bytesToHex(messageId);
     const message: DmMessage = {
       id,
       from,
@@ -1910,9 +2047,25 @@ export class MeshStore implements CommsStore {
     const arr = this.dms.get(key) ?? [];
     arr.push(message);
     this.dms.set(key, arr);
-    await this.broadcastPatch({ type: "dm_add", key, message });
 
-    await this.deliverLocallyAndBroadcast(to, { type: "dm", message });
+    if (to !== from) {
+      const { slot, clock } = this.requireIdentity();
+      const token = loadRoomTokens(slot)[key];
+      if (token === undefined) {
+        throw new CommsError(`No room:member token for ${key}`, "NOT_MEMBER");
+      }
+      const params: Record<string, unknown> = {
+        verb: "room.send",
+        "message-id": messageId,
+        "sent-at": clock.now(),
+        text: content,
+        ...(streamingBehavior !== undefined && {
+          "streaming-behavior": streamingBehavior,
+        }),
+      };
+      await this.deliverRoomSendToMember(to, key, token, params);
+    }
+
     return message;
   }
 
