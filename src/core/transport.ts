@@ -22,6 +22,7 @@ import type {
   CapabilityScope,
   CapabilityToken,
   ManageCommand,
+  RevocationEntry,
 } from "wire-mesh-core/generated/protocol";
 import type { ManageOutcome } from "wire-mesh-core/domain/mesh-session";
 
@@ -121,6 +122,11 @@ export interface TransportEvents {
    * We received a become_coordinator message — take over as coordinator.
    */
   onBecomeCoordinator(peerList: PeerInfo[]): void;
+
+  /**
+   * A peer announced one already-minted revocation-entry over an established session (management.cddl's revocation-announce, flattened to one call per entry). MeshStore should verify it and, if it verifies, record it in its own RevocationView -- a bearer's already-issued token stays valid to every peer that never received this until it does, per the design's own honest "detection with propagation delay" limit.
+   */
+  onRevocationAnnounce(entry: RevocationEntry): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,6 +209,11 @@ export interface MeshTransport {
    * Broadcast a wire message to all connected peer data connections.
    */
   broadcast(message: MeshMessage): Promise<void>;
+
+  /**
+   * Announces one or more already-minted revocation-entries to every connected peer session, best-effort (an unreachable peer misses it and learns of the revocation later, if ever -- the same honest gossip-propagation-delay limit every other broadcast in this codebase already accepts).
+   */
+  broadcastRevocation(entries: readonly RevocationEntry[]): Promise<void>;
 
   /**
    * Sends a real core/room manage-request to a specific member's own established session, returning its outcome (e.g. a room.join request's granted-token, or a room.send's delivery receipt) rather than swallowing it the way send() does for the legacy opaque-frame path. Resolves to a not_connected error outcome if no live session to that member exists, rather than throwing -- the caller (currently room-join, and P3.5's directed fan-out once it lands) decides how to react to an unreachable member.

@@ -19,6 +19,7 @@ function fakeEvents(): TransportEvents {
     onPeerJoined: mock.fn(),
     onBecomeCoordinator: mock.fn(),
     onError: mock.fn(),
+    onRevocationAnnounce: mock.fn(),
   };
 }
 
