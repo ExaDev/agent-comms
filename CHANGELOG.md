@@ -1,3 +1,14 @@
+## [2.5.0](https://github.com/ExaDev/agent-comms/compare/v2.4.0...v2.5.0) (2026-09-12)
+
+### Features
+
+* **core:** add a random token-id generator for minted capability tokens ([47514d0](https://github.com/ExaDev/agent-comms/commit/47514d0a52fdedfaa4488f93f20eeb57ee20ea1c))
+* **core:** mint and persist the room owner's own room:member grant ([6d50426](https://github.com/ExaDev/agent-comms/commit/6d5042637c7099676a5db7a010f66e7208a0d7aa))
+
+### Tests
+
+* wire the smoke test's spawned peers with identity, retry the port wait ([6de80e4](https://github.com/ExaDev/agent-comms/commit/6de80e4744af82bb9535ad0417927027c2ced1bb))
+
 ## [2.4.0](https://github.com/ExaDev/agent-comms/compare/v2.3.1...v2.4.0) (2026-09-12)
 
 ### Features
