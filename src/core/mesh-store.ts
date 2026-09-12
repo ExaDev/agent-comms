@@ -51,6 +51,7 @@ import type {
 import {
   roomInviteSchema,
   roomJoinOkSchema,
+  roomLeaveSchema,
   roomMembersOkSchema,
   roomReadSchema,
   roomSendSchema,
@@ -67,6 +68,7 @@ import {
 } from "./room-token-verification.js";
 import {
   deleteIssuedRoomGrant,
+  deleteRoomToken,
   loadIssuedRoomGrant,
   loadRoomTokens,
   saveIssuedRoomGrant,
@@ -1278,6 +1280,7 @@ export class MeshStore implements CommsStore {
       "room.members": (request, handle) =>
         this.handleRoomMembers(request, handle),
       "room.invite": (request) => this.handleRoomInvite(request),
+      "room.leave": (request, handle) => this.handleRoomLeave(request, handle),
     };
   }
 
@@ -1767,6 +1770,78 @@ export class MeshStore implements CommsStore {
     return { result: "ok" };
   }
 
+  /**
+   * Receiving side of a real, wire-level room.leave (P3.8), covering both an actual member leaving and a decline of a never-joined invite -- the same wire request either way, since both are "give up a room:member grant I hold," per leaveRemoteRoom's own reasoning. Distinguishes the two purely from this store's own membership/invited lists (never from anything the sender claims), revokes the sender's grant for real via revokeMemberGrant, and notifies accordingly: member_left broadcast to the room's other members for a real leave, a local invite_declined event (carrying the sender's own optional reason extension) for a decline -- there is no third party to notify for a decline, since nobody else ever knew about an invite that was never accepted.
+   */
+  private async handleRoomLeave(
+    request: IncomingManageRequest,
+    handle: ConnectionHandle,
+  ): Promise<ManageOutcome> {
+    const roomPath = request.scope.path;
+    if (roomPath === undefined) {
+      return { result: "error", code: "missing_scope_path" };
+    }
+    if (request.token === undefined) {
+      return { result: "error", code: "unauthorized" };
+    }
+    const { identity, clock, revocation } = this.requireIdentity();
+    const verdict = await verifyRoomToken(request.token, {
+      identity,
+      clock,
+      revocation,
+      expectedBearer: deviceIdFromHex(handle.id),
+      roomPath,
+    });
+    if (!verdict.ok) {
+      return { result: "error", code: "unauthorized" };
+    }
+    const parsedParams = roomLeaveSchema.safeParse(request.command.params);
+    if (!parsedParams.success) {
+      return { result: "error", code: "malformed_params" };
+    }
+
+    const room = this.rooms.get(roomPath);
+    if (room === undefined) {
+      return { result: "error", code: "room_not_found" };
+    }
+    const wasMember = room.members.includes(handle.id);
+    const wasInvited = room.invited.includes(handle.id);
+    if (!wasMember && !wasInvited) {
+      return { result: "ok" };
+    }
+
+    await this.revokeMemberGrant(roomPath, handle.id);
+
+    this.bump(room);
+    if (wasMember) this.recordMemberOp(room, "member", "leave", handle.id);
+    if (wasInvited) this.recordMemberOp(room, "invited", "leave", handle.id);
+    this.refreshMembership(room);
+    this.rooms.set(roomPath, room);
+    await this.broadcastPatch({ type: "room_upsert", room });
+
+    if (wasMember) {
+      await this.deliverToRoom(
+        roomPath,
+        { type: "member_left", room: roomPath, agent: handle.id },
+        handle.id,
+      );
+    } else {
+      const reasonValue = parsedParams.data.reason;
+      const decliner = this.agents.get(handle.id);
+      const event: DeliveryEvent = {
+        type: "invite_declined",
+        room: roomPath,
+        agent: handle.id,
+        agentName: decliner?.name ?? handle.id,
+        reason: typeof reasonValue === "string" ? reasonValue : "",
+      };
+      this.queueDelivery(this.peerId, event);
+      this.fireLocalDelivery(this.peerId, event);
+    }
+
+    return { result: "ok" };
+  }
+
   /** Every room.join request currently held open awaiting this store's own accept/reject decision. */
   listPendingRoomJoins(): { roomPath: string; requesterId: string }[] {
     return [...this.pendingRoomJoins.values()].map(
@@ -2093,10 +2168,16 @@ export class MeshStore implements CommsStore {
     return room;
   }
 
+  /**
+   * Leaves a room. For this store's own identity leaving a room it does not itself own, the local Room object is only ever this store's own static snapshot from when it joined or was invited (P3.6/P3.8) -- mutating it directly, as the legacy branch below does, would tell nobody but this store itself. The real effect needs a wire round trip to the room's own owner instead, so this always defers to leaveRemoteRoom in that case. Leaving on behalf of a DIFFERENT agentId, or the owner leaving their own room (this store's own authoritative copy), is untouched -- that is the legacy CRDT mutation state-sync-convergence.test.ts exercises directly.
+   */
   async leaveRoom(roomId: string, agentId: string): Promise<void> {
     const room = this.rooms.get(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
+    if (agentId === this.peerId && room.owner !== this.peerId) {
+      return this.leaveRemoteRoom(roomId, room.owner);
+    }
 
     this.bump(room);
     this.recordMemberOp(room, "member", "leave", agentId);
@@ -2127,6 +2208,40 @@ export class MeshStore implements CommsStore {
     if (room.members.length === 0 && room.owner === agentId) {
       await this.destroyRoom(roomId, agentId);
     }
+  }
+
+  /**
+   * The remote-leave path: roomPath names a room this store is a member of but does not own, so leaving for real means telling the owner over a real, wire-authenticated room.leave rather than mutating a local Room record nobody else reads. Also declineInvite's own mechanism (P3.8): the moment a target receives an invite (handleRoomInvite), it already holds a real, persisted room:member token exactly as if it had joined -- declining is simply leaving before ever really participating, and the owner's own receiving side (handleRoomLeave) tells the two cases apart by checking its own membership/invited lists, not by a separate verb. reason rides room.leave's own open extension tail so the owner can still surface a real decline reason without a second wire shape.
+   */
+  private async leaveRemoteRoom(
+    roomPath: string,
+    ownerId: string,
+    reason?: string,
+  ): Promise<void> {
+    const { slot } = this.requireIdentity();
+    const token = loadRoomTokens(slot)[roomPath];
+    if (token === undefined) {
+      throw new CommsError(`No room:member token for ${roomPath}`, "NOT_MEMBER");
+    }
+    const params: Record<string, unknown> = {
+      verb: "room.leave",
+      ...(reason !== undefined ? { reason } : {}),
+    };
+    const outcome = await this.requireTransport().sendRoomRequest(
+      ownerId,
+      { verb: ROOM_MEMBER_CAPABILITY, params },
+      { kind: "room", path: roomPath },
+      token,
+    );
+    if (outcome.result !== "ok") {
+      throw new CommsError(
+        `Leaving ${roomPath} failed (${outcome.code})`,
+        "LEAVE_FAILED",
+      );
+    }
+    deleteRoomToken(slot, roomPath);
+    this.rooms.delete(roomPath);
+    this.messages.delete(roomPath);
   }
 
   /**
@@ -2193,40 +2308,51 @@ export class MeshStore implements CommsStore {
     }
   }
 
+  /**
+   * Declines a pending invite, over the same real room.leave request leaveRemoteRoom already sends for an actual leave (P3.8): the moment this store received the invite (handleRoomInvite), it already holds a real, persisted room:member token, so declining before ever really participating is simply leaving early -- the owner's own receiving side (handleRoomLeave) tells the two cases apart from its own membership/invited lists, not from a separate verb. Uses parseRoomPath rather than any locally cached Room record to find the owner to leave, since handleRoomInvite never constructs one -- there is nothing here to read a room.owner field off in the first place.
+   */
   async declineInvite(
     roomId: string,
     agentId: string,
     reason: string,
   ): Promise<void> {
-    const room = this.rooms.get(roomId);
-    if (!room)
-      throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
-
-    if (!room.invited.includes(agentId))
+    // Every real caller declines on its own behalf (tool.ts always passes ctx.agentId, which for a real bridge process is always this.peerId, per the design's own "one bridge is one agent is one device" organising fact) -- there is no remote-decline-on-someone-else's-behalf mechanism, so a mismatch here means the caller itself is confused about whose invite it is declining.
+    if (agentId !== this.peerId) {
       throw new CommsError(
-        `Agent ${agentId} was not invited to ${roomId}`,
-        "NOT_INVITED",
+        `Cannot decline an invite on behalf of ${agentId}`,
+        "NOT_SELF",
       );
-
-    this.bump(room);
-    this.recordMemberOp(room, "invited", "leave", agentId);
-    this.refreshMembership(room);
-    this.rooms.set(roomId, room);
-    await this.broadcastPatch({ type: "room_upsert", room });
-
-    const decliner = this.agents.get(agentId);
-    await this.deliverLocallyAndBroadcast(room.owner, {
-      type: "invite_declined",
-      room: roomId,
-      agent: agentId,
-      agentName: decliner?.name ?? agentId,
-      reason,
-    });
+    }
+    const parsed = parseRoomPath(roomId);
+    if (parsed.kind !== "owner-named") {
+      throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
+    }
+    return this.leaveRemoteRoom(roomId, parsed.owner, reason);
   }
 
   /**
    * Kicks targetId from roomId. Beyond the legacy CRDT membership removal (retired in P3.8 along with every other non-message broadcastPatch caller), this revokes the member's own room:member grant for real: mints a revocation-entry for the token-id this identity recorded when it admitted them (admitRoomJoin's own saveIssuedRoomGrant), records it in this store's own RevocationView immediately (so this identity's own future verifications see the kick without waiting on its own gossip), and announces it to every connected peer so each one's independent verification of the target's token -- not just this room's owner -- also starts failing as "revoked" from here on. Silently skips the revocation step (kick still happens; only the token-side enforcement doesn't) when no issued-grant record exists for this member, e.g. a grant predating this bookkeeping.
    */
+  /**
+   * Revokes memberId's own room:member grant for roomId for real, if this identity ever recorded issuing one: mints a revocation-entry for its token-id, records it in this store's own RevocationView immediately, announces it to every connected peer, and forgets the issued-grant record (a later re-admission mints and records a genuinely fresh one rather than leaving a stale entry alongside it). Silently does nothing when no issued-grant record exists (a grant predating this bookkeeping, or a member who was never actually admitted a token at all) -- shared by kickFromRoom (owner-initiated) and handleRoomLeave (member-initiated, including a decline).
+   */
+  private async revokeMemberGrant(
+    roomId: string,
+    memberId: string,
+  ): Promise<void> {
+    const { identity, clock, slot, revocation } = this.requireIdentity();
+    const tokenId = loadIssuedRoomGrant(slot, roomId, memberId);
+    if (tokenId === undefined) return;
+    const entry = await mintRevocationEntry({
+      identity,
+      tokenId,
+      revokedAt: clock.now(),
+    });
+    await revocation.record(entry, { identity });
+    await this.requireTransport().broadcastRevocation([entry]);
+    deleteIssuedRoomGrant(slot, roomId, memberId);
+  }
+
   async kickFromRoom(
     roomId: string,
     targetId: string,
@@ -2238,18 +2364,7 @@ export class MeshStore implements CommsStore {
     if (room.owner !== kickerId)
       throw new CommsError("Only the room owner can kick", "NOT_OWNER");
 
-    const { identity, clock, slot, revocation } = this.requireIdentity();
-    const tokenId = loadIssuedRoomGrant(slot, roomId, targetId);
-    if (tokenId !== undefined) {
-      const entry = await mintRevocationEntry({
-        identity,
-        tokenId,
-        revokedAt: clock.now(),
-      });
-      await revocation.record(entry, { identity });
-      await this.requireTransport().broadcastRevocation([entry]);
-      deleteIssuedRoomGrant(slot, roomId, targetId);
-    }
+    await this.revokeMemberGrant(roomId, targetId);
 
     this.bump(room);
     this.recordMemberOp(room, "member", "leave", targetId);
