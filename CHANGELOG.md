@@ -1,3 +1,9 @@
+## [2.2.0](https://github.com/ExaDev/agent-comms/compare/v2.1.0...v2.2.0) (2026-09-12)
+
+### Features
+
+* **core:** add the six-obligation room-token verification helper ([3e26c48](https://github.com/ExaDev/agent-comms/commit/3e26c484dc91169f97667d12e38b8547b2a7373b))
+
 ## [2.1.0](https://github.com/ExaDev/agent-comms/compare/v2.0.1...v2.1.0) (2026-09-11)
 
 ### Features
