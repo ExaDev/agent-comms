@@ -29,7 +29,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export async function run(): Promise<void> {
   // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us. The stdio server has no graceful shutdown hook; a stale lock self-heals via the pid probe.
   const identitySlot: IdentitySlot = { harness: "mcp", cwd: process.cwd() };
-  const { store, tool } = createBridgeMesh(identitySlot);
+  const { store, tool } = await createBridgeMesh(identitySlot);
   let agentId: string | undefined;
 
   const mcp = new McpServer(

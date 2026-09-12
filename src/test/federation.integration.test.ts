@@ -39,7 +39,7 @@ async function createMesh(
   deliveries: DeliveryEvent[];
 }> {
   const store = new MeshStore(coordinatorPort);
-  wireTestTransport(store);
+  await wireTestTransport(store);
   const deliveries: DeliveryEvent[] = [];
   store.onDelivery = (_agentId: string, event: DeliveryEvent) => {
     deliveries.push(event);

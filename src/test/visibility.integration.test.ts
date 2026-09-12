@@ -74,7 +74,7 @@ describe("DiscoveryManager visibility", () => {
 describe("MeshStore visibility delegation", () => {
   void test("setVisibility delegates to discovery manager", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     await store.init();
 
     assert.equal(store.getVisibility(), "discoverable");
@@ -93,7 +93,7 @@ describe("MeshStore visibility delegation", () => {
 
   void test("setVisibility with adapter delegates per-adapter", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     await store.init();
 
     await store.setVisibility("quiet", "mdns");
@@ -111,7 +111,7 @@ describe("MeshStore visibility delegation", () => {
 describe("CommsTool visibility actions", () => {
   void test("mesh_set_visibility action sets visibility", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     await store.init();
 
     const agent = await store.registerAgent({
@@ -138,7 +138,7 @@ describe("CommsTool visibility actions", () => {
 
   void test("mesh_set_visibility with adapter sets per-adapter", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     await store.init();
 
     const agent = await store.registerAgent({
@@ -165,7 +165,7 @@ describe("CommsTool visibility actions", () => {
 
   void test("mesh_get_visibility returns current visibility", async () => {
     const store = new MeshStore(TEST_PORT);
-    wireTestTransport(store);
+    await wireTestTransport(store);
     await store.init();
 
     const agent = await store.registerAgent({

@@ -157,7 +157,7 @@ export async function run(): Promise<void> {
     harness: "claude-code",
     cwd: process.cwd(),
   };
-  const { store, tool } = createBridgeMesh(identitySlot);
+  const { store, tool } = await createBridgeMesh(identitySlot);
   let agentId: string | undefined;
 
   const claudeCodePid = findClaudeCodePid();

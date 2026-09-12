@@ -53,9 +53,9 @@ describe("connection approval", () => {
 
     // Set up coordinator (store A)
     const storeA = new MeshStore(portA);
-    wireTestTransport(storeA);
+    await wireTestTransport(storeA);
     const storeB = new MeshStore(portB);
-    wireTestTransport(storeB);
+    await wireTestTransport(storeB);
     try {
       const receivedRequests: Extract<
         DeliveryEvent,
@@ -128,9 +128,9 @@ describe("connection approval", () => {
     const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
-    wireTestTransport(storeA);
+    await wireTestTransport(storeA);
     const storeB = new MeshStore(portB);
-    wireTestTransport(storeB);
+    await wireTestTransport(storeB);
     try {
       const receivedRequests: Extract<
         DeliveryEvent,
@@ -207,9 +207,9 @@ describe("connection approval", () => {
     const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
-    wireTestTransport(storeA);
+    await wireTestTransport(storeA);
     const storeB = new MeshStore(portB);
-    wireTestTransport(storeB);
+    await wireTestTransport(storeB);
     try {
       const receivedRequests: Extract<
         DeliveryEvent,
@@ -280,9 +280,9 @@ describe("connection approval", () => {
     const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
-    wireTestTransport(storeA);
+    await wireTestTransport(storeA);
     const storeB = new MeshStore(portB);
-    wireTestTransport(storeB);
+    await wireTestTransport(storeB);
     try {
       storeA.onDelivery = () => {};
       await storeA.init();
@@ -364,9 +364,9 @@ describe("connection approval", () => {
     const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
-    wireTestTransport(storeA);
+    await wireTestTransport(storeA);
     const storeB = new MeshStore(portB);
-    wireTestTransport(storeB);
+    await wireTestTransport(storeB);
     try {
       storeA.onDelivery = () => {};
       await storeA.init();
@@ -516,9 +516,9 @@ describe("connection approval", () => {
     const portB = await uniquePort();
 
     const storeA = new MeshStore(portA);
-    wireTestTransport(storeA);
+    await wireTestTransport(storeA);
     const storeB = new MeshStore(portB);
-    wireTestTransport(storeB);
+    await wireTestTransport(storeB);
     try {
       storeA.onDelivery = () => {};
       await storeA.init();
@@ -592,7 +592,7 @@ describe("connection approval", () => {
   void test("a message other than introduce/connect_request from an unapproved connection is refused, not routed", async () => {
     const portA = await uniquePort();
     const storeA = new MeshStore(portA);
-    wireTestTransport(storeA);
+    await wireTestTransport(storeA);
     try {
       await storeA.init();
       await storeA.registerAgent({

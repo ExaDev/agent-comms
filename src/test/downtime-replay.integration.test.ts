@@ -9,14 +9,15 @@ import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
+import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { MeshStore } from "../core/mesh-store.js";
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
-import { generateIdentity } from "../core/identity.js";
 import {
   loadOrCreateIdentity,
   releaseIdentityLock,
   type IdentitySlot,
 } from "../core/identity-store.js";
+import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import type { DeliveryEvent } from "../core/types.js";
 import type { PeerIdentity } from "../core/identity.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
@@ -29,11 +30,19 @@ interface Peer {
   deliveries: DeliveryEvent[];
 }
 
-/** A peer wired like a real bridge: WireMeshTransport, device-id peer ID. */
-function makePeer(identity: PeerIdentity): Peer {
+/** A peer wired like a real bridge: WireMeshTransport, device-id peer ID, and a persisted identity slot so createRoom can mint and persist the owner's own room:member grant. */
+async function makePeer(
+  identity: PeerIdentity,
+  slot: IdentitySlot,
+): Promise<Peer> {
   const store = new MeshStore(TEST_PORT);
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   store.setTransport(new WireMeshTransport(store.events, identity));
+  store.setIdentity({
+    identity: await toIdentityPort(identity),
+    clock: createSystemClock(),
+    slot,
+  });
   const deliveries: DeliveryEvent[] = [];
   return { store, deliveries };
 }
@@ -53,9 +62,14 @@ async function waitFor(
 async function main(): Promise<void> {
   const dir = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-downtime-"));
   const slot: IdentitySlot = { harness: "pi", cwd: "/tmp/project", dir };
+  const slotA: IdentitySlot = {
+    harness: "claude-code",
+    cwd: "/tmp/a",
+    dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-downtime-a-")),
+  };
 
   // A is a normal ephemeral bridge that stays up throughout.
-  const a = makePeer(generateIdentity());
+  const a = await makePeer(loadOrCreateIdentity(slotA), slotA);
   await a.store.init();
   await a.store.registerAgent({
     name: "peer-a",
@@ -76,7 +90,7 @@ async function main(): Promise<void> {
 
   // B joins with a persisted identity and becomes a room member.
   const identityB = loadOrCreateIdentity(slot);
-  const b1 = makePeer(identityB);
+  const b1 = await makePeer(identityB, slot);
   await b1.store.init();
   // Registration must wait for the TLS data connections to establish (#23).
   await sleep(300);
@@ -112,7 +126,7 @@ async function main(): Promise<void> {
     deviceIdToHex(Uint8Array.from(identityB2.deviceId)),
     deviceIdToHex(Uint8Array.from(identityB.deviceId)),
   );
-  const b2 = makePeer(identityB2);
+  const b2 = await makePeer(identityB2, slot);
   b2.store.onDelivery = (_id, ev) => {
     b2.deliveries.push(ev);
   };

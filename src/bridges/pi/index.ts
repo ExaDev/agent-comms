@@ -19,7 +19,7 @@ import { Type } from "typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 
 import {
-  createBridgeMesh,
+  createBridgeMeshSync,
   buildAction,
   ensureProjectRoom,
   ensureRegistered,
@@ -44,7 +44,7 @@ function getWebPort(handle: WebServerHandle): number | undefined {
 export default function (pi: ExtensionAPI) {
   // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us
   const identitySlot: IdentitySlot = { harness: "pi", cwd: process.cwd() };
-  const { store, tool } = createBridgeMesh(identitySlot);
+  const { store, tool, attachIdentity } = createBridgeMeshSync(identitySlot);
 
   let agentId: string | undefined;
   let webHandle: WebServerHandle | undefined;
@@ -122,6 +122,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     uiCtx = ctx.ui;
 
+    await attachIdentity();
     await store.init();
     meshReady = store.connected;
 

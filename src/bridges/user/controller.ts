@@ -30,7 +30,8 @@ import type {
 // ---------------------------------------------------------------------------
 
 export class ChatController extends EventEmitter {
-  private store: MeshStore;
+  // Assigned either by init() (this controller owns its identity, the createBridgeMesh path) or by fromExisting() (it wraps an already-built store) -- always populated before any other method runs, definite-assignment-asserted the same way ctx already was.
+  private store!: MeshStore;
   /** Set only when this controller owns its persisted identity (standalone mode). */
   private ownedIdentitySlot: IdentitySlot | undefined;
 
@@ -38,26 +39,15 @@ export class ChatController extends EventEmitter {
   get meshStore(): MeshStore {
     return this.store;
   }
-  private tool: CommsTool;
+  private tool!: CommsTool;
   private ctx!: CommsContext;
   private currentRoom: string | undefined;
 
   constructor(
     private userName: string,
-    coordinatorPort?: number,
+    private coordinatorPort?: number,
   ) {
     super();
-    // Persistent identity for the web user's slot so the chat identity survives relaunches of the standalone web CLI
-    const identitySlot: IdentitySlot = { harness: "user", cwd: process.cwd() };
-    this.ownedIdentitySlot = identitySlot;
-    const { store, tool } = createBridgeMesh(identitySlot, coordinatorPort);
-    this.store = store;
-    this.tool = tool;
-
-    // Push delivery events to UIs
-    this.store.onDelivery = (_agentId: string, event: DeliveryEvent) => {
-      this.emit("message", event);
-    };
   }
 
   /**
@@ -83,6 +73,21 @@ export class ChatController extends EventEmitter {
   }
 
   async init(): Promise<void> {
+    // Persistent identity for the web user's slot so the chat identity survives relaunches of the standalone web CLI
+    const identitySlot: IdentitySlot = { harness: "user", cwd: process.cwd() };
+    this.ownedIdentitySlot = identitySlot;
+    const { store, tool } = await createBridgeMesh(
+      identitySlot,
+      this.coordinatorPort,
+    );
+    this.store = store;
+    this.tool = tool;
+
+    // Push delivery events to UIs
+    this.store.onDelivery = (_agentId: string, event: DeliveryEvent) => {
+      this.emit("message", event);
+    };
+
     await this.store.init();
 
     const reg = await ensureRegistered({

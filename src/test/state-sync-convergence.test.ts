@@ -12,9 +12,9 @@ import { ownerNamedRoomPath } from "../core/room-path.js";
 import { wireTestTransport } from "./test-transport.js";
 
 /** A local-only store: transport is set (registerAgent's own broadcastPatch needs one) but never started, so no ports and no flake -- the stores in these tests never actually connect. */
-function makeStore(): MeshStore {
+async function makeStore(): Promise<MeshStore> {
   const store = new MeshStore();
-  wireTestTransport(store);
+  await wireTestTransport(store);
   return store;
 }
 
@@ -23,8 +23,8 @@ function snapshotOf(store: MeshStore): SerialisedState {
 }
 
 void test("a stale holder converges when a fresher snapshot arrives", async () => {
-  const a = makeStore();
-  const b = makeStore();
+  const a = await makeStore();
+  const b = await makeStore();
   const agent = await a.registerAgent({
     name: "old-name",
     harness: "pi",
@@ -45,8 +45,8 @@ void test("a stale holder converges when a fresher snapshot arrives", async () =
 });
 
 void test("a current holder rejects a stale snapshot instead of regressing", async () => {
-  const a = makeStore();
-  const b = makeStore();
+  const a = await makeStore();
+  const b = await makeStore();
   const agent = await a.registerAgent({
     name: "old-name",
     harness: "pi",
@@ -72,8 +72,8 @@ void test("a current holder rejects a stale snapshot instead of regressing", asy
 });
 
 void test("room membership changes converge and stale member lists are rejected", async () => {
-  const a = makeStore();
-  const b = makeStore();
+  const a = await makeStore();
+  const b = await makeStore();
   const owner = await a.registerAgent({
     name: "owner",
     harness: "pi",
@@ -123,8 +123,8 @@ void test("room membership changes converge and stale member lists are rejected"
 });
 
 void test("history sync adds unseen messages and unions read receipts", async () => {
-  const a = makeStore();
-  const b = makeStore();
+  const a = await makeStore();
+  const b = await makeStore();
   const agent = await a.registerAgent({
     name: "sender",
     harness: "pi",
@@ -165,7 +165,7 @@ void test("a kick racing a concurrent join converges with the kick honoured", as
   // other records X joining, both at the same revision because they mutated
   // concurrently from the same base. Both directions of the sync must
   // converge on X being out — the leave wins an exact tie (#27).
-  const base = makeStore();
+  const base = await makeStore();
   const owner = await base.registerAgent({
     name: "owner",
     harness: "pi",
@@ -174,7 +174,7 @@ void test("a kick racing a concurrent join converges with the kick honoured", as
     visibility: "visible",
     tags: [],
   });
-  const member = makeStore();
+  const member = await makeStore();
   const x = await member.registerAgent({
     name: "x",
     harness: "claude-code",
@@ -192,8 +192,8 @@ void test("a kick racing a concurrent join converges with the kick honoured", as
   });
   await base.joinRoom(roomId, x.id);
 
-  const kicker = makeStore();
-  const joiner = makeStore();
+  const kicker = await makeStore();
+  const joiner = await makeStore();
   kicker.applyStateSync(snapshotOf(base));
   joiner.applyStateSync(snapshotOf(base));
 
@@ -214,7 +214,7 @@ void test("concurrent joins of different agents both survive the merge", async (
   // The property the old version-tie union existed to protect: two peers
   // each record a different agent joining from the same base, and the
   // merged room holds both.
-  const base = makeStore();
+  const base = await makeStore();
   const owner = await base.registerAgent({
     name: "owner",
     harness: "pi",
@@ -223,7 +223,7 @@ void test("concurrent joins of different agents both survive the merge", async (
     visibility: "visible",
     tags: [],
   });
-  const agents = makeStore();
+  const agents = await makeStore();
   const p = await agents.registerAgent({
     name: "p",
     harness: "claude-code",
@@ -249,8 +249,8 @@ void test("concurrent joins of different agents both survive the merge", async (
   });
   base.applyStateSync(snapshotOf(agents));
 
-  const holderA = makeStore();
-  const holderB = makeStore();
+  const holderA = await makeStore();
+  const holderB = await makeStore();
   holderA.applyStateSync(snapshotOf(base));
   holderB.applyStateSync(snapshotOf(base));
   await holderA.joinRoom(roomId, p.id);

@@ -25,7 +25,7 @@ function tempSlot(harness: string): IdentitySlot {
 void test("createBridgeMesh sets peerId to deviceIdToHex(identity.deviceId), not the certificate fingerprint", async () => {
   const slot = tempSlot("test-harness");
   const identity = loadOrCreateIdentity(slot);
-  const { store } = createBridgeMesh(slot);
+  const { store } = await createBridgeMesh(slot);
   try {
     assert.strictEqual(
       store.peerId,
@@ -39,7 +39,7 @@ void test("createBridgeMesh sets peerId to deviceIdToHex(identity.deviceId), not
 
 void test("createBridgeMesh wires a WireMeshTransport", async () => {
   const slot = tempSlot("test-harness");
-  const { store } = createBridgeMesh(slot);
+  const { store } = await createBridgeMesh(slot);
   try {
     // init() is the only way to prove the transport is actually usable end to end, which also confirms it's a WireMeshTransport by construction (createBridgeMesh only ever builds one).
     await store.init();
@@ -53,8 +53,8 @@ void test("createBridgeMesh passes an explicit coordinatorPort through to MeshSt
   const slotA = tempSlot("test-harness-a");
   const slotB = tempSlot("test-harness-b");
   const port = 20_900 + Math.floor(Math.random() * 100);
-  const a = createBridgeMesh(slotA, port);
-  const b = createBridgeMesh(slotB, port);
+  const a = await createBridgeMesh(slotA, port);
+  const b = await createBridgeMesh(slotB, port);
   try {
     await a.store.init();
     await b.store.init();

@@ -23,7 +23,7 @@ const TEST_PORT = 19879;
  */
 void test("coordinator survives ECONNRESET on accepted socket", async () => {
   const store = new MeshStore(TEST_PORT);
-  wireTestTransport(store);
+  await wireTestTransport(store);
   await store.init();
 
   // Connect a raw socket to the coordinator port

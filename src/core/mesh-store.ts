@@ -26,6 +26,13 @@ import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
 import { FederationManager } from "./federation.js";
 import type { FedLink } from "./federation.js";
 import { getCertificateFingerprint } from "./identity.js";
+import { deviceIdFromHex } from "wire-mesh-core/domain/device-id";
+import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
+import type { IdentityPort } from "wire-mesh-core/ports/identity";
+import type { Clock } from "wire-mesh-core/ports/clock";
+import { saveRoomToken } from "./identity-store.js";
+import type { IdentitySlot } from "./identity-store.js";
+import { randomTokenId } from "./token-id.js";
 import type { MeshMessage, MeshStatePatch, PeerInfo } from "./wire-protocol.js";
 import type {
   ConnectionHandle,
@@ -55,6 +62,18 @@ import type { ListenerInfo, ListenerPolicy } from "./transport.js";
 
 const DEFAULT_COORDINATOR_PORT = 19876;
 const COORDINATOR_HOST = "127.0.0.1";
+
+/** The identity/clock/persistence collaborators MeshStore mints and persists room-membership grants against. Set via setIdentity(), mirroring the transport's own setTransport() contract. */
+export interface MeshStoreIdentity {
+  identity: IdentityPort;
+  clock: Clock;
+  slot: IdentitySlot;
+}
+
+/**
+ * Lifetime of a freshly minted room:member grant (owner root grant or member join/invite grant alike). Deliberately generous rather than the "short expires, periodic re-issue" pattern the design calls for to bound kick-convergence to gossip-independent expiry -- that re-issue mechanism is P3.7's own deliverable (riding room.members refreshes), and shipping a short expiry before it exists would let ordinary grants go stale with nothing to renew them. 30 days comfortably outlives any realistic room lifetime for now; P3.7 tightens this once re-issue-on-refresh lands.
+ */
+const ROOM_TOKEN_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Bound on pending delivery events held per target agent. Events beyond the
@@ -103,6 +122,7 @@ export class MeshStore implements CommsStore {
   private identityCache = new Map<string, { id: string }>();
 
   private transport: MeshTransport | undefined;
+  private storeIdentity: MeshStoreIdentity | undefined;
   private peerInfo = new Map<string, PeerInfo>();
   private staleCheckTimer: ReturnType<typeof setInterval> | undefined;
   private isShutDown = false;
@@ -195,6 +215,21 @@ export class MeshStore implements CommsStore {
       );
     }
     return this.transport;
+  }
+
+  /** Sets the identity/clock/slot this store mints and persists room-membership grants against. Must be called before createRoom() or any other identity-using method, mirroring setTransport()'s own contract. */
+  setIdentity(identity: MeshStoreIdentity): void {
+    this.storeIdentity = identity;
+  }
+
+  /** The set identity, or throws if setIdentity() hasn't been called yet -- the single place every identity-using method reads through, mirroring requireTransport() above. */
+  private requireIdentity(): MeshStoreIdentity {
+    if (this.storeIdentity === undefined) {
+      throw new Error(
+        "MeshStore: no identity set; call setIdentity() before using the store",
+      );
+    }
+    return this.storeIdentity;
   }
 
   // -----------------------------------------------------------------------
@@ -1143,6 +1178,32 @@ export class MeshStore implements CommsStore {
   // CommsStore — Rooms
   // -----------------------------------------------------------------------
 
+  /**
+   * Mints and persists the room owner's own self-signed room:member grant: issuer = bearer = owner, no parent, delegationsRemaining: 0. This is deliberately NOT the parent every later member grant chains through -- a delegations-remaining: 0 parent cannot mint any child at all (mintCapabilityToken refuses a child whose own delegationsRemaining isn't strictly less than its parent's, and there is no value less than 0), so a later join/invite grant is its own independent, parent-less, owner-issued root-level token instead (still satisfying the "chain roots at the path's own owner" obligation, since rootIssuer is just the token's own issuer when it carries no parent). This root grant exists purely so the owner has a token to present for its own room actions, uniformly with every other member, per the design's own "every code path that checks membership does the same thing regardless of who it is checking" reasoning.
+   */
+  private async mintOwnerRootGrant(
+    roomPath: string,
+    owner: string,
+  ): Promise<void> {
+    const { identity, clock, slot } = this.requireIdentity();
+    const verdict = await mintCapabilityToken({
+      identity,
+      clock,
+      tokenId: randomTokenId(),
+      bearer: deviceIdFromHex(owner),
+      capability: "room:member",
+      scope: { kind: "room", path: roomPath },
+      expires: clock.now() + ROOM_TOKEN_LIFETIME_MS,
+      delegationsRemaining: 0,
+    });
+    if (!verdict.ok) {
+      throw new Error(
+        `MeshStore: failed to mint room owner grant for ${roomPath}: ${verdict.reason}`,
+      );
+    }
+    saveRoomToken(slot, roomPath, verdict.token);
+  }
+
   async createRoom(opts: {
     name: string;
     type: RoomType;
@@ -1156,6 +1217,9 @@ export class MeshStore implements CommsStore {
     const id = ownerNamedRoomPath(opts.owner, localName);
     if (this.rooms.has(id))
       throw new CommsError(`Room ${id} already exists`, "ROOM_EXISTS");
+
+    // Every room creation this store performs is local: opts.owner is always this bridge's own identity (create_room's caller passes ctx.agentId, and one bridge process is one agent is one device), so minting the owner's own root grant here always signs under the identity this store was wired with, never someone else's.
+    await this.mintOwnerRootGrant(id, opts.owner);
 
     const room: Room = {
       id,
