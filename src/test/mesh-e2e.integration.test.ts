@@ -10,7 +10,7 @@ import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
 import type { DeliveryEvent } from "../core/types.js";
 import * as assert from "node:assert/strict";
-import { wireTestTransport } from "./test-transport.js";
+import { waitFor, wireTestTransport } from "./test-transport.js";
 
 const E2E_PORT = 19878;
 
@@ -87,9 +87,20 @@ async function main(): Promise<void> {
   console.log(`  B sees ${String(roomsB.length)} room(s)`);
   assert.ok(roomsB.length >= 1, "B should see the room");
 
-  // --- Test: B joins room ---
+  // --- Test: B joins room --- The room already replicated to B via legacy full-state-sync, but knowing about a room is not the same as holding a room:member token for it -- B's own join still goes through real wire-level admission, held open until A approves it.
   console.log("Test: B joins room...");
-  await b.store.joinRoom(room.id, b.store.peerId);
+  const joinPromise = b.store.joinRoom(room.id, b.store.peerId);
+  await waitFor(
+    () =>
+      a.store
+        .listPendingRoomJoins()
+        .some(
+          (p) => p.roomPath === room.id && p.requesterId === b.store.peerId,
+        ),
+    "A to see B's pending join request",
+  );
+  a.store.acceptRoomJoin(room.id, b.store.peerId);
+  await joinPromise;
 
   await sleep(200);
 
@@ -116,7 +127,23 @@ async function main(): Promise<void> {
   assert.strictEqual(roomMsg.type, "room_message");
   assert.strictEqual(roomMsg.message.content, "Hello from A!");
 
-  // --- Test: DM from A to B ---
+  // --- Test: DM from A to B --- The two-round DM consent flow (section 6): A's own outbound room.join is what authorises the DM, and B (the party contacted first) still needs a human decision.
+  console.log("Test: A requests DM access from B...");
+  const dmAccessPromise = a.store.requestDmAccess(b.store.peerId);
+  await waitFor(
+    () =>
+      b.store
+        .listPendingRoomJoins()
+        .some((p) => p.requesterId === a.store.peerId),
+    "B to see A's pending DM request",
+  );
+  const pendingDm = b.store
+    .listPendingRoomJoins()
+    .find((p) => p.requesterId === a.store.peerId);
+  assert.ok(pendingDm);
+  b.store.acceptRoomJoin(pendingDm.roomPath, a.store.peerId);
+  await dmAccessPromise;
+
   console.log("Test: DM from A to B...");
   b.deliveries.length = 0;
   await a.store.sendDm(a.store.peerId, b.store.peerId, "Hey B!");
