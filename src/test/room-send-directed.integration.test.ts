@@ -84,9 +84,8 @@ async function grantMembership(
 }
 
 void test("a directed room.send delivers to the recipient's own onDelivery", async () => {
-  const { owner, ownerSlot, member, memberSlot } = await makeConnectedPair(
-    freshPort(),
-  );
+  const { owner, ownerSlot, member, memberSlot } =
+    await makeConnectedPair(freshPort());
 
   try {
     const room = await owner.createRoom({
@@ -108,9 +107,7 @@ void test("a directed room.send delivers to the recipient's own onDelivery", asy
       () => deliveries.some((event) => event.type === "room_message"),
       "member receives the directed room.send",
     );
-    const delivered = deliveries.find(
-      (event) => event.type === "room_message",
-    );
+    const delivered = deliveries.find((event) => event.type === "room_message");
     assert.ok(delivered);
     if (delivered.type !== "room_message") return;
     assert.equal(delivered.message.content, "hello there");
@@ -123,9 +120,8 @@ void test("a directed room.send delivers to the recipient's own onDelivery", asy
 });
 
 void test("a directed room.send from a member (not just the owner) also delivers", async () => {
-  const { owner, ownerSlot, member, memberSlot } = await makeConnectedPair(
-    freshPort(),
-  );
+  const { owner, ownerSlot, member, memberSlot } =
+    await makeConnectedPair(freshPort());
 
   try {
     const room = await owner.createRoom({
