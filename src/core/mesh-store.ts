@@ -172,6 +172,9 @@ export class MeshStore implements CommsStore {
     }
   >();
 
+  // -- DM paths this store has itself sent an outbound room.join for -- section 6's own basis for auto-approving the counterpart's reciprocal room.join without a second human decision. Never cleared: a DM conversation, once opened, stays open, and holding a stale entry here costs nothing beyond a few bytes per DM this node has ever initiated.
+  private dmRequestsInitiatedByMe = new Set<string>();
+
   onDelivery:
     | ((agentId: string, event: DeliveryEvent) => void | Promise<void>)
     | undefined;
@@ -1243,7 +1246,7 @@ export class MeshStore implements CommsStore {
   }
 
   /**
-   * Owner-side admission for an incoming room.join request against a named room this store owns. Holds the request open (mirroring WireMeshTransport.consumeQuarantined's own connect_request pattern) until acceptRoomJoin/rejectRoomJoin settles it, then mints the requester a fresh, independent, parent-less room:member grant -- see mintOwnerRootGrant's own comment for why this is NOT chained through the owner's root grant. Refuses outright, with no pending entry created, for anything this phase doesn't yet handle: a DM path (section 6's own two-round consent flow, not built here) or a named room this store isn't the owner of.
+   * Owner-side admission for an incoming room.join request, against either a named room this store owns or a DM path this store is a participant of. Named-room admission always needs a human decision; DM admission needs one only for the party being contacted first -- the reply half of the two-round consent flow (section 6) auto-approves, since a reply on a path this node itself opened is not unsolicited contact.
    */
   private async handleRoomJoin(
     request: IncomingManageRequest,
@@ -1254,22 +1257,38 @@ export class MeshStore implements CommsStore {
       return { result: "error", code: "missing_scope_path" };
     }
     const parsed = parseRoomPath(roomPath);
-    if (parsed.kind !== "owner-named") {
-      return { result: "error", code: "unsupported_room_kind" };
-    }
-    if (parsed.owner !== this.peerId) {
-      return { result: "error", code: "not_owner" };
+
+    if (parsed.kind === "owner-named") {
+      if (parsed.owner !== this.peerId) {
+        return { result: "error", code: "not_owner" };
+      }
+      return this.admitRoomJoin(roomPath, handle, false);
     }
 
-    const key = `${roomPath}::${handle.id}`;
-    const decision = await new Promise<RoomJoinDecision>((resolve) => {
-      this.pendingRoomJoins.set(key, {
-        roomPath,
-        requesterId: handle.id,
-        resolve,
-      });
-    });
-    this.pendingRoomJoins.delete(key);
+    if (!parsed.participants.includes(this.peerId)) {
+      return { result: "error", code: "not_participant" };
+    }
+    // The reciprocal half of section 6's own two-round DM flow: this node's own outbound room.join to the same path (recorded by joinRemoteRoom before this response was even awaited) is the consent that makes the counterpart's own reply not unsolicited contact.
+    const autoApprove = this.dmRequestsInitiatedByMe.has(roomPath);
+    return this.admitRoomJoin(roomPath, handle, autoApprove);
+  }
+
+  /** Shared admission continuation for both room.join branches above: waits for a human decision (unless auto-approved), then mints and returns the requester's own independent, parent-less room:member grant. */
+  private async admitRoomJoin(
+    roomPath: string,
+    handle: ConnectionHandle,
+    autoApprove: boolean,
+  ): Promise<ManageOutcome> {
+    const decision: RoomJoinDecision = autoApprove
+      ? { kind: "accept" }
+      : await new Promise<RoomJoinDecision>((resolve) => {
+          this.pendingRoomJoins.set(`${roomPath}::${handle.id}`, {
+            roomPath,
+            requesterId: handle.id,
+            resolve,
+          });
+        });
+    if (!autoApprove) this.pendingRoomJoins.delete(`${roomPath}::${handle.id}`);
     if (decision.kind === "reject") {
       return {
         result: "error",
@@ -1460,6 +1479,34 @@ export class MeshStore implements CommsStore {
     this.rooms.set(roomPath, room);
     this.messages.set(roomPath, []);
     return room;
+  }
+
+  /**
+   * The requester's own half of section 6's two-round DM consent flow: sends an ungated room.join scoped to dmRoomPath(this, counterpart) directly to the counterpart, records having initiated it so the counterpart's own reciprocal room.join back auto-approves rather than surfacing as a fresh, unsolicited request, and persists whatever grant comes back. Deliberately outside the CommsStore interface, like connection approval, since it is a wire-mesh-specific concern FileStore has no equivalent for. Safe to call again for the same counterpart later (e.g. after an earlier request expired or was rejected) -- it always sends a fresh request rather than checking for an existing token first.
+   */
+  async requestDmAccess(counterpart: string): Promise<void> {
+    const dmPath = dmRoomPath(this.peerId, counterpart);
+    this.dmRequestsInitiatedByMe.add(dmPath);
+    const outcome = await this.requireTransport().sendRoomRequest(
+      counterpart,
+      { verb: ROOM_MEMBER_CAPABILITY, params: { verb: "room.join" } },
+      { kind: "room", path: dmPath },
+    );
+    if (outcome.result !== "ok") {
+      throw new CommsError(
+        `DM access request to ${counterpart} was refused (${outcome.code})`,
+        "JOIN_REFUSED",
+      );
+    }
+    const parsedOutcome = roomJoinOkSchema.safeParse(outcome);
+    if (!parsedOutcome.success) {
+      throw new CommsError(
+        `DM access response from ${counterpart} was malformed`,
+        "MALFORMED_RESPONSE",
+      );
+    }
+    const { slot } = this.requireIdentity();
+    saveRoomToken(slot, dmPath, parsedOutcome.data["granted-token"]);
   }
 
   async joinRoom(roomId: string, agentId: string): Promise<Room> {
