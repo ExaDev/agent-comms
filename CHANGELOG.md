@@ -1,3 +1,9 @@
+## [2.6.0](https://github.com/ExaDev/agent-comms/compare/v2.5.0...v2.6.0) (2026-09-12)
+
+### Features
+
+* **core:** add room.join owner-side admission and the requester wire path ([76f1f26](https://github.com/ExaDev/agent-comms/commit/76f1f26b3ffed6d63e09c1934011a430c6526f09))
+
 ## [2.5.0](https://github.com/ExaDev/agent-comms/compare/v2.4.0...v2.5.0) (2026-09-12)
 
 ### Features
