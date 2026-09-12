@@ -1,3 +1,9 @@
+## [2.4.0](https://github.com/ExaDev/agent-comms/compare/v2.3.1...v2.4.0) (2026-09-12)
+
+### Features
+
+* **core:** extract verb-routed dispatch into a dedicated room router ([8b778d0](https://github.com/ExaDev/agent-comms/commit/8b778d0ef171a6de44bda877507791abbc26d61d))
+
 ## [2.3.1](https://github.com/ExaDev/agent-comms/compare/v2.3.0...v2.3.1) (2026-09-12)
 
 ### Bug Fixes
