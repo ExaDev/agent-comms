@@ -1,3 +1,17 @@
+## [2.15.0](https://github.com/ExaDev/agent-comms/compare/v2.14.0...v2.15.0) (2026-09-12)
+
+### Features
+
+* **core:** revoke a leaving or declining member's grant for real ([0fe440c](https://github.com/ExaDev/agent-comms/commit/0fe440cd12542746a1167337def49474ee534056))
+
+### Styles
+
+* **core:** wrap a few lines a pre-commit formatting pass had missed ([cbf7cac](https://github.com/ExaDev/agent-comms/commit/cbf7cacdd43fd8587783fd2096e0ab594bbd52da))
+
+### Tests
+
+* **core:** cover real leave/decline revocation and fix a convergence test ([2c5f369](https://github.com/ExaDev/agent-comms/commit/2c5f3697b76ea98d64d967b510b161e0b4c1af82))
+
 ## [2.14.0](https://github.com/ExaDev/agent-comms/compare/v2.13.0...v2.14.0) (2026-09-12)
 
 ### Features
