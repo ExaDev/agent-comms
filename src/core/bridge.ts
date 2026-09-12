@@ -52,6 +52,9 @@ export const MCP_TOOL_PARAMS = z.object({
     "mesh_accept",
     "mesh_reject",
     "mesh_pending",
+    "room_accept",
+    "room_reject",
+    "room_pending",
     "mesh_discover",
     "mesh_advertise",
     "mesh_unadvertise",
@@ -86,6 +89,7 @@ export const MCP_TOOL_PARAMS = z.object({
   id: z.string().optional(),
   meshVisibility: MeshVisibilityEnum.optional(),
   connectionId: z.string().optional(),
+  requesterId: z.string().optional(),
   streamingBehavior: z.enum(["steer", "followUp", "info"]).optional(),
 });
 
@@ -261,6 +265,31 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
     }
     case "mesh_pending":
       return { action: "mesh_pending" };
+    case "room_accept": {
+      if (p.room === undefined)
+        throw new BuildActionError("room_accept", "room");
+      if (p.requesterId === undefined)
+        throw new BuildActionError("room_accept", "requesterId");
+      return {
+        action: "room_accept",
+        room: p.room,
+        requesterId: p.requesterId,
+      };
+    }
+    case "room_reject": {
+      if (p.room === undefined)
+        throw new BuildActionError("room_reject", "room");
+      if (p.requesterId === undefined)
+        throw new BuildActionError("room_reject", "requesterId");
+      return {
+        action: "room_reject",
+        room: p.room,
+        requesterId: p.requesterId,
+        ...(p.reason !== undefined && { reason: p.reason }),
+      };
+    }
+    case "room_pending":
+      return { action: "room_pending" };
     case "mesh_discover": {
       const discover: CommsAction & { action: "mesh_discover" } = {
         action: "mesh_discover",

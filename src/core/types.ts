@@ -340,6 +340,18 @@ export const CommsActionSchema = defineSchema(
     }),
     z.object({ action: z.literal("mesh_pending") }),
     z.object({
+      action: z.literal("room_accept"),
+      room: z.string(),
+      requesterId: z.string(),
+    }),
+    z.object({
+      action: z.literal("room_reject"),
+      room: z.string(),
+      requesterId: z.string(),
+      reason: z.string().optional(),
+    }),
+    z.object({ action: z.literal("room_pending") }),
+    z.object({
       action: z.literal("mesh_discover"),
       method: z.string().optional(),
     }),
