@@ -1,3 +1,13 @@
+## [2.14.0](https://github.com/ExaDev/agent-comms/compare/v2.13.0...v2.14.0) (2026-09-12)
+
+### Features
+
+* **core:** deliver room invites over a real, wire-authenticated request ([40ab9ec](https://github.com/ExaDev/agent-comms/commit/40ab9ec584f9a523d2f09c04f4ff58938ef1009d))
+
+### Styles
+
+* **core:** wrap handleRoomInvite's inviterId ternary onto two lines ([dbf9038](https://github.com/ExaDev/agent-comms/commit/dbf9038916c1d498e663c34b5a5eefff9897b52d))
+
 ## [2.13.0](https://github.com/ExaDev/agent-comms/compare/v2.12.0...v2.13.0) (2026-09-12)
 
 ### Features
