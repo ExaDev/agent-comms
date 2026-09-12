@@ -124,9 +124,10 @@ describe("handleRoomJoin (owner side)", () => {
     assert.equal(roomAfterReject?.members.includes(REQUESTER_ID), false);
   });
 
-  it("refuses a DM path outright, with no pending entry created", async () => {
+  it("refuses a DM path naming neither of its own device as a participant, with no pending entry created", async () => {
     const store = new MeshStore();
     await wireTestTransport(store);
+    // Neither "c"x64 nor "d"x64 is this store's own peerId, so this DM path names a conversation the store has no part in -- the dm-admission integration tests cover the genuinely-a-participant case end to end.
     const dmPath = `${deviceIdToHex(deviceIdFromHex("c".repeat(64)))}+${deviceIdToHex(deviceIdFromHex("d".repeat(64)))}`;
 
     const handler = store.roomVerbHandlers["room.join"];
