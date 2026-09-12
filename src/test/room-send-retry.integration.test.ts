@@ -1,7 +1,5 @@
 /**
- * Integration test for issue #28: a bridge restarted with a persisted identity must be push-delivered the events that accumulated while its process was down, not just find them in synced history.
- *
- * Peer B goes away; A sends a room message while B is down; B restarts in the same identity slot and must fire onDelivery for the missed message.
+ * Integration test for issue #28's own acceptance behaviour, re-verified against P3.5's directed fan-out: a room message sent while its recipient is offline must still reach the recipient once it reconnects. Unlike the legacy full-state-sync this replaces, a directed room.send to a disconnected member fails immediately rather than eventually converging, so the fan-out queues it for retry (pendingRoomSends) and flushes that queue the moment the member's connection is (re)established (handlePeerConnected). Replaces downtime-replay.integration.test.ts, whose own scenario relied on deliveryQueues/applyStateSync -- machinery this fan-out no longer uses for message delivery.
  */
 
 import * as assert from "node:assert/strict";
@@ -23,7 +21,7 @@ import type { DeliveryEvent } from "../core/types.js";
 import type { PeerIdentity } from "../core/identity.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
 
-const TEST_PORT = 19896;
+const TEST_PORT = 19897;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 interface Peer {
@@ -64,12 +62,12 @@ async function waitFor(
 }
 
 async function main(): Promise<void> {
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-downtime-"));
+  const dir = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-send-retry-"));
   const slot: IdentitySlot = { harness: "pi", cwd: "/tmp/project", dir };
   const slotA: IdentitySlot = {
     harness: "claude-code",
     cwd: "/tmp/a",
-    dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-downtime-a-")),
+    dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-send-retry-a-")),
   };
 
   // A is a normal ephemeral bridge that stays up throughout.
@@ -92,7 +90,7 @@ async function main(): Promise<void> {
   });
   await sleep(200);
 
-  // B joins with a persisted identity and becomes a room member.
+  // B joins with a persisted identity and becomes a room member -- a real admitted join, since the room already replicating to B via legacy full-state-sync says nothing about B holding a room:member token for it.
   const identityB = loadOrCreateIdentity(slot);
   const b1 = await makePeer(identityB, slot);
   await b1.store.init();
@@ -106,25 +104,28 @@ async function main(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await waitFor("the room to reach the joiner", async () => {
-    const rooms = await b1.store.listRooms(b1.store.peerId);
-    return rooms.some((room) => room.id === roomId);
-  });
-  await b1.store.joinRoom(roomId, b1.store.peerId);
-  await waitFor("membership to reach the sender", async () => {
-    const room = await a.store.getRoom(roomId);
-    return room?.members.includes(b1.store.peerId) === true;
-  });
+  const joinPromise = b1.store.joinRoom(roomId, b1.store.peerId);
+  await waitFor("A to see B's pending join request", async () =>
+    Promise.resolve(
+      a.store
+        .listPendingRoomJoins()
+        .some(
+          (p) => p.roomPath === roomId && p.requesterId === b1.store.peerId,
+        ),
+    ),
+  );
+  a.store.acceptRoomJoin(roomId, b1.store.peerId);
+  await joinPromise;
 
   // B goes down.
   await b1.store.shutdown();
   await sleep(200);
 
-  // A sends a room message while B is down.
+  // A sends a room message while B is down: the directed send to B fails immediately (B isn't connected), so it's queued for retry rather than thrown or silently dropped.
   await a.store.sendRoomMessage(roomId, a.store.peerId, "while you were down");
   await sleep(200);
 
-  // B restarts in the same slot: same identity, same agent ID.
+  // B restarts in the same slot: same identity, same agent ID, same persisted room:member token -- the queued send retries the moment the reconnection to A completes.
   const identityB2 = loadOrCreateIdentity(slot);
   assert.equal(
     deviceIdToHex(Uint8Array.from(identityB2.deviceId)),
@@ -144,7 +145,7 @@ async function main(): Promise<void> {
     tags: [],
   });
 
-  // The message sent during downtime must push to the restarted bridge.
+  // The message sent during downtime must push to the restarted bridge, once A's own pendingRoomSends queue flushes against the new connection.
   await waitFor(
     "the downtime message to push to the restarted bridge",
     async () =>
@@ -158,7 +159,7 @@ async function main(): Promise<void> {
   await b2.store.shutdown();
   await a.store.shutdown();
   releaseIdentityLock(slot);
-  console.log("✓ downtime messages push-deliver on restart");
+  console.log("✓ a queued room.send retries and delivers on reconnect");
 }
 
 main().catch((err: unknown) => {
