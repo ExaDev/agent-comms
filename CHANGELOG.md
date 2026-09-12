@@ -1,3 +1,9 @@
+## [2.3.1](https://github.com/ExaDev/agent-comms/compare/v2.3.0...v2.3.1) (2026-09-12)
+
+### Bug Fixes
+
+* **core:** reject a room token whose own capability isn't room:member ([923c721](https://github.com/ExaDev/agent-comms/commit/923c7214e8c5cfa3a265879e27022e79530fcbb1))
+
 ## [2.3.0](https://github.com/ExaDev/agent-comms/compare/v2.2.0...v2.3.0) (2026-09-12)
 
 ### Features
