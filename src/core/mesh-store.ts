@@ -49,6 +49,7 @@ import type {
   ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
 import {
+  roomInviteSchema,
   roomJoinOkSchema,
   roomMembersOkSchema,
   roomReadSchema,
@@ -1276,6 +1277,7 @@ export class MeshStore implements CommsStore {
       "room.read": (request, handle) => this.handleRoomRead(request, handle),
       "room.members": (request, handle) =>
         this.handleRoomMembers(request, handle),
+      "room.invite": (request) => this.handleRoomInvite(request),
     };
   }
 
@@ -1693,6 +1695,77 @@ export class MeshStore implements CommsStore {
     };
   }
 
+  /**
+   * The inviter's own display name and cwd, riding room-invite's own open extension tail -- agent-comms' own application data, the same convention roomStateExtension already establishes for room metadata. Unlike room-state (which needs gossip on the requester's own side of room.join/members), the inviter here is always this store's own local agent record: inviteToRoom only ever succeeds for the room's real owner, which per this store's own organising fact (one bridge is one agent is one device) is always this.peerId, so the record is always this store's own registration, never a gossip-dependent lookup.
+   */
+  private static inviterAgentExtension(inviter: Readonly<AgentIdentity>): {
+    "inviter-agent": { name: string; cwd: string };
+  } {
+    return { "inviter-agent": { name: inviter.name, cwd: inviter.cwd } };
+  }
+
+  /** The receiving-side counterpart of inviterAgentExtension: narrows an incoming room.invite's own "inviter-agent" field to the shape this store's own convention sends, or undefined for a peer running without it (an older version) -- the caller falls back to the inviter's bare device-id in that case, the same honest degradation parseRoomStateExtension's own absent case already accepts. */
+  private static parseInviterAgentExtension(
+    value: unknown,
+  ): { name: string; cwd: string } | undefined {
+    if (typeof value !== "object" || value === null) return undefined;
+    if (!("name" in value) || !("cwd" in value)) return undefined;
+    if (typeof value.name !== "string" || typeof value.cwd !== "string")
+      return undefined;
+    return { name: value.name, cwd: value.cwd };
+  }
+
+  /**
+   * Receiving side of a real, wire-level room.invite (P3.8): unlike every other room verb, the request itself is deliberately ungated (the sender already IS the room's own owner, with no need to prove capability to invite) -- the security instead lives entirely in the embedded params.token, which must genuinely name this store's own identity as bearer and root at the room path's own claimed owner. Persists the verified token via saveRoomToken (mirroring joinRemoteRoom's own persistence) and fires a local room_invite delivery event carrying the room's real name/description (room-state) and the inviter's real name/cwd (inviter-agent) when the sender includes them, falling back to the bare device-id and room path otherwise.
+   */
+  private async handleRoomInvite(
+    request: IncomingManageRequest,
+  ): Promise<ManageOutcome> {
+    const roomPath = request.scope.path;
+    if (roomPath === undefined) {
+      return { result: "error", code: "missing_scope_path" };
+    }
+    const parsedParams = roomInviteSchema.safeParse(request.command.params);
+    if (!parsedParams.success) {
+      return { result: "error", code: "malformed_params" };
+    }
+    const { token } = parsedParams.data;
+
+    const { identity, clock, slot, revocation } = this.requireIdentity();
+    const verdict = await verifyRoomToken(token, {
+      identity,
+      clock,
+      revocation,
+      expectedBearer: deviceIdFromHex(this.peerId),
+      roomPath,
+    });
+    if (!verdict.ok) {
+      return { result: "error", code: "unauthorized" };
+    }
+    saveRoomToken(slot, roomPath, token);
+
+    const parsed = parseRoomPath(roomPath);
+    const inviterId = parsed.kind === "owner-named" ? parsed.owner : this.peerId;
+    const roomState = MeshStore.parseRoomStateExtension(
+      parsedParams.data["room-state"],
+    );
+    const inviterAgent = MeshStore.parseInviterAgentExtension(
+      parsedParams.data["inviter-agent"],
+    );
+    const event: DeliveryEvent = {
+      type: "room_invite",
+      room: roomPath,
+      roomDescription: roomState?.description ?? "",
+      from: inviterId,
+      fromName: inviterAgent?.name ?? inviterId,
+      fromCwd: inviterAgent?.cwd ?? "",
+    };
+    this.queueDelivery(this.peerId, event);
+    this.fireLocalDelivery(this.peerId, event);
+
+    return { result: "ok" };
+  }
+
   /** Every room.join request currently held open awaiting this store's own accept/reject decision. */
   listPendingRoomJoins(): { roomPath: string; requesterId: string }[] {
     return [...this.pendingRoomJoins.values()].map(
@@ -2055,6 +2128,9 @@ export class MeshStore implements CommsStore {
     }
   }
 
+  /**
+   * Invites targetId to roomId, over a real, wire-authenticated room.invite (P3.8): mints a fresh room:member grant for the target, records its own token-id the same way admitRoomJoin does (kickFromRoom can revoke an invited member's own grant exactly as it can a joined one), and pushes the grant to the target directly in the invite request itself -- room.invite is deliberately ungated (the room's own owner needs no capability to invite, per core/room's design), so the target's own verification of the embedded token is what proves this invite is genuine, not anything about the connection it arrived on. Retains the local CRDT invited-list bookkeeping (still this store's own record of who it has invited) but no longer broadcasts it: the target learns of the invite from the real request, not a mesh-wide patch.
+   */
   async inviteToRoom(
     roomId: string,
     targetId: string,
@@ -2072,17 +2148,48 @@ export class MeshStore implements CommsStore {
     }
     this.refreshMembership(room);
     this.rooms.set(roomId, room);
-    await this.broadcastPatch({ type: "room_upsert", room });
+
+    const { identity, clock, slot } = this.requireIdentity();
+    const tokenId = randomId();
+    const verdict = await mintCapabilityToken({
+      identity,
+      clock,
+      tokenId,
+      bearer: deviceIdFromHex(targetId),
+      capability: ROOM_MEMBER_CAPABILITY,
+      scope: { kind: "room", path: roomId },
+      expires: clock.now() + ROOM_TOKEN_LIFETIME_MS,
+      delegationsRemaining: 0,
+    });
+    if (!verdict.ok) {
+      throw new CommsError(
+        `Failed to mint an invite grant for ${targetId}`,
+        "MINT_FAILED",
+      );
+    }
+    saveIssuedRoomGrant(slot, roomId, targetId, tokenId);
 
     const inviter = this.agents.get(inviterId);
-    await this.deliverLocallyAndBroadcast(targetId, {
-      type: "room_invite",
-      room: roomId,
-      roomDescription: room.description,
-      from: inviterId,
-      fromName: inviter?.name ?? inviterId,
-      fromCwd: inviter?.cwd ?? "",
-    });
+    const params: Record<string, unknown> = {
+      verb: "room.invite",
+      invitee: deviceIdFromHex(targetId),
+      token: verdict.token,
+      ...MeshStore.roomStateExtension(room),
+      ...(inviter !== undefined
+        ? MeshStore.inviterAgentExtension(inviter)
+        : {}),
+    };
+    const outcome = await this.requireTransport().sendRoomRequest(
+      targetId,
+      { verb: ROOM_MEMBER_CAPABILITY, params },
+      { kind: "room", path: roomId },
+    );
+    if (outcome.result !== "ok") {
+      throw new CommsError(
+        `Invite to ${targetId} for ${roomId} failed (${outcome.code})`,
+        "INVITE_FAILED",
+      );
+    }
   }
 
   async declineInvite(
