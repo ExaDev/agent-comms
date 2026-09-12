@@ -47,6 +47,7 @@ import type {
 } from "wire-mesh-core/domain/mesh-session";
 import {
   roomJoinOkSchema,
+  roomReadSchema,
   roomSendSchema,
 } from "wire-mesh-core/generated/protocol";
 import type {
@@ -153,8 +154,8 @@ export class MeshStore implements CommsStore {
   private dms = new Map<string, DmMessage[]>();
   private deliveryQueues = new Map<string, DeliveryEvent[]>();
   private identityCache = new Map<string, { id: string }>();
-  /** Directed room.send requests that failed because their target member wasn't reachable at send time, held for retry when that member's own connection is (re)established -- the wire-authenticated fan-out's substitute for the legacy full-state-sync's own automatic eventual consistency, since a direct request to a disconnected peer fails immediately with no protocol-level retry of its own. Keyed by member device-id hex, bounded oldest-first per member with the same cap ordinary delivery queues use. */
-  private pendingRoomSends = new Map<
+  /** Directed room-domain requests (room.send, room.read) that failed because their target member wasn't reachable at send time, held for retry when that member's own connection is (re)established -- the wire-authenticated fan-out's substitute for the legacy full-state-sync's own automatic eventual consistency, since a direct request to a disconnected peer fails immediately with no protocol-level retry of its own. Keyed by member device-id hex, bounded oldest-first per member with the same cap ordinary delivery queues use. */
+  private pendingRoomRequests = new Map<
     string,
     { roomPath: string; params: Record<string, unknown> }[]
   >();
@@ -405,7 +406,7 @@ export class MeshStore implements CommsStore {
         state,
       });
     }
-    await this.flushPendingRoomSends(handle.id);
+    await this.flushPendingRoomRequests(handle.id);
   }
 
   /**
@@ -859,10 +860,6 @@ export class MeshStore implements CommsStore {
         }
         break;
       }
-      case "message_read": {
-        this.applyReadReceipt(patch.messageId, patch.readBy, patch.room);
-        break;
-      }
     }
 
     if (this.onPatch) {
@@ -1042,61 +1039,53 @@ export class MeshStore implements CommsStore {
     return undefined;
   }
 
+  /** Like findMessageSender, but also returns the room-path a room.read needs to address: room itself for a room message, or the specific DM key (this.dms is keyed by dmRoomPath/"self:...", not the bare pair) the message was actually found under. */
+  private findMessageLocation(
+    messageId: string,
+    room?: string,
+  ): { roomPath: string; from: string } | undefined {
+    if (room !== undefined) {
+      const msg = this.messages.get(room)?.find((m) => m.id === messageId);
+      return msg === undefined ? undefined : { roomPath: room, from: msg.from };
+    }
+    for (const [key, msgs] of this.dms) {
+      const msg = msgs.find((m) => m.id === messageId);
+      if (msg) return { roomPath: key, from: msg.from };
+    }
+    return undefined;
+  }
+
+  /**
+   * Marks a message read by readBy (always this store's own identity -- see the auto-mark-read timers in fireLocalDelivery and drainDelivery, its only callers) and notifies the message's own author via a directed, wire-authenticated room.read (P3.5), replacing the legacy message_read patch's mesh-wide broadcast: only the author is a genuine audience for "did you read my message" per core/room's own always-voluntary read-receipt design, and a direct request to them is strictly more than the old broadcast actually needed. Silently does nothing beyond the local readBy update when the author is this store itself (a self-DM, or an already-own message) or when this store holds no room:member token for the message's own room-path -- read receipts stay best-effort by design, never a reason to throw.
+   */
   private async markRead(
     messageId: string,
     readBy: string,
     room?: string,
   ): Promise<void> {
-    // Update local message state
-    if (room) {
-      const msgs = this.messages.get(room);
-      if (msgs) {
-        const msg = msgs.find((m) => m.id === messageId);
-        if (msg && !msg.readBy.includes(readBy)) {
-          msg.readBy.push(readBy);
-        }
-      }
-    } else {
-      for (const [, msgs] of this.dms) {
-        const msg = msgs.find((m) => m.id === messageId);
-        if (msg && !msg.readBy.includes(readBy)) {
-          msg.readBy.push(readBy);
-        }
-      }
+    const location = this.findMessageLocation(messageId, room);
+    if (location === undefined) return;
+    const { roomPath, from } = location;
+
+    const history =
+      room !== undefined ? this.messages.get(room) : this.dms.get(roomPath);
+    const message = history?.find((m) => m.id === messageId);
+    if (message && !message.readBy.includes(readBy)) {
+      message.readBy.push(readBy);
     }
 
-    // Notify sender
-    await this.emitDeliveryStatus(messageId, readBy, "read", room);
+    if (from === readBy) return;
 
-    // Propagate to other peers
-    await this.broadcastPatch(
-      room
-        ? { type: "message_read", messageId, readBy, room }
-        : { type: "message_read", messageId, readBy },
-    );
-  }
+    const { slot, clock } = this.requireIdentity();
+    const token = loadRoomTokens(slot)[roomPath];
+    if (token === undefined) return;
 
-  private applyReadReceipt(
-    messageId: string,
-    readBy: string,
-    room?: string,
-  ): void {
-    if (room) {
-      const msgs = this.messages.get(room);
-      if (msgs) {
-        const msg = msgs.find((m) => m.id === messageId);
-        if (msg && !msg.readBy.includes(readBy)) {
-          msg.readBy.push(readBy);
-        }
-      }
-    } else {
-      for (const [, msgs] of this.dms) {
-        const msg = msgs.find((m) => m.id === messageId);
-        if (msg && !msg.readBy.includes(readBy)) {
-          msg.readBy.push(readBy);
-        }
-      }
-    }
+    const params: Record<string, unknown> = {
+      verb: "room.read",
+      messages: [bytesFromHex(messageId)],
+      at: clock.now(),
+    };
+    await this.sendRoomRequestToMember(from, roomPath, token, params);
   }
 
   // -----------------------------------------------------------------------
@@ -1263,6 +1252,7 @@ export class MeshStore implements CommsStore {
     return {
       "room.join": (request, handle) => this.handleRoomJoin(request, handle),
       "room.send": (request, handle) => this.handleRoomSend(request, handle),
+      "room.read": (request, handle) => this.handleRoomRead(request, handle),
     };
   }
 
@@ -1360,6 +1350,63 @@ export class MeshStore implements CommsStore {
   }
 
   /**
+   * Receiving side of a directed room.read (P3.5): verifies the presented token the same way handleRoomSend does, then for each read message-id in the batch, updates this store's own local copy of that message's readBy (this store holds one because it's the message's own author -- the reason it's the one being notified) and fires a delivery_status event locally, replacing what markRead used to broadcast via the legacy message_read patch. Read receipts stay voluntary and best-effort by design: a message-id this store doesn't recognise (already expired from history, or simply never this store's own) is silently skipped rather than treated as an error.
+   */
+  private async handleRoomRead(
+    request: IncomingManageRequest,
+    handle: ConnectionHandle,
+  ): Promise<ManageOutcome> {
+    const roomPath = request.scope.path;
+    if (roomPath === undefined) {
+      return { result: "error", code: "missing_scope_path" };
+    }
+    if (request.token === undefined) {
+      return { result: "error", code: "unauthorized" };
+    }
+    const { identity, clock, revocation } = this.requireIdentity();
+    const verdict = await verifyRoomToken(request.token, {
+      identity,
+      clock,
+      revocation,
+      expectedBearer: deviceIdFromHex(handle.id),
+      roomPath,
+    });
+    if (!verdict.ok) {
+      return { result: "error", code: "unauthorized" };
+    }
+
+    const parsedParams = roomReadSchema.safeParse(request.command.params);
+    if (!parsedParams.success) {
+      return { result: "error", code: "malformed_params" };
+    }
+    const params = parsedParams.data;
+    const isDm = parseRoomPath(roomPath).kind === "dm";
+
+    for (const messageIdBytes of params.messages) {
+      const messageId = bytesToHex(messageIdBytes);
+      const history = isDm
+        ? this.dms.get(roomPath)
+        : this.messages.get(roomPath);
+      const message = history?.find((m) => m.id === messageId);
+      if (message === undefined) continue;
+      if (!message.readBy.includes(handle.id)) {
+        message.readBy.push(handle.id);
+      }
+      const event: DeliveryEvent = {
+        type: "delivery_status",
+        messageId,
+        agent: handle.id,
+        status: "read",
+        ...(isDm ? {} : { room: roomPath }),
+      };
+      this.queueDelivery(this.peerId, event);
+      this.fireLocalDelivery(this.peerId, event);
+    }
+
+    return { result: "ok" };
+  }
+
+  /**
    * Sends one directed room.send to a single member's own session, attaching this store's own persisted room:member token for the given room path -- the primitive P3.5's own directed fan-out (deliverToRoom) will loop over per member once it replaces the legacy broadcastPatch path this store still uses for message delivery today. Throws if this store holds no token for the room: never a member, or a token that expired or was revoked with nothing fresh persisted in its place.
    */
   async sendRoomMessageDirected(
@@ -1397,50 +1444,57 @@ export class MeshStore implements CommsStore {
     }
   }
 
-  /** Records a room.send that couldn't reach memberId right now, for a later flushPendingRoomSends to retry once that member reconnects. Bounded oldest-first with the same cap ordinary delivery queues use, so an indefinitely-offline member cannot grow this without limit. */
-  private queuePendingRoomSend(
+  /** Records a room-domain request that couldn't reach memberId right now, for a later flushPendingRoomRequests to retry once that member reconnects. Bounded oldest-first with the same cap ordinary delivery queues use, so an indefinitely-offline member cannot grow this without limit. */
+  private queuePendingRoomRequest(
     memberId: string,
     roomPath: string,
     params: Record<string, unknown>,
   ): void {
-    const queue = this.pendingRoomSends.get(memberId) ?? [];
+    const queue = this.pendingRoomRequests.get(memberId) ?? [];
     queue.push({ roomPath, params });
     if (queue.length > MAX_QUEUED_DELIVERIES_PER_AGENT) {
       queue.splice(0, queue.length - MAX_QUEUED_DELIVERIES_PER_AGENT);
     }
-    this.pendingRoomSends.set(memberId, queue);
+    this.pendingRoomRequests.set(memberId, queue);
   }
 
   /**
-   * Sends one directed room.send to a single member, queuing it for retry instead of throwing when the member isn't currently reachable -- the fan-out's own per-recipient primitive, distinct from sendRoomMessageDirected's deliberate throw-on-failure contract for a caller sending to one specific, known recipient. Silently drops a send this store no longer holds a token for (no longer a member of the room) rather than queuing something that will only fail again on retry.
+   * Sends one directed room-domain request (room.send, room.read, or any future room:member-gated verb) to a single member, queuing it for retry instead of throwing when the member isn't currently reachable -- the fan-out's own per-recipient primitive, distinct from sendRoomMessageDirected's deliberate throw-on-failure contract for a caller sending to one specific, known recipient. Silently drops a request this store no longer holds a token for (no longer a member of the room) rather than queuing something that will only fail again on retry.
    */
-  private async deliverRoomSendToMember(
+  private async sendRoomRequestToMember(
     memberId: string,
     roomPath: string,
     token: CapabilityToken,
     params: Record<string, unknown>,
   ): Promise<void> {
-    const outcome = await this.requireTransport().sendRoomRequest(
-      memberId,
-      { verb: ROOM_MEMBER_CAPABILITY, params },
-      { kind: "room", path: roomPath },
-      token,
-    );
+    // sendRoomRequest can reject outright (e.g. the connection drops mid-request, per wire-mesh-core's own rejectPendingManageRequests), not just resolve with an error outcome -- both are exactly the same "memberId isn't reachable right now" fact from this method's own point of view, so both queue for retry rather than one of them propagating as an uncaught rejection out of what every caller treats as a fire-and-forget send.
+    let outcome: ManageOutcome;
+    try {
+      outcome = await this.requireTransport().sendRoomRequest(
+        memberId,
+        { verb: ROOM_MEMBER_CAPABILITY, params },
+        { kind: "room", path: roomPath },
+        token,
+      );
+    } catch {
+      this.queuePendingRoomRequest(memberId, roomPath, params);
+      return;
+    }
     if (outcome.result !== "ok") {
-      this.queuePendingRoomSend(memberId, roomPath, params);
+      this.queuePendingRoomRequest(memberId, roomPath, params);
     }
   }
 
   /** Retries every room.send queued for memberId since it was last reachable, dropping (not re-queuing) any whose room this store no longer holds a token for. Called once a connection to memberId is (re)established -- handlePeerConnected fires for both a fresh introduction and a reconnection after downtime, exactly the two cases a queued send needs to be retried on. */
-  private async flushPendingRoomSends(memberId: string): Promise<void> {
-    const queue = this.pendingRoomSends.get(memberId);
+  private async flushPendingRoomRequests(memberId: string): Promise<void> {
+    const queue = this.pendingRoomRequests.get(memberId);
     if (queue === undefined || queue.length === 0) return;
-    this.pendingRoomSends.delete(memberId);
+    this.pendingRoomRequests.delete(memberId);
     const { slot } = this.requireIdentity();
     for (const pending of queue) {
       const token = loadRoomTokens(slot)[pending.roomPath];
       if (token === undefined) continue;
-      await this.deliverRoomSendToMember(
+      await this.sendRoomRequestToMember(
         memberId,
         pending.roomPath,
         token,
@@ -1934,7 +1988,7 @@ export class MeshStore implements CommsStore {
   // -----------------------------------------------------------------------
 
   /**
-   * Sends a room message via a real, wire-authenticated room.send fan-out (P3.5): one directed request per member, each carrying this sender's own persisted room:member token, rather than the legacy broadcastPatch's full-state replication. A member unreachable right now is queued for retry (see deliverRoomSendToMember/flushPendingRoomSends) instead of blocking or failing the whole send -- delivery to any one recipient is independent of every other.
+   * Sends a room message via a real, wire-authenticated room.send fan-out (P3.5): one directed request per member, each carrying this sender's own persisted room:member token, rather than the legacy broadcastPatch's full-state replication. A member unreachable right now is queued for retry (see sendRoomRequestToMember/flushPendingRoomRequests) instead of blocking or failing the whole send -- delivery to any one recipient is independent of every other.
    */
   async sendRoomMessage(
     roomId: string,
@@ -1992,7 +2046,7 @@ export class MeshStore implements CommsStore {
 
     for (const memberId of room.members) {
       if (memberId !== from) {
-        await this.deliverRoomSendToMember(memberId, roomId, token, params);
+        await this.sendRoomRequestToMember(memberId, roomId, token, params);
       }
     }
 
@@ -2063,7 +2117,7 @@ export class MeshStore implements CommsStore {
           "streaming-behavior": streamingBehavior,
         }),
       };
-      await this.deliverRoomSendToMember(to, key, token, params);
+      await this.sendRoomRequestToMember(to, key, token, params);
     }
 
     return message;

@@ -48,8 +48,7 @@ export type MeshStatePatch =
   | { type: "room_delete"; roomId: string }
   | { type: "message_add"; roomId: string; message: RoomMessage }
   | { type: "dm_add"; key: string; message: DmMessage }
-  | { type: "delivery"; agentId: string; event: DeliveryEvent }
-  | { type: "message_read"; messageId: string; readBy: string; room?: string };
+  | { type: "delivery"; agentId: string; event: DeliveryEvent };
 
 // ---------------------------------------------------------------------------
 // Wire message union
