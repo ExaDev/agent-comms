@@ -2377,6 +2377,9 @@ export class MeshStore implements CommsStore {
     await this.broadcastPatch({ type: "room_upsert", room });
   }
 
+  /**
+   * Destroys roomId, revoking every member's own room:member grant for real first (P3.8) -- the same revocation machinery kickFromRoom already uses, since destroying a room out from under its members is exactly as much a membership revocation as kicking them individually would be, just for all of them at once. Room-existence notification (agent_upsert/room_delete) stays on the legacy broadcastPatch for now: replacing it needs the same broader informational-events redesign the rest of P3.8 already tracks as separate, larger work, not something this specific fix should improvise alone.
+   */
   async destroyRoom(roomId: string, agentId: string): Promise<void> {
     const room = this.rooms.get(roomId);
     if (!room)
@@ -2385,6 +2388,7 @@ export class MeshStore implements CommsStore {
       throw new CommsError("Only the room owner can destroy", "NOT_OWNER");
 
     for (const memberId of room.members) {
+      await this.revokeMemberGrant(roomId, memberId);
       const member = this.agents.get(memberId);
       if (member) {
         member.subscribedRooms = member.subscribedRooms.filter(
