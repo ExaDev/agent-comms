@@ -1,3 +1,26 @@
+## [2.9.0](https://github.com/ExaDev/agent-comms/compare/v2.8.0...v2.9.0) (2026-09-12)
+
+### Features
+
+* **core:** verify and deliver a directed room.send ([b9c110b](https://github.com/ExaDev/agent-comms/commit/b9c110b1df3fcd328d2120ea0c9ce33dc40c6827))
+
+### Bug Fixes
+
+* **deps:** bump wire-mesh-core to 1.0.3 for the real-wire signature fix ([3cb441e](https://github.com/ExaDev/agent-comms/commit/3cb441e9f3f81e3d34637dbd05940567d14105fc))
+
+### Refactoring
+
+* **core:** generalise token-id.ts into random-id.ts ([3708080](https://github.com/ExaDev/agent-comms/commit/37080804c1b6b09e91f10c0d27706664470485af))
+
+### Styles
+
+* apply eslint --fix formatting ([b69bddb](https://github.com/ExaDev/agent-comms/commit/b69bddbb02034b0ec1ef5f2b06942194ef2cce59))
+
+### Tests
+
+* **core:** cover directed room.send delivery end to end ([796916f](https://github.com/ExaDev/agent-comms/commit/796916f7c26290fe115e881a20884bde7d116c93))
+* wire the smoke test's generated script for real room-verb dispatch ([a01c564](https://github.com/ExaDev/agent-comms/commit/a01c56436a541e2cb4acfd54d309dc264f399f07))
+
 ## [2.8.0](https://github.com/ExaDev/agent-comms/compare/v2.7.0...v2.8.0) (2026-09-12)
 
 ### Features
