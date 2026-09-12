@@ -1,5 +1,5 @@
 /**
- * core/room's six verifier obligations (spec/room.cddl), layered on top of verifyCapabilityToken (obligations 2, 4, and 5 -- bearer match, ordinary token-claims checks, and delegations-remaining narrowing -- already live there). This module adds the two obligations specific to room-shaped scopes: the chain must terminate at the correct root for the path's own shape (1), and the token's own scope must actually name the room the request claims to act on (3). Obligation 6 (refuse an unrecognised content-type/kind) is a message-handling concern, not a token-verification one, and belongs to the room verb router instead.
+ * core/room's six verifier obligations (spec/room.cddl), layered on top of verifyCapabilityToken (obligations 2, 4, and 5 -- bearer match, ordinary token-claims checks, and delegations-remaining narrowing -- already live there). This module adds the checks specific to room-shaped scopes: the token must actually carry the room:member capability the six obligations presuppose (room.cddl's own obligation 1 opens with "a room:member token's delegation chain..." -- a token minted for some other capability that happens to be scoped to a room path must not pass just because scope.kind/path line up), the chain must terminate at the correct root for the path's own shape (1), and the token's own scope must actually name the room the request claims to act on (3). Obligation 6 (refuse an unrecognised content-type/kind) is a message-handling concern, not a token-verification one, and belongs to the room verb router instead.
  */
 
 import {
@@ -15,8 +15,12 @@ import type {
 } from "wire-mesh-core/generated/protocol";
 import { parseRoomPath } from "./room-path.js";
 
+/** The one capability that authorises every ordinary room-membership verb (room.send/read/leave/members) -- "one resource, not several", the same pattern exec:pty already uses for its own four inner verbs. room.join/room.invite are deliberately ungated and never reach this check at all. */
+const ROOM_MEMBER_CAPABILITY = "room:member";
+
 export type RoomTokenVerdictReason =
   | TokenVerdictReason
+  | "wrong_capability"
   | "wrong_scope_kind"
   | "wrong_scope_path"
   | "wrong_chain_root";
@@ -52,6 +56,9 @@ export async function verifyRoomToken(
     return verdict;
   }
 
+  if (verdict.claims.capability !== ROOM_MEMBER_CAPABILITY) {
+    return { ok: false, reason: "wrong_capability" };
+  }
   if (verdict.claims.scope.kind !== "room") {
     return { ok: false, reason: "wrong_scope_kind" };
   }
