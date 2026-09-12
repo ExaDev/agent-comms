@@ -1,3 +1,14 @@
+## [2.11.0](https://github.com/ExaDev/agent-comms/compare/v2.10.0...v2.11.0) (2026-09-12)
+
+### Features
+
+* **core:** deliver read receipts via a directed room.read ([3e47ef3](https://github.com/ExaDev/agent-comms/commit/3e47ef35d90f16a16c3218ef433f6264c3ad6716))
+
+### Tests
+
+* **core:** cover directed room.read delivery ([2c8b521](https://github.com/ExaDev/agent-comms/commit/2c8b5217a015f67b45ba5579909b392ae09ccc20))
+* give the smoke test's own join-admission poll a realistic budget ([7090708](https://github.com/ExaDev/agent-comms/commit/709070861b826b138641eac80ab479520e9a9593))
+
 ## [2.10.0](https://github.com/ExaDev/agent-comms/compare/v2.9.0...v2.10.0) (2026-09-12)
 
 ### Features
