@@ -1,3 +1,9 @@
+## [2.16.0](https://github.com/ExaDev/agent-comms/compare/v2.15.0...v2.16.0) (2026-09-12)
+
+### Features
+
+* **core:** revoke every member's grant for real when a room is destroyed ([61ce084](https://github.com/ExaDev/agent-comms/commit/61ce0842e378002e07dd5fb2bb5b1c385131061a))
+
 ## [2.15.0](https://github.com/ExaDev/agent-comms/compare/v2.14.0...v2.15.0) (2026-09-12)
 
 ### Features
