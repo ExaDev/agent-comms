@@ -1,3 +1,14 @@
+## [2.13.0](https://github.com/ExaDev/agent-comms/compare/v2.12.0...v2.13.0) (2026-09-12)
+
+### Features
+
+* **core:** announce and ingest revocation entries over the wire ([80d2bfe](https://github.com/ExaDev/agent-comms/commit/80d2bfe0043cd588295a3cc10c949e8367550075))
+* **core:** revoke a kicked member's own grant for real ([4f201b6](https://github.com/ExaDev/agent-comms/commit/4f201b6dc9117d51ac2232da95689e600af2bd16))
+
+### Tests
+
+* **core:** cover kick revoking a member's token for every peer ([1abd8cf](https://github.com/ExaDev/agent-comms/commit/1abd8cf2d8880c2769cf652859dcb13b17469964))
+
 ## [2.12.0](https://github.com/ExaDev/agent-comms/compare/v2.11.0...v2.12.0) (2026-09-12)
 
 ### Features
