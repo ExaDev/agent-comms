@@ -37,8 +37,11 @@ import {
   deviceIdFromHex,
   deviceIdToHex,
 } from "wire-mesh-core/domain/device-id";
-import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
-import type { RevocationCheck } from "wire-mesh-core/domain/tokens";
+import {
+  mintCapabilityToken,
+  mintRevocationEntry,
+} from "wire-mesh-core/domain/tokens";
+import type { RevocationView } from "wire-mesh-core/domain/revocation-view";
 import type { IdentityPort } from "wire-mesh-core/ports/identity";
 import type { Clock } from "wire-mesh-core/ports/clock";
 import type {
@@ -54,13 +57,20 @@ import {
 import type {
   CapabilityToken,
   MessageRef,
+  RevocationEntry,
 } from "wire-mesh-core/generated/protocol";
 import type { RoomVerbHandler } from "./room-router.js";
 import {
   ROOM_MEMBER_CAPABILITY,
   verifyRoomToken,
 } from "./room-token-verification.js";
-import { loadRoomTokens, saveRoomToken } from "./identity-store.js";
+import {
+  deleteIssuedRoomGrant,
+  loadIssuedRoomGrant,
+  loadRoomTokens,
+  saveIssuedRoomGrant,
+  saveRoomToken,
+} from "./identity-store.js";
 import type { IdentitySlot } from "./identity-store.js";
 import { randomId } from "./random-id.js";
 import type { MeshMessage, MeshStatePatch, PeerInfo } from "./wire-protocol.js";
@@ -97,7 +107,7 @@ export interface MeshStoreIdentity {
   identity: IdentityPort;
   clock: Clock;
   slot: IdentitySlot;
-  revocation: RevocationCheck;
+  revocation: RevocationView;
 }
 
 /**
@@ -668,7 +678,18 @@ export class MeshStore implements CommsStore {
       onError: (error) => {
         this.onError?.(error);
       },
+      onRevocationAnnounce: (entry) => {
+        void this.handleRevocationAnnounce(entry);
+      },
     };
+  }
+
+  /** Verifies a gossiped revocation-entry and, if it verifies, records it in this store's own RevocationView -- future verifyRoomToken calls against this token's (token-id, issuer) pair fail with "revoked" from this point on. A failing entry is dropped silently: the same "hostile input produces a verdict, never a throw" contract verifyRevocationEntry itself already guarantees, so there is nothing further for a caller to react to. */
+  private async handleRevocationAnnounce(
+    entry: RevocationEntry,
+  ): Promise<void> {
+    const { identity, revocation } = this.requireIdentity();
+    await revocation.record(entry, { identity });
   }
 
   /** Append to a target agent's delivery queue, bounded oldest-first (#28). */
@@ -1601,12 +1622,13 @@ export class MeshStore implements CommsStore {
       };
     }
 
-    // Only identity/clock are needed here: the granted token belongs to the requester's own node, which persists it itself once it receives this response, not this store's own identity slot.
-    const { identity, clock } = this.requireIdentity();
+    // The granted token itself belongs to the requester's own node, which persists it itself once it receives this response -- but this identity slot must also remember the token-id it just issued (saveIssuedRoomGrant below), since revoking a specific member's grant later (kickFromRoom) has no other way to name which token-id to revoke: a token-id is never presented back on the wire, so a room owner's own memory of having minted it is the only record.
+    const { identity, clock, slot } = this.requireIdentity();
+    const tokenId = randomId();
     const verdict = await mintCapabilityToken({
       identity,
       clock,
-      tokenId: randomId(),
+      tokenId,
       bearer: deviceIdFromHex(handle.id),
       capability: "room:member",
       scope: { kind: "room", path: roomPath },
@@ -1616,6 +1638,7 @@ export class MeshStore implements CommsStore {
     if (!verdict.ok) {
       return { result: "error", code: "mint_failed" };
     }
+    saveIssuedRoomGrant(slot, roomPath, handle.id, tokenId);
 
     const room = this.rooms.get(roomPath);
     if (room !== undefined) {
@@ -2093,6 +2116,9 @@ export class MeshStore implements CommsStore {
     });
   }
 
+  /**
+   * Kicks targetId from roomId. Beyond the legacy CRDT membership removal (retired in P3.8 along with every other non-message broadcastPatch caller), this revokes the member's own room:member grant for real: mints a revocation-entry for the token-id this identity recorded when it admitted them (admitRoomJoin's own saveIssuedRoomGrant), records it in this store's own RevocationView immediately (so this identity's own future verifications see the kick without waiting on its own gossip), and announces it to every connected peer so each one's independent verification of the target's token -- not just this room's owner -- also starts failing as "revoked" from here on. Silently skips the revocation step (kick still happens; only the token-side enforcement doesn't) when no issued-grant record exists for this member, e.g. a grant predating this bookkeeping.
+   */
   async kickFromRoom(
     roomId: string,
     targetId: string,
@@ -2103,6 +2129,19 @@ export class MeshStore implements CommsStore {
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
     if (room.owner !== kickerId)
       throw new CommsError("Only the room owner can kick", "NOT_OWNER");
+
+    const { identity, clock, slot, revocation } = this.requireIdentity();
+    const tokenId = loadIssuedRoomGrant(slot, roomId, targetId);
+    if (tokenId !== undefined) {
+      const entry = await mintRevocationEntry({
+        identity,
+        tokenId,
+        revokedAt: clock.now(),
+      });
+      await revocation.record(entry, { identity });
+      await this.requireTransport().broadcastRevocation([entry]);
+      deleteIssuedRoomGrant(slot, roomId, targetId);
+    }
 
     this.bump(room);
     this.recordMemberOp(room, "member", "leave", targetId);
