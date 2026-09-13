@@ -2,8 +2,7 @@
  * Unit tests for bridge.ts — formatDeliveryEvent.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { formatDeliveryEvent, isActionableEvent } from "../bridge.js";
 import type { DeliveryEvent } from "../types.js";
 
@@ -16,7 +15,7 @@ describe("formatDeliveryEvent", () => {
       newName: "Bob",
     };
     const result = formatDeliveryEvent(event);
-    assert.strictEqual(result, "Alice is now known as Bob");
+    expect(result).toBe("Alice is now known as Bob");
   });
 
   it("formats room_message", () => {
@@ -32,7 +31,7 @@ describe("formatDeliveryEvent", () => {
       },
     };
     const result = formatDeliveryEvent(event);
-    assert.strictEqual(result, "[r1] a1: hello");
+    expect(result).toBe("[r1] a1: hello");
   });
 
   it("formats member_status", () => {
@@ -43,7 +42,7 @@ describe("formatDeliveryEvent", () => {
       status: "busy",
     };
     const result = formatDeliveryEvent(event);
-    assert.strictEqual(result, "a1 is now busy in r1");
+    expect(result).toBe("a1 is now busy in r1");
   });
 });
 
@@ -60,7 +59,7 @@ describe("isActionableEvent", () => {
         readBy: [],
       },
     };
-    assert.strictEqual(isActionableEvent(event), true);
+    expect(isActionableEvent(event)).toBe(true);
   });
 
   it("classifies dm as actionable", () => {
@@ -75,7 +74,7 @@ describe("isActionableEvent", () => {
         readBy: [],
       },
     };
-    assert.strictEqual(isActionableEvent(event), true);
+    expect(isActionableEvent(event)).toBe(true);
   });
 
   it("classifies room_invite as actionable", () => {
@@ -87,7 +86,7 @@ describe("isActionableEvent", () => {
       fromName: "Alice",
       fromCwd: "/home",
     };
-    assert.strictEqual(isActionableEvent(event), true);
+    expect(isActionableEvent(event)).toBe(true);
   });
 
   it("classifies member_joined as informational", () => {
@@ -96,7 +95,7 @@ describe("isActionableEvent", () => {
       room: "r1",
       agent: "a1",
     };
-    assert.strictEqual(isActionableEvent(event), false);
+    expect(isActionableEvent(event)).toBe(false);
   });
 
   it("classifies member_status as informational", () => {
@@ -106,7 +105,7 @@ describe("isActionableEvent", () => {
       agent: "a1",
       status: "offline",
     };
-    assert.strictEqual(isActionableEvent(event), false);
+    expect(isActionableEvent(event)).toBe(false);
   });
 
   it("classifies name_changed as informational", () => {
@@ -116,7 +115,7 @@ describe("isActionableEvent", () => {
       oldName: "Alice",
       newName: "Bob",
     };
-    assert.strictEqual(isActionableEvent(event), false);
+    expect(isActionableEvent(event)).toBe(false);
   });
 
   it("classifies delivery_status as informational", () => {
@@ -126,6 +125,6 @@ describe("isActionableEvent", () => {
       agent: "a1",
       status: "delivered",
     };
-    assert.strictEqual(isActionableEvent(event), false);
+    expect(isActionableEvent(event)).toBe(false);
   });
 });
