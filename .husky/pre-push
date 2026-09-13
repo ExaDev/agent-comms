@@ -1,1 +1,1 @@
-node node_modules/.bin/eslint . 2>&1 && node node_modules/.bin/tsc --noEmit 2>&1 && node node_modules/.bin/tsx --test --test-concurrency=1 'src/test/**/*.test.ts' 2>&1
+node node_modules/.bin/eslint . 2>&1 && node node_modules/.bin/tsc --noEmit 2>&1 && node node_modules/.bin/vitest run 2>&1
