@@ -244,23 +244,26 @@ function buildExtensions(publicKeyDer: Buffer): Buffer {
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * Generate a fresh cryptographic identity: ECDSA P-256 keypair and self-signed
- * X.509 certificate. The fingerprint of the certificate serves as the peer ID.
+ * Generate a fresh cryptographic identity: ECDSA P-256 keypair and self-signed X.509 certificate. The fingerprint of the certificate serves as the peer ID.
  *
- * Key material is generated in memory; bridges that need a stable identity
- * across restarts persist it through identity-store.ts, which keeps the
- * fingerprint (and therefore the peer/agent ID) stable.
+ * Key material is generated in memory; bridges that need a stable identity across restarts persist it through identity-store.ts, which keeps the fingerprint (and therefore the peer/agent ID) stable.
  */
 export function generateIdentity(): PeerIdentity {
-  // When encoding options are specified, generateKeyPairSync returns
-  // { publicKey: string, privateKey: string } in PEM format.
+  // When encoding options are specified, generateKeyPairSync returns { publicKey: string, privateKey: string } in PEM format.
   const keyPair = generateKeyPairSync("ec", {
     namedCurve: "P-256",
     publicKeyEncoding: { type: "spki", format: "pem" },
     privateKeyEncoding: { type: "pkcs8", format: "pem" },
   });
 
-  const publicKeyDer = createPublicKey(keyPair.publicKey).export({
+  return certifyKeyPair(keyPair.privateKey);
+}
+
+/**
+ * Issue a fresh self-signed X.509 certificate for an already-existing EC private key, rather than generating a new key pair -- what a certificate renewal must call instead of `generateIdentity()`, since device-id is derived from the public key, not the certificate: reusing the same key pair across a re-sign is what keeps device-id stable across renewal.
+ */
+export function certifyKeyPair(privateKeyPem: string): PeerIdentity {
+  const publicKeyDer = createPublicKey(privateKeyPem).export({
     type: "spki",
     format: "der",
   });
@@ -307,7 +310,7 @@ export function generateIdentity(): PeerIdentity {
   // Sign the TBSCertificate
   const signer = createSign("SHA256");
   signer.update(tbsCert);
-  const signature = signer.sign(keyPair.privateKey);
+  const signature = signer.sign(privateKeyPem);
 
   // Assemble the full certificate
   const certDer = buildCertificateDer(tbsCert, sigAlgSeq, signature);
@@ -316,10 +319,10 @@ export function generateIdentity(): PeerIdentity {
   const certificate = derToCertificatePem(certDer);
 
   return {
-    privateKey: keyPair.privateKey,
+    privateKey: privateKeyPem,
     certificate,
     fingerprint: getCertificateFingerprint(certificate),
-    deviceId: deriveDeviceId(keyPair.privateKey),
+    deviceId: deriveDeviceId(privateKeyPem),
   };
 }
 
