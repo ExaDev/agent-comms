@@ -2,8 +2,7 @@
  * Component interaction tests for JoinForm.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { render as preactRender } from "preact";
 import { act } from "preact/test-utils";
 import { Window } from "happy-dom";
@@ -35,7 +34,7 @@ describe("JoinForm interactions", () => {
         container,
       );
       const form = container.querySelector("#join-form")!;
-      assert.ok(form.classList.contains("hidden"));
+      expect(form.classList.contains("hidden")).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -57,7 +56,7 @@ describe("JoinForm interactions", () => {
       );
       const btn = container.querySelector(".join-submit")!;
       btn.click();
-      assert.strictEqual(submitted, false);
+      expect(submitted).toBe(false);
     } finally {
       cleanup();
     }
@@ -71,12 +70,12 @@ describe("JoinForm interactions", () => {
         container,
       );
       const input = container.querySelector("input.join-input")!;
-      assert.ok(input);
-      assert.strictEqual(input.getAttribute("placeholder"), "Room name...");
+      expect(input).toBeTruthy();
+      expect(input.getAttribute("placeholder")).toBe("Room name...");
 
       const btn = container.querySelector("button.join-submit")!;
-      assert.ok(btn);
-      assert.strictEqual(btn.textContent, "Join");
+      expect(btn).toBeTruthy();
+      expect(btn.textContent).toBe("Join");
     } finally {
       cleanup();
     }

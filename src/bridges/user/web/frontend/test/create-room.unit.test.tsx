@@ -2,8 +2,7 @@
  * Unit tests for CreateRoomForm component.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { render as preactRender } from "preact";
 import { Window } from "happy-dom";
 import { CreateRoomForm } from "../components/CreateRoomForm.js";
@@ -38,7 +37,7 @@ describe("CreateRoomForm", () => {
         container,
       );
       const form = container.querySelector("form");
-      assert.strictEqual(form, null);
+      expect(form).toBe(null);
     } finally {
       cleanup();
     }
@@ -57,20 +56,17 @@ describe("CreateRoomForm", () => {
       );
 
       const nameInput = container.querySelector("input[name='room-name']")!;
-      assert.ok(nameInput, "room name input should exist");
-      assert.strictEqual(
-        nameInput.getAttribute("placeholder"),
-        "e.g. project-alpha",
-      );
+      expect(nameInput, "room name input should exist").toBeTruthy();
+      expect(nameInput.getAttribute("placeholder")).toBe("e.g. project-alpha");
 
       const typeSelect = container.querySelector("select[name='room-type']")!;
-      assert.ok(typeSelect, "room type select should exist");
-      assert.strictEqual(typeSelect.value, "public");
+      expect(typeSelect, "room type select should exist").toBeTruthy();
+      expect(typeSelect.value).toBe("public");
 
       const descInput = container.querySelector(
         "input[name='room-description']",
       )!;
-      assert.ok(descInput, "description input should exist");
+      expect(descInput, "description input should exist").toBeTruthy();
     } finally {
       cleanup();
     }
@@ -89,10 +85,10 @@ describe("CreateRoomForm", () => {
       );
 
       const options = container.querySelectorAll("select option");
-      assert.strictEqual(options.length, 3);
-      assert.strictEqual(options[0].getAttribute("value"), "public");
-      assert.strictEqual(options[1].getAttribute("value"), "private");
-      assert.strictEqual(options[2].getAttribute("value"), "secret");
+      expect(options.length).toBe(3);
+      expect(options[0].getAttribute("value")).toBe("public");
+      expect(options[1].getAttribute("value")).toBe("private");
+      expect(options[2].getAttribute("value")).toBe("secret");
     } finally {
       cleanup();
     }
@@ -111,12 +107,12 @@ describe("CreateRoomForm", () => {
       );
 
       const submitBtn = container.querySelector("button.create-room-submit")!;
-      assert.ok(submitBtn);
-      assert.strictEqual(submitBtn.textContent, "Create");
+      expect(submitBtn).toBeTruthy();
+      expect(submitBtn.textContent).toBe("Create");
 
       const cancelBtn = container.querySelector("button.create-room-cancel")!;
-      assert.ok(cancelBtn);
-      assert.strictEqual(cancelBtn.textContent, "Cancel");
+      expect(cancelBtn).toBeTruthy();
+      expect(cancelBtn.textContent).toBe("Cancel");
     } finally {
       cleanup();
     }

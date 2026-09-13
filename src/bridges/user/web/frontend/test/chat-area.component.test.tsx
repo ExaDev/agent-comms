@@ -2,8 +2,7 @@
  * Component interaction tests for ChatArea.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { render as preactRender } from "preact";
 import { Window } from "happy-dom";
 import { ChatArea } from "../components/ChatArea.js";
@@ -46,9 +45,9 @@ describe("ChatArea interactions", () => {
         container,
       );
       const btn = container.querySelector(".leave-btn")!;
-      assert.ok(btn);
+      expect(btn).toBeTruthy();
       btn.click();
-      assert.strictEqual(leftCalled, true);
+      expect(leftCalled).toBe(true);
     } finally {
       cleanup();
     }
@@ -69,7 +68,7 @@ describe("ChatArea interactions", () => {
         />,
         container,
       );
-      assert.strictEqual(container.querySelector(".leave-btn"), null);
+      expect(container.querySelector(".leave-btn")).toBe(null);
     } finally {
       cleanup();
     }
@@ -91,8 +90,8 @@ describe("ChatArea interactions", () => {
         container,
       );
       const btn = container.querySelector("#send-btn")!;
-      assert.ok(btn);
-      assert.strictEqual(btn.textContent, "Send");
+      expect(btn).toBeTruthy();
+      expect(btn.textContent).toBe("Send");
     } finally {
       cleanup();
     }
@@ -122,7 +121,7 @@ describe("ChatArea interactions", () => {
         />,
         container,
       );
-      assert.strictEqual(container.querySelectorAll(".msg").length, 2);
+      expect(container.querySelectorAll(".msg").length).toBe(2);
     } finally {
       cleanup();
     }
@@ -148,10 +147,10 @@ describe("ChatArea interactions", () => {
         container,
       );
       const prompt = container.querySelector(".connect-prompt");
-      assert.ok(prompt, "should render .connect-prompt");
+      expect(prompt, "should render .connect-prompt").toBeTruthy();
       const btn = container.querySelector(".connect-btn");
-      assert.ok(btn, "should render .connect-btn");
-      assert.strictEqual(btn?.textContent, "Connect to local mesh");
+      expect(btn, "should render .connect-btn").toBeTruthy();
+      expect(btn?.textContent).toBe("Connect to local mesh");
     } finally {
       cleanup();
     }
@@ -172,11 +171,10 @@ describe("ChatArea interactions", () => {
         />,
         container,
       );
-      assert.strictEqual(
+      expect(
         container.querySelector(".connect-prompt"),
-        null,
         "should not render .connect-prompt when connected",
-      );
+      ).toBe(null);
     } finally {
       cleanup();
     }
@@ -200,11 +198,10 @@ describe("ChatArea interactions", () => {
         />,
         container,
       );
-      assert.strictEqual(
+      expect(
         container.querySelector(".connect-prompt"),
-        null,
         "should not render .connect-prompt when messages exist",
-      );
+      ).toBe(null);
     } finally {
       cleanup();
     }
@@ -229,9 +226,9 @@ describe("ChatArea interactions", () => {
         container,
       );
       const btn = container.querySelector(".connect-btn")!;
-      assert.ok(btn);
+      expect(btn).toBeTruthy();
       btn.click();
-      assert.strictEqual(connectCalled, true);
+      expect(connectCalled).toBe(true);
     } finally {
       cleanup();
     }

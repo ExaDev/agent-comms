@@ -4,8 +4,7 @@
  * Uses Preact's act() to flush state updates after clicks.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { render as preactRender } from "preact";
 import { act } from "preact/test-utils";
 import { Window } from "happy-dom";
@@ -80,7 +79,7 @@ describe("Sidebar interactions", () => {
       );
       const roomItem = container.querySelector(".room-item") as HTMLElement;
       roomItem.click();
-      assert.strictEqual(joinedRoom, "r1");
+      expect(joinedRoom).toBe("r1");
     } finally {
       cleanup();
     }
@@ -107,7 +106,7 @@ describe("Sidebar interactions", () => {
       );
       const agentItem = container.querySelector(".agent-item") as HTMLElement;
       agentItem.click();
-      assert.strictEqual(selectedAgent, "a1");
+      expect(selectedAgent).toBe("a1");
     } finally {
       cleanup();
     }
@@ -130,7 +129,7 @@ describe("Sidebar interactions", () => {
         container,
       );
 
-      assert.strictEqual(container.querySelector("form"), null);
+      expect(container.querySelector("form")).toBe(null);
 
       act(() => {
         const toggle = container.querySelector(
@@ -139,10 +138,10 @@ describe("Sidebar interactions", () => {
         toggle.click();
       });
 
-      assert.ok(
+      expect(
         container.querySelector("form.create-room-form"),
         "create room form should appear after toggle click",
-      );
+      ).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -172,7 +171,7 @@ describe("Sidebar interactions", () => {
         ) as HTMLElement;
         toggle.click();
       });
-      assert.ok(container.querySelector("form"));
+      expect(container.querySelector("form")).toBeTruthy();
 
       // Cancel
       act(() => {
@@ -182,7 +181,7 @@ describe("Sidebar interactions", () => {
         cancel.click();
       });
 
-      assert.strictEqual(container.querySelector("form"), null);
+      expect(container.querySelector("form")).toBe(null);
     } finally {
       cleanup();
     }
@@ -205,7 +204,7 @@ describe("Sidebar interactions", () => {
         container,
       );
 
-      assert.strictEqual(container.querySelector("input.join-input"), null);
+      expect(container.querySelector("input.join-input")).toBe(null);
 
       act(() => {
         const toggle = container.querySelector(
@@ -214,10 +213,10 @@ describe("Sidebar interactions", () => {
         toggle.click();
       });
 
-      assert.ok(
+      expect(
         container.querySelector("input.join-input"),
         "join input should appear after toggle click",
-      );
+      ).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -244,7 +243,7 @@ describe("Sidebar interactions", () => {
         />,
         container,
       );
-      assert.strictEqual(container.querySelectorAll(".room-item").length, 3);
+      expect(container.querySelectorAll(".room-item").length).toBe(3);
     } finally {
       cleanup();
     }
@@ -270,7 +269,7 @@ describe("Sidebar interactions", () => {
         />,
         container,
       );
-      assert.strictEqual(container.querySelectorAll(".agent-item").length, 2);
+      expect(container.querySelectorAll(".agent-item").length).toBe(2);
     } finally {
       cleanup();
     }

@@ -2,28 +2,27 @@
  * Unit tests for input.ts — command parsing.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { parseInput, routeAction } from "../input.js";
 
 describe("input", () => {
   describe("parseInput", () => {
     it("ignores empty input", () => {
-      assert.deepStrictEqual(parseInput("", undefined), { kind: "ignored" });
-      assert.deepStrictEqual(parseInput("   ", undefined), { kind: "ignored" });
+      expect(parseInput("", undefined)).toEqual({ kind: "ignored" });
+      expect(parseInput("   ", undefined)).toEqual({ kind: "ignored" });
     });
 
     it("returns error for message with no current room or DM target", () => {
       const result = parseInput("hello", undefined, undefined);
-      assert.strictEqual(result.kind, "local");
+      expect(result.kind).toBe("local");
       if (result.kind === "local") {
-        assert.strictEqual(result.result.type, "error");
+        expect(result.result.type).toBe("error");
       }
     });
 
     it("returns DM action when DM target is set and no current room", () => {
       const result = parseInput("hello there", undefined, "agent-42");
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: { action: "dm", target: "agent-42", content: "hello there" },
       });
@@ -31,7 +30,7 @@ describe("input", () => {
 
     it("prefers current room over DM target for plain text", () => {
       const result = parseInput("hello", "room-1", "agent-42");
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: { action: "send", target: "room-1", content: "hello" },
       });
@@ -39,7 +38,7 @@ describe("input", () => {
 
     it("returns send action for message in current room", () => {
       const result = parseInput("hello there", "room-1");
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: { action: "send", target: "room-1", content: "hello there" },
       });
@@ -47,7 +46,7 @@ describe("input", () => {
 
     it("parses /join command", () => {
       const result = parseInput("/join my-room", undefined);
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: { action: "join_room", room: "my-room" },
       });
@@ -55,16 +54,16 @@ describe("input", () => {
 
     it("returns error for /join without room", () => {
       const result = parseInput("/join", undefined);
-      assert.strictEqual(result.kind, "local");
+      expect(result.kind).toBe("local");
       if (result.kind === "local") {
-        assert.strictEqual(result.result.type, "error");
-        assert.ok(result.result.text.includes("Usage"));
+        expect(result.result.type).toBe("error");
+        expect(result.result.text.includes("Usage")).toBeTruthy();
       }
     });
 
     it("parses /leave with explicit room", () => {
       const result = parseInput("/leave room-1", undefined);
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: { action: "leave_room", room: "room-1" },
       });
@@ -72,7 +71,7 @@ describe("input", () => {
 
     it("parses /leave with current room", () => {
       const result = parseInput("/leave", "current-room");
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: { action: "leave_room", room: "current-room" },
       });
@@ -80,7 +79,7 @@ describe("input", () => {
 
     it("parses /dm command", () => {
       const result = parseInput("/dm agent-1 hello friend", undefined);
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: { action: "dm", target: "agent-1", content: "hello friend" },
       });
@@ -88,15 +87,15 @@ describe("input", () => {
 
     it("returns error for /dm without target or message", () => {
       const result = parseInput("/dm", undefined);
-      assert.strictEqual(result.kind, "local");
+      expect(result.kind).toBe("local");
       if (result.kind === "local") {
-        assert.strictEqual(result.result.type, "error");
+        expect(result.result.type).toBe("error");
       }
     });
 
     it("parses /create command", () => {
       const result = parseInput("/create new-room", undefined);
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: { action: "create_room", name: "new-room", type: "public" },
       });
@@ -104,7 +103,7 @@ describe("input", () => {
 
     it("parses /destroy command", () => {
       const result = parseInput("/destroy old-room", undefined);
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: { action: "destroy_room", room: "old-room" },
       });
@@ -112,7 +111,7 @@ describe("input", () => {
 
     it("parses /rooms command", () => {
       const result = parseInput("/rooms", undefined);
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: { action: "list_rooms" },
       });
@@ -120,7 +119,7 @@ describe("input", () => {
 
     it("parses /agents command", () => {
       const result = parseInput("/agents", undefined);
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: { action: "list_agents" },
       });
@@ -128,26 +127,26 @@ describe("input", () => {
 
     it("parses /help command", () => {
       const result = parseInput("/help", undefined);
-      assert.strictEqual(result.kind, "local");
+      expect(result.kind).toBe("local");
       if (result.kind === "local") {
-        assert.strictEqual(result.result.type, "help");
-        assert.ok(result.result.text.includes("/join"));
-        assert.ok(result.result.text.includes("/dm"));
+        expect(result.result.type).toBe("help");
+        expect(result.result.text.includes("/join")).toBeTruthy();
+        expect(result.result.text.includes("/dm")).toBeTruthy();
       }
     });
 
     it("returns unknown for unrecognized commands", () => {
       const result = parseInput("/foobar", undefined);
-      assert.strictEqual(result.kind, "local");
+      expect(result.kind).toBe("local");
       if (result.kind === "local") {
-        assert.strictEqual(result.result.type, "unknown");
-        assert.ok(result.result.text.includes("/foobar"));
+        expect(result.result.type).toBe("unknown");
+        expect(result.result.text.includes("/foobar")).toBeTruthy();
       }
     });
 
     it("parses /rename command", () => {
       const result = parseInput("/rename agent-1 New Name", undefined);
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         kind: "action",
         action: {
           action: "rename_agent",
@@ -159,19 +158,19 @@ describe("input", () => {
 
     it("returns error for /rename without agent or name", () => {
       const result = parseInput("/rename", undefined);
-      assert.strictEqual(result.kind, "local");
+      expect(result.kind).toBe("local");
       if (result.kind === "local") {
-        assert.strictEqual(result.result.type, "error");
-        assert.ok(result.result.text.includes("Usage"));
+        expect(result.result.type).toBe("error");
+        expect(result.result.text.includes("Usage")).toBeTruthy();
       }
     });
 
     it("includes /rename in help text", () => {
       const result = parseInput("/help", undefined);
-      assert.strictEqual(result.kind, "local");
+      expect(result.kind).toBe("local");
       if (result.kind === "local") {
-        assert.strictEqual(result.result.type, "help");
-        assert.ok(result.result.text.includes("/rename"));
+        expect(result.result.type).toBe("help");
+        expect(result.result.text.includes("/rename")).toBeTruthy();
       }
     });
   });
@@ -180,7 +179,7 @@ describe("input", () => {
     it("routes join_room through local handler", () => {
       const result = parseInput("/join my-room", undefined);
       const route = routeAction(result);
-      assert.deepStrictEqual(route, {
+      expect(route).toEqual({
         kind: "join_room",
         room: "my-room",
       });
@@ -189,33 +188,33 @@ describe("input", () => {
     it("routes leave_room through local handler", () => {
       const result = parseInput("/leave", "current-room");
       const route = routeAction(result);
-      assert.deepStrictEqual(route, { kind: "leave_room" });
+      expect(route).toEqual({ kind: "leave_room" });
     });
 
     it("routes leave_room with explicit room through local handler", () => {
       const result = parseInput("/leave other-room", "current-room");
       const route = routeAction(result);
-      assert.deepStrictEqual(route, { kind: "leave_room" });
+      expect(route).toEqual({ kind: "leave_room" });
     });
 
     it("returns null for send action", () => {
       const result = parseInput("hello", "room-1");
-      assert.strictEqual(routeAction(result), null);
+      expect(routeAction(result)).toBe(null);
     });
 
     it("returns null for DM action", () => {
       const result = parseInput("hello", undefined, "agent-1");
-      assert.strictEqual(routeAction(result), null);
+      expect(routeAction(result)).toBe(null);
     });
 
     it("returns null for local results", () => {
       const result = parseInput("/help", undefined);
-      assert.strictEqual(routeAction(result), null);
+      expect(routeAction(result)).toBe(null);
     });
 
     it("returns null for ignored input", () => {
       const result = parseInput("", undefined);
-      assert.strictEqual(routeAction(result), null);
+      expect(routeAction(result)).toBe(null);
     });
   });
 });

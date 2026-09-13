@@ -2,8 +2,7 @@
  * Unit tests for buildProjectTree.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { buildProjectTree } from "../project-tree.js";
 import type { Agent, Room } from "../types.js";
 
@@ -38,8 +37,8 @@ function makeRoom(overrides: Partial<Room> & { id: string }): Room {
 describe("buildProjectTree", () => {
   it("returns empty tree for no agents and no rooms", () => {
     const result = buildProjectTree([], []);
-    assert.deepStrictEqual(result.roots, []);
-    assert.deepStrictEqual(result.manualRooms, []);
+    expect(result.roots).toEqual([]);
+    expect(result.manualRooms).toEqual([]);
   });
 
   it("shows directories from project rooms even with no agents", () => {
@@ -51,20 +50,20 @@ describe("buildProjectTree", () => {
       }),
     ];
     const result = buildProjectTree([], rooms);
-    assert.strictEqual(result.roots.length, 1);
+    expect(result.roots.length).toBe(1);
     const dir = result.roots[0];
-    assert.ok(dir?.type === "directory");
+    expect(dir?.type).toBe("directory");
     if (dir?.type !== "directory") return;
-    assert.strictEqual(dir.name, "my-app");
-    assert.strictEqual(dir.roomId, "my-app");
+    expect(dir.name).toBe("my-app");
+    expect(dir.roomId).toBe("my-app");
   });
 
   it("returns empty roots when no agents but has manual rooms", () => {
     const rooms = [makeRoom({ id: "general", description: "General chat" })];
     const result = buildProjectTree([], rooms);
-    assert.deepStrictEqual(result.roots, []);
-    assert.strictEqual(result.manualRooms.length, 1);
-    assert.strictEqual(result.manualRooms[0]?.id, "general");
+    expect(result.roots).toEqual([]);
+    expect(result.manualRooms.length).toBe(1);
+    expect(result.manualRooms[0]?.id).toBe("general");
   });
 
   it("places a single agent under its directory basename", () => {
@@ -72,18 +71,18 @@ describe("buildProjectTree", () => {
       makeAgent({ id: "a1", cwd: "/Users/joe/Developer/my-app" }),
     ];
     const result = buildProjectTree(agents, []);
-    assert.strictEqual(result.roots.length, 1);
+    expect(result.roots.length).toBe(1);
 
     const dir = result.roots[0];
-    assert.ok(dir?.type === "directory", "root should be a directory");
+    expect(dir?.type, "root should be a directory").toBe("directory");
     if (dir?.type !== "directory") return;
-    assert.strictEqual(dir.name, "my-app");
-    assert.strictEqual(dir.children.length, 1);
+    expect(dir.name).toBe("my-app");
+    expect(dir.children.length).toBe(1);
 
     const agentNode = dir.children[0];
-    assert.ok(agentNode?.type === "agent");
+    expect(agentNode?.type).toBe("agent");
     if (agentNode?.type !== "agent") return;
-    assert.strictEqual(agentNode.agentId, "a1");
+    expect(agentNode.agentId).toBe("a1");
   });
 
   it("groups agents in the same directory as siblings", () => {
@@ -93,13 +92,13 @@ describe("buildProjectTree", () => {
     ];
     const result = buildProjectTree(agents, []);
 
-    assert.strictEqual(result.roots.length, 1);
+    expect(result.roots.length).toBe(1);
     const dir = result.roots[0];
-    assert.ok(dir?.type === "directory");
+    expect(dir?.type).toBe("directory");
     if (dir?.type !== "directory") return;
-    assert.strictEqual(dir.children.length, 2);
-    assert.ok(dir.children[0]?.type === "agent");
-    assert.ok(dir.children[1]?.type === "agent");
+    expect(dir.children.length).toBe(2);
+    expect(dir.children[0]?.type).toBe("agent");
+    expect(dir.children[1]?.type).toBe("agent");
   });
 
   it("creates nested directories for agents at different depths", () => {
@@ -111,28 +110,28 @@ describe("buildProjectTree", () => {
 
     // Common prefix is /Users/joe, trimmed
     // Remaining: "Developer" → "Developer/my-app"
-    assert.strictEqual(result.roots.length, 1);
+    expect(result.roots.length).toBe(1);
 
     const dev = result.roots[0];
-    assert.ok(dev?.type === "directory");
+    expect(dev?.type).toBe("directory");
     if (dev?.type !== "directory") return;
-    assert.strictEqual(dev.name, "Developer");
+    expect(dev.name).toBe("Developer");
 
     // Should have agent a1 (in Developer) and directory my-app (with a2)
-    assert.strictEqual(dev.children.length, 2);
+    expect(dev.children.length).toBe(2);
 
     const dirChild = dev.children.find((c) => c.type === "directory");
     const agentChild = dev.children.find((c) => c.type === "agent");
 
-    assert.ok(dirChild, "should have a directory child");
-    assert.ok(agentChild, "should have an agent child");
+    expect(dirChild, "should have a directory child").toBeTruthy();
+    expect(agentChild, "should have an agent child").toBeTruthy();
 
     if (dirChild?.type !== "directory") return;
-    assert.strictEqual(dirChild.name, "my-app");
-    assert.strictEqual(dirChild.children.length, 1);
+    expect(dirChild.name).toBe("my-app");
+    expect(dirChild.children.length).toBe(1);
 
     if (agentChild?.type !== "agent") return;
-    assert.strictEqual(agentChild.agentId, "a1");
+    expect(agentChild.agentId).toBe("a1");
   });
 
   it("sorts directories before agents, both alphabetically", () => {
@@ -153,23 +152,23 @@ describe("buildProjectTree", () => {
     const result = buildProjectTree(agents, []);
 
     const dev = result.roots[0];
-    assert.ok(dev?.type === "directory");
+    expect(dev?.type).toBe("directory");
     if (dev?.type !== "directory") return;
 
     // 2 directories + 2 agents = 4 children
-    assert.strictEqual(dev.children.length, 4);
+    expect(dev.children.length).toBe(4);
 
     // First two should be directories, sorted alphabetically
-    assert.strictEqual(dev.children[0]?.type, "directory");
-    assert.strictEqual(dev.children[0]?.name, "a-project");
-    assert.strictEqual(dev.children[1]?.type, "directory");
-    assert.strictEqual(dev.children[1]?.name, "z-project");
+    expect(dev.children[0]?.type).toBe("directory");
+    expect(dev.children[0]?.name).toBe("a-project");
+    expect(dev.children[1]?.type).toBe("directory");
+    expect(dev.children[1]?.name).toBe("z-project");
 
     // Next two should be agents, sorted alphabetically
-    assert.strictEqual(dev.children[2]?.type, "agent");
-    assert.strictEqual(dev.children[2]?.name, "a-agent");
-    assert.strictEqual(dev.children[3]?.type, "agent");
-    assert.strictEqual(dev.children[3]?.name, "z-agent");
+    expect(dev.children[2]?.type).toBe("agent");
+    expect(dev.children[2]?.name).toBe("a-agent");
+    expect(dev.children[3]?.type).toBe("agent");
+    expect(dev.children[3]?.name).toBe("z-agent");
   });
 
   it("separates manual rooms from project rooms", () => {
@@ -183,8 +182,8 @@ describe("buildProjectTree", () => {
     ];
 
     const result = buildProjectTree(agents, rooms);
-    assert.strictEqual(result.manualRooms.length, 1);
-    assert.strictEqual(result.manualRooms[0]?.id, "general");
+    expect(result.manualRooms.length).toBe(1);
+    expect(result.manualRooms[0]?.id).toBe("general");
   });
 
   it("attaches roomId to directory nodes with project rooms", () => {
@@ -199,9 +198,9 @@ describe("buildProjectTree", () => {
     const result = buildProjectTree(agents, rooms);
 
     const dir = result.roots[0];
-    assert.ok(dir?.type === "directory");
+    expect(dir?.type).toBe("directory");
     if (dir?.type !== "directory") return;
-    assert.strictEqual(dir.roomId, "my-app");
+    expect(dir.roomId).toBe("my-app");
   });
 
   it("does not attach roomId when no project room matches", () => {
@@ -209,9 +208,9 @@ describe("buildProjectTree", () => {
     const result = buildProjectTree(agents, []);
 
     const dir = result.roots[0];
-    assert.ok(dir?.type === "directory");
+    expect(dir?.type).toBe("directory");
     if (dir?.type !== "directory") return;
-    assert.strictEqual(dir.roomId, undefined);
+    expect(dir.roomId).toBe(undefined);
   });
 
   it("handles agents with no common prefix", () => {
@@ -223,20 +222,20 @@ describe("buildProjectTree", () => {
 
     // Common segment: "Users" → parent trim → root "/"
     // Full tree: Users > alice > project > agent, Users > bob > project > agent
-    assert.strictEqual(result.roots.length, 1);
+    expect(result.roots.length).toBe(1);
 
     const users = result.roots[0];
-    assert.ok(users?.type === "directory");
+    expect(users?.type).toBe("directory");
     if (users?.type !== "directory") return;
-    assert.strictEqual(users.name, "Users");
-    assert.strictEqual(users.children.length, 2);
+    expect(users.name).toBe("Users");
+    expect(users.children.length).toBe(2);
 
     const alice = users.children[0];
     const bob = users.children[1];
-    assert.ok(alice?.type === "directory");
-    assert.ok(bob?.type === "directory");
-    assert.strictEqual(alice.name, "alice");
-    assert.strictEqual(bob.name, "bob");
+    expect(alice?.type).toBe("directory");
+    expect(bob?.type).toBe("directory");
+    expect(alice.name).toBe("alice");
+    expect(bob.name).toBe("bob");
   });
 
   it("trims common prefix shared by all agents", () => {
@@ -248,15 +247,15 @@ describe("buildProjectTree", () => {
 
     // Common path: /Users/joe/Developer → parent trim → /Users/joe
     // Remaining: Developer/app1 and Developer/app2
-    assert.strictEqual(result.roots.length, 1);
+    expect(result.roots.length).toBe(1);
 
     const dev = result.roots[0];
-    assert.ok(dev?.type === "directory");
+    expect(dev?.type).toBe("directory");
     if (dev?.type !== "directory") return;
-    assert.strictEqual(dev.name, "Developer");
-    assert.strictEqual(dev.children.length, 2);
-    assert.strictEqual(dev.children[0]?.name, "app1");
-    assert.strictEqual(dev.children[1]?.name, "app2");
+    expect(dev.name).toBe("Developer");
+    expect(dev.children.length).toBe(2);
+    expect(dev.children[0]?.name).toBe("app1");
+    expect(dev.children[1]?.name).toBe("app2");
   });
 
   it("handles deeply nested paths", () => {
@@ -264,15 +263,15 @@ describe("buildProjectTree", () => {
     const result = buildProjectTree(agents, []);
 
     // Single agent: prefix trimmed to /a/b/c, tree starts at "d"
-    assert.strictEqual(result.roots.length, 1);
+    expect(result.roots.length).toBe(1);
 
     const d = result.roots[0];
-    assert.ok(d?.type === "directory");
+    expect(d?.type).toBe("directory");
     if (d?.type !== "directory") return;
-    assert.strictEqual(d.name, "d");
-    assert.strictEqual(d.children.length, 1);
-    assert.strictEqual(d.children[0]?.type, "agent");
+    expect(d.name).toBe("d");
+    expect(d.children.length).toBe(1);
+    expect(d.children[0]?.type).toBe("agent");
     if (d.children[0]?.type !== "agent") return;
-    assert.strictEqual(d.children[0].agentId, "a1");
+    expect(d.children[0].agentId).toBe("a1");
   });
 });
