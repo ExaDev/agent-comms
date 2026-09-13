@@ -1,3 +1,24 @@
+## [2.18.4](https://github.com/ExaDev/agent-comms/compare/v2.18.3...v2.18.4) (2026-09-13)
+
+### Bug Fixes
+
+* **build:** point the pre-push hook at vitest instead of node:test ([b7564b5](https://github.com/ExaDev/agent-comms/commit/b7564b553af6f8cb2892a70d26c99efb69e8d8d4))
+* keep a project-room directory node with no agents in the tree ([408a0b1](https://github.com/ExaDev/agent-comms/commit/408a0b1aed5cea5ecb8919125b209ab587fc8382))
+
+### Tests
+
+* migrate core unit tests to vitest's describe/it/expect ([59a17bb](https://github.com/ExaDev/agent-comms/commit/59a17bb1f24815b9cfa362c88a171775612b4fe8))
+* migrate frontend component and unit tests to vitest ([46e86b3](https://github.com/ExaDev/agent-comms/commit/46e86b3111a2a095733941c6e53d6d2bfccaaeed))
+* migrate identity and room-primitive tests to vitest ([83e7ebf](https://github.com/ExaDev/agent-comms/commit/83e7ebf01d5473635f7bf0a62431426e3458326c))
+* migrate mesh, transport, and connection tests to vitest ([2b12620](https://github.com/ExaDev/agent-comms/commit/2b126207ef75310c27e59325c31c3ffebad488dd))
+* migrate room lifecycle and admission tests to vitest ([a10b638](https://github.com/ExaDev/agent-comms/commit/a10b6384053f12a6fd61f75c0f914c7e94db42b1))
+* migrate web bridge server-side tests to vitest ([47846cc](https://github.com/ExaDev/agent-comms/commit/47846cc24d6800300fd40e149e608469448c10a3))
+* point pnpm test at vitest and finish its runtime config ([576acd8](https://github.com/ExaDev/agent-comms/commit/576acd81740f21da1b6e67f810bdb3a5534f0f4a))
+
+### Chores
+
+* add vitest and a serial-execution config ([737a76d](https://github.com/ExaDev/agent-comms/commit/737a76de1dc161e9b8261ef0758f80532e836041))
+
 ## [2.18.3](https://github.com/ExaDev/agent-comms/compare/v2.18.2...v2.18.3) (2026-09-13)
 
 ### Bug Fixes
