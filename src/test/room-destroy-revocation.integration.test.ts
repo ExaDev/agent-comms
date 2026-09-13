@@ -2,8 +2,7 @@
  * Integration test for destroy-via-revocation (P3.8): destroying a room revokes every member's own room:member grant for real, the same way kicking one member already does, so a fellow member's own independent token verification rejects a former member's message even after the room itself is gone from the owner's own bookkeeping.
  */
 
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 
@@ -48,7 +47,7 @@ async function joinAndAccept(
   await joinPromise;
 }
 
-void test("destroying a room revokes every member's own grant for every peer, not just the owner", async () => {
+test("destroying a room revokes every member's own grant for every peer, not just the owner", async () => {
   const port = freshPort();
   const owner = await makeRegisteredStore(port, "owner");
   const memberA = await makeRegisteredStore(port, "member-a");
@@ -77,11 +76,10 @@ void test("destroying a room revokes every member's own grant for every peer, no
     // Settles the revocation-announce destroyRoom just broadcast for every member: B's own drain loop processes it asynchronously off the wire, with no observable side effect from outside B's own store to wait on affirmatively.
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    await assert.rejects(
+    await expect(
       memberA.sendRoomMessageDirected(room.id, memberB.peerId, "still here?"),
-      /unauthorized/,
       "B must reject a room.send sent under a grant the owner already revoked by destroying the room",
-    );
+    ).rejects.toThrow(/unauthorized/);
   } finally {
     await memberB.shutdown();
     await memberA.shutdown();

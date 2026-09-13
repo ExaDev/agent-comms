@@ -7,8 +7,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { tmpdir } from "node:os";
-import * as assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, expect } from "vitest";
 import type {
   IncomingManageRequest,
   ManageOutcome,
@@ -69,28 +68,30 @@ describe("handleRoomJoin (owner side)", () => {
     });
 
     const handler = store.roomVerbHandlers["room.join"];
-    assert.ok(handler, "expected a registered room.join handler");
+    expect(handler, "expected a registered room.join handler").toBeTruthy();
+    if (handler === undefined)
+      throw new Error("expected a registered room.join handler");
     const handle: ConnectionHandle = { id: REQUESTER_ID };
     const { request } = fakeRequest(room.id);
 
     const outcomePromise = handler(request, handle);
 
-    assert.deepEqual(store.listPendingRoomJoins(), [
+    expect(store.listPendingRoomJoins()).toEqual([
       { roomPath: room.id, requesterId: REQUESTER_ID },
     ]);
 
     store.acceptRoomJoin(room.id, REQUESTER_ID);
     const outcome = await outcomePromise;
 
-    assert.equal(outcome.result, "ok");
+    expect(outcome.result).toBe("ok");
     if (outcome.result !== "ok") return;
-    assert.deepEqual(store.listPendingRoomJoins(), []);
+    expect(store.listPendingRoomJoins()).toEqual([]);
 
     const token = outcome["granted-token"];
-    assert.ok(token !== undefined, "expected a granted-token in the outcome");
+    expect(token, "expected a granted-token in the outcome").toBeDefined();
 
     const roomAfterJoin = await store.getRoom(room.id);
-    assert.ok(roomAfterJoin?.members.includes(REQUESTER_ID));
+    expect(roomAfterJoin?.members.includes(REQUESTER_ID)).toBeTruthy();
   });
 
   it("denies the request without minting anything on rejection", async () => {
@@ -112,7 +113,9 @@ describe("handleRoomJoin (owner side)", () => {
     });
 
     const handler = store.roomVerbHandlers["room.join"];
-    assert.ok(handler);
+    expect(handler).toBeTruthy();
+    if (handler === undefined)
+      throw new Error("expected a room.join handler to be registered");
     const handle: ConnectionHandle = { id: REQUESTER_ID };
     const { request } = fakeRequest(room.id);
 
@@ -120,9 +123,9 @@ describe("handleRoomJoin (owner side)", () => {
     store.rejectRoomJoin(room.id, REQUESTER_ID);
     const outcome = await outcomePromise;
 
-    assert.equal(outcome.result, "error");
+    expect(outcome.result).toBe("error");
     const roomAfterReject = await store.getRoom(room.id);
-    assert.equal(roomAfterReject?.members.includes(REQUESTER_ID), false);
+    expect(roomAfterReject?.members.includes(REQUESTER_ID)).toBe(false);
   });
 
   it("refuses a DM path naming neither of its own device as a participant, with no pending entry created", async () => {
@@ -132,14 +135,16 @@ describe("handleRoomJoin (owner side)", () => {
     const dmPath = `${deviceIdToHex(deviceIdFromHex("c".repeat(64)))}+${deviceIdToHex(deviceIdFromHex("d".repeat(64)))}`;
 
     const handler = store.roomVerbHandlers["room.join"];
-    assert.ok(handler);
+    expect(handler).toBeTruthy();
+    if (handler === undefined)
+      throw new Error("expected a room.join handler to be registered");
     const handle: ConnectionHandle = { id: REQUESTER_ID };
     const { request } = fakeRequest(dmPath);
 
     const outcome = await handler(request, handle);
 
-    assert.equal(outcome.result, "error");
-    assert.deepEqual(store.listPendingRoomJoins(), []);
+    expect(outcome.result).toBe("error");
+    expect(store.listPendingRoomJoins()).toEqual([]);
   });
 
   it("refuses a named room this store doesn't own", async () => {
@@ -149,14 +154,16 @@ describe("handleRoomJoin (owner side)", () => {
     const roomPath = ownerNamedRoomPath(someoneElse, "general");
 
     const handler = store.roomVerbHandlers["room.join"];
-    assert.ok(handler);
+    expect(handler).toBeTruthy();
+    if (handler === undefined)
+      throw new Error("expected a room.join handler to be registered");
     const handle: ConnectionHandle = { id: REQUESTER_ID };
     const { request } = fakeRequest(roomPath);
 
     const outcome = await handler(request, handle);
 
-    assert.equal(outcome.result, "error");
-    assert.deepEqual(store.listPendingRoomJoins(), []);
+    expect(outcome.result).toBe("error");
+    expect(store.listPendingRoomJoins()).toEqual([]);
   });
 });
 
@@ -191,10 +198,10 @@ describe("joinRoom (requester side, remote path)", () => {
       expires: Date.now() + 60_000,
       delegationsRemaining: 0,
     });
-    assert.ok(
+    expect(
       grantedTokenVerdict.ok,
       "expected the fixture token to mint successfully",
-    );
+    ).toBeTruthy();
     if (!grantedTokenVerdict.ok) return;
     const grantedToken = grantedTokenVerdict.token;
 
@@ -215,7 +222,7 @@ describe("joinRoom (requester side, remote path)", () => {
       broadcastRevocation: async () => {},
       sendRoomRequest: async (_memberId, command, scope) => {
         capturedRoomPath = scope.path;
-        assert.deepEqual(command.params, { verb: "room.join" });
+        expect(command.params).toEqual({ verb: "room.join" });
         return {
           result: "ok",
           "granted-token": grantedToken,
@@ -230,18 +237,18 @@ describe("joinRoom (requester side, remote path)", () => {
     };
     store.setTransport(fakeTransport);
 
-    assert.equal(await store.getRoom(roomPath), undefined);
+    expect(await store.getRoom(roomPath)).toBe(undefined);
 
     const joined = await store.joinRoom(roomPath, store.peerId);
 
-    assert.equal(joined.id, roomPath);
-    assert.equal(capturedRoomPath, roomPath);
-    assert.ok(joined.members.includes(store.peerId));
+    expect(joined.id).toBe(roomPath);
+    expect(capturedRoomPath).toBe(roomPath);
+    expect(joined.members.includes(store.peerId)).toBeTruthy();
 
     const tokens = loadRoomTokens(slot);
-    assert.ok(
-      tokens[roomPath] !== undefined,
+    expect(
+      tokens[roomPath],
       "expected the granted token to be persisted",
-    );
+    ).toBeDefined();
   });
 });

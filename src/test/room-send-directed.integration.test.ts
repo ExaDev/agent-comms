@@ -4,8 +4,7 @@
  * Membership is set up by minting and persisting the member's own token directly, not by driving a real room.join round trip: MeshStore's legacy full-state-sync (still active per the "both paths coexist" transition) makes two mesh-connected peers instantly aware of any room the moment it's created, so member.joinRoom(room.id, ...) always takes the already-known-locally branch rather than the wire-level remote-join path -- the same race #73's own tests had to route around, and irrelevant to what this file actually tests (room.send, not room.join).
  */
 
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { deviceIdFromHex } from "wire-mesh-core/domain/device-id";
@@ -78,12 +77,15 @@ async function grantMembership(
     expires: clock.now() + 60_000,
     delegationsRemaining: 0,
   });
-  assert.ok(verdict.ok, "expected the fixture grant to mint successfully");
+  expect(
+    verdict.ok,
+    "expected the fixture grant to mint successfully",
+  ).toBeTruthy();
   if (!verdict.ok) return;
   saveRoomToken(memberSlot, roomPath, verdict.token);
 }
 
-void test("a directed room.send delivers to the recipient's own onDelivery", async () => {
+test("a directed room.send delivers to the recipient's own onDelivery", async () => {
   const { owner, ownerSlot, member, memberSlot } =
     await makeConnectedPair(freshPort());
 
@@ -108,18 +110,18 @@ void test("a directed room.send delivers to the recipient's own onDelivery", asy
       "member receives the directed room.send",
     );
     const delivered = deliveries.find((event) => event.type === "room_message");
-    assert.ok(delivered);
-    if (delivered.type !== "room_message") return;
-    assert.equal(delivered.message.content, "hello there");
-    assert.equal(delivered.message.from, owner.peerId);
-    assert.equal(delivered.message.room, room.id);
+    expect(delivered).toBeTruthy();
+    if (delivered?.type !== "room_message") return;
+    expect(delivered.message.content).toBe("hello there");
+    expect(delivered.message.from).toBe(owner.peerId);
+    expect(delivered.message.room).toBe(room.id);
   } finally {
     await member.shutdown();
     await owner.shutdown();
   }
 });
 
-void test("a directed room.send from a member (not just the owner) also delivers", async () => {
+test("a directed room.send from a member (not just the owner) also delivers", async () => {
   const { owner, ownerSlot, member, memberSlot } =
     await makeConnectedPair(freshPort());
 
@@ -149,7 +151,7 @@ void test("a directed room.send from a member (not just the owner) also delivers
   }
 });
 
-void test("sendRoomMessageDirected throws when this store holds no token for the room", async () => {
+test("sendRoomMessageDirected throws when this store holds no token for the room", async () => {
   const { owner, member } = await makeConnectedPair(freshPort());
 
   try {
@@ -160,10 +162,9 @@ void test("sendRoomMessageDirected throws when this store holds no token for the
       description: "",
     });
     // Deliberately not granted -- member has no persisted token for this room.
-    await assert.rejects(
+    await expect(
       member.sendRoomMessageDirected(room.id, owner.peerId, "uninvited"),
-      /No room:member token/,
-    );
+    ).rejects.toThrow(/No room:member token/);
   } finally {
     await member.shutdown();
     await owner.shutdown();
