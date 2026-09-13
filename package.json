@@ -57,7 +57,8 @@
     "test:smoke": "pnpm build && tsx --test src/test/mesh-smoke.runner.ts",
     "test:all": "pnpm test && pnpm test:delivery && pnpm test:smoke",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mutation": "stryker run stryker.config.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.1",
@@ -74,6 +75,9 @@
     "@semantic-release/git": "10.0.1",
     "@semantic-release/github": "12.0.9",
     "@semantic-release/release-notes-generator": "14.1.1",
+    "@stryker-mutator/api": "10.0.0",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/typescript-checker": "10.0.0",
     "@types/bun": "1.3.14",
     "@types/node": "^26.1.1",
     "@types/ws": "8.18.1",
