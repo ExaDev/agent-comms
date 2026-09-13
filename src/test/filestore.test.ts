@@ -2,11 +2,10 @@
  * Tests for the FileStore, the filesystem-backed legacy store exported from the public API. Covers the membership operation maps (a pending invite must survive an unrelated join, #35) and record parsing (an unparseable record must surface, not read as an empty mesh, #32).
  */
 
-import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { FileStore } from "../core/store.js";
 
 function tempStore(): FileStore {
@@ -14,7 +13,7 @@ function tempStore(): FileStore {
   return new FileStore(root);
 }
 
-void test("a pending invite survives an unrelated join to the room", async () => {
+test("a pending invite survives an unrelated join to the room", async () => {
   const store = tempStore();
   const owner = await store.registerAgent({
     name: "owner",
@@ -47,14 +46,14 @@ void test("a pending invite survives an unrelated join to the room", async () =>
     description: "x",
   });
   await store.inviteToRoom("room", invitee.id, owner.id);
-  assert.deepEqual((await store.getRoom("room"))?.invited, [invitee.id]);
+  expect((await store.getRoom("room"))?.invited).toEqual([invitee.id]);
 
   // Any later join re-derives the invited view from the operation maps; the pending invite must survive it (#35).
   await store.joinRoom("room", other.id);
-  assert.deepEqual((await store.getRoom("room"))?.invited, [invitee.id]);
+  expect((await store.getRoom("room"))?.invited).toEqual([invitee.id]);
 });
 
-void test("declining and kicking clear the invited view consistently", async () => {
+test("declining and kicking clear the invited view consistently", async () => {
   const store = tempStore();
   const owner = await store.registerAgent({
     name: "owner",
@@ -81,19 +80,18 @@ void test("declining and kicking clear the invited view consistently", async () 
   await store.inviteToRoom("room", invitee.id, owner.id);
   await store.declineInvite("room", invitee.id, "not now");
   const declined = await store.getRoom("room");
-  assert.deepEqual(declined?.invited, []);
+  expect(declined?.invited).toEqual([]);
   // Re-inviting after a decline works: the new join op outranks the leave.
   await store.inviteToRoom("room", invitee.id, owner.id);
-  assert.deepEqual((await store.getRoom("room"))?.invited, [invitee.id]);
+  expect((await store.getRoom("room"))?.invited).toEqual([invitee.id]);
   await store.kickFromRoom("room", invitee.id, owner.id);
-  assert.deepEqual((await store.getRoom("room"))?.invited, []);
-  assert.equal(
-    (await store.getRoom("room"))?.members.includes(invitee.id),
+  expect((await store.getRoom("room"))?.invited).toEqual([]);
+  expect((await store.getRoom("room"))?.members.includes(invitee.id)).toBe(
     false,
   );
 });
 
-void test("joining through an invitation consumes it", async () => {
+test("joining through an invitation consumes it", async () => {
   const store = tempStore();
   const owner = await store.registerAgent({
     name: "owner",
@@ -120,11 +118,11 @@ void test("joining through an invitation consumes it", async () => {
   await store.inviteToRoom("room", invitee.id, owner.id);
   await store.joinRoom("room", invitee.id);
   const room = await store.getRoom("room");
-  assert.deepEqual(room?.invited, []);
-  assert.equal(room?.members.includes(invitee.id), true);
+  expect(room?.invited).toEqual([]);
+  expect(room?.members.includes(invitee.id)).toBe(true);
 });
 
-void test("an unparseable stored record surfaces instead of an empty list", async () => {
+test("an unparseable stored record surfaces instead of an empty list", async () => {
   const store = tempStore();
   await store.registerAgent({
     name: "good",
@@ -137,13 +135,10 @@ void test("an unparseable stored record surfaces instead of an empty list", asyn
   // A record missing the required fields (written by an older build, say) must raise from listAgents, not read as an empty mesh (#32).
   const agentsDir = path.join(store.root, "registry", "agents");
   fs.writeFileSync(path.join(agentsDir, "stale.json"), '{"id": "stale"}');
-  await assert.rejects(
-    store.listAgents("whoever"),
-    (err: unknown) => err instanceof Error,
-  );
+  await expect(store.listAgents("whoever")).rejects.toBeInstanceOf(Error);
 });
 
-void test("a store with no registry yet lists no agents", async () => {
+test("a store with no registry yet lists no agents", async () => {
   const store = tempStore();
-  assert.deepEqual(await store.listAgents("whoever"), []);
+  expect(await store.listAgents("whoever")).toEqual([]);
 });

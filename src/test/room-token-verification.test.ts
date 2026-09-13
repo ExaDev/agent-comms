@@ -1,6 +1,5 @@
 import { webcrypto } from "node:crypto";
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { createNodeIdentity } from "wire-mesh-core/adapters/node-identity";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import {
@@ -84,7 +83,7 @@ describe("verifyRoomToken", () => {
       roomPath,
     });
 
-    assert.equal(verdict.ok, true);
+    expect(verdict.ok).toBe(true);
   });
 
   it("refuses a token rooted at the wrong device for a named room", async () => {
@@ -106,8 +105,8 @@ describe("verifyRoomToken", () => {
       roomPath,
     });
 
-    assert.equal(verdict.ok, false);
-    if (!verdict.ok) assert.equal(verdict.reason, "wrong_chain_root");
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toBe("wrong_chain_root");
   });
 
   it("accepts a DM token rooted at the verifying identity itself", async () => {
@@ -128,7 +127,7 @@ describe("verifyRoomToken", () => {
       roomPath,
     });
 
-    assert.equal(verdict.ok, true);
+    expect(verdict.ok).toBe(true);
   });
 
   it("refuses a DM token rooted at neither participant nor the verifier", async () => {
@@ -150,8 +149,8 @@ describe("verifyRoomToken", () => {
       roomPath,
     });
 
-    assert.equal(verdict.ok, false);
-    if (!verdict.ok) assert.equal(verdict.reason, "wrong_chain_root");
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toBe("wrong_chain_root");
   });
 
   it("refuses a token scoped to a different room path", async () => {
@@ -175,8 +174,8 @@ describe("verifyRoomToken", () => {
       roomPath: otherRoomPath,
     });
 
-    assert.equal(verdict.ok, false);
-    if (!verdict.ok) assert.equal(verdict.reason, "wrong_scope_path");
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toBe("wrong_scope_path");
   });
 
   it("refuses a token with an unrelated capability and an unrelated scope kind", async () => {
@@ -205,8 +204,8 @@ describe("verifyRoomToken", () => {
       roomPath,
     });
 
-    assert.equal(verdict.ok, false);
-    if (!verdict.ok) assert.equal(verdict.reason, "wrong_capability");
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toBe("wrong_capability");
   });
 
   it("refuses a token with the wrong capability even when its scope is correctly shaped for the room", async () => {
@@ -236,8 +235,8 @@ describe("verifyRoomToken", () => {
       roomPath,
     });
 
-    assert.equal(verdict.ok, false);
-    if (!verdict.ok) assert.equal(verdict.reason, "wrong_capability");
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toBe("wrong_capability");
   });
 
   it("refuses a token bearing a different device than the authenticated connection", async () => {
@@ -258,8 +257,8 @@ describe("verifyRoomToken", () => {
       roomPath,
     });
 
-    assert.equal(verdict.ok, false);
-    if (!verdict.ok) assert.equal(verdict.reason, "bearer_mismatch");
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toBe("bearer_mismatch");
   });
 
   it("refuses an expired token", async () => {
@@ -279,8 +278,8 @@ describe("verifyRoomToken", () => {
       roomPath,
     });
 
-    assert.equal(verdict.ok, false);
-    if (!verdict.ok) assert.equal(verdict.reason, "expired");
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toBe("expired");
   });
 
   it("refuses a revoked token", async () => {
@@ -309,7 +308,7 @@ describe("verifyRoomToken", () => {
       roomPath,
     });
 
-    assert.equal(verdict.ok, false);
-    if (!verdict.ok) assert.equal(verdict.reason, "revoked");
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toBe("revoked");
   });
 });

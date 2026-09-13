@@ -4,8 +4,7 @@
  * Also covers the append-only history merge: unseen messages are added and read receipts are unioned. These tests exercise the merge seam directly (no transport): the stores never connect, snapshots are exchanged through serialise() / applyStateSync().
  */
 
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { deviceIdFromHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
@@ -27,7 +26,7 @@ function snapshotOf(store: MeshStore): SerialisedState {
   return structuredClone(store.serialise());
 }
 
-void test("a stale holder converges when a fresher snapshot arrives", async () => {
+test("a stale holder converges when a fresher snapshot arrives", async () => {
   const a = await makeStore();
   const b = await makeStore();
   const agent = await a.registerAgent({
@@ -41,15 +40,15 @@ void test("a stale holder converges when a fresher snapshot arrives", async () =
 
   // B holds the pre-rename copy.
   b.applyStateSync(snapshotOf(a));
-  assert.equal((await b.getAgent(agent.id))?.name, "old-name");
+  expect((await b.getAgent(agent.id))?.name).toBe("old-name");
 
   // A renames while B is away; B heals on A's next snapshot.
   await a.updateAgent(agent.id, { name: "new-name" });
   b.applyStateSync(snapshotOf(a));
-  assert.equal((await b.getAgent(agent.id))?.name, "new-name");
+  expect((await b.getAgent(agent.id))?.name).toBe("new-name");
 });
 
-void test("a current holder rejects a stale snapshot instead of regressing", async () => {
+test("a current holder rejects a stale snapshot instead of regressing", async () => {
   const a = await makeStore();
   const b = await makeStore();
   const agent = await a.registerAgent({
@@ -64,7 +63,7 @@ void test("a current holder rejects a stale snapshot instead of regressing", asy
   // B is current at the post-rename revision.
   await a.updateAgent(agent.id, { name: "new-name" });
   b.applyStateSync(snapshotOf(a));
-  assert.equal((await b.getAgent(agent.id))?.name, "new-name");
+  expect((await b.getAgent(agent.id))?.name).toBe("new-name");
 
   // A returning peer that still holds the pre-rename snapshot cannot regress B, where the old add-only merge kept whatever arrived first.
   const stale = snapshotOf(a);
@@ -73,10 +72,10 @@ void test("a current holder rejects a stale snapshot instead of regressing", asy
   staleAgent.name = "old-name";
   staleAgent.version -= 1;
   b.applyStateSync(stale);
-  assert.equal((await b.getAgent(agent.id))?.name, "new-name");
+  expect((await b.getAgent(agent.id))?.name).toBe("new-name");
 });
 
-void test("room membership changes converge and stale member lists are rejected", async () => {
+test("room membership changes converge and stale member lists are rejected", async () => {
   const a = await makeStore();
   const b = new MeshStore();
   const bSlot = await wireTestTransport(b);
@@ -107,7 +106,7 @@ void test("room membership changes converge and stale member lists are rejected"
   // A holds the room before the join; the joiner lives on B, so the join mutates B's copy and syncs back (one MeshStore is one peer identity, so a second agent cannot be registered on A).
   a.applyStateSync(snapshotOf(b));
   b.applyStateSync(snapshotOf(a));
-  assert.equal((await a.getRoom(roomId))?.members.includes(joiner.id), false);
+  expect((await a.getRoom(roomId))?.members.includes(joiner.id)).toBe(false);
 
   // joiner.id is B's own peerId (registerAgent's own id is always this.peerId), so this is a real self-join as far as joinRoom's own admission gate is concerned -- give B a token for the room first so the gate sees an already-admitted member and exercises the CRDT membership-merge logic this test actually targets, not a real (and here, transport-free, therefore impossible) wire-level join.
   const bClock = createSystemClock();
@@ -122,17 +121,20 @@ void test("room membership changes converge and stale member lists are rejected"
     expires: bClock.now() + 60_000,
     delegationsRemaining: 0,
   });
-  assert.ok(grantVerdict.ok, "expected the fixture grant to mint successfully");
+  expect(
+    grantVerdict.ok,
+    "expected the fixture grant to mint successfully",
+  ).toBeTruthy();
   if (grantVerdict.ok) saveRoomToken(bSlot, roomId, grantVerdict.token);
 
   await b.joinRoom(roomId, joiner.id);
   a.applyStateSync(snapshotOf(b));
-  assert.equal((await a.getRoom(roomId))?.members.includes(joiner.id), true);
+  expect((await a.getRoom(roomId))?.members.includes(joiner.id)).toBe(true);
 
   // The joiner leaves. Unlike the join step above, there is no token-presence gate to skip here: any genuine member always already holds one, so leaveRoom's own self-leave gate (P3.8) always routes joiner.id === b.peerId through a real, and here impossible, wire round trip to the room's owner. Run the leave on A (the room's real owner) instead -- joiner.id !== a.peerId there, so it takes the same pure local CRDT branch the "kicker" test below already exercises -- and let B converge to A's own now-current state, exactly mirroring the join step's own direction reversed.
   await a.leaveRoom(roomId, joiner.id);
   b.applyStateSync(snapshotOf(a));
-  assert.equal((await a.getRoom(roomId))?.members.includes(joiner.id), false);
+  expect((await a.getRoom(roomId))?.members.includes(joiner.id)).toBe(false);
 
   // A stale member list that still contains them is rejected.
   const stale = snapshotOf(b);
@@ -141,10 +143,10 @@ void test("room membership changes converge and stale member lists are rejected"
   staleRoom.members.push(joiner.id);
   staleRoom.version -= 1;
   a.applyStateSync(stale);
-  assert.equal((await a.getRoom(roomId))?.members.includes(joiner.id), false);
+  expect((await a.getRoom(roomId))?.members.includes(joiner.id)).toBe(false);
 });
 
-void test("history sync adds unseen messages and unions read receipts", async () => {
+test("history sync adds unseen messages and unions read receipts", async () => {
   const a = await makeStore();
   const b = await makeStore();
   const agent = await a.registerAgent({
@@ -175,14 +177,11 @@ void test("history sync adds unseen messages and unions read receipts", async ()
   b.applyStateSync(fresh);
 
   const merged = await b.readRoomMessages(roomId);
-  assert.deepEqual(
-    merged.map((m) => m.content),
-    ["one", "two"],
-  );
-  assert.equal(merged[0]?.readBy.includes("reader-elsewhere"), true);
+  expect(merged.map((m) => m.content)).toEqual(["one", "two"]);
+  expect(merged[0]?.readBy.includes("reader-elsewhere")).toBe(true);
 });
 
-void test("a kick racing a concurrent join converges with the kick honoured", async () => {
+test("a kick racing a concurrent join converges with the kick honoured", async () => {
   // Two holders of the same room base: one records X leaving (a kick), the
   // other records X joining, both at the same revision because they mutated
   // concurrently from the same base. Both directions of the sync must
@@ -222,17 +221,17 @@ void test("a kick racing a concurrent join converges with the kick honoured", as
   // Concurrent mutations from the same base: a kick on one holder, a re-join of X recorded on the other.
   await kicker.leaveRoom(roomId, x.id);
   await joiner.joinRoom(roomId, x.id);
-  assert.equal((await kicker.getRoom(roomId))?.members.includes(x.id), false);
-  assert.equal((await joiner.getRoom(roomId))?.members.includes(x.id), true);
+  expect((await kicker.getRoom(roomId))?.members.includes(x.id)).toBe(false);
+  expect((await joiner.getRoom(roomId))?.members.includes(x.id)).toBe(true);
 
   // Exchange both ways: both converge on the kick.
   kicker.applyStateSync(snapshotOf(joiner));
   joiner.applyStateSync(snapshotOf(kicker));
-  assert.equal((await kicker.getRoom(roomId))?.members.includes(x.id), false);
-  assert.equal((await joiner.getRoom(roomId))?.members.includes(x.id), false);
+  expect((await kicker.getRoom(roomId))?.members.includes(x.id)).toBe(false);
+  expect((await joiner.getRoom(roomId))?.members.includes(x.id)).toBe(false);
 });
 
-void test("concurrent joins of different agents both survive the merge", async () => {
+test("concurrent joins of different agents both survive the merge", async () => {
   // The property the old version-tie union existed to protect: two peers
   // each record a different agent joining from the same base, and the
   // merged room holds both.
@@ -282,7 +281,7 @@ void test("concurrent joins of different agents both survive the merge", async (
   holderB.applyStateSync(snapshotOf(holderA));
   const mergedA = await holderA.getRoom(roomId);
   const mergedB = await holderB.getRoom(roomId);
-  assert.equal(mergedA?.members.includes(p.id), true);
-  assert.equal(mergedA?.members.includes(q.id), true);
-  assert.deepEqual(mergedB?.members, mergedA?.members);
+  expect(mergedA?.members.includes(p.id)).toBe(true);
+  expect(mergedA?.members.includes(q.id)).toBe(true);
+  expect(mergedB?.members).toEqual(mergedA?.members);
 });

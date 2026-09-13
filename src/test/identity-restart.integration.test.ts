@@ -4,10 +4,10 @@
  * Before persistent identities, every restart generated a fresh keypair, so the device-id-derived agent ID changed and peers kept targeting the old ID: their messages queued for an agent whose local handler (gated on agentId === peerId) never fired again.
  */
 
-import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { test, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
@@ -60,7 +60,7 @@ async function waitFor(
     if (await check()) return;
     await sleep(100);
   }
-  assert.ok(false, `timed out waiting for ${what}`);
+  expect(false, `timed out waiting for ${what}`).toBeTruthy();
 }
 
 async function main(): Promise<void> {
@@ -128,8 +128,7 @@ async function main(): Promise<void> {
 
   // A restarts in the same slot: same key material, same agent ID.
   const identityA2 = loadOrCreateIdentity(slot);
-  assert.equal(
-    deviceIdToHex(Uint8Array.from(identityA2.deviceId)),
+  expect(deviceIdToHex(Uint8Array.from(identityA2.deviceId))).toBe(
     deviceIdToHex(Uint8Array.from(identityA.deviceId)),
   );
   const a2 = await makePeer(identityA2, slot);
@@ -146,7 +145,7 @@ async function main(): Promise<void> {
     tags: [],
   });
 
-  assert.equal(a2.store.peerId, agentIdA);
+  expect(a2.store.peerId).toBe(agentIdA);
   await waitFor("B to see the restarted agent active", async () => {
     const agents = await b.store.listAgents(b.store.peerId);
     const seen = agents.find((agent) => agent.id === agentIdA);
@@ -174,7 +173,8 @@ async function main(): Promise<void> {
   const pendingDm = a2.store
     .listPendingRoomJoins()
     .find((p) => p.requesterId === b.store.peerId);
-  assert.ok(pendingDm);
+  expect(pendingDm).toBeTruthy();
+  if (pendingDm === undefined) throw new Error("expected a pending DM request");
   a2.store.acceptRoomJoin(pendingDm.roomPath, b.store.peerId);
   await dmAccessPromise;
 
@@ -193,9 +193,6 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((err: unknown) => {
-  console.error("Test failed:", err);
-  process.exitCode = 1;
-  // The sequence above keeps mesh handles open when it fails partway; exit explicitly so a failure cannot hang the runner.
-  process.exit(1);
+test("a bridge restarted with a persisted identity keeps its agent ID, room membership, and push delivery", async () => {
+  await main();
 });
