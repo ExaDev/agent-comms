@@ -1,3 +1,9 @@
+## [2.19.1](https://github.com/ExaDev/agent-comms/compare/v2.19.0...v2.19.1) (2026-09-13)
+
+### Bug Fixes
+
+* **ci:** raise the mutation testing job's own timeout to 240 minutes ([c702a9e](https://github.com/ExaDev/agent-comms/commit/c702a9e8dcead9568c737bc728357fbf4f31a1c3))
+
 ## [2.19.0](https://github.com/ExaDev/agent-comms/compare/v2.18.4...v2.19.0) (2026-09-13)
 
 ### Features
