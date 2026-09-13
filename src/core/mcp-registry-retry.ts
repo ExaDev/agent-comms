@@ -16,10 +16,22 @@ export function nextRetryDelayMs(previousDelayMs: number): number {
   );
 }
 
-/** Recognises the MCP registry's own npm-propagation-lag error text -- the specific, recoverable failure worth retrying, as opposed to any other publish failure. */
-export function isNpmPropagationLag(output: string): boolean {
+/** The MCP registry's own npm-propagation-lag error text -- the version semantic-release just published may not be visible to the registry's own npm lookup for a few seconds. */
+function isNpmPropagationLag(output: string): boolean {
   return (
     output.includes("was not found") &&
     output.includes("A newly published release can take a moment")
   );
+}
+
+// Confirmed as a second, distinct retryable failure mode in the same run this retry logic was first fixed for (ExaDev/agent-comms, 2026-09-13, v2.18.1): the registry returned a genuine HTTP 504 (a transient gateway timeout on the registry's own infrastructure, not anything to do with npm propagation), and the retry logic at the time only recognised the propagation-lag text above, so it failed the release job immediately instead of retrying a condition that resolved itself on a plain re-run seconds later. Any 5xx is the registry's own server failing to complete the request, not this side's request being wrong -- exactly the class of error a retry can plausibly fix, unlike a 4xx (this side asked for something invalid) other than the specific propagation-lag 404 already handled above.
+const SERVER_ERROR_STATUS_PATTERN = /server returned status 5\d{2}\b/;
+
+function isRetryableServerError(output: string): boolean {
+  return SERVER_ERROR_STATUS_PATTERN.test(output);
+}
+
+/** Recognises a publish failure worth retrying (npm propagation lag, or a transient 5xx from the registry's own infrastructure) as opposed to any other failure -- a genuinely invalid publish request, for instance, which retrying can never fix. */
+export function isRetryablePublishFailure(output: string): boolean {
+  return isNpmPropagationLag(output) || isRetryableServerError(output);
 }
