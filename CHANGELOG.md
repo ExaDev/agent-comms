@@ -1,3 +1,9 @@
+## [2.20.0](https://github.com/ExaDev/agent-comms/compare/v2.19.1...v2.20.0) (2026-09-13)
+
+### Features
+
+* **ci:** split mutation testing into a per-file matrix job ([c477dcc](https://github.com/ExaDev/agent-comms/commit/c477dcce29a07663412ef0971594008e7db28c40))
+
 ## [2.19.1](https://github.com/ExaDev/agent-comms/compare/v2.19.0...v2.19.1) (2026-09-13)
 
 ### Bug Fixes
