@@ -2,8 +2,7 @@
  * Unit tests for the directed room.send fan-out's own retry queue (P3.5): a send that fails because its target member isn't currently reachable is queued rather than thrown or dropped, and retried the moment that member's connection is (re)established -- handlePeerConnected fires for exactly that event, so these tests trigger it directly via store.events.onPeerConnected rather than driving a real second peer (see room-send-retry.integration.test.ts for the real, two-peer version of this same acceptance behaviour).
  */
 
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import type { ManageOutcome } from "wire-mesh-core/domain/mesh-session";
 import { MeshStore } from "../core/mesh-store.js";
 import type { MeshTransport } from "../core/transport.js";
@@ -57,7 +56,7 @@ function fakeTransport(): {
   };
 }
 
-void test("a room.send to an unreachable member is queued and retried once it reconnects", async () => {
+test("a room.send to an unreachable member is queued and retried once it reconnects", async () => {
   const store = new MeshStore();
   await wireTestTransport(store);
   const owner = await store.registerAgent({
@@ -80,7 +79,7 @@ void test("a room.send to an unreachable member is queued and retried once it re
   store.setTransport(transport);
 
   await store.sendRoomMessage(room.id, owner.id, "hello");
-  assert.equal(attempts.length, 1, "the first, failed attempt was made");
+  expect(attempts.length, "the first, failed attempt was made").toBe(1);
 
   setConnected(true);
   store.events.onPeerConnected(
@@ -94,7 +93,7 @@ void test("a room.send to an unreachable member is queued and retried once it re
   );
 });
 
-void test("the retry queue is bounded oldest-first per member", async () => {
+test("the retry queue is bounded oldest-first per member", async () => {
   const store = new MeshStore();
   await wireTestTransport(store);
   const owner = await store.registerAgent({
@@ -120,7 +119,7 @@ void test("the retry queue is bounded oldest-first per member", async () => {
   for (let i = 0; i < QUEUE_CAP + overflow; i++) {
     await store.sendRoomMessage(room.id, owner.id, `msg-${String(i)}`);
   }
-  assert.equal(attempts.length, QUEUE_CAP + overflow);
+  expect(attempts.length).toBe(QUEUE_CAP + overflow);
 
   attempts.length = 0;
   setConnected(true);
@@ -139,14 +138,13 @@ void test("the retry queue is bounded oldest-first per member", async () => {
     if (!("text" in params)) return undefined;
     return typeof params.text === "string" ? params.text : undefined;
   }
-  assert.equal(textOf(attempts[0]), `msg-${String(overflow)}`);
-  assert.equal(
-    textOf(attempts[attempts.length - 1]),
+  expect(textOf(attempts[0])).toBe(`msg-${String(overflow)}`);
+  expect(textOf(attempts[attempts.length - 1])).toBe(
     `msg-${String(QUEUE_CAP + overflow - 1)}`,
   );
 });
 
-void test("a flush drops (not re-queues) a send whose room this store no longer holds a token for", async () => {
+test("a flush drops (not re-queues) a send whose room this store no longer holds a token for", async () => {
   const store = new MeshStore();
   const slot = await wireTestTransport(store);
   const owner = await store.registerAgent({
@@ -169,7 +167,7 @@ void test("a flush drops (not re-queues) a send whose room this store no longer 
   store.setTransport(transport);
 
   await store.sendRoomMessage(room.id, owner.id, "hello");
-  assert.equal(attempts.length, 1);
+  expect(attempts.length).toBe(1);
 
   deleteRoomToken(slot, room.id);
 
@@ -179,5 +177,5 @@ void test("a flush drops (not re-queues) a send whose room this store no longer 
   );
   // No token to present -- give the flush a moment to run, then confirm it made no further attempt.
   await new Promise((resolve) => setTimeout(resolve, 50));
-  assert.equal(attempts.length, 1);
+  expect(attempts.length).toBe(1);
 });

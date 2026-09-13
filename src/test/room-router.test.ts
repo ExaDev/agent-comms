@@ -1,5 +1,4 @@
-import { describe, it, mock } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, vi, expect } from "vitest";
 import type { IncomingManageRequest } from "wire-mesh-core/domain/mesh-session";
 import type { ManageOutcome } from "wire-mesh-core/domain/mesh-session";
 import { FRAME_VERB, buildCommand } from "../core/wire-mesh-transport.js";
@@ -10,17 +9,17 @@ const TEST_HANDLE: ConnectionHandle = { id: "a".repeat(64) };
 
 function fakeEvents(): TransportEvents {
   return {
-    onMessage: mock.fn(),
-    onIntroduction: mock.fn(),
-    onConnectionRequest: mock.fn(),
-    onPeerConnected: mock.fn(),
-    onPeerDisconnected: mock.fn(),
-    onPeerList: mock.fn(),
-    onPeerJoined: mock.fn(),
-    onBecomeCoordinator: mock.fn(),
-    onError: mock.fn(),
-    onRevocationAnnounce: mock.fn(),
-    onPresenceAdvert: mock.fn(),
+    onMessage: vi.fn(),
+    onIntroduction: vi.fn(),
+    onConnectionRequest: vi.fn(),
+    onPeerConnected: vi.fn(),
+    onPeerDisconnected: vi.fn(),
+    onPeerList: vi.fn(),
+    onPeerJoined: vi.fn(),
+    onBecomeCoordinator: vi.fn(),
+    onError: vi.fn(),
+    onRevocationAnnounce: vi.fn(),
+    onPresenceAdvert: vi.fn(),
   };
 }
 
@@ -51,13 +50,11 @@ describe("createRoomRouter", () => {
 
     await router.handleRequest(request, TEST_HANDLE);
 
-    assert.equal(
-      (
-        events.onPeerList as unknown as ReturnType<typeof mock.fn>
-      ).mock.callCount(),
-      1,
-    );
-    assert.deepEqual(responses, [{ result: "ok" }]);
+    expect(
+      (events.onPeerList as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .length,
+    ).toBe(1);
+    expect(responses).toEqual([{ result: "ok" }]);
   });
 
   it("routes an otherwise-well-formed FRAME_VERB payload with no recognised case to the onMessage catch-all", async () => {
@@ -71,13 +68,11 @@ describe("createRoomRouter", () => {
 
     await router.handleRequest(request, TEST_HANDLE);
 
-    assert.equal(
-      (
-        events.onMessage as unknown as ReturnType<typeof mock.fn>
-      ).mock.callCount(),
-      1,
-    );
-    assert.deepEqual(responses, [{ result: "ok" }]);
+    expect(
+      (events.onMessage as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .length,
+    ).toBe(1);
+    expect(responses).toEqual([{ result: "ok" }]);
   });
 
   it("responds ok without routing anything for a FRAME_VERB payload with no message field at all", async () => {
@@ -90,13 +85,11 @@ describe("createRoomRouter", () => {
 
     await router.handleRequest(request, TEST_HANDLE);
 
-    assert.equal(
-      (
-        events.onMessage as unknown as ReturnType<typeof mock.fn>
-      ).mock.callCount(),
-      0,
-    );
-    assert.deepEqual(responses, [{ result: "ok" }]);
+    expect(
+      (events.onMessage as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .length,
+    ).toBe(0);
+    expect(responses).toEqual([{ result: "ok" }]);
   });
 
   it("dispatches a registered room verb to its own handler", async () => {
@@ -118,8 +111,8 @@ describe("createRoomRouter", () => {
 
     await router.handleRequest(request, TEST_HANDLE);
 
-    assert.deepEqual(handled, [{ verb: "room.send", text: "hi" }]);
-    assert.deepEqual(responses, [{ result: "ok" }]);
+    expect(handled).toEqual([{ verb: "room.send", text: "hi" }]);
+    expect(responses).toEqual([{ result: "ok" }]);
   });
 
   it("refuses an unregistered room verb with unsupported_verb", async () => {
@@ -132,8 +125,8 @@ describe("createRoomRouter", () => {
 
     await router.handleRequest(request, TEST_HANDLE);
 
-    assert.equal(responses.length, 1);
-    assert.deepEqual(responses[0], {
+    expect(responses.length).toBe(1);
+    expect(responses[0]).toEqual({
       result: "error",
       code: "unsupported_verb",
     });
@@ -149,9 +142,7 @@ describe("createRoomRouter", () => {
 
     await router.handleRequest(request, TEST_HANDLE);
 
-    assert.deepEqual(responses, [
-      { result: "error", code: "unsupported_verb" },
-    ]);
+    expect(responses).toEqual([{ result: "error", code: "unsupported_verb" }]);
   });
 
   it("refuses a params object with no verb field at all", async () => {
@@ -164,8 +155,6 @@ describe("createRoomRouter", () => {
 
     await router.handleRequest(request, TEST_HANDLE);
 
-    assert.deepEqual(responses, [
-      { result: "error", code: "unsupported_verb" },
-    ]);
+    expect(responses).toEqual([{ result: "error", code: "unsupported_verb" }]);
   });
 });

@@ -2,8 +2,7 @@
  * Unit tests for the room_accept/room_reject/room_pending CommsTool actions -- the human-facing wrapper around MeshStore's own acceptRoomJoin/rejectRoomJoin/listPendingRoomJoins, additive alongside (never replacing) the existing mesh_accept/mesh_reject/mesh_pending connection-level actions.
  */
 
-import * as assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, expect } from "vitest";
 import type { IncomingManageRequest } from "wire-mesh-core/domain/mesh-session";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
@@ -40,7 +39,9 @@ describe("room admission CommsTool actions", () => {
       description: "",
     });
     const handler = store.roomVerbHandlers["room.join"];
-    assert.ok(handler);
+    expect(handler).toBeTruthy();
+    if (handler === undefined)
+      throw new Error("expected a room.join handler to be registered");
     void handler(fakeJoinRequest(room.id), { id: REQUESTER_ID });
 
     const tool = new CommsTool(store);
@@ -55,9 +56,9 @@ describe("room admission CommsTool actions", () => {
       buildAction({ action: "room_pending" }),
     );
 
-    assert.equal(pendingResult.isError, false);
-    assert.ok(pendingResult.content.includes(room.id));
-    assert.ok(pendingResult.content.includes(REQUESTER_ID));
+    expect(pendingResult.isError).toBe(false);
+    expect(pendingResult.content.includes(room.id)).toBeTruthy();
+    expect(pendingResult.content.includes(REQUESTER_ID)).toBeTruthy();
   });
 
   it("room_accept grants the pending request", async () => {
@@ -78,7 +79,9 @@ describe("room admission CommsTool actions", () => {
       description: "",
     });
     const handler = store.roomVerbHandlers["room.join"];
-    assert.ok(handler);
+    expect(handler).toBeTruthy();
+    if (handler === undefined)
+      throw new Error("expected a room.join handler to be registered");
     const outcomePromise = handler(fakeJoinRequest(room.id), {
       id: REQUESTER_ID,
     });
@@ -99,15 +102,15 @@ describe("room admission CommsTool actions", () => {
       }),
     );
 
-    assert.equal(acceptResult.isError, false);
+    expect(acceptResult.isError).toBe(false);
     const outcome = await outcomePromise;
-    assert.equal(outcome.result, "ok");
+    expect(outcome.result).toBe("ok");
 
     const pendingAfter = await tool.handle(
       ctx,
       buildAction({ action: "room_pending" }),
     );
-    assert.equal(pendingAfter.content, "No pending room join requests.");
+    expect(pendingAfter.content).toBe("No pending room join requests.");
   });
 
   it("room_reject denies the pending request with an optional reason", async () => {
@@ -128,7 +131,9 @@ describe("room admission CommsTool actions", () => {
       description: "",
     });
     const handler = store.roomVerbHandlers["room.join"];
-    assert.ok(handler);
+    expect(handler).toBeTruthy();
+    if (handler === undefined)
+      throw new Error("expected a room.join handler to be registered");
     const outcomePromise = handler(fakeJoinRequest(room.id), {
       id: REQUESTER_ID,
     });
@@ -150,11 +155,11 @@ describe("room admission CommsTool actions", () => {
       }),
     );
 
-    assert.equal(rejectResult.isError, false);
+    expect(rejectResult.isError).toBe(false);
     const outcome = await outcomePromise;
-    assert.equal(outcome.result, "error");
+    expect(outcome.result).toBe("error");
     if (outcome.result === "error") {
-      assert.equal(outcome.message, "not now");
+      expect(outcome.message).toBe("not now");
     }
   });
 
@@ -186,6 +191,6 @@ describe("room admission CommsTool actions", () => {
       }),
     );
 
-    assert.equal(result.isError, true);
+    expect(result.isError).toBe(true);
   });
 });

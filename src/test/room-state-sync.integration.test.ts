@@ -2,8 +2,7 @@
  * Integration test for room-state sync (P3.6): a joiner's own local Room record gets the room's real name/description/type from room.join's response, and a later room.members refresh picks up changes made after the join (here, simulated by mutating the owner's own room record directly, since no rename/re-describe verb exists yet).
  */
 
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 
@@ -66,7 +65,7 @@ async function joinAndAccept(
   await joinPromise;
 }
 
-void test("a joiner's own local room record carries the room's real name, description, and type", async () => {
+test("a joiner's own local room record carries the room's real name, description, and type", async () => {
   const { owner, member } = await makeConnectedPair(freshPort());
 
   try {
@@ -80,18 +79,20 @@ void test("a joiner's own local room record carries the room's real name, descri
     await joinAndAccept(owner, member, room.id);
 
     const memberCopy = await member.getRoom(room.id);
-    assert.ok(memberCopy);
+    expect(memberCopy).toBeTruthy();
+    if (memberCopy === undefined)
+      throw new Error("expected member's own copy of the room");
     // createRoom slugs the raw name before storing it (General-Chat, not General Chat) -- the point of this assertion is that member's own copy matches owner's own stored value exactly, not the pre-slug input.
-    assert.equal(memberCopy.name, "General-Chat");
-    assert.equal(memberCopy.description, "the main room");
-    assert.equal(memberCopy.type, "private");
+    expect(memberCopy.name).toBe("General-Chat");
+    expect(memberCopy.description).toBe("the main room");
+    expect(memberCopy.type).toBe("private");
   } finally {
     await member.shutdown();
     await owner.shutdown();
   }
 });
 
-void test("refreshRoomMembers re-syncs a member's own local room record from the owner", async () => {
+test("refreshRoomMembers re-syncs a member's own local room record from the owner", async () => {
   const { owner, member } = await makeConnectedPair(freshPort());
 
   try {
@@ -105,30 +106,31 @@ void test("refreshRoomMembers re-syncs a member's own local room record from the
 
     // A change on the owner's own side that room.join's own response never carries after the fact -- refreshRoomMembers is the only way member ever learns of it.
     const ownerCopy = await owner.getRoom(room.id);
-    assert.ok(ownerCopy);
+    expect(ownerCopy).toBeTruthy();
+    if (ownerCopy === undefined)
+      throw new Error("expected owner's own copy of the room");
     ownerCopy.description = "renamed after the join";
 
     const refreshed = await member.refreshRoomMembers(room.id);
-    assert.equal(refreshed.description, "renamed after the join");
-    assert.ok(refreshed.members.includes(owner.peerId));
-    assert.ok(refreshed.members.includes(member.peerId));
+    expect(refreshed.description).toBe("renamed after the join");
+    expect(refreshed.members.includes(owner.peerId)).toBeTruthy();
+    expect(refreshed.members.includes(member.peerId)).toBeTruthy();
 
     const memberCopy = await member.getRoom(room.id);
-    assert.equal(memberCopy?.description, "renamed after the join");
+    expect(memberCopy?.description).toBe("renamed after the join");
   } finally {
     await member.shutdown();
     await owner.shutdown();
   }
 });
 
-void test("refreshRoomMembers throws for a DM path -- no Room record exists to refresh", async () => {
+test("refreshRoomMembers throws for a DM path -- no Room record exists to refresh", async () => {
   const { owner, member } = await makeConnectedPair(freshPort());
 
   try {
-    await assert.rejects(
+    await expect(
       member.refreshRoomMembers(`${owner.peerId}+${member.peerId}`),
-      /not found/i,
-    );
+    ).rejects.toThrow(/not found/i);
   } finally {
     await member.shutdown();
     await owner.shutdown();

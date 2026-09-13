@@ -2,8 +2,7 @@
  * Integration tests for room.leave's real wire-level path (P3.8): a member leaving, or a target declining an invite it never joined, both tell the room's own owner over a real, wire-authenticated room.leave -- the owner revokes the sender's own grant for real (the same revocation machinery kickFromRoom already uses) and notifies accordingly (member_left for a real leave, invite_declined for a decline), rather than each mutating a local Room record nobody else reads.
  */
 
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { loadRoomTokens } from "../core/identity-store.js";
@@ -53,7 +52,7 @@ async function joinAndAccept(
   await joinPromise;
 }
 
-void test("a member leaving revokes its own grant and notifies the other members", async () => {
+test("a member leaving revokes its own grant and notifies the other members", async () => {
   const port = freshPort();
   const { store: owner } = await makeRegisteredStore(port, "owner");
   const { store: memberA, slot: aSlot } = await makeRegisteredStore(
@@ -96,11 +95,10 @@ void test("a member leaving revokes its own grant and notifies the other members
     );
 
     // A's own local token is gone, and A can no longer act as a member.
-    assert.equal(loadRoomTokens(aSlot)[room.id], undefined);
-    await assert.rejects(
+    expect(loadRoomTokens(aSlot)[room.id]).toBe(undefined);
+    await expect(
       memberA.sendRoomMessageDirected(room.id, owner.peerId, "still here?"),
-      { code: "NOT_A_MEMBER" },
-    );
+    ).rejects.toMatchObject({ code: "NOT_A_MEMBER" });
   } finally {
     await memberB.shutdown();
     await memberA.shutdown();
@@ -108,7 +106,7 @@ void test("a member leaving revokes its own grant and notifies the other members
   }
 });
 
-void test("declining an invite before ever joining revokes the pushed grant and notifies the owner", async () => {
+test("declining an invite before ever joining revokes the pushed grant and notifies the owner", async () => {
   const port = freshPort();
   const { store: owner } = await makeRegisteredStore(port, "owner");
   const { store: target, slot: targetSlot } = await makeRegisteredStore(
@@ -154,9 +152,11 @@ void test("declining an invite before ever joining revokes the pushed grant and 
       (event): event is Extract<DeliveryEvent, { type: "invite_declined" }> =>
         event.type === "invite_declined",
     );
-    assert.ok(declined);
-    assert.equal(declined.reason, "not right now");
-    assert.equal(loadRoomTokens(targetSlot)[room.id], undefined);
+    expect(declined).toBeTruthy();
+    if (declined === undefined)
+      throw new Error("expected an invite_declined delivery event");
+    expect(declined.reason).toBe("not right now");
+    expect(loadRoomTokens(targetSlot)[room.id]).toBe(undefined);
   } finally {
     await target.shutdown();
     await owner.shutdown();

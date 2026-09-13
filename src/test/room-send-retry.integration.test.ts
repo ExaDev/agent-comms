@@ -2,10 +2,10 @@
  * Integration test for issue #28's own acceptance behaviour, re-verified against P3.5's directed fan-out: a room message sent while its recipient is offline must still reach the recipient once it reconnects. Unlike the legacy full-state-sync this replaces, a directed room.send to a disconnected member fails immediately rather than eventually converging, so the fan-out queues it for retry (pendingRoomSends) and flushes that queue the moment the member's connection is (re)established (handlePeerConnected). Replaces downtime-replay.integration.test.ts, whose own scenario relied on deliveryQueues/applyStateSync -- machinery this fan-out no longer uses for message delivery.
  */
 
-import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { test, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
@@ -58,7 +58,7 @@ async function waitFor(
     if (await check()) return;
     await sleep(100);
   }
-  assert.ok(false, `timed out waiting for ${what}`);
+  expect(false, `timed out waiting for ${what}`).toBeTruthy();
 }
 
 async function main(): Promise<void> {
@@ -127,8 +127,7 @@ async function main(): Promise<void> {
 
   // B restarts in the same slot: same identity, same agent ID, same persisted room:member token -- the queued send retries the moment the reconnection to A completes.
   const identityB2 = loadOrCreateIdentity(slot);
-  assert.equal(
-    deviceIdToHex(Uint8Array.from(identityB2.deviceId)),
+  expect(deviceIdToHex(Uint8Array.from(identityB2.deviceId))).toBe(
     deviceIdToHex(Uint8Array.from(identityB.deviceId)),
   );
   const b2 = await makePeer(identityB2, slot);
@@ -162,9 +161,6 @@ async function main(): Promise<void> {
   console.log("✓ a queued room.send retries and delivers on reconnect");
 }
 
-main().catch((err: unknown) => {
-  console.error("Test failed:", err);
-  process.exitCode = 1;
-  // The sequence above keeps mesh handles open when it fails partway; exit explicitly so a failure cannot hang the runner.
-  process.exit(1);
+test("a room.send queued for a disconnected member retries and delivers once that member reconnects", async () => {
+  await main();
 });

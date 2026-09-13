@@ -4,8 +4,7 @@
  * Three real peers: owner (mints and later revokes A's grant), A (the member being kicked), and B (a fellow member who never talks to A about the kick directly -- B's own rejection of A's post-kick message is what proves the revocation-announce genuinely propagated over the wire, not merely that owner's own local view updated).
  */
 
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
@@ -52,7 +51,7 @@ async function joinAndAccept(
   await joinPromise;
 }
 
-void test("kicking a member revokes their room:member token for every peer, not just the owner", async () => {
+test("kicking a member revokes their room:member token for every peer, not just the owner", async () => {
   const port = freshPort();
   const owner = await makeRegisteredStore(port, "owner");
   const memberA = await makeRegisteredStore(port, "member-a");
@@ -100,25 +99,23 @@ void test("kicking a member revokes their room:member token for every peer, not 
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     // sendRoomMessage (not used here) re-checks this store's own local CRDT room.members list, which the kick's own legacy room_upsert patch has by now also reached A through -- that would mask exactly what this test needs to isolate. sendRoomMessageDirected instead only ever consults A's own persisted bearer token (never revoked by kickFromRoom, which revokes the OWNER's own record of having issued it, not A's own copy), so it genuinely simulates a still-token-holding A trying to reach B directly -- the real scenario a token-side revocation exists to stop, independent of whatever A's own CRDT view happens to already know. B's own handleRoomSend rejects it with "unauthorized" (the announced revocation now verifies as revoked on B's own independent check), which sendRoomMessageDirected surfaces as a thrown error rather than swallowing it the way the fan-out path does.
-    await assert.rejects(
+    await expect(
       memberA.sendRoomMessageDirected(
         room.id,
         memberB.peerId,
         "after the kick",
       ),
-      /unauthorized/,
       "B must reject a room.send sent under a token its owner already revoked",
-    );
+    ).rejects.toThrow(/unauthorized/);
 
-    assert.equal(
+    expect(
       bDeliveries.some(
         (event) =>
           event.type === "room_message" &&
           event.message.content === "after the kick",
       ),
-      false,
       "B must not have delivered a message sent under a revoked token",
-    );
+    ).toBe(false);
   } finally {
     await memberB.shutdown();
     await memberA.shutdown();

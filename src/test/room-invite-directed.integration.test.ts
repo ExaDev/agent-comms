@@ -2,8 +2,7 @@
  * Integration test for room.invite's real wire-level path (P3.8): the room owner pushes an already-minted room:member grant to a target directly, over a real, wire-authenticated room.invite -- replacing the legacy broadcastPatch/deliverLocallyAndBroadcast fan-out (which reached every mesh-connected peer with a "delivery" patch, not just the intended target) with a directed request the target itself verifies before persisting the token.
  */
 
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { loadRoomTokens } from "../core/identity-store.js";
@@ -51,7 +50,7 @@ async function makeConnectedPair(port: number): Promise<{
   return { owner, target, targetSlot };
 }
 
-void test("inviting a target delivers a real room_invite carrying the room's own name/description and the inviter's own name/cwd", async () => {
+test("inviting a target delivers a real room_invite carrying the room's own name/description and the inviter's own name/cwd", async () => {
   const { owner, target, targetSlot } = await makeConnectedPair(freshPort());
 
   try {
@@ -77,22 +76,24 @@ void test("inviting a target delivers a real room_invite carrying the room's own
       (event): event is Extract<DeliveryEvent, { type: "room_invite" }> =>
         event.type === "room_invite",
     );
-    assert.ok(invite);
-    assert.equal(invite.room, room.id);
-    assert.equal(invite.roomDescription, "the main room");
-    assert.equal(invite.from, owner.peerId);
-    assert.equal(invite.fromName, "owner");
-    assert.equal(invite.fromCwd, "/test/owner");
+    expect(invite).toBeTruthy();
+    if (invite === undefined)
+      throw new Error("expected a room_invite delivery event");
+    expect(invite.room).toBe(room.id);
+    expect(invite.roomDescription).toBe("the main room");
+    expect(invite.from).toBe(owner.peerId);
+    expect(invite.fromName).toBe("owner");
+    expect(invite.fromCwd).toBe("/test/owner");
 
     // The pushed grant is usable, not just delivered: the target holds a real, persisted room:member token for the room now.
-    assert.ok(loadRoomTokens(targetSlot)[room.id]);
+    expect(loadRoomTokens(targetSlot)[room.id]).toBeTruthy();
   } finally {
     await target.shutdown();
     await owner.shutdown();
   }
 });
 
-void test("inviting an unreachable target throws rather than silently dropping the invite", async () => {
+test("inviting an unreachable target throws rather than silently dropping the invite", async () => {
   const owner = new MeshStore(freshPort());
   await wireTestTransport(owner);
   await owner.init();
@@ -113,10 +114,9 @@ void test("inviting an unreachable target throws rather than silently dropping t
       description: "",
     });
     const strangerId = "b".repeat(64);
-    await assert.rejects(
+    await expect(
       owner.inviteToRoom(room.id, strangerId, owner.peerId),
-      { code: "INVITE_FAILED" },
-    );
+    ).rejects.toMatchObject({ code: "INVITE_FAILED" });
   } finally {
     await owner.shutdown();
   }

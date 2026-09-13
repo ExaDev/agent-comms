@@ -4,8 +4,7 @@
  * Membership is set up by minting and persisting the member's own token directly, matching room-send-directed.integration.test.ts's own reasoning: the legacy full-state-sync makes a real room.join round trip structurally unreachable in a two-peer test here, and it's irrelevant to what this file tests.
  */
 
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { deviceIdFromHex } from "wire-mesh-core/domain/device-id";
@@ -78,12 +77,15 @@ async function grantMembership(
     expires: clock.now() + 60_000,
     delegationsRemaining: 0,
   });
-  assert.ok(verdict.ok, "expected the fixture grant to mint successfully");
+  expect(
+    verdict.ok,
+    "expected the fixture grant to mint successfully",
+  ).toBeTruthy();
   if (!verdict.ok) return;
   saveRoomToken(bearerSlot, roomPath, verdict.token);
 }
 
-void test("reading a directed room.send notifies only its own author via room.read", async () => {
+test("reading a directed room.send notifies only its own author via room.read", async () => {
   const { owner, ownerSlot, member, memberSlot } =
     await makeConnectedPair(freshPort());
 
@@ -126,21 +128,25 @@ void test("reading a directed room.send notifies only its own author via room.re
       (event): event is Extract<DeliveryEvent, { type: "delivery_status" }> =>
         event.type === "delivery_status" && event.status === "read",
     );
-    assert.ok(readReceipt);
-    assert.equal(readReceipt.agent, member.peerId);
-    assert.equal(readReceipt.room, room.id);
+    expect(readReceipt).toBeTruthy();
+    if (readReceipt === undefined)
+      throw new Error("expected a read-receipt delivery event");
+    expect(readReceipt.agent).toBe(member.peerId);
+    expect(readReceipt.room).toBe(room.id);
 
     const ownerHistory = await owner.readRoomMessages(room.id);
     const sent = ownerHistory.find((m) => m.content === "hello there");
-    assert.ok(sent);
-    assert.ok(sent.readBy.includes(member.peerId));
+    expect(sent).toBeTruthy();
+    if (sent === undefined)
+      throw new Error("expected to find the sent message");
+    expect(sent.readBy.includes(member.peerId)).toBeTruthy();
   } finally {
     await member.shutdown();
     await owner.shutdown();
   }
 });
 
-void test("reading a message from a peer with no room:member token for it does nothing beyond the local readBy update", async () => {
+test("reading a message from a peer with no room:member token for it does nothing beyond the local readBy update", async () => {
   const { owner, ownerSlot, member, memberSlot } =
     await makeConnectedPair(freshPort());
 
@@ -169,10 +175,9 @@ void test("reading a message from a peer with no room:member token for it does n
 
     // Give the auto-mark-read timer a real chance to fire and (incorrectly) notify owner before asserting it never did.
     await new Promise((resolve) => setTimeout(resolve, 300));
-    assert.equal(
+    expect(
       ownerDeliveries.some((event) => event.type === "delivery_status"),
-      false,
-    );
+    ).toBe(false);
   } finally {
     await member.shutdown();
     await owner.shutdown();
