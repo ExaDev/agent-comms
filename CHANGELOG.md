@@ -1,3 +1,9 @@
+## [2.17.0](https://github.com/ExaDev/agent-comms/compare/v2.16.0...v2.17.0) (2026-09-13)
+
+### Features
+
+* **core:** expire an unanswered connect_request after a configurable timeout ([007f7e0](https://github.com/ExaDev/agent-comms/commit/007f7e0834b463a3a30c1446ce168c616c99818d))
+
 ## [2.16.0](https://github.com/ExaDev/agent-comms/compare/v2.15.0...v2.16.0) (2026-09-12)
 
 ### Features
