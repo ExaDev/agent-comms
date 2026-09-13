@@ -4,7 +4,7 @@ import {
   INITIAL_RETRY_DELAY_MS,
   MAX_RETRY_DELAY_MS,
   MAX_TOTAL_RETRY_MS,
-  isNpmPropagationLag,
+  isRetryablePublishFailure,
   nextRetryDelayMs,
 } from "../core/mcp-registry-retry.js";
 
@@ -34,14 +34,25 @@ describe("nextRetryDelayMs", () => {
   });
 });
 
-describe("isNpmPropagationLag", () => {
+describe("isRetryablePublishFailure", () => {
   it("recognises the MCP registry's own npm-propagation-lag error text", () => {
     const output =
       "registry validation failed for package 0 (agent-comms): NPM package 'agent-comms' exists, but version '2.18.0' was not found (status: 404). A newly published release can take a moment to appear on the registry. Wait and retry, or publish version '2.18.0' before registering it";
-    assert.equal(isNpmPropagationLag(output), true);
+    assert.equal(isRetryablePublishFailure(output), true);
   });
 
-  it("does not misclassify an unrelated failure as propagation lag", () => {
-    assert.equal(isNpmPropagationLag("permission denied"), false);
+  it("recognises a transient 5xx from the registry's own infrastructure -- confirmed as a real, second retryable failure mode (ExaDev/agent-comms, 2026-09-13, v2.18.1): the registry returned a genuine HTTP 504 that resolved itself on a plain re-run seconds later, but the retry logic at the time only recognised the propagation-lag text above and failed the release job immediately instead of retrying it", () => {
+    const output = "Error: publish failed: server returned status 504: <html>";
+    assert.equal(isRetryablePublishFailure(output), true);
+  });
+
+  it("does not retry a 4xx other than the specific propagation-lag 404 -- a genuinely invalid publish request, which retrying can never fix", () => {
+    const output =
+      "Error: publish failed: server returned status 400: Bad Request";
+    assert.equal(isRetryablePublishFailure(output), false);
+  });
+
+  it("does not misclassify an unrelated failure as retryable", () => {
+    assert.equal(isRetryablePublishFailure("permission denied"), false);
   });
 });

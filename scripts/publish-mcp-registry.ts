@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import {
   INITIAL_RETRY_DELAY_MS,
   MAX_TOTAL_RETRY_MS,
-  isNpmPropagationLag,
+  isRetryablePublishFailure,
   nextRetryDelayMs,
 } from "../src/core/mcp-registry-retry.js";
 
@@ -31,10 +31,10 @@ function runPublishWithRetry(command: string, args: string[]): void {
     }
     const output = `${result.stdout}${result.stderr}`;
     const canRetry =
-      isNpmPropagationLag(output) && Date.now() + delayMs < deadline;
+      isRetryablePublishFailure(output) && Date.now() + delayMs < deadline;
     if (canRetry) {
       console.error(
-        `mcp-publisher publish hit npm propagation lag (attempt ${String(attempt)}), retrying in ${String(delayMs / 1000)}s`,
+        `mcp-publisher publish hit a retryable failure (attempt ${String(attempt)}), retrying in ${String(delayMs / 1000)}s`,
       );
       sleepSync(delayMs);
       delayMs = nextRetryDelayMs(delayMs);
@@ -67,7 +67,7 @@ function main(): void {
   }
 }
 
-// Only run as a side effect when executed directly (semantic-release's own exec step), never on a plain import, which is how the test suite reaches nextRetryDelayMs()/isNpmPropagationLag() (via src/core/mcp-registry-retry.ts) without downloading mcp-publisher or attempting a real publish.
+// Only run as a side effect when executed directly (semantic-release's own exec step), never on a plain import, which is how the test suite reaches nextRetryDelayMs()/isRetryablePublishFailure() (via src/core/mcp-registry-retry.ts) without downloading mcp-publisher or attempting a real publish.
 const invokedPath = process.argv[1];
 if (invokedPath !== undefined && import.meta.url === `file://${invokedPath}`) {
   main();
