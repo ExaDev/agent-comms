@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -51,6 +52,26 @@ jobs:
       - run: pnpm run build
       - run: pnpm test
       - run: pnpm test:smoke
+
+  mutation:
+    name: Mutation Testing
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run mutation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-report
+          path: reports/mutation/mutation.html
+          retention-days: 30
 
   pages:
     name: GitHub Pages
