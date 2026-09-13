@@ -7,8 +7,7 @@
 
 import * as net from "node:net";
 import { MeshStore } from "../core/mesh-store.js";
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { wireTestTransport } from "./test-transport.js";
 
 const TEST_PORT = 19879;
@@ -21,7 +20,7 @@ const TEST_PORT = 19879;
  * .on("data") but no .on("error"), so an ECONNRESET became an unhandled
  * error event on the socket → uncaught exception → process crash.
  */
-void test("coordinator survives ECONNRESET on accepted socket", async () => {
+test("coordinator survives ECONNRESET on accepted socket", async () => {
   const store = new MeshStore(TEST_PORT);
   await wireTestTransport(store);
   await store.init();
@@ -45,7 +44,10 @@ void test("coordinator survives ECONNRESET on accepted socket", async () => {
   // If we reach here, the process didn't crash from the unhandled error.
   // Verify the store is still functional.
   const agents = await store.listAgents(store.peerId);
-  assert.ok(Array.isArray(agents), "Store should still be functional");
+  expect(
+    Array.isArray(agents),
+    "Store should still be functional",
+  ).toBeTruthy();
 
   await store.shutdown();
 });

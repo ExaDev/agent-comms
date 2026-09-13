@@ -1,10 +1,8 @@
 /**
  * becomeCoordinator/addListener actual-port regression test (#42) — becomeCoordinator(host, 0) and addListener(host, 0, policy) must report the OS-assigned port they actually bound, not the literal 0 they were called with, on every transport whose listener bookkeeping goes through listListeners().
- *
- * Run directly with a specific scenario name as an argument, or with none to run every scenario in order.
  */
 
-import * as assert from "node:assert/strict";
+import { test, expect } from "vitest";
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
 import { acceptMeshSession } from "wire-mesh-core/domain/mesh-session";
 import { WireMeshTransport, DOMAIN } from "../core/wire-mesh-transport.js";
@@ -48,8 +46,9 @@ async function testBecomeCoordinatorReportsActualPort(): Promise<void> {
 
   await transport.becomeCoordinator("127.0.0.1", 0);
   const [listener] = transport.listListeners();
-  assert.ok(listener);
-  assert.notStrictEqual(listener.port, 0);
+  expect(listener).toBeTruthy();
+  if (listener === undefined) throw new Error("expected a bound listener");
+  expect(listener.port).not.toBe(0);
 
   await connectAndClose(listener.port);
   console.log(
@@ -66,8 +65,9 @@ async function testAddListenerReportsActualPort(): Promise<void> {
 
   const id = await transport.addListener("127.0.0.1", 0, "observe");
   const added = transport.listListeners().find((l) => l.id === id);
-  assert.ok(added);
-  assert.notStrictEqual(added.port, 0);
+  expect(added).toBeTruthy();
+  if (added === undefined) throw new Error("expected the added listener");
+  expect(added.port).not.toBe(0);
 
   await connectAndClose(added.port);
   console.log(
@@ -77,48 +77,10 @@ async function testAddListenerReportsActualPort(): Promise<void> {
   await transport.shutdown();
 }
 
-// ---------------------------------------------------------------------------
-// Runner
-// ---------------------------------------------------------------------------
+test("become-coordinator-reports-actual-port", async () => {
+  await testBecomeCoordinatorReportsActualPort();
+});
 
-const testName = process.argv[2];
-
-const tests: Record<string, () => Promise<void>> = {
-  "become-coordinator-reports-actual-port":
-    testBecomeCoordinatorReportsActualPort,
-  "add-listener-reports-actual-port": testAddListenerReportsActualPort,
-};
-
-const selected =
-  testName === undefined
-    ? Object.entries(tests)
-    : Object.entries(tests).filter(([name]) => name === testName);
-if (selected.length === 0) {
-  console.error(`Unknown test: ${testName}`);
-  console.error(`Available: ${Object.keys(tests).join(", ")}`);
-  process.exit(1);
-}
-
-async function run(): Promise<void> {
-  for (const [name, fn] of selected) {
-    console.log(`Running ${name}:`);
-    await fn();
-  }
-
-  const maxWait = 2000;
-  const start = Date.now();
-  while (
-    ((
-      process as unknown as { _getActiveHandles?: () => unknown[] }
-    )._getActiveHandles?.()?.length ?? 0) > 0 &&
-    Date.now() - start < maxWait
-  ) {
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
-  }
-  process.exit(0);
-}
-
-run().catch((err: unknown) => {
-  console.error(`FAIL [${testName ?? "all"}]:`, err);
-  process.exit(1);
+test("add-listener-reports-actual-port", async () => {
+  await testAddListenerReportsActualPort();
 });

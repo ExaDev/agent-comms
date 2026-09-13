@@ -15,8 +15,8 @@
 
 import { MeshStore } from "../core/mesh-store.js";
 import type { DeliveryEvent, RoomMessage } from "../core/types.js";
-import * as assert from "node:assert/strict";
 import * as net from "node:net";
+import { test, expect } from "vitest";
 import { wireTestTransport } from "./test-transport.js";
 
 // Use high ports to avoid collisions with real meshes
@@ -99,40 +99,48 @@ async function main(): Promise<void> {
 
   // --- Test 0: untrusted inbound connection is rejected ---
   console.log("\nTest 0: untrusted connection is rejected...");
-  await assert.rejects(
-    () => b.store.fedConnect("127.0.0.1", fedPort),
-    /rejected|not in the trusted-fingerprint allowlist/i,
+  await expect(
+    b.store.fedConnect("127.0.0.1", fedPort),
     "Connecting before either side has pinned the other's fingerprint should be rejected",
-  );
-  assert.strictEqual(
+  ).rejects.toThrow(/rejected|not in the trusted-fingerprint allowlist/i);
+  expect(
     b.store.fedLinks().length,
-    0,
     "B should have no federation links after a rejected attempt",
-  );
+  ).toBe(0);
   console.log("  Rejected as expected — no link was created.");
 
   // --- Pin fingerprints on both sides, mirroring what an operator does out of band ---
   console.log("\nPinning fingerprints on both sides...");
   const fingerprintA = a.store.getFederationFingerprint();
   const fingerprintB = b.store.getFederationFingerprint();
-  assert.ok(fingerprintA.length > 0, "A should report its own fingerprint");
-  assert.ok(fingerprintB.length > 0, "B should report its own fingerprint");
+  expect(
+    fingerprintA.length > 0,
+    "A should report its own fingerprint",
+  ).toBeTruthy();
+  expect(
+    fingerprintB.length > 0,
+    "B should report its own fingerprint",
+  ).toBeTruthy();
   await a.store.fedTrust(fingerprintB);
   await b.store.fedTrust(fingerprintA);
-  assert.deepStrictEqual(a.store.fedTrustedFingerprints(), [fingerprintB]);
-  assert.deepStrictEqual(b.store.fedTrustedFingerprints(), [fingerprintA]);
+  expect(a.store.fedTrustedFingerprints()).toEqual([fingerprintB]);
+  expect(b.store.fedTrustedFingerprints()).toEqual([fingerprintA]);
 
   // --- Test 1: Establish federation link now that both sides trust each other ---
   console.log("\nTest 1: Establish federation link...");
   const linkId = await b.store.fedConnect("127.0.0.1", fedPort);
   console.log(`  Link established: ${linkId}`);
-  assert.ok(linkId, "Should return a link ID");
+  expect(linkId, "Should return a link ID").toBeTruthy();
 
   const linksB = b.store.fedLinks();
-  assert.strictEqual(linksB.length, 1, "B should have 1 federation link");
+  expect(linksB.length, "B should have 1 federation link").toBe(1);
   const link = linksB[0];
-  assert.ok(link, "Link should exist");
-  assert.ok(link.remoteMeshId.length > 0, "Remote mesh ID should be present");
+  expect(link, "Link should exist").toBeTruthy();
+  if (link === undefined) throw new Error("Link should exist");
+  expect(
+    link.remoteMeshId.length > 0,
+    "Remote mesh ID should be present",
+  ).toBeTruthy();
 
   await sleep(200);
 
@@ -141,18 +149,18 @@ async function main(): Promise<void> {
   const agentsB = await b.store.listAgents(b.store.peerId);
   console.log(`  B sees ${String(agentsB.length)} agent(s)`);
   const fedAgentsB = agentsB.filter((ag) => ag.tags.includes("federated"));
-  assert.ok(
+  expect(
     fedAgentsB.length >= 1,
     "B should see at least 1 federated agent from A",
-  );
+  ).toBeTruthy();
 
   const agentsA = await a.store.listAgents(a.store.peerId);
   console.log(`  A sees ${String(agentsA.length)} agent(s)`);
   const fedAgentsA = agentsA.filter((ag) => ag.tags.includes("federated"));
-  assert.ok(
+  expect(
     fedAgentsA.length >= 1,
     "A should see at least 1 federated agent from B",
-  );
+  ).toBeTruthy();
 
   // --- Test 3: Federated room messages propagate ---
   console.log("Test 3: Federated room messages propagate...");
@@ -197,7 +205,10 @@ async function main(): Promise<void> {
       e.type === "room_message" && e.message.content === "Hello from mesh A!",
   );
   console.log(`  B received ${String(fedMsgs.length)} federated message(s)`);
-  assert.ok(fedMsgs.length >= 1, "B should receive the federated room message");
+  expect(
+    fedMsgs.length >= 1,
+    "B should receive the federated room message",
+  ).toBeTruthy();
 
   // --- Test 4: Non-federated rooms are isolated ---
   console.log("Test 4: Non-federated rooms are isolated...");
@@ -232,16 +243,15 @@ async function main(): Promise<void> {
       e.type === "room_message" && e.message.content === "Secret local message",
   );
   console.log(`  B received ${String(leakedMsgs.length)} leaked message(s)`);
-  assert.strictEqual(
+  expect(
     leakedMsgs.length,
-    0,
     "B should NOT receive non-federated room messages",
-  );
+  ).toBe(0);
 
   // --- Test 5: Federation link listing ---
   console.log("Test 5: Federation link listing...");
   const linksA = a.store.fedLinks();
-  assert.strictEqual(linksA.length, 1, "A should have 1 federation link");
+  expect(linksA.length, "A should have 1 federation link").toBe(1);
   console.log(`  A links: ${linksA.map((l) => l.remoteName).join(", ")}`);
 
   // --- Test 6: Disconnect federation link ---
@@ -250,11 +260,10 @@ async function main(): Promise<void> {
   await sleep(200);
 
   const linksAfter = b.store.fedLinks();
-  assert.strictEqual(
+  expect(
     linksAfter.length,
-    0,
     "B should have 0 federation links after disconnect",
-  );
+  ).toBe(0);
 
   // --- Cleanup ---
   console.log("\nCleaning up...");
@@ -265,7 +274,6 @@ async function main(): Promise<void> {
   console.log("\n✓ All federation tests passed!");
 }
 
-main().catch((err: unknown) => {
-  console.error("Test failed:", err);
-  process.exit(1);
+test("federates two meshes over coordinator-to-coordinator TLS links, propagating presence and room messages while rejecting an untrusted inbound link", async () => {
+  await main();
 });

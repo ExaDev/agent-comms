@@ -9,8 +9,7 @@
  *   - Actions route through CommsTool correctly
  */
 
-import * as assert from "node:assert/strict";
-import { test, describe } from "node:test";
+import { test, describe, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
@@ -25,45 +24,45 @@ const TEST_PORT = 19881;
 // ---------------------------------------------------------------------------
 
 describe("DiscoveryManager visibility", () => {
-  void test("default visibility is discoverable", () => {
+  test("default visibility is discoverable", () => {
     const dm = new DiscoveryManager();
-    assert.equal(dm.getVisibility(), "discoverable");
+    expect(dm.getVisibility()).toBe("discoverable");
   });
 
-  void test("setVisibility changes global visibility", async () => {
+  test("setVisibility changes global visibility", async () => {
     const dm = new DiscoveryManager();
     await dm.setVisibility("quiet");
-    assert.equal(dm.getVisibility(), "quiet");
+    expect(dm.getVisibility()).toBe("quiet");
     await dm.setVisibility("dark");
-    assert.equal(dm.getVisibility(), "dark");
+    expect(dm.getVisibility()).toBe("dark");
     await dm.setVisibility("discoverable");
-    assert.equal(dm.getVisibility(), "discoverable");
+    expect(dm.getVisibility()).toBe("discoverable");
   });
 
-  void test("per-adapter visibility overrides global", async () => {
+  test("per-adapter visibility overrides global", async () => {
     const dm = new DiscoveryManager();
     await dm.setVisibility("quiet", "mdns");
-    assert.equal(dm.getVisibility("mdns"), "quiet");
+    expect(dm.getVisibility("mdns")).toBe("quiet");
     // Global unchanged
-    assert.equal(dm.getVisibility(), "discoverable");
+    expect(dm.getVisibility()).toBe("discoverable");
     // Unset adapter falls back to global
-    assert.equal(dm.getVisibility("tailscale"), "discoverable");
+    expect(dm.getVisibility("tailscale")).toBe("discoverable");
   });
 
-  void test("per-adapter visibility is independent", async () => {
+  test("per-adapter visibility is independent", async () => {
     const dm = new DiscoveryManager();
     await dm.setVisibility("quiet", "mdns");
     await dm.setVisibility("dark", "tailscale");
-    assert.equal(dm.getVisibility("mdns"), "quiet");
-    assert.equal(dm.getVisibility("tailscale"), "dark");
-    assert.equal(dm.getVisibility(), "discoverable");
+    expect(dm.getVisibility("mdns")).toBe("quiet");
+    expect(dm.getVisibility("tailscale")).toBe("dark");
+    expect(dm.getVisibility()).toBe("discoverable");
   });
 
-  void test("discover returns empty for dark backends", async () => {
+  test("discover returns empty for dark backends", async () => {
     const dm = new DiscoveryManager();
     await dm.setVisibility("dark");
     const results = await dm.discover();
-    assert.equal(results.length, 0);
+    expect(results.length).toBe(0);
   });
 });
 
@@ -72,33 +71,33 @@ describe("DiscoveryManager visibility", () => {
 // ---------------------------------------------------------------------------
 
 describe("MeshStore visibility delegation", () => {
-  void test("setVisibility delegates to discovery manager", async () => {
+  test("setVisibility delegates to discovery manager", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     await store.init();
 
-    assert.equal(store.getVisibility(), "discoverable");
+    expect(store.getVisibility()).toBe("discoverable");
 
     await store.setVisibility("quiet");
-    assert.equal(store.getVisibility(), "quiet");
+    expect(store.getVisibility()).toBe("quiet");
 
     await store.setVisibility("dark");
-    assert.equal(store.getVisibility(), "dark");
+    expect(store.getVisibility()).toBe("dark");
 
     await store.setVisibility("discoverable");
-    assert.equal(store.getVisibility(), "discoverable");
+    expect(store.getVisibility()).toBe("discoverable");
 
     await store.shutdown();
   });
 
-  void test("setVisibility with adapter delegates per-adapter", async () => {
+  test("setVisibility with adapter delegates per-adapter", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     await store.init();
 
     await store.setVisibility("quiet", "mdns");
-    assert.equal(store.getVisibility("mdns"), "quiet");
-    assert.equal(store.getVisibility(), "discoverable");
+    expect(store.getVisibility("mdns")).toBe("quiet");
+    expect(store.getVisibility()).toBe("discoverable");
 
     await store.shutdown();
   });
@@ -109,7 +108,7 @@ describe("MeshStore visibility delegation", () => {
 // ---------------------------------------------------------------------------
 
 describe("CommsTool visibility actions", () => {
-  void test("mesh_set_visibility action sets visibility", async () => {
+  test("mesh_set_visibility action sets visibility", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     await store.init();
@@ -129,14 +128,17 @@ describe("CommsTool visibility actions", () => {
       { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
       { action: "mesh_set_visibility", visibility: "quiet" },
     );
-    assert.ok(!result.isError, `Expected success, got: ${result.content}`);
-    assert.ok(result.content.includes("quiet"));
-    assert.equal(store.getVisibility(), "quiet");
+    expect(
+      !result.isError,
+      `Expected success, got: ${result.content}`,
+    ).toBeTruthy();
+    expect(result.content.includes("quiet")).toBeTruthy();
+    expect(store.getVisibility()).toBe("quiet");
 
     await store.shutdown();
   });
 
-  void test("mesh_set_visibility with adapter sets per-adapter", async () => {
+  test("mesh_set_visibility with adapter sets per-adapter", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     await store.init();
@@ -156,14 +158,17 @@ describe("CommsTool visibility actions", () => {
       { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
       { action: "mesh_set_visibility", visibility: "dark", adapter: "mdns" },
     );
-    assert.ok(!result.isError, `Expected success, got: ${result.content}`);
-    assert.equal(store.getVisibility("mdns"), "dark");
-    assert.equal(store.getVisibility(), "discoverable");
+    expect(
+      !result.isError,
+      `Expected success, got: ${result.content}`,
+    ).toBeTruthy();
+    expect(store.getVisibility("mdns")).toBe("dark");
+    expect(store.getVisibility()).toBe("discoverable");
 
     await store.shutdown();
   });
 
-  void test("mesh_get_visibility returns current visibility", async () => {
+  test("mesh_get_visibility returns current visibility", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     await store.init();
@@ -183,8 +188,8 @@ describe("CommsTool visibility actions", () => {
       { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
       { action: "mesh_get_visibility" },
     );
-    assert.ok(!result.isError);
-    assert.ok(result.content.includes("discoverable"));
+    expect(!result.isError).toBeTruthy();
+    expect(result.content.includes("discoverable")).toBeTruthy();
 
     await store.setVisibility("dark");
 
@@ -192,7 +197,7 @@ describe("CommsTool visibility actions", () => {
       { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
       { action: "mesh_get_visibility" },
     );
-    assert.ok(result2.content.includes("dark"));
+    expect(result2.content.includes("dark")).toBeTruthy();
 
     await store.shutdown();
   });
@@ -203,40 +208,39 @@ describe("CommsTool visibility actions", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildAction visibility parsing", () => {
-  void test("buildAction parses mesh_set_visibility", () => {
+  test("buildAction parses mesh_set_visibility", () => {
     const action = buildAction({
       action: "mesh_set_visibility",
       meshVisibility: "quiet",
     });
-    assert.equal(action.action, "mesh_set_visibility");
+    expect(action.action).toBe("mesh_set_visibility");
     if (action.action === "mesh_set_visibility") {
-      assert.equal(action.visibility, "quiet");
+      expect(action.visibility).toBe("quiet");
     }
   });
 
-  void test("buildAction parses mesh_set_visibility with adapter", () => {
+  test("buildAction parses mesh_set_visibility with adapter", () => {
     const action = buildAction({
       action: "mesh_set_visibility",
       meshVisibility: "dark",
       adapter: "mdns",
     });
-    assert.equal(action.action, "mesh_set_visibility");
+    expect(action.action).toBe("mesh_set_visibility");
     if (action.action === "mesh_set_visibility") {
-      assert.equal(action.visibility, "dark");
-      assert.equal(action.adapter, "mdns");
+      expect(action.visibility).toBe("dark");
+      expect(action.adapter).toBe("mdns");
     }
   });
 
-  void test("buildAction parses mesh_get_visibility", () => {
+  test("buildAction parses mesh_get_visibility", () => {
     const action = buildAction({
       action: "mesh_get_visibility",
     });
-    assert.equal(action.action, "mesh_get_visibility");
+    expect(action.action).toBe("mesh_get_visibility");
   });
 
-  void test("buildAction throws for mesh_set_visibility without meshVisibility", () => {
-    assert.throws(
-      () => buildAction({ action: "mesh_set_visibility" }),
+  test("buildAction throws for mesh_set_visibility without meshVisibility", () => {
+    expect(() => buildAction({ action: "mesh_set_visibility" })).toThrow(
       /meshVisibility/,
     );
   });

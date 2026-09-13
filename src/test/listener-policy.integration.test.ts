@@ -21,99 +21,92 @@ import {
   WireMeshTransport,
 } from "../core/wire-mesh-transport.js";
 import type { ConnectionHandle, TransportEvents } from "../core/transport.js";
-import * as assert from "node:assert/strict";
-import { test, describe } from "node:test";
+import { test, describe, expect } from "vitest";
 import { wireTestTransport } from "./test-transport.js";
 
 const TEST_PORT = 19880;
 
 describe("listener policy", () => {
-  void test("coordinator starts with a single default localhost listener", async () => {
+  test("coordinator starts with a single default localhost listener", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     try {
       await store.init();
 
       const listeners = store.listListeners();
-      assert.equal(listeners.length, 1, "Should have exactly one listener");
-      assert.equal(
+      expect(listeners.length, "Should have exactly one listener").toBe(1);
+      expect(
         listeners[0]?.policy,
-        "full",
         "Default listener should have full policy",
-      );
-      assert.equal(
+      ).toBe("full");
+      expect(
         listeners[0]?.isDefault,
-        true,
         "Default listener should be marked as default",
-      );
-      assert.equal(
+      ).toBe(true);
+      expect(
         listeners[0]?.host,
-        "127.0.0.1",
         "Default listener should be on localhost",
-      );
-      assert.equal(
+      ).toBe("127.0.0.1");
+      expect(
         listeners[0]?.port,
-        TEST_PORT,
         "Default listener should be on the coordinator port",
-      );
+      ).toBe(TEST_PORT);
     } finally {
       await store.shutdown();
     }
   });
 
-  void test("addListener creates an additional listener", async () => {
+  test("addListener creates an additional listener", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     try {
       await store.init();
 
       const id = await store.addListener("127.0.0.1", 0, "observe");
-      assert.ok(id, "Should return a listener ID");
+      expect(id, "Should return a listener ID").toBeTruthy();
 
       const listeners = store.listListeners();
-      assert.equal(listeners.length, 2, "Should have two listeners");
+      expect(listeners.length, "Should have two listeners").toBe(2);
 
       const newListener = listeners.find((l) => l.id === id);
-      assert.ok(newListener, "New listener should be listed");
-      assert.equal(
+      expect(newListener, "New listener should be listed").toBeTruthy();
+      if (newListener === undefined)
+        throw new Error("New listener should be listed");
+      expect(
         newListener.policy,
-        "observe",
         "New listener should have observe policy",
-      );
-      assert.equal(
-        newListener.isDefault,
+      ).toBe("observe");
+      expect(newListener.isDefault, "New listener should not be default").toBe(
         false,
-        "New listener should not be default",
       );
-      assert.ok(newListener.port > 0, "Should have an assigned port");
+      expect(newListener.port > 0, "Should have an assigned port").toBeTruthy();
     } finally {
       await store.shutdown();
     }
   });
 
-  void test("removeListener removes a non-default listener", async () => {
+  test("removeListener removes a non-default listener", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     try {
       await store.init();
 
       const id = await store.addListener("127.0.0.1", 0, "observe");
-      assert.equal(store.listListeners().length, 2);
+      expect(store.listListeners().length).toBe(2);
 
       await store.removeListener(id);
       const listeners = store.listListeners();
-      assert.equal(listeners.length, 1, "Should be back to one listener");
-      assert.equal(
+      expect(listeners.length, "Should be back to one listener").toBe(1);
+      expect(
         listeners[0]?.isDefault,
-        true,
         "Remaining listener should be the default",
-      );
+      ).toBe(true);
     } finally {
       await store.shutdown();
     }
   });
 
-  void test("removeListener rejects removing the default listener", async () => {
+  test("removeListener rejects removing the default listener", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     try {
@@ -121,19 +114,20 @@ describe("listener policy", () => {
 
       const listeners = store.listListeners();
       const defaultId = listeners[0]?.id;
-      assert.ok(defaultId, "Should have a default listener");
+      expect(defaultId, "Should have a default listener").toBeTruthy();
+      if (defaultId === undefined)
+        throw new Error("Should have a default listener");
 
-      await assert.rejects(
-        () => store.removeListener(defaultId),
-        /Cannot remove the default/,
+      await expect(
+        store.removeListener(defaultId),
         "Should reject removing default listener",
-      );
+      ).rejects.toThrow(/Cannot remove the default/);
     } finally {
       await store.shutdown();
     }
   });
 
-  void test("observe listener accepts connections but enforces policy", async () => {
+  test("observe listener accepts connections but enforces policy", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     try {
@@ -142,7 +136,9 @@ describe("listener policy", () => {
       const id = await store.addListener("127.0.0.1", 0, "observe");
       const listeners = store.listListeners();
       const observeListener = listeners.find((l) => l.id === id);
-      assert.ok(observeListener, "Observe listener should exist");
+      expect(observeListener, "Observe listener should exist").toBeTruthy();
+      if (observeListener === undefined)
+        throw new Error("Observe listener should exist");
 
       // Verify a peer can connect to the observe listener's port
       const canConnect = await new Promise<boolean>((resolve) => {
@@ -159,13 +155,16 @@ describe("listener policy", () => {
           resolve(false);
         });
       });
-      assert.ok(canConnect, "Should be able to connect to observe listener");
+      expect(
+        canConnect,
+        "Should be able to connect to observe listener",
+      ).toBeTruthy();
     } finally {
       await store.shutdown();
     }
   });
 
-  void test("mesh_listeners action returns all listeners via CommsTool", async () => {
+  test("mesh_listeners action returns all listeners via CommsTool", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     try {
@@ -188,21 +187,21 @@ describe("listener policy", () => {
         { action: "mesh_listeners" },
       );
 
-      assert.ok(!result.isError, "Should not be an error");
-      assert.ok(
+      expect(!result.isError, "Should not be an error").toBeTruthy();
+      expect(
         result.content.includes("full"),
         "Should list the default full listener",
-      );
-      assert.ok(
+      ).toBeTruthy();
+      expect(
         result.content.includes("rooms-only"),
         "Should list the rooms-only listener",
-      );
+      ).toBeTruthy();
     } finally {
       await store.shutdown();
     }
   });
 
-  void test("mesh_interfaces action returns available network adapters", async () => {
+  test("mesh_interfaces action returns available network adapters", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     try {
@@ -223,17 +222,17 @@ describe("listener policy", () => {
         { action: "mesh_interfaces" },
       );
 
-      assert.ok(!result.isError, "Should not be an error");
-      assert.ok(
+      expect(!result.isError, "Should not be an error").toBeTruthy();
+      expect(
         result.content.includes("lo") || result.content.includes("IPv4"),
         "Should list network interfaces",
-      );
+      ).toBeTruthy();
     } finally {
       await store.shutdown();
     }
   });
 
-  void test("mesh_unlisten removes listener via CommsTool", async () => {
+  test("mesh_unlisten removes listener via CommsTool", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     try {
@@ -256,17 +255,20 @@ describe("listener policy", () => {
         { action: "mesh_unlisten", id: listenerId },
       );
 
-      assert.ok(!result.isError, "Should not be an error");
-      assert.ok(result.content.includes("removed"), "Should confirm removal");
+      expect(!result.isError, "Should not be an error").toBeTruthy();
+      expect(
+        result.content.includes("removed"),
+        "Should confirm removal",
+      ).toBeTruthy();
 
       const listeners = store.listListeners();
-      assert.equal(listeners.length, 1, "Should be back to one listener");
+      expect(listeners.length, "Should be back to one listener").toBe(1);
     } finally {
       await store.shutdown();
     }
   });
 
-  void test("mesh_listen adds listener via CommsTool", async () => {
+  test("mesh_listen adds listener via CommsTool", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
     try {
@@ -287,56 +289,56 @@ describe("listener policy", () => {
         { action: "mesh_listen", host: "127.0.0.1", policy: "observe" },
       );
 
-      assert.ok(!result.isError, "Should not be an error");
-      assert.ok(
+      expect(!result.isError, "Should not be an error").toBeTruthy();
+      expect(
         result.content.includes("Listener added"),
         "Should confirm addition",
-      );
+      ).toBeTruthy();
 
       const listeners = store.listListeners();
-      assert.equal(listeners.length, 2, "Should have two listeners");
+      expect(listeners.length, "Should have two listeners").toBe(2);
     } finally {
       await store.shutdown();
     }
   });
 
-  void test("buildAction parses mesh_listen with host and policy", () => {
+  test("buildAction parses mesh_listen with host and policy", () => {
     const action = buildAction({
       action: "mesh_listen",
       host: "192.168.1.1",
       port: 9999,
       policy: "observe",
     });
-    assert.equal(action.action, "mesh_listen");
+    expect(action.action).toBe("mesh_listen");
     if (action.action === "mesh_listen") {
-      assert.equal(action.host, "192.168.1.1");
-      assert.equal(action.port, 9999);
-      assert.equal(action.policy, "observe");
+      expect(action.host).toBe("192.168.1.1");
+      expect(action.port).toBe(9999);
+      expect(action.policy).toBe("observe");
     }
   });
 
-  void test("buildAction parses mesh_unlisten", () => {
+  test("buildAction parses mesh_unlisten", () => {
     const action = buildAction({
       action: "mesh_unlisten",
       id: "abc123",
     });
-    assert.equal(action.action, "mesh_unlisten");
+    expect(action.action).toBe("mesh_unlisten");
     if (action.action === "mesh_unlisten") {
-      assert.equal(action.id, "abc123");
+      expect(action.id).toBe("abc123");
     }
   });
 
-  void test("buildAction parses mesh_listeners", () => {
+  test("buildAction parses mesh_listeners", () => {
     const action = buildAction({ action: "mesh_listeners" });
-    assert.equal(action.action, "mesh_listeners");
+    expect(action.action).toBe("mesh_listeners");
   });
 
-  void test("buildAction parses mesh_interfaces", () => {
+  test("buildAction parses mesh_interfaces", () => {
     const action = buildAction({ action: "mesh_interfaces" });
-    assert.equal(action.action, "mesh_interfaces");
+    expect(action.action).toBe("mesh_interfaces");
   });
 
-  void test("connections via non-default listener carry policy in handle", async () => {
+  test("connections via non-default listener carry policy in handle", async () => {
     // Constructed directly rather than through MeshStore: MeshStore.events is a getter that builds a fresh TransportEvents object on every access, so there's no way to observe what the transport itself passed to onIntroduction without either reaching into the transport by an unsafe cast or, as here, supplying our own TransportEvents object the transport calls directly.
     let receivedPolicy: string | undefined = "not-called";
     const events: TransportEvents = {
@@ -361,7 +363,9 @@ describe("listener policy", () => {
       const listenerId = await transport.addListener("127.0.0.1", 0, "observe");
       const listeners = transport.listListeners();
       const observeListener = listeners.find((l) => l.id === listenerId);
-      assert.ok(observeListener, "Should find the observe listener");
+      expect(observeListener, "Should find the observe listener").toBeTruthy();
+      if (observeListener === undefined)
+        throw new Error("Should find the observe listener");
 
       // Connect to the observe listener and send an introduce message over a real WireMeshTransport client session -- the transport should tag the resulting connection handle with policy="observe".
       const probeIdentity = generateIdentity();
@@ -385,11 +389,9 @@ describe("listener policy", () => {
           }),
           FRAME_SCOPE,
         );
-        assert.equal(outcome.result, "ok", "introduce should be accepted");
-        assert.equal(
-          receivedPolicy,
+        expect(outcome.result, "introduce should be accepted").toBe("ok");
+        expect(receivedPolicy, "Handle should carry observe policy").toBe(
           "observe",
-          "Handle should carry observe policy",
         );
       } finally {
         await session.close();

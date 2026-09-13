@@ -4,7 +4,7 @@
  * Every production bridge calls registerAgent() immediately after store.init() returns, while the fire-and-forget peer dials are still in flight. Broadcasts landing in that window used to have nowhere to go, so the joining peer stayed invisible in established peers' list_agents until some later patch happened to arrive. The transport now queues broadcasts for dialling peers and flushes them when the connection registers.
  */
 
-import * as assert from "node:assert/strict";
+import { test, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { MeshStore } from "../core/mesh-store.js";
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
@@ -31,7 +31,7 @@ async function waitFor(
     if (await check()) return;
     await sleep(100);
   }
-  assert.ok(false, `timed out waiting for ${what}`);
+  expect(false, `timed out waiting for ${what}`).toBeTruthy();
 }
 
 async function main(): Promise<void> {
@@ -79,9 +79,6 @@ async function main(): Promise<void> {
   console.log("✓ immediate registration is visible without settle delays");
 }
 
-main().catch((err: unknown) => {
-  console.error("Test failed:", err);
-  process.exitCode = 1;
-  // The sequence above keeps mesh handles open when it fails partway; exit explicitly so a failure cannot hang the runner.
-  process.exit(1);
+test("a broadcast landing while data connections are still dialling reaches the joining peer once the dial completes", async () => {
+  await main();
 });
