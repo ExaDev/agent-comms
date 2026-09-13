@@ -1,3 +1,9 @@
+## [2.18.2](https://github.com/ExaDev/agent-comms/compare/v2.18.1...v2.18.2) (2026-09-13)
+
+### Bug Fixes
+
+* **release:** retry a transient 5xx from the MCP registry, not just npm propagation lag ([3bfb933](https://github.com/ExaDev/agent-comms/commit/3bfb93359d1cd53b6146d24a3c659b0b452098a2))
+
 ## [2.18.1](https://github.com/ExaDev/agent-comms/compare/v2.18.0...v2.18.1) (2026-09-13)
 
 ### Bug Fixes
