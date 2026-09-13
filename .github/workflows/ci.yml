@@ -65,6 +65,7 @@ jobs:
         with:
           node-version-file: .tool-versions
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
       - run: pnpm run mutation
       - uses: actions/upload-artifact@v4
         if: always()

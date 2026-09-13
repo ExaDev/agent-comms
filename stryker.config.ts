@@ -25,8 +25,8 @@ const config: PartialStrykerOptions = {
   // The command runner only sees the subprocess's exit code, never which tests ran -- there's no per-test signal to analyse coverage from, so Stryker itself forces this to "off" for this runner regardless of what's configured here.
   coverageAnalysis: "off",
   incremental: true,
-  // dist/coverage/.turbo are build/tooling output Stryker would otherwise copy into every mutant's own sandbox for nothing -- none of it is ever read by a test run against source.
-  ignorePatterns: ["dist", "coverage", ".turbo", "node_modules"],
+  // coverage/.turbo are build/tooling output Stryker would otherwise copy into every mutant's own sandbox for nothing. dist is the one exception, deliberately force-included via the "!" negation despite being gitignored: web-server.integration.test.ts loads a real built dist/bundle.js, which this config's own mutate list can never change (it only ever touches src/core/*.ts, nothing on the web-console frontend's build path), so the same pre-built dist/ is valid, byte-identical, across every mutant -- run `pnpm build` once before invoking Stryker, not per mutant.
+  ignorePatterns: ["!dist", "coverage", ".turbo", "node_modules"],
   reporters: ["progress", "clear-text", "html"],
   tempDirName: ".stryker-tmp",
   cleanTempDir: true,
