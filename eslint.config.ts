@@ -77,6 +77,7 @@ export default defineConfig(
             "commitlint.config.ts",
             "lint-staged.config.ts",
             "playwright.config.ts",
+            "vitest.config.ts",
             "scripts/*.ts",
             "src/bridges/user/web/e2e/*.ts",
             "src/bridges/user/web/frontend/test/*.ts",
