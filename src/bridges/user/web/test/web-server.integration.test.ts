@@ -4,8 +4,7 @@
  * Tests the server layer without a browser, using raw HTTP and WS clients.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import http from "node:http";
 import { createWebServer, type WebServerHandle } from "../server.js";
 import WS from "ws";
@@ -114,11 +113,11 @@ describe("Web server integration", () => {
     const { port, cleanup } = await setup();
     try {
       const { status, body } = await fetchJson(port, "/");
-      assert.strictEqual(status, 200);
-      assert.ok(
+      expect(status).toBe(200);
+      expect(
         typeof body === "string" && body.includes("Agent Comms"),
         "HTML should contain 'Agent Comms'",
-      );
+      ).toBeTruthy();
     } finally {
       await cleanup();
     }
@@ -128,8 +127,8 @@ describe("Web server integration", () => {
     const { port, cleanup } = await setup();
     try {
       const { status, body } = await fetchJson(port, "/api/agents");
-      assert.strictEqual(status, 200);
-      assert.ok(Array.isArray(body));
+      expect(status).toBe(200);
+      expect(Array.isArray(body)).toBeTruthy();
     } finally {
       await cleanup();
     }
@@ -139,8 +138,8 @@ describe("Web server integration", () => {
     const { port, cleanup } = await setup();
     try {
       const { status, body } = await fetchJson(port, "/api/rooms");
-      assert.strictEqual(status, 200);
-      assert.ok(Array.isArray(body));
+      expect(status).toBe(200);
+      expect(Array.isArray(body)).toBeTruthy();
     } finally {
       await cleanup();
     }
@@ -154,11 +153,11 @@ describe("Web server integration", () => {
         name: "integration-test-room",
         type: "public",
       });
-      assert.strictEqual(status, 200);
-      assert.ok(
+      expect(status).toBe(200);
+      expect(
         typeof body === "object" && body !== null && "content" in body,
         "should return a result object",
-      );
+      ).toBeTruthy();
     } finally {
       await cleanup();
     }
@@ -192,12 +191,12 @@ describe("Web server integration", () => {
         });
         ws.on("error", reject);
       });
-      assert.ok(
+      expect(
         typeof frame === "object" && frame !== null && "type" in frame,
         "should receive a JSON frame",
-      );
+      ).toBeTruthy();
       const typed = frame as { type: string };
-      assert.strictEqual(typed.type, "state");
+      expect(typed.type).toBe("state");
     } finally {
       await cleanup();
     }
@@ -207,7 +206,7 @@ describe("Web server integration", () => {
     const { port, cleanup } = await setup();
     try {
       const { status } = await fetchJson(port, "/nonexistent");
-      assert.strictEqual(status, 404);
+      expect(status).toBe(404);
     } finally {
       await cleanup();
     }
