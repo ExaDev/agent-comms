@@ -59,7 +59,14 @@ const customPlugin = {
 
 export default defineConfig(
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "**/pnpm-lock.yaml"],
+    // .stryker-tmp holds Stryker's own instrumented sandbox copies of the source (each mutant gets a full copy, deliberately carrying a @ts-nocheck pragma Stryker injects itself) -- linting them produces thousands of irrelevant errors against generated, throwaway code, not anything committed. reports/ is Stryker's own output (HTML/JSON), same reasoning.
+    ignores: [
+      "**/dist/**",
+      "**/node_modules/**",
+      "**/pnpm-lock.yaml",
+      ".stryker-tmp/**",
+      "reports/**",
+    ],
   },
   {
     files: ["**/*.{ts,tsx}"],
