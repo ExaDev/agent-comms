@@ -2,8 +2,7 @@
  * P4 presence: WireMeshTransport's periodic self-advert re-send (readvertisePresence) and its counterpart on the receiving side (reportPresenceAdvert -> TransportEvents.onPresenceAdvert). Constructed directly against two real WireMeshTransport instances joined by a genuine data connection, deliberately bypassing MeshStore -- MeshStore's own updateAgent already propagates a status change via the pre-existing broadcastPatch/broadcast() path (P3.8 has not retired that yet), which would make a MeshStore-level test unable to tell whether presence gossip specifically worked, as opposed to the older mechanism that still runs alongside it.
  */
 
-import * as assert from "node:assert/strict";
-import { test, describe } from "node:test";
+import { test, describe, expect } from "vitest";
 import { generateIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
@@ -32,7 +31,7 @@ function eventsRecordingPresence(
 }
 
 describe("WireMeshTransport presence re-advertisement", () => {
-  void test("a session periodically re-sends this side's presence, and the peer surfaces it via onPresenceAdvert", async () => {
+  test("a session periodically re-sends this side's presence, and the peer surfaces it via onPresenceAdvert", async () => {
     const identityA = generateIdentity();
     const identityB = generateIdentity();
     const peerIdA = deviceIdToHex(
@@ -87,14 +86,14 @@ describe("WireMeshTransport presence re-advertisement", () => {
       const idleSighting = presenceSeenByB.find(
         (seen) => seen.status === "idle",
       );
-      assert.equal(idleSighting?.handle.id, peerIdA);
+      expect(idleSighting?.handle.id).toBe(peerIdA);
     } finally {
       await transportB.shutdown();
       await transportA.shutdown();
     }
   });
 
-  void test("a session with no presence source configured never re-advertises", async () => {
+  test("a session with no presence source configured never re-advertises", async () => {
     const identityA = generateIdentity();
     const identityB = generateIdentity();
     const peerIdA = deviceIdToHex(
@@ -134,7 +133,7 @@ describe("WireMeshTransport presence re-advertisement", () => {
       await new Promise((resolve) =>
         setTimeout(resolve, SHORT_PRESENCE_INTERVAL_MS * 3),
       );
-      assert.equal(presenceSeenByB.length, 0);
+      expect(presenceSeenByB.length).toBe(0);
     } finally {
       await transportB.shutdown();
       await transportA.shutdown();

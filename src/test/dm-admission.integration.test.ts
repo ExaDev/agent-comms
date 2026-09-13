@@ -4,8 +4,7 @@
  * Unlike named-room admission, a real two-peer test can actually exercise this: dmRequestsInitiatedByMe and the persisted room-token store are both purely local state legacy full-state-sync never touches, so two ordinarily mesh-connected peers stay in the "never DM'd before" state this flow exists for.
  */
 
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { dmRoomPath } from "../core/room-path.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
@@ -50,7 +49,7 @@ async function makeConnectedPair(
   return { a, b };
 }
 
-void test("A's DM request holds open for B's decision; B's reply back auto-approves", async () => {
+test("A's DM request holds open for B's decision; B's reply back auto-approves", async () => {
   const { a, b } = await makeConnectedPair(freshPort());
 
   try {
@@ -63,8 +62,8 @@ void test("A's DM request holds open for B's decision; B's reply back auto-appro
       "B sees A's pending DM request",
     );
     const [pending] = b.listPendingRoomJoins();
-    assert.equal(pending?.roomPath, dmPath);
-    assert.equal(pending?.requesterId, a.peerId);
+    expect(pending?.roomPath).toBe(dmPath);
+    expect(pending?.requesterId).toBe(a.peerId);
 
     b.acceptRoomJoin(dmPath, a.peerId);
     await aRequestPromise;
@@ -72,14 +71,14 @@ void test("A's DM request holds open for B's decision; B's reply back auto-appro
     // B's own reply, to the identical path, must NOT surface as a second pending decision on A's side -- A's own outbound request already covers it.
     const bRequestPromise = b.requestDmAccess(a.peerId);
     await bRequestPromise;
-    assert.deepEqual(a.listPendingRoomJoins(), []);
+    expect(a.listPendingRoomJoins()).toEqual([]);
   } finally {
     await b.shutdown();
     await a.shutdown();
   }
 });
 
-void test("an unsolicited DM request (no prior outbound request) still needs a human decision", async () => {
+test("an unsolicited DM request (no prior outbound request) still needs a human decision", async () => {
   const { a, b } = await makeConnectedPair(freshPort());
 
   try {
@@ -91,8 +90,8 @@ void test("an unsolicited DM request (no prior outbound request) still needs a h
       "A sees B's pending DM request",
     );
     const [pending] = a.listPendingRoomJoins();
-    assert.equal(pending?.roomPath, dmPath);
-    assert.equal(pending?.requesterId, b.peerId);
+    expect(pending?.roomPath).toBe(dmPath);
+    expect(pending?.requesterId).toBe(b.peerId);
 
     a.acceptRoomJoin(dmPath, b.peerId);
     await requestPromise;
@@ -102,7 +101,7 @@ void test("an unsolicited DM request (no prior outbound request) still needs a h
   }
 });
 
-void test("a rejected DM request throws, and never auto-approves the reciprocal reply", async () => {
+test("a rejected DM request throws, and never auto-approves the reciprocal reply", async () => {
   const { a, b } = await makeConnectedPair(freshPort());
 
   try {
@@ -114,7 +113,7 @@ void test("a rejected DM request throws, and never auto-approves the reciprocal 
       "B sees A's pending DM request",
     );
     b.rejectRoomJoin(dmPath, a.peerId, "not interested");
-    await assert.rejects(aRequestPromise, /was refused \(denied\)/);
+    await expect(aRequestPromise).rejects.toThrow(/was refused \(denied\)/);
   } finally {
     await b.shutdown();
     await a.shutdown();

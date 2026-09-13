@@ -5,11 +5,11 @@
  * room creation, messaging, and delivery push.
  */
 
+import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
 import type { DeliveryEvent } from "../core/types.js";
-import * as assert from "node:assert/strict";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 
 const E2E_PORT = 19878;
@@ -58,7 +58,7 @@ async function main(): Promise<void> {
   console.log("Test: list agents from A...");
   const agentsA = await a.store.listAgents(a.store.peerId);
   console.log(`  A sees ${String(agentsA.length)} agent(s)`);
-  assert.ok(agentsA.length >= 2, "A should see both agents");
+  expect(agentsA.length >= 2, "A should see both agents").toBeTruthy();
 
   // Wait for state sync
   await sleep(200);
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
   console.log("Test: list agents from B...");
   const agentsB = await b.store.listAgents(b.store.peerId);
   console.log(`  B sees ${String(agentsB.length)} agent(s)`);
-  assert.ok(agentsB.length >= 2, "B should see both agents");
+  expect(agentsB.length >= 2, "B should see both agents").toBeTruthy();
 
   // --- Test: create room ---
   console.log("Test: create room...");
@@ -85,7 +85,7 @@ async function main(): Promise<void> {
   console.log("Test: B lists rooms...");
   const roomsB = await b.store.listRooms(b.store.peerId);
   console.log(`  B sees ${String(roomsB.length)} room(s)`);
-  assert.ok(roomsB.length >= 1, "B should see the room");
+  expect(roomsB.length >= 1, "B should see the room").toBeTruthy();
 
   // --- Test: B joins room --- The room already replicated to B via legacy full-state-sync, but knowing about a room is not the same as holding a room:member token for it -- B's own join still goes through real wire-level admission, held open until A approves it.
   console.log("Test: B joins room...");
@@ -110,8 +110,8 @@ async function main(): Promise<void> {
   const roomB = await b.store.getRoom(room.id);
   console.log(`  A sees ${String(roomA?.members.length)} member(s)`);
   console.log(`  B sees ${String(roomB?.members.length)} member(s)`);
-  assert.ok(roomA?.members.length === 2, "A should see 2 room members");
-  assert.ok(roomB?.members.length === 2, "B should see 2 room members");
+  expect(roomA?.members.length, "A should see 2 room members").toBe(2);
+  expect(roomB?.members.length, "B should see 2 room members").toBe(2);
 
   // --- Test: A sends message, B receives delivery ---
   console.log("Test: A sends message to room...");
@@ -121,11 +121,17 @@ async function main(): Promise<void> {
   await sleep(300);
 
   console.log(`  B received ${String(b.deliveries.length)} delivery event(s)`);
-  assert.ok(b.deliveries.length >= 1, "B should receive the room message");
+  expect(
+    b.deliveries.length >= 1,
+    "B should receive the room message",
+  ).toBeTruthy();
   const roomMsg = b.deliveries[0];
-  assert.ok(roomMsg);
-  assert.strictEqual(roomMsg.type, "room_message");
-  assert.strictEqual(roomMsg.message.content, "Hello from A!");
+  expect(roomMsg).toBeTruthy();
+  if (roomMsg === undefined) throw new Error("expected a delivery event");
+  expect(roomMsg.type).toBe("room_message");
+  if (roomMsg.type !== "room_message")
+    throw new Error("expected a room_message event");
+  expect(roomMsg.message.content).toBe("Hello from A!");
 
   // --- Test: DM from A to B --- The two-round DM consent flow (section 6): A's own outbound room.join is what authorises the DM, and B (the party contacted first) still needs a human decision.
   console.log("Test: A requests DM access from B...");
@@ -140,7 +146,8 @@ async function main(): Promise<void> {
   const pendingDm = b.store
     .listPendingRoomJoins()
     .find((p) => p.requesterId === a.store.peerId);
-  assert.ok(pendingDm);
+  expect(pendingDm).toBeTruthy();
+  if (pendingDm === undefined) throw new Error("expected a pending DM request");
   b.store.acceptRoomJoin(pendingDm.roomPath, a.store.peerId);
   await dmAccessPromise;
 
@@ -151,16 +158,17 @@ async function main(): Promise<void> {
   await sleep(300);
 
   console.log(`  B received ${String(b.deliveries.length)} DM event(s)`);
-  assert.ok(b.deliveries.length >= 1, "B should receive the DM");
+  expect(b.deliveries.length >= 1, "B should receive the DM").toBeTruthy();
   const dmEvent = b.deliveries[0];
-  assert.ok(dmEvent);
-  assert.strictEqual(dmEvent.type, "dm");
+  expect(dmEvent).toBeTruthy();
+  if (dmEvent === undefined) throw new Error("expected a delivery event");
+  expect(dmEvent.type).toBe("dm");
 
   // --- Test: read room messages ---
   console.log("Test: B reads room messages...");
   const messages = await b.store.readRoomMessages(room.id);
   console.log(`  B sees ${String(messages.length)} message(s)`);
-  assert.ok(messages.length >= 1, "B should see the message");
+  expect(messages.length >= 1, "B should see the message").toBeTruthy();
 
   // --- Test: CommsTool integration ---
   console.log("Test: CommsTool send via B...");
@@ -183,7 +191,7 @@ async function main(): Promise<void> {
   await sleep(300);
 
   console.log(`  A received ${String(a.deliveries.length)} delivery event(s)`);
-  assert.ok(a.deliveries.length >= 1, "A should receive B's message");
+  expect(a.deliveries.length >= 1, "A should receive B's message").toBeTruthy();
 
   // --- Cleanup ---
   console.log("Cleaning up...");
@@ -197,7 +205,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-main().catch((err: unknown) => {
-  console.error("Test failed:", err);
-  process.exit(1);
+test("two MeshStore instances discover each other, create a shared room, message, and push-deliver over a real TCP peer mesh", async () => {
+  await main();
 });
