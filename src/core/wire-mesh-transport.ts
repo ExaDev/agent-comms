@@ -51,6 +51,13 @@ import {
 
 const COORDINATOR_HOST = "127.0.0.1";
 
+/** How long a connect_request may sit awaiting a human decision before this side gives up and rejects it automatically. Generous on purpose -- this bounds a human approval window, not a network timeout: 5 minutes covers a person genuinely being away from the terminal for a few minutes, while still guaranteeing every unanswered request eventually resolves instead of accumulating in pendingConnections indefinitely. */
+const PENDING_CONNECTION_TIMEOUT_MINUTES = 5;
+const SECONDS_PER_MINUTE = 60;
+const MS_PER_SECOND = 1000;
+const DEFAULT_PENDING_CONNECTION_TIMEOUT_MS =
+  PENDING_CONNECTION_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
+
 /** This project's own namespaced domain (registrant "exadev.io", local name "agent-comms-v1"), matching namespaced-domain-id's "<registrant>/<local-name>" shape -- registry/core-domains.md's own recommended pattern for a third party. Exported for test use only: a security test simulating a hostile client that skips connect_request needs to construct a well-formed frame under the same domain/verb/scope this transport itself listens on, rather than duplicating these as separately-maintained magic strings that could silently drift from the real values. */
 export const DOMAIN = "exadev.io/agent-comms-v1";
 
@@ -93,6 +100,8 @@ interface PendingConnection {
   session: AcceptedMeshSession;
   /** Settles the Promise consumeQuarantined is blocked on for this connect_request -- the mechanism by which acceptConnection/rejectConnection resume a loop suspended mid-iteration, without ever needing to re-obtain (and so needing to reason about the identity of) a second iterator over the same session's incomingManageRequests. */
   resolve: (decision: ConnectionDecision) => void;
+  /** Auto-rejects this request after the configured pending-connection timeout if no human decision arrives first. Cleared by acceptConnection/rejectConnection/watchForDisconnect's own disconnect path, whichever settles the request first -- an entry is only ever removed from pendingConnections once, so this timer firing after another path already resolved it is structurally impossible, not merely guarded against. */
+  timeoutHandle: ReturnType<typeof setTimeout>;
 }
 
 interface TrackedListener {
@@ -154,10 +163,13 @@ export class WireMeshTransport implements MeshTransport {
   // -- The single consumer of every approved session's incomingManageRequests, once quarantine (if any) is past. Owns verb dispatch (the legacy opaque frame, plus whichever real core/room verbs later phases register handlers for) -- this transport itself no longer decodes or routes a MeshMessage at all beyond handing a session off here.
   private readonly roomRouter: RoomRouter;
 
+  private readonly pendingConnectionTimeoutMs: number;
+
   constructor(
     events: TransportEvents,
     identity: Readonly<PeerIdentity>,
     roomVerbHandlers?: Partial<Record<string, RoomVerbHandler>>,
+    pendingConnectionTimeoutMs: number = DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
   ) {
     this.events = events;
     this.wireTransport = createTlsTransport({
@@ -169,6 +181,7 @@ export class WireMeshTransport implements MeshTransport {
       events,
       ...(roomVerbHandlers !== undefined ? { handlers: roomVerbHandlers } : {}),
     });
+    this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;
   }
 
   // -- Public getters --
@@ -269,7 +282,7 @@ export class WireMeshTransport implements MeshTransport {
           continue;
         }
         if (message.method === "connect_request") {
-          // Held open deliberately -- see this file's own header comment. Answered later by acceptConnection/rejectConnection, not here.
+          // Held open deliberately -- see this file's own header comment. Answered later by acceptConnection/rejectConnection, or by this.expirePendingConnection if neither happens within pendingConnectionTimeoutMs.
           const decision = await new Promise<ConnectionDecision>((resolve) => {
             this.pendingConnections.set(handle.id, {
               respond: request.respond,
@@ -279,6 +292,10 @@ export class WireMeshTransport implements MeshTransport {
               policy: handle.policy,
               session,
               resolve,
+              // unref()'d so a stray pending connection (this timer failing to be cleared through some path not yet covered) can never by itself keep the process alive for up to pendingConnectionTimeoutMs after everything else is done -- confirmed necessary directly: shutdown() originally cleared every pendingConnections entry without clearing its timer, and the whole test process hung for the full default timeout before exiting.
+              timeoutHandle: setTimeout(() => {
+                this.expirePendingConnection(handle.id);
+              }, this.pendingConnectionTimeoutMs).unref(),
             });
             this.events.onConnectionRequest(handle, {
               peerId: handle.id,
@@ -336,8 +353,12 @@ export class WireMeshTransport implements MeshTransport {
           if (wasTracked) this.peerSessions.delete(deviceIdHex);
           this.allSessions.delete(session);
           // A requester disconnecting before a human decides must unblock consumeQuarantined's own still-suspended loop iteration -- otherwise that promise, and the closure awaiting it, never settle.
-          this.pendingConnections.get(deviceIdHex)?.resolve("reject");
-          this.pendingConnections.delete(deviceIdHex);
+          const pending = this.pendingConnections.get(deviceIdHex);
+          if (pending !== undefined) {
+            clearTimeout(pending.timeoutHandle);
+            pending.resolve("reject");
+            this.pendingConnections.delete(deviceIdHex);
+          }
           // A no-op when this session was never a connectToPeer dial (e.g. the coordinator-client or an accepted connection) -- Set.delete on an absent key is always safe.
           this.dataDials.delete(deviceIdHex);
           if (wasTracked && !this.shutDown) {
@@ -347,6 +368,23 @@ export class WireMeshTransport implements MeshTransport {
         }
       }
     })();
+  }
+
+  /** Auto-rejects a connect_request that has sat unanswered past pendingConnectionTimeoutMs -- the same respond-then-resolve shape rejectConnection uses (a real error response, not a silent hang), since unlike watchForDisconnect's own cleanup path the requester's session is still very much alive and waiting to hear back. A no-op if the request was already settled by acceptConnection/rejectConnection/disconnect before this timer fired -- entries are deleted exactly once, by whichever path settles first. */
+  private expirePendingConnection(id: string): void {
+    const pending = this.pendingConnections.get(id);
+    if (pending === undefined) {
+      return;
+    }
+    this.pendingConnections.delete(id);
+    void pending
+      .respond({
+        result: "error",
+        code: "timeout",
+        message: "no human decision within the pending-connection timeout",
+      })
+      .catch(() => undefined);
+    pending.resolve("reject");
   }
 
   // -----------------------------------------------------------------------
@@ -579,6 +617,7 @@ export class WireMeshTransport implements MeshTransport {
     if (pending === undefined) {
       throw new Error(`No pending connection for handle ${handle.id}`);
     }
+    clearTimeout(pending.timeoutHandle);
     this.pendingConnections.delete(handle.id);
     await pending.respond({ result: "ok" });
     // Must happen before onIntroduction fires below: mesh-store's own handleIntroduction sends a reply on this exact handle synchronously as part of handling that event, which needs peerSessions already populated -- waiting for consumeQuarantined's own suspended loop to resume (via resolve() below) would race, since that only happens on a later microtask tick.
@@ -603,6 +642,7 @@ export class WireMeshTransport implements MeshTransport {
     if (pending === undefined) {
       throw new Error(`No pending connection for handle ${handle.id}`);
     }
+    clearTimeout(pending.timeoutHandle);
     this.pendingConnections.delete(handle.id);
     await pending.respond({
       result: "error",
@@ -668,6 +708,7 @@ export class WireMeshTransport implements MeshTransport {
     this.dataDials.clear();
 
     for (const pending of this.pendingConnections.values()) {
+      clearTimeout(pending.timeoutHandle);
       await pending
         .respond({ result: "error", code: "shutting_down" })
         .catch(() => undefined);

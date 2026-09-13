@@ -13,10 +13,11 @@ import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { nanoid } from "../core/nanoid.js";
 import type { MeshStore } from "../core/mesh-store.js";
 
-/** Wires store onto a fresh WireMeshTransport and a persisted identity slot, returning the slot so a test can inspect (or reuse) the persisted room tokens directly via loadRoomTokens(). Defaults to a throwaway temp-dir slot per call -- pass an explicit slot when a test needs the same identity to survive across more than one wireTestTransport call (e.g. simulating a restart). */
+/** Wires store onto a fresh WireMeshTransport and a persisted identity slot, returning the slot so a test can inspect (or reuse) the persisted room tokens directly via loadRoomTokens(). Defaults to a throwaway temp-dir slot per call -- pass an explicit slot when a test needs the same identity to survive across more than one wireTestTransport call (e.g. simulating a restart). pendingConnectionTimeoutMs overrides WireMeshTransport's own default 5-minute connect_request expiry -- a test proving that expiry behaviour needs it far shorter than any real approval window. */
 export async function wireTestTransport(
   store: MeshStore,
   slot?: Readonly<IdentitySlot>,
+  pendingConnectionTimeoutMs?: number,
 ): Promise<IdentitySlot> {
   const resolvedSlot: IdentitySlot = slot ?? {
     harness: "test",
@@ -27,7 +28,14 @@ export async function wireTestTransport(
   // Every real bridge sets peerId to deviceIdToHex(identity.deviceId) before wiring the transport (createBridgeMesh) -- WireMeshTransport's own session bookkeeping is keyed by device-id, so a peer's advertised ID and the identity the other side actually authenticates the connection against must be the same value, or introduction/state-sync never recognises the peer as itself.
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   store.setTransport(
-    new WireMeshTransport(store.events, identity, store.roomVerbHandlers),
+    new WireMeshTransport(
+      store.events,
+      identity,
+      store.roomVerbHandlers,
+      ...(pendingConnectionTimeoutMs !== undefined
+        ? [pendingConnectionTimeoutMs]
+        : []),
+    ),
   );
   store.setIdentity({
     identity: await toIdentityPort(identity),

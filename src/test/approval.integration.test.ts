@@ -275,6 +275,77 @@ describe("connection approval", () => {
     }
   });
 
+  void test("connect_request expires and is auto-rejected if left unanswered past the configured timeout", async () => {
+    const portA = await uniquePort();
+    const portB = await uniquePort();
+    const SHORT_PENDING_CONNECTION_TIMEOUT_MS = 300;
+
+    const storeA = new MeshStore(portA);
+    wireTestTransport(storeA, undefined, SHORT_PENDING_CONNECTION_TIMEOUT_MS);
+    const storeB = new MeshStore(portB);
+    wireTestTransport(storeB);
+    try {
+      const receivedRequests: Extract<
+        DeliveryEvent,
+        { type: "connection_request" }
+      >[] = [];
+      storeA.onDelivery = (_id, event) => {
+        if (event.type === "connection_request") {
+          receivedRequests.push(event);
+        }
+      };
+      await storeA.init();
+      await storeA.registerAgent({
+        name: "coordinator",
+        harness: "test",
+        cwd: "/test/a",
+        pid: process.pid,
+        visibility: "visible",
+        tags: [],
+      });
+
+      await sleep(100);
+
+      await storeB.startDataServerOnly();
+      await storeB.registerAgent({
+        name: "connector",
+        harness: "test",
+        cwd: "/test/b",
+        pid: process.pid,
+        visibility: "visible",
+        tags: [],
+      });
+
+      storeB.connectToRemote("127.0.0.1", portA);
+
+      await waitFor(
+        () => receivedRequests.length === 1,
+        "coordinator receives the connection request",
+      );
+      const request = receivedRequests[0];
+      assert.ok(request?.connectionId);
+
+      // No accept/reject call at all -- wait past the configured timeout with the request left untouched.
+      await sleep(SHORT_PENDING_CONNECTION_TIMEOUT_MS + 500);
+
+      // The strongest available proof the entry actually expired (not merely "still pending, not yet an agent," which would be equally true before any decision): acceptConnection on an expired request must fail exactly the way it fails for any other unknown handle, since expirePendingConnection has already deleted it.
+      await assert.rejects(
+        () => storeA.acceptConnection(request.connectionId),
+        /No pending connection/,
+        "An expired connect_request should no longer be acceptable",
+      );
+
+      const agentsA = await storeA.listAgents(storeA.peerId);
+      assert.ok(
+        !agentsA.some((a) => a.id === storeB.peerId),
+        "An expired, auto-rejected peer should not appear in agent list",
+      );
+    } finally {
+      await storeB.shutdown();
+      await storeA.shutdown();
+    }
+  });
+
   void test("mesh_pending lists pending connections", async () => {
     const portA = await uniquePort();
     const portB = await uniquePort();
