@@ -12,6 +12,7 @@ import * as path from "node:path";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import {
   generateIdentity,
+  certifyKeyPair,
   getCertificateFingerprint,
   deriveDeviceId,
   CERTIFICATE_VALIDITY_MS,
@@ -207,7 +208,9 @@ export function loadOrCreateIdentity(slot: IdentitySlot): PeerIdentity {
   return identity;
 }
 
-/** Load and validate the stored key material, renewing near certificate expiry. */
+/**
+ * Load and validate the stored key material. A well-formed record nearing certificate expiry is renewed by re-certifying its existing key pair (preserving device-id) rather than replaced -- see `certifyKeyPair`'s own doc comment for why generating a fresh key pair here would be wrong. Returns undefined only when there is no usable existing key pair to renew at all (missing, unparseable, or corrupt), which is the caller's signal to generate an entirely new identity instead.
+ */
 function loadStoredIdentity(identityFile: string): PeerIdentity | undefined {
   let parsed: unknown;
   try {
@@ -218,11 +221,21 @@ function loadStoredIdentity(identityFile: string): PeerIdentity | undefined {
   if (!isStoredIdentity(parsed)) return undefined;
 
   const expiresAt = Date.parse(parsed.expiresAt);
-  if (Number.isNaN(expiresAt) || Date.now() > expiresAt - RENEWAL_MARGIN_MS) {
-    return undefined;
-  }
+  const needsRenewal =
+    Number.isNaN(expiresAt) || Date.now() > expiresAt - RENEWAL_MARGIN_MS;
 
   try {
+    if (needsRenewal) {
+      const renewed = certifyKeyPair(parsed.privateKey);
+      // A plain persistIdentity() call here would silently drop this slot's roomTokens/issuedGrants (it always writes a bare {privateKey, certificate, expiresAt} record) -- write through writeStoredIdentity instead so a renewal preserves everything else already on record, the same way saveRoomToken/saveIssuedRoomGrant already do for their own fields.
+      writeStoredIdentity(identityFile, {
+        ...parsed,
+        privateKey: renewed.privateKey,
+        certificate: renewed.certificate,
+        expiresAt: new Date(Date.now() + CERTIFICATE_VALIDITY_MS).toISOString(),
+      });
+      return renewed;
+    }
     return {
       privateKey: parsed.privateKey,
       certificate: parsed.certificate,

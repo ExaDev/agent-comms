@@ -117,6 +117,23 @@ void test("a near-expiry identity is renewed", () => {
   releaseIdentityLock(slot);
 });
 
+void test("a near-expiry identity is renewed without rotating the device-id", () => {
+  const { slot, dir } = tempSlot("gemini");
+  const original = loadOrCreateIdentity(slot);
+
+  const identityFile = slotFile(dir, ".json");
+  const stored = JSON.parse(fs.readFileSync(identityFile, "utf-8")) as {
+    expiresAt: string;
+  };
+  stored.expiresAt = new Date(Date.now() + 1000).toISOString();
+  fs.writeFileSync(identityFile, JSON.stringify(stored));
+
+  const renewed = loadOrCreateIdentity(slot);
+  assert.deepEqual(renewed.deviceId, original.deviceId);
+  assert.equal(renewed.privateKey, original.privateKey);
+  releaseIdentityLock(slot);
+});
+
 void test("a corrupt identity file is regenerated", () => {
   const { slot, dir } = tempSlot("user");
   loadOrCreateIdentity(slot);
