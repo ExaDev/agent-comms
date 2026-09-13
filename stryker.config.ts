@@ -2,7 +2,7 @@ import type { PartialStrykerOptions } from "@stryker-mutator/api/core";
 
 // A real .ts file, not stryker.config.mjs with a `@type` JSDoc annotation: Stryker's own config loader is a plain `import()` under the hood with no opinion about the extension it's given, and Node's own ESM loader strips a .ts file's type syntax natively on this workspace's runtime, so `stryker run stryker.config.ts` resolves straight through that support with no shim file.
 //
-// testRunner is "command", not a native runner integration: this repo's own test script (`tsx --test --test-concurrency=1 'src/test/**/*.test.ts'`) runs node's built-in test runner directly against TS source via tsx, not vitest/jest/mocha, so there's no official Stryker runner plugin to reach for. The command runner re-runs the whole test command as a subprocess per mutant instead of driving the runner in-process, so it loses per-test coverage analysis (every mutant re-runs the entire suite rather than only its covering tests) but works correctly against any test command at all. No separate build step is needed first: the test script already runs directly against .ts source, so Stryker's own instrumented sandbox copy is tested exactly the way a real run is, with nothing to keep in sync between a build and a test step.
+// testRunner is "command", not "@stryker-mutator/vitest-runner", despite this repo's own test script now running on vitest: vitest-runner@10.0.0 crashes on init against vitest@5.0.0 with "TypeError: Converting circular structure to JSON" while serialising vitest's own resolved config, a confirmed upstream incompatibility with no fix or compatible version pairing available (see wire-mesh-core's own stryker.config.ts, which hit the identical crash first). The command runner re-runs `pnpm test` as a subprocess per mutant instead of driving vitest in-process, so it loses per-test coverage analysis (every mutant re-runs the entire suite rather than only its covering tests) but actually produces a real result. Revisit once vitest-runner ships a fix. No separate build step is needed first: the test script already runs directly against .ts source, so Stryker's own instrumented sandbox copy is tested exactly the way a real run is, with nothing to keep in sync between a build and a test step.
 const config: PartialStrykerOptions = {
   packageManager: "pnpm",
   // Scoped to the three files the issue that added this config actually names, not the whole of src/core/: identity.ts, mesh-store.ts, and wire-mesh-transport.ts are the branch-heavy, security-relevant code a green suite can still be hiding an untested condition in. The rest of src/core/ (discovery, federation, push, bridge wiring) is exercised by its own integration tests and out of scope for this pass -- narrower than the glob this config originally shipped with, which matched every file under src/core/ despite this same comment always having named only these three.
@@ -13,7 +13,7 @@ const config: PartialStrykerOptions = {
   ],
   testRunner: "command",
   commandRunner: {
-    command: "npx tsx --test --test-concurrency=1 'src/test/**/*.test.ts'",
+    command: "npx vitest run",
   },
   plugins: ["@stryker-mutator/typescript-checker"],
   checkers: ["typescript"],
