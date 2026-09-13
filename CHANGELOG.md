@@ -1,3 +1,17 @@
+## [2.18.0](https://github.com/ExaDev/agent-comms/compare/v2.17.0...v2.18.0) (2026-09-13)
+
+### Features
+
+* **core:** periodically re-advertise and consume presence over gossip ([685d5b8](https://github.com/ExaDev/agent-comms/commit/685d5b85f094ae66d682ef1b7db1a1c23cd9babe))
+
+### Styles
+
+* reformat presence-readvertise test to satisfy prettier ([8da5fcc](https://github.com/ExaDev/agent-comms/commit/8da5fcc9256e3002f10c2d61a70d9d8400b2546b))
+
+### Chores
+
+* bump wire-mesh-core to the release carrying sendGossipUpdate ([bfed2c0](https://github.com/ExaDev/agent-comms/commit/bfed2c066e5a51197480ce9a06c042cae44abb06))
+
 ## [2.17.0](https://github.com/ExaDev/agent-comms/compare/v2.16.0...v2.17.0) (2026-09-13)
 
 ### Features
