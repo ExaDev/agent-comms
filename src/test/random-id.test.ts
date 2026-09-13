@@ -1,16 +1,15 @@
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { randomId } from "../core/random-id.js";
 
 describe("randomId", () => {
   it("returns 16 bytes", () => {
     const id = randomId();
-    assert.equal(id.length, 16);
+    expect(id.length).toBe(16);
   });
 
   it("returns a different value on each call", () => {
     const a = randomId();
     const b = randomId();
-    assert.notDeepEqual(a, b);
+    expect(a).not.toEqual(b);
   });
 });

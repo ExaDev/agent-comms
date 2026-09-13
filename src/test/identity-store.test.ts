@@ -2,12 +2,11 @@
  * Unit tests for persistent bridge identity (core/identity-store).
  */
 
-import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import {
   loadOrCreateIdentity,
   releaseIdentityLock,
@@ -21,7 +20,9 @@ function tempSlot(harness: string): { slot: IdentitySlot; dir: string } {
 
 function slotFile(dir: string, suffix: string): string {
   const found = fs.readdirSync(dir).find((f) => f.endsWith(suffix));
-  assert.ok(found !== undefined, `expected a ${suffix} file in ${dir}`);
+  expect(found, `expected a ${suffix} file in ${dir}`).toBeDefined();
+  if (found === undefined)
+    throw new Error(`expected a ${suffix} file in ${dir}`);
   return path.join(dir, found);
 }
 
@@ -36,7 +37,9 @@ function spawnLiveProcess(): { pid: number; exit: () => Promise<void> } {
     ["-e", "setInterval(() => {}, 60000)"],
     { stdio: "ignore" },
   );
-  assert.ok(child.pid !== undefined);
+  expect(child.pid).toBeDefined();
+  if (child.pid === undefined)
+    throw new Error("expected the spawned child to have a pid");
   return {
     pid: child.pid,
     exit: () =>
@@ -47,30 +50,30 @@ function spawnLiveProcess(): { pid: number; exit: () => Promise<void> } {
   };
 }
 
-void test("loadOrCreateIdentity persists and reloads the same key material", () => {
+test("loadOrCreateIdentity persists and reloads the same key material", () => {
   const { slot, dir } = tempSlot("pi");
   const first = loadOrCreateIdentity(slot);
   const lockFile = slotFile(dir, ".lock");
-  assert.equal(lockPid(lockFile), process.pid);
+  expect(lockPid(lockFile)).toBe(process.pid);
 
   const reloaded = loadOrCreateIdentity(slot);
-  assert.equal(reloaded.fingerprint, first.fingerprint);
-  assert.equal(reloaded.privateKey, first.privateKey);
-  assert.equal(reloaded.certificate, first.certificate);
+  expect(reloaded.fingerprint).toBe(first.fingerprint);
+  expect(reloaded.privateKey).toBe(first.privateKey);
+  expect(reloaded.certificate).toBe(first.certificate);
 
   releaseIdentityLock(slot);
-  assert.equal(fs.existsSync(lockFile), false);
+  expect(fs.existsSync(lockFile)).toBe(false);
 });
 
-void test("identity file is created with owner-only permissions", () => {
+test("identity file is created with owner-only permissions", () => {
   const { slot, dir } = tempSlot("claude-code");
   loadOrCreateIdentity(slot);
   const mode = fs.statSync(slotFile(dir, ".json")).mode & 0o777;
-  assert.equal(mode, 0o600);
+  expect(mode).toBe(0o600);
   releaseIdentityLock(slot);
 });
 
-void test("a slot held by a live process yields an ephemeral identity", () => {
+test("a slot held by a live process yields an ephemeral identity", () => {
   const { slot, dir } = tempSlot("mcp");
   const owner = loadOrCreateIdentity(slot);
   const lockFile = slotFile(dir, ".lock");
@@ -79,15 +82,15 @@ void test("a slot held by a live process yields an ephemeral identity", () => {
   fs.writeFileSync(lockFile, `${String(holder.pid)}\n`);
 
   const loser = loadOrCreateIdentity(slot);
-  assert.notEqual(loser.fingerprint, owner.fingerprint);
+  expect(loser.fingerprint).not.toBe(owner.fingerprint);
   // The live holder's lock must not be clobbered by the ephemeral loser.
-  assert.equal(lockPid(lockFile), holder.pid);
+  expect(lockPid(lockFile)).toBe(holder.pid);
 
   void holder.exit();
   releaseIdentityLock(slot);
 });
 
-void test("a stale lock from a dead process is taken over", async () => {
+test("a stale lock from a dead process is taken over", async () => {
   const { slot, dir } = tempSlot("codex");
   const owner = loadOrCreateIdentity(slot);
   const lockFile = slotFile(dir, ".lock");
@@ -97,11 +100,11 @@ void test("a stale lock from a dead process is taken over", async () => {
   await holder.exit();
 
   const successor = loadOrCreateIdentity(slot);
-  assert.equal(successor.fingerprint, owner.fingerprint);
+  expect(successor.fingerprint).toBe(owner.fingerprint);
   releaseIdentityLock(slot);
 });
 
-void test("a near-expiry identity is renewed", () => {
+test("a near-expiry identity is renewed", () => {
   const { slot, dir } = tempSlot("opencode");
   const original = loadOrCreateIdentity(slot);
 
@@ -113,11 +116,11 @@ void test("a near-expiry identity is renewed", () => {
   fs.writeFileSync(identityFile, JSON.stringify(stored));
 
   const renewed = loadOrCreateIdentity(slot);
-  assert.notEqual(renewed.fingerprint, original.fingerprint);
+  expect(renewed.fingerprint).not.toBe(original.fingerprint);
   releaseIdentityLock(slot);
 });
 
-void test("a near-expiry identity is renewed without rotating the device-id", () => {
+test("a near-expiry identity is renewed without rotating the device-id", () => {
   const { slot, dir } = tempSlot("gemini");
   const original = loadOrCreateIdentity(slot);
 
@@ -129,17 +132,17 @@ void test("a near-expiry identity is renewed without rotating the device-id", ()
   fs.writeFileSync(identityFile, JSON.stringify(stored));
 
   const renewed = loadOrCreateIdentity(slot);
-  assert.deepEqual(renewed.deviceId, original.deviceId);
-  assert.equal(renewed.privateKey, original.privateKey);
+  expect(renewed.deviceId).toEqual(original.deviceId);
+  expect(renewed.privateKey).toBe(original.privateKey);
   releaseIdentityLock(slot);
 });
 
-void test("a corrupt identity file is regenerated", () => {
+test("a corrupt identity file is regenerated", () => {
   const { slot, dir } = tempSlot("user");
   loadOrCreateIdentity(slot);
   fs.writeFileSync(slotFile(dir, ".json"), "{not json");
 
   const regenerated = loadOrCreateIdentity(slot);
-  assert.match(regenerated.fingerprint, /^[0-9A-F]{2}(:[0-9A-F]{2})+$/);
+  expect(regenerated.fingerprint).toMatch(/^[0-9A-F]{2}(:[0-9A-F]{2})+$/);
   releaseIdentityLock(slot);
 });

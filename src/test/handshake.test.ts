@@ -2,9 +2,8 @@
  * Unit tests for the protocol handshake (#31): the gate state machine, negotiation over wire-mesh-core, and the state-sync wire tolerance.
  */
 
-import * as assert from "node:assert/strict";
 import * as net from "node:net";
-import { describe, it } from "node:test";
+import { describe, it, expect } from "vitest";
 import { encode as cborEncode, cdeEncodeOptions } from "cbor2";
 import {
   AGENT_COMMS_DOMAIN,
@@ -26,9 +25,9 @@ describe("negotiateMeshProtocol", () => {
       version: MESH_PROTOCOL_VERSION + 1,
       domains: [AGENT_COMMS_DOMAIN],
     });
-    assert.equal(result.ok, true);
-    assert.equal(result.version, MESH_PROTOCOL_VERSION);
-    assert.deepEqual(result.sharedDomains, [AGENT_COMMS_DOMAIN]);
+    expect(result.ok).toBe(true);
+    expect(result.version).toBe(MESH_PROTOCOL_VERSION);
+    expect(result.sharedDomains).toEqual([AGENT_COMMS_DOMAIN]);
   });
 
   it("refuses a peer with no shared domain", () => {
@@ -37,7 +36,7 @@ describe("negotiateMeshProtocol", () => {
       version: MESH_PROTOCOL_VERSION,
       domains: ["example.com/something-else"],
     });
-    assert.equal(result.ok, false);
+    expect(result.ok).toBe(false);
   });
 });
 
@@ -47,32 +46,32 @@ describe("ConnectionHandshake", () => {
     const frame = encodeHandshakeFrame();
     const jsonTail = Buffer.from('{"method":"introduce"}\n', "utf8");
     const outcome = gate.feed(Buffer.concat([frame, jsonTail]));
-    assert.equal(outcome.kind, "negotiated");
+    expect(outcome.kind).toBe("negotiated");
     if (outcome.kind !== "negotiated") return;
-    assert.equal(outcome.result.version, MESH_PROTOCOL_VERSION);
-    assert.equal(outcome.rest.toString(), jsonTail.toString());
+    expect(outcome.result.version).toBe(MESH_PROTOCOL_VERSION);
+    expect(outcome.rest.toString()).toBe(jsonTail.toString());
     // Subsequent feeds pass through unchanged.
     const more = gate.feed(Buffer.from("{}", "utf8"));
-    assert.equal(more.kind, "negotiated");
+    expect(more.kind).toBe("negotiated");
     if (more.kind !== "negotiated") return;
-    assert.equal(more.rest.toString(), "{}");
+    expect(more.rest.toString()).toBe("{}");
   });
 
   it("reassembles a frame split across TCP-sized chunks", () => {
     const gate = new ConnectionHandshake("server");
     const frame = Buffer.from(encodeHandshakeFrame());
     const split = Math.floor(frame.length / 2);
-    assert.equal(gate.feed(frame.subarray(0, split)).kind, "pending");
+    expect(gate.feed(frame.subarray(0, split)).kind).toBe("pending");
     const outcome = gate.feed(frame.subarray(split));
-    assert.equal(outcome.kind, "negotiated");
+    expect(outcome.kind).toBe("negotiated");
   });
 
   it("classifies a JSON-first-byte connection as legacy and passes bytes through", () => {
     const gate = new ConnectionHandshake("server");
     const outcome = gate.feed(Buffer.from('{"method":"introduce"}\n', "utf8"));
-    assert.equal(outcome.kind, "legacy");
+    expect(outcome.kind).toBe("legacy");
     if (outcome.kind !== "legacy") return;
-    assert.match(outcome.rest.toString(), /introduce/);
+    expect(outcome.rest.toString()).toMatch(/introduce/);
   });
 
   it("refuses a handshake whose negotiation fails (no shared domain)", () => {
@@ -82,28 +81,28 @@ describe("ConnectionHandshake", () => {
       cdeEncodeOptions,
     );
     const outcome = gate.feed(Buffer.from(hostile));
-    assert.equal(outcome.kind, "refused");
+    expect(outcome.kind).toBe("refused");
     if (outcome.kind !== "refused") return;
-    assert.match(outcome.reason, /no shared domain/);
+    expect(outcome.reason).toMatch(/no shared domain/);
   });
 
   it("refuses a CBOR item that is not a handshake frame", () => {
     const gate = new ConnectionHandshake("server");
     const notAHandshake = cborEncode({ hello: "world" }, cdeEncodeOptions);
     const outcome = gate.feed(Buffer.from(notAHandshake));
-    assert.equal(outcome.kind, "refused");
+    expect(outcome.kind).toBe("refused");
   });
 
   it("refuses undecodable leading bytes that are neither CBOR maps nor JSON", () => {
     const gate = new ConnectionHandshake("server");
     const outcome = gate.feed(Buffer.from([0xff, 0x00, 0x01]));
-    assert.equal(outcome.kind, "refused");
+    expect(outcome.kind).toBe("refused");
   });
 
   it("refuses a binary blob far beyond any handshake frame size", () => {
     const gate = new ConnectionHandshake("server");
     const big = Buffer.alloc(2048, 0x61); // 'a' — neither CBOR map head nor '{'
-    assert.equal(gate.feed(big).kind, "refused");
+    expect(gate.feed(big).kind).toBe("refused");
   });
 });
 
@@ -118,8 +117,8 @@ describe("normaliseWireState (#31 direction 2)", () => {
       dms: {},
     } as unknown as Parameters<typeof normaliseWireState>[0];
     const normalised = normaliseWireState(legacy);
-    assert.deepEqual(normalised.deliveryQueues, {});
-    assert.equal((normalised.agents.a1 as { version: number }).version, 1);
+    expect(normalised.deliveryQueues).toEqual({});
+    expect((normalised.agents.a1 as { version: number }).version).toBe(1);
   });
 
   it("passes a complete modern state through unchanged", () => {
@@ -131,7 +130,7 @@ describe("normaliseWireState (#31 direction 2)", () => {
       dms: {},
       deliveryQueues: { a1: [] },
     } as unknown as SerialisedState;
-    assert.deepEqual(normaliseWireState(modern), modern);
+    expect(normaliseWireState(modern)).toEqual(modern);
   });
 });
 
@@ -173,8 +172,8 @@ describe("ConnectionHandshake over a real socket pair", () => {
     );
     client.write(encodeHandshakeFrame());
 
-    assert.equal(await serverOutcome, "negotiated");
-    assert.equal(await clientOutcome, "negotiated");
+    expect(await serverOutcome).toBe("negotiated");
+    expect(await clientOutcome).toBe("negotiated");
 
     client.destroy();
     server.close();
@@ -203,7 +202,7 @@ describe("ConnectionHandshake over a real socket pair", () => {
     await new Promise<void>((resolve) => client.on("connect", resolve));
     client.write('{"method":"introduce"}\n');
 
-    assert.match(await serverReceived, /introduce/);
+    expect(await serverReceived).toMatch(/introduce/);
 
     client.destroy();
     server.close();
@@ -244,7 +243,7 @@ describe("ConnectionHandshake over a real socket pair", () => {
     client.write(Buffer.from(foreignFrame));
 
     const error = await serverError;
-    assert.match(error.message, /no shared domain/);
+    expect(error.message).toMatch(/no shared domain/);
 
     await new Promise<void>((resolve) => {
       client.on("close", resolve);

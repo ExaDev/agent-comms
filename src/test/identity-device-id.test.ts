@@ -3,8 +3,7 @@
  */
 
 import { createHash, createPublicKey } from "node:crypto";
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { generateIdentity } from "../core/identity.js";
 
 /** Re-derives the raw uncompressed SEC1 point independently of identity.ts's own implementation, via the JWK x/y coordinates every Node public KeyObject can export -- an oracle the test checks identity.ts's own derivation against, not a copy of it. */
@@ -24,20 +23,19 @@ function rawPublicKeyFromCertificate(certificatePem: string): Buffer {
 
 const SHA256_BYTE_LENGTH = 32;
 
-void test("deviceId is SHA-256 of the raw public key, independent of the certificate", () => {
+test("deviceId is SHA-256 of the raw public key, independent of the certificate", () => {
   const identity = generateIdentity();
-  assert.equal(identity.deviceId.length, SHA256_BYTE_LENGTH);
+  expect(identity.deviceId.length).toBe(SHA256_BYTE_LENGTH);
 
   const rawPublicKey = rawPublicKeyFromCertificate(identity.certificate);
   const expected = createHash("sha256").update(rawPublicKey).digest();
-  assert.equal(Buffer.from(identity.deviceId).equals(expected), true);
+  expect(Buffer.from(identity.deviceId).equals(expected)).toBe(true);
 });
 
-void test("deviceId differs between two freshly generated identities", () => {
+test("deviceId differs between two freshly generated identities", () => {
   const a = generateIdentity();
   const b = generateIdentity();
-  assert.notEqual(
-    Buffer.from(a.deviceId).toString("hex"),
+  expect(Buffer.from(a.deviceId).toString("hex")).not.toBe(
     Buffer.from(b.deviceId).toString("hex"),
   );
 });

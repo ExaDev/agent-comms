@@ -2,11 +2,10 @@
  * Unit tests for createBridgeMesh -- the shared factory every bridge builds its own MeshStore/WireMeshTransport/CommsTool from, replacing the identical four-line block each of the six bridges used to repeat against TlsTransport directly.
  */
 
-import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createBridgeMesh } from "../core/bridge-mesh.js";
 import {
@@ -22,34 +21,33 @@ function tempSlot(harness: string): IdentitySlot {
   return { harness, cwd: "/tmp/project", dir };
 }
 
-void test("createBridgeMesh sets peerId to deviceIdToHex(identity.deviceId), not the certificate fingerprint", async () => {
+test("createBridgeMesh sets peerId to deviceIdToHex(identity.deviceId), not the certificate fingerprint", async () => {
   const slot = tempSlot("test-harness");
   const identity = loadOrCreateIdentity(slot);
   const { store } = await createBridgeMesh(slot);
   try {
-    assert.strictEqual(
-      store.peerId,
+    expect(store.peerId).toBe(
       deviceIdToHex(Uint8Array.from(identity.deviceId)),
     );
-    assert.notStrictEqual(store.peerId, identity.fingerprint);
+    expect(store.peerId).not.toBe(identity.fingerprint);
   } finally {
     await store.shutdown();
   }
 });
 
-void test("createBridgeMesh wires a WireMeshTransport", async () => {
+test("createBridgeMesh wires a WireMeshTransport", async () => {
   const slot = tempSlot("test-harness");
   const { store } = await createBridgeMesh(slot);
   try {
     // init() is the only way to prove the transport is actually usable end to end, which also confirms it's a WireMeshTransport by construction (createBridgeMesh only ever builds one).
     await store.init();
-    assert.ok(store.connected);
+    expect(store.connected).toBeTruthy();
   } finally {
     await store.shutdown();
   }
 });
 
-void test("createBridgeMesh passes an explicit coordinatorPort through to MeshStore, forming one shared mesh", async () => {
+test("createBridgeMesh passes an explicit coordinatorPort through to MeshStore, forming one shared mesh", async () => {
   const slotA = tempSlot("test-harness-a");
   const slotB = tempSlot("test-harness-b");
   const port = 20_900 + Math.floor(Math.random() * 100);
@@ -58,8 +56,8 @@ void test("createBridgeMesh passes an explicit coordinatorPort through to MeshSt
   try {
     await a.store.init();
     await b.store.init();
-    assert.ok(a.store.connected);
-    assert.ok(b.store.connected);
+    expect(a.store.connected).toBeTruthy();
+    expect(b.store.connected).toBeTruthy();
     await a.store.registerAgent({
       name: "peer-a",
       harness: "test-harness-a",

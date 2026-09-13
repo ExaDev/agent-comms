@@ -5,14 +5,13 @@
  */
 
 import * as tls from "node:tls";
-import * as assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, expect } from "vitest";
 import { generateIdentity } from "../core/identity.js";
 
 // ~90% detection odds against the original 1-in-128 defect per run.
 const IDENTITIES_TO_LOAD = 300;
 
-void test("generated certificates are loadable by tls.createServer", () => {
+test("generated certificates are loadable by tls.createServer", () => {
   for (let i = 0; i < IDENTITIES_TO_LOAD; i++) {
     const identity = generateIdentity();
     const server = tls.createServer(
@@ -20,6 +19,6 @@ void test("generated certificates are loadable by tls.createServer", () => {
       () => {},
     );
     server.close();
-    assert.equal(identity.fingerprint.length > 0, true);
+    expect(identity.fingerprint.length > 0).toBe(true);
   }
 });
