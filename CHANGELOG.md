@@ -1,3 +1,14 @@
+## [2.18.1](https://github.com/ExaDev/agent-comms/compare/v2.18.0...v2.18.1) (2026-09-13)
+
+### Bug Fixes
+
+* **build:** scope no-pointless-reassignments to const bindings only ([7588a89](https://github.com/ExaDev/agent-comms/commit/7588a89c96f7da53e6619875918d66f7b073fe26))
+* **release:** retry the MCP registry publish for up to 15 minutes ([6a0b32f](https://github.com/ExaDev/agent-comms/commit/6a0b32f23b99d2717d1de3e765497206b44c4136))
+
+### Tests
+
+* cover the MCP registry publish retry logic ([929bd0e](https://github.com/ExaDev/agent-comms/commit/929bd0ed8c1935743bd86f071df413a347215b94))
+
 ## [2.18.0](https://github.com/ExaDev/agent-comms/compare/v2.17.0...v2.18.0) (2026-09-13)
 
 ### Features
