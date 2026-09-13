@@ -23,6 +23,7 @@ function noopEvents(): TransportEvents {
     onPeerJoined: () => undefined,
     onBecomeCoordinator: () => undefined,
     onRevocationAnnounce: () => undefined,
+    onPresenceAdvert: () => undefined,
   };
 }
 

@@ -25,6 +25,7 @@ import type {
   RevocationEntry,
 } from "wire-mesh-core/generated/protocol";
 import type { ManageOutcome } from "wire-mesh-core/domain/mesh-session";
+import type { AgentStatus } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Connection handle — opaque reference to a specific peer connection
@@ -127,6 +128,11 @@ export interface TransportEvents {
    * A peer announced one already-minted revocation-entry over an established session (management.cddl's revocation-announce, flattened to one call per entry). MeshStore should verify it and, if it verifies, record it in its own RevocationView -- a bearer's already-issued token stays valid to every peer that never received this until it does, per the design's own honest "detection with propagation delay" limit.
    */
   onRevocationAnnounce(entry: RevocationEntry): void;
+
+  /**
+   * A peer's gossiped self-advert carried a `presence/status` extension (wire-mesh-core's peer-advert open extension tail, re-sent periodically via sendGossipUpdate). Fires only when that key is present and a recognised AgentStatus value -- an advert with no presence extension, or an unrecognised value, is a peer that simply isn't advertising presence over this mechanism, not an error.
+   */
+  onPresenceAdvert(handle: ConnectionHandle, status: AgentStatus): void;
 }
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
+  type DirectoryEntry,
   type IncomingManageRequest,
   type ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
@@ -38,6 +39,7 @@ import type {
 import type { PeerIdentity } from "./identity.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
 import { nanoid } from "./nanoid.js";
+import { AgentStatus } from "./types.js";
 import {
   createRoomRouter,
   extractMessage,
@@ -57,6 +59,14 @@ const SECONDS_PER_MINUTE = 60;
 const MS_PER_SECOND = 1000;
 const DEFAULT_PENDING_CONNECTION_TIMEOUT_MS =
   PENDING_CONNECTION_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
+
+/** How often this side re-sends its own presence status onto every live session's gossip self-advert. wire-mesh-core's own sendGossipUpdate deliberately owns no cadence of its own (a MeshSession only sends what it's told, when it's told) -- this is that cadence, chosen generously enough to avoid chattiness on an idle mesh while still keeping a remote peer's own picture of this agent's status fresh well within the tens-of-minutes staleness window a status change (active -> idle -> offline) is actually meaningful over. */
+const PRESENCE_READVERTISE_INTERVAL_SECONDS = 20;
+const PRESENCE_READVERTISE_INTERVAL_MS =
+  PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND;
+
+/** The domain-qualified gossip extension key this transport reads/writes presence under, per wire-mesh's own gossip-extension-namespacing convention (spec/CONVENTIONS.md): `<domain>/<field>`, never a bare name a second application's own extension could collide with. */
+const PRESENCE_GOSSIP_KEY = "presence/status";
 
 /** This project's own namespaced domain (registrant "exadev.io", local name "agent-comms-v1"), matching namespaced-domain-id's "<registrant>/<local-name>" shape -- registry/core-domains.md's own recommended pattern for a third party. Exported for test use only: a security test simulating a hostile client that skips connect_request needs to construct a well-formed frame under the same domain/verb/scope this transport itself listens on, rather than duplicating these as separately-maintained magic strings that could silently drift from the real values. */
 export const DOMAIN = "exadev.io/agent-comms-v1";
@@ -165,11 +175,18 @@ export class WireMeshTransport implements MeshTransport {
 
   private readonly pendingConnectionTimeoutMs: number;
 
+  /** Reads this side's own current AgentStatus for the next presence re-advertisement tick -- a pull, not a push, so MeshStore never needs to reach into this transport's internals on every status change (see updateAgent/setAgentOffline, which patch MeshStore's own agents map and let the next tick pick it up). undefined when no presence source was wired in (every existing construction site that predates this feature), in which case the interval below is never even started. */
+  private readonly getCurrentPresence:
+    (() => AgentStatus | undefined) | undefined;
+  private presenceInterval: ReturnType<typeof setInterval> | undefined;
+
   constructor(
     events: TransportEvents,
     identity: Readonly<PeerIdentity>,
     roomVerbHandlers?: Partial<Record<string, RoomVerbHandler>>,
     pendingConnectionTimeoutMs: number = DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
+    getCurrentPresence?: () => AgentStatus | undefined,
+    presenceReadvertiseIntervalMs: number = PRESENCE_READVERTISE_INTERVAL_MS,
   ) {
     this.events = events;
     this.wireTransport = createTlsTransport({
@@ -182,6 +199,28 @@ export class WireMeshTransport implements MeshTransport {
       ...(roomVerbHandlers !== undefined ? { handlers: roomVerbHandlers } : {}),
     });
     this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;
+    this.getCurrentPresence = getCurrentPresence;
+    if (getCurrentPresence !== undefined) {
+      this.presenceInterval = setInterval(() => {
+        this.readvertisePresence();
+      }, presenceReadvertiseIntervalMs);
+      this.presenceInterval.unref();
+    }
+  }
+
+  /** Re-sends this side's own current presence status onto every live session's gossip self-advert. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. A no-op tick (nothing to advertise, because getCurrentPresence returned undefined, or no sessions exist yet) is expected and silent. */
+  private readvertisePresence(): void {
+    const status = this.getCurrentPresence?.();
+    if (status === undefined) return;
+    for (const session of this.allSessions) {
+      session
+        .sendGossipUpdate({ [PRESENCE_GOSSIP_KEY]: status })
+        .catch((error: unknown) => {
+          this.events.onError?.(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        });
+    }
   }
 
   // -- Public getters --
@@ -341,6 +380,21 @@ export class WireMeshTransport implements MeshTransport {
     })();
   }
 
+  /** Surfaces a presence extension from the remote peer's own gossiped self-advert, if this event's directory carries a fresh one for exactly this session's peer -- never for any other device-id a multi-hop directory might mention, since only the session's own authenticated peer's advert is this session's business to report. A missing presence/status key, or a value that isn't a recognised AgentStatus, is silently ignored: an advert simply not participating in this convention, not an error (the same verifier obligation peer-advert's own open extension tail is documented under). */
+  private reportPresenceAdvert(
+    handle: ConnectionHandle,
+    deviceIdHex: string,
+    directory: readonly DirectoryEntry[],
+  ): void {
+    const entry = directory.find(
+      (candidate) => deviceIdToHex(candidate.device) === deviceIdHex,
+    );
+    if (entry === undefined) return;
+    const status: unknown = entry.advert[PRESENCE_GOSSIP_KEY];
+    if (!AgentStatus.is(status)) return;
+    this.events.onPresenceAdvert(handle, status);
+  }
+
   private watchForDisconnect(
     session: AcceptedMeshSession,
     handle: ConnectionHandle,
@@ -348,6 +402,7 @@ export class WireMeshTransport implements MeshTransport {
   ): void {
     void (async () => {
       for await (const event of session.events) {
+        this.reportPresenceAdvert(handle, deviceIdHex, event.directory);
         if (event.state.status === "closed") {
           const wasTracked = this.peerSessions.get(deviceIdHex) === session;
           if (wasTracked) this.peerSessions.delete(deviceIdHex);
@@ -705,6 +760,10 @@ export class WireMeshTransport implements MeshTransport {
 
   async shutdown(): Promise<void> {
     this.shutDown = true;
+    if (this.presenceInterval !== undefined) {
+      clearInterval(this.presenceInterval);
+      this.presenceInterval = undefined;
+    }
     this.dataDials.clear();
 
     for (const pending of this.pendingConnections.values()) {

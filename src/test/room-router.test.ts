@@ -20,6 +20,7 @@ function fakeEvents(): TransportEvents {
     onBecomeCoordinator: mock.fn(),
     onError: mock.fn(),
     onRevocationAnnounce: mock.fn(),
+    onPresenceAdvert: mock.fn(),
   };
 }
 

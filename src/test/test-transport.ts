@@ -13,11 +13,12 @@ import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { nanoid } from "../core/nanoid.js";
 import type { MeshStore } from "../core/mesh-store.js";
 
-/** Wires store onto a fresh WireMeshTransport and a persisted identity slot, returning the slot so a test can inspect (or reuse) the persisted room tokens directly via loadRoomTokens(). Defaults to a throwaway temp-dir slot per call -- pass an explicit slot when a test needs the same identity to survive across more than one wireTestTransport call (e.g. simulating a restart). pendingConnectionTimeoutMs overrides WireMeshTransport's own default 5-minute connect_request expiry -- a test proving that expiry behaviour needs it far shorter than any real approval window. */
+/** Wires store onto a fresh WireMeshTransport and a persisted identity slot, returning the slot so a test can inspect (or reuse) the persisted room tokens directly via loadRoomTokens(). Defaults to a throwaway temp-dir slot per call -- pass an explicit slot when a test needs the same identity to survive across more than one wireTestTransport call (e.g. simulating a restart). pendingConnectionTimeoutMs overrides WireMeshTransport's own default 5-minute connect_request expiry -- a test proving that expiry behaviour needs it far shorter than any real approval window. presenceReadvertiseIntervalMs likewise overrides the default 20s presence re-advertisement cadence -- a test proving that behaviour needs it far shorter too, or a test that doesn't care about presence at all wants it long enough to never fire spuriously mid-test. */
 export async function wireTestTransport(
   store: MeshStore,
   slot?: Readonly<IdentitySlot>,
   pendingConnectionTimeoutMs?: number,
+  presenceReadvertiseIntervalMs?: number,
 ): Promise<IdentitySlot> {
   const resolvedSlot: IdentitySlot = slot ?? {
     harness: "test",
@@ -32,9 +33,9 @@ export async function wireTestTransport(
       store.events,
       identity,
       store.roomVerbHandlers,
-      ...(pendingConnectionTimeoutMs !== undefined
-        ? [pendingConnectionTimeoutMs]
-        : []),
+      pendingConnectionTimeoutMs,
+      () => store.selfStatus,
+      presenceReadvertiseIntervalMs,
     ),
   );
   store.setIdentity({

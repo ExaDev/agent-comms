@@ -351,6 +351,7 @@ describe("listener policy", () => {
       onPeerJoined: () => undefined,
       onBecomeCoordinator: () => undefined,
       onRevocationAnnounce: () => undefined,
+      onPresenceAdvert: () => undefined,
     };
     const identity = generateIdentity();
     const transport = new WireMeshTransport(events, identity);
