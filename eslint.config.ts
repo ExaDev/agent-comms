@@ -29,6 +29,13 @@ const noPointlessReassignments: Rule.RuleModule = {
         if (node.id.name.startsWith("_")) {
           return;
         }
+        // A `let`/`var` binding can be legitimately reassigned later (e.g. a loop-mutated value initialised from a starting constant, then updated each iteration) -- only `const` genuinely guarantees the binding is nothing but a permanent alias for its initializer, since a `const` can never be written to again. Without this check the rule fired on exactly that pattern (`let delayMs = INITIAL_RETRY_DELAY_MS` ahead of a loop that reassigns `delayMs` every iteration), which is not a pointless reassignment at all.
+        if (
+          node.parent.type === "VariableDeclaration" &&
+          node.parent.kind !== "const"
+        ) {
+          return;
+        }
         context.report({
           node,
           messageId: "pointlessReassignment",
