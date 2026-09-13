@@ -33,6 +33,8 @@ const config: PartialStrykerOptions = {
   concurrency: 4,
   // This repo's own real integration tests (full mesh e2e, federation, room-send-retry) genuinely take real wall-clock seconds each against real TLS/WebSocket connections -- generous on purpose since the whole suite re-runs once per mutant under the command runner.
   timeoutMS: 60_000,
+  // Distinct from timeoutMS above (which bounds each individual mutant's test run once a baseline net time is known): this is the absolute timeout for Stryker's own initial, unmutated dry run, defaulting to 5 minutes. That default was hit for real on a genuinely shared, heavily-loaded machine, where the full suite's live TCP/TLS integration tests took over 5 minutes to complete once even with no mutation applied at all.
+  dryRunTimeoutMinutes: 15,
   thresholds: {
     high: 80,
     low: 60,
