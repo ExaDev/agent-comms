@@ -2,8 +2,7 @@
  * Unit tests for messages.ts — delivery event → display message conversion.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { deliveryEventToMessage, roomMessageToDisplay } from "../messages.js";
 import type { DeliveryEvent, RoomMessage } from "../types.js";
 
@@ -24,7 +23,7 @@ describe("deliveryEventToMessage", () => {
         message: MOCK_MESSAGE,
       };
       const result = deliveryEventToMessage(event, "room-1");
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         type: "chat",
         sender: "agent-1",
         content: "Hello world",
@@ -38,7 +37,7 @@ describe("deliveryEventToMessage", () => {
         message: MOCK_MESSAGE,
       };
       const result = deliveryEventToMessage(event, "other-room");
-      assert.strictEqual(result, undefined);
+      expect(result).toBe(undefined);
     });
 
     it("returns undefined for room_message with no current room", () => {
@@ -47,7 +46,7 @@ describe("deliveryEventToMessage", () => {
         message: MOCK_MESSAGE,
       };
       const result = deliveryEventToMessage(event, undefined);
-      assert.strictEqual(result, undefined);
+      expect(result).toBe(undefined);
     });
   });
 
@@ -65,7 +64,7 @@ describe("deliveryEventToMessage", () => {
         },
       };
       const result = deliveryEventToMessage(event, undefined);
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         type: "dm",
         sender: "a1",
         content: "hey",
@@ -82,7 +81,7 @@ describe("deliveryEventToMessage", () => {
         agent: "a1",
       };
       const result = deliveryEventToMessage(event, "r1");
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         type: "system",
         text: "a1 joined r1",
       });
@@ -97,7 +96,7 @@ describe("deliveryEventToMessage", () => {
         agent: "a1",
       };
       const result = deliveryEventToMessage(event, "r1");
-      assert.deepStrictEqual(result, {
+      expect(result).toEqual({
         type: "system",
         text: "a1 left r1",
       });
@@ -113,8 +112,8 @@ describe("deliveryEventToMessage", () => {
         status: "busy",
       };
       const result = deliveryEventToMessage(event, "r1");
-      assert.strictEqual(result?.type, "status");
-      assert.ok(result?.text?.includes("a1 is now busy"));
+      expect(result?.type).toBe("status");
+      expect(result?.text?.includes("a1 is now busy")).toBeTruthy();
     });
   });
 
@@ -127,8 +126,8 @@ describe("deliveryEventToMessage", () => {
         status: "delivered",
       };
       const result = deliveryEventToMessage(event, undefined);
-      assert.strictEqual(result?.type, "status");
-      assert.ok(result?.text?.includes("delivered"));
+      expect(result?.type).toBe("status");
+      expect(result?.text?.includes("delivered")).toBeTruthy();
     });
   });
 
@@ -143,9 +142,9 @@ describe("deliveryEventToMessage", () => {
         ],
       };
       const result = deliveryEventToMessage(event, "r1");
-      assert.strictEqual(result?.type, "system");
-      assert.ok(result?.text?.includes("Alice"));
-      assert.ok(result?.text?.includes("Bob"));
+      expect(result?.type).toBe("system");
+      expect(result?.text?.includes("Alice")).toBeTruthy();
+      expect(result?.text?.includes("Bob")).toBeTruthy();
     });
 
     it("returns undefined for other room", () => {
@@ -155,7 +154,7 @@ describe("deliveryEventToMessage", () => {
         members: [{ id: "a1", name: "Alice", status: "active" }],
       };
       const result = deliveryEventToMessage(event, "other-room");
-      assert.strictEqual(result, undefined);
+      expect(result).toBe(undefined);
     });
   });
 
@@ -170,10 +169,10 @@ describe("deliveryEventToMessage", () => {
         fromCwd: "/home",
       };
       const result = deliveryEventToMessage(event, undefined);
-      assert.strictEqual(result?.type, "system");
-      assert.ok(result?.text?.includes("Alice"));
-      assert.ok(result?.text?.includes("r1"));
-      assert.ok(result?.text?.includes("A cool room"));
+      expect(result?.type).toBe("system");
+      expect(result?.text?.includes("Alice")).toBeTruthy();
+      expect(result?.text?.includes("r1")).toBeTruthy();
+      expect(result?.text?.includes("A cool room")).toBeTruthy();
     });
 
     it("converts without description", () => {
@@ -186,9 +185,9 @@ describe("deliveryEventToMessage", () => {
         fromCwd: "/home",
       };
       const result = deliveryEventToMessage(event, undefined);
-      assert.strictEqual(result?.type, "system");
-      assert.ok(result?.text?.includes("Alice"));
-      assert.ok(!result?.text?.includes(" — "));
+      expect(result?.type).toBe("system");
+      expect(result?.text?.includes("Alice")).toBeTruthy();
+      expect(!result?.text?.includes(" — ")).toBeTruthy();
     });
   });
 
@@ -202,9 +201,9 @@ describe("deliveryEventToMessage", () => {
         reason: "Too busy",
       };
       const result = deliveryEventToMessage(event, undefined);
-      assert.strictEqual(result?.type, "system");
-      assert.ok(result?.text?.includes("Alice"));
-      assert.ok(result?.text?.includes("Too busy"));
+      expect(result?.type).toBe("system");
+      expect(result?.text?.includes("Alice")).toBeTruthy();
+      expect(result?.text?.includes("Too busy")).toBeTruthy();
     });
   });
 });
@@ -212,7 +211,7 @@ describe("deliveryEventToMessage", () => {
 describe("roomMessageToDisplay", () => {
   it("converts a room message to a chat display message", () => {
     const result = roomMessageToDisplay(MOCK_MESSAGE);
-    assert.deepStrictEqual(result, {
+    expect(result).toEqual({
       type: "chat",
       sender: "agent-1",
       content: "Hello world",

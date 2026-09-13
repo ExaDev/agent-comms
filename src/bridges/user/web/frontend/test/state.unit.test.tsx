@@ -2,8 +2,7 @@
  * Unit tests for state.ts — client state management.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { State } from "../state.js";
 import type { Agent, Room } from "../types.js";
 
@@ -35,11 +34,11 @@ describe("state", () => {
   it("starts with initial state", () => {
     const state = new State();
     const s = state.get();
-    assert.strictEqual(s.currentRoom, undefined);
-    assert.strictEqual(s.dmTarget, undefined);
-    assert.deepStrictEqual(s.agents, []);
-    assert.deepStrictEqual(s.rooms, []);
-    assert.strictEqual(s.connected, false);
+    expect(s.currentRoom).toBe(undefined);
+    expect(s.dmTarget).toBe(undefined);
+    expect(s.agents).toEqual([]);
+    expect(s.rooms).toEqual([]);
+    expect(s.connected).toBe(false);
   });
 
   it("sets current room and notifies", () => {
@@ -48,27 +47,27 @@ describe("state", () => {
     state.subscribe((s) => notified.push(s));
 
     state.setCurrentRoom("room-1");
-    assert.strictEqual(state.get().currentRoom, "room-1");
-    assert.strictEqual(notified.length, 1);
-    assert.strictEqual(notified[0]?.currentRoom, "room-1");
+    expect(state.get().currentRoom).toBe("room-1");
+    expect(notified.length).toBe(1);
+    expect(notified[0]?.currentRoom).toBe("room-1");
   });
 
   it("sets agents and notifies", () => {
     const state = new State();
     state.setAgents([MOCK_AGENT]);
-    assert.deepStrictEqual(state.get().agents, [MOCK_AGENT]);
+    expect(state.get().agents).toEqual([MOCK_AGENT]);
   });
 
   it("sets rooms and notifies", () => {
     const state = new State();
     state.setRooms([MOCK_ROOM]);
-    assert.deepStrictEqual(state.get().rooms, [MOCK_ROOM]);
+    expect(state.get().rooms).toEqual([MOCK_ROOM]);
   });
 
   it("sets connected and notifies", () => {
     const state = new State();
     state.setConnected(true);
-    assert.strictEqual(state.get().connected, true);
+    expect(state.get().connected).toBe(true);
   });
 
   it("applyState sets agents and rooms atomically", () => {
@@ -77,9 +76,9 @@ describe("state", () => {
     state.subscribe(() => notified.push(true));
 
     state.applyState([MOCK_AGENT], [MOCK_ROOM]);
-    assert.deepStrictEqual(state.get().agents, [MOCK_AGENT]);
-    assert.deepStrictEqual(state.get().rooms, [MOCK_ROOM]);
-    assert.strictEqual(notified.length, 1);
+    expect(state.get().agents).toEqual([MOCK_AGENT]);
+    expect(state.get().rooms).toEqual([MOCK_ROOM]);
+    expect(notified.length).toBe(1);
   });
 
   it("sets dmTarget and notifies", () => {
@@ -88,9 +87,9 @@ describe("state", () => {
     state.subscribe((s) => notified.push(s));
 
     state.setDmTarget("agent-42");
-    assert.strictEqual(state.get().dmTarget, "agent-42");
-    assert.strictEqual(notified.length, 1);
-    assert.strictEqual(notified[0]?.dmTarget, "agent-42");
+    expect(state.get().dmTarget).toBe("agent-42");
+    expect(notified.length).toBe(1);
+    expect(notified[0]?.dmTarget).toBe("agent-42");
   });
 
   it("sets dmTarget and notifies", () => {
@@ -99,9 +98,9 @@ describe("state", () => {
     state.subscribe((s) => notified.push(s));
 
     state.setDmTarget("agent-42");
-    assert.strictEqual(state.get().dmTarget, "agent-42");
-    assert.strictEqual(notified.length, 1);
-    assert.strictEqual(notified[0]?.dmTarget, "agent-42");
+    expect(state.get().dmTarget).toBe("agent-42");
+    expect(notified.length).toBe(1);
+    expect(notified[0]?.dmTarget).toBe("agent-42");
   });
 
   it("reset returns to initial state", () => {
@@ -112,9 +111,9 @@ describe("state", () => {
 
     state.reset();
     const s = state.get();
-    assert.strictEqual(s.currentRoom, undefined);
-    assert.deepStrictEqual(s.agents, []);
-    assert.strictEqual(s.connected, false);
+    expect(s.currentRoom).toBe(undefined);
+    expect(s.agents).toEqual([]);
+    expect(s.connected).toBe(false);
   });
 
   it("unsubscribe stops notifications", () => {
@@ -125,11 +124,11 @@ describe("state", () => {
     });
 
     state.setConnected(true);
-    assert.strictEqual(count, 1);
+    expect(count).toBe(1);
 
     unsub();
     state.setConnected(false);
-    assert.strictEqual(count, 1);
+    expect(count).toBe(1);
   });
 
   it("multiple subscribers all get notified", () => {
@@ -144,7 +143,7 @@ describe("state", () => {
     });
 
     state.setConnected(true);
-    assert.strictEqual(count1, 1);
-    assert.strictEqual(count2, 1);
+    expect(count1).toBe(1);
+    expect(count2).toBe(1);
   });
 });

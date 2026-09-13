@@ -2,8 +2,7 @@
  * Unit tests for Preact components — render into happy-dom containers.
  */
 
-import { describe, it, beforeEach, afterEach } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, beforeEach, afterEach, expect } from "vitest";
 import { render as preactRender } from "preact";
 import { Window } from "happy-dom";
 import { Message } from "../components/Message.js";
@@ -84,10 +83,10 @@ describe("Message component", () => {
     try {
       preactRender(<Message message={MOCK_CHAT} />, container);
       const el = container.querySelector(".msg") as HTMLElement;
-      assert.ok(el);
-      assert.ok(el.textContent?.includes("Alice"));
-      assert.ok(el.textContent?.includes("14:30:45"));
-      assert.ok(el.textContent?.includes("Hello world"));
+      expect(el).toBeTruthy();
+      expect(el.textContent?.includes("Alice")).toBeTruthy();
+      expect(el.textContent?.includes("14:30:45")).toBeTruthy();
+      expect(el.textContent?.includes("Hello world")).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -98,9 +97,9 @@ describe("Message component", () => {
     try {
       preactRender(<Message message={MOCK_DM} />, container);
       const el = container.querySelector(".msg.dm") as HTMLElement;
-      assert.ok(el);
-      assert.ok(el.textContent?.includes("DM"));
-      assert.ok(el.textContent?.includes("Bob"));
+      expect(el).toBeTruthy();
+      expect(el.textContent?.includes("DM")).toBeTruthy();
+      expect(el.textContent?.includes("Bob")).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -111,8 +110,8 @@ describe("Message component", () => {
     try {
       preactRender(<Message message={MOCK_SYSTEM} />, container);
       const el = container.querySelector(".msg.system") as HTMLElement;
-      assert.ok(el);
-      assert.strictEqual(el.textContent, "Connected");
+      expect(el).toBeTruthy();
+      expect(el.textContent).toBe("Connected");
     } finally {
       cleanup();
     }
@@ -123,8 +122,8 @@ describe("Message component", () => {
     try {
       preactRender(<Message message={MOCK_STATUS} />, container);
       const el = container.querySelector(".msg.status") as HTMLElement;
-      assert.ok(el);
-      assert.ok(el.textContent?.includes("busy"));
+      expect(el).toBeTruthy();
+      expect(el.textContent?.includes("busy")).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -140,7 +139,7 @@ describe("MessageList component", () => {
         container,
       );
       const msgs = container.querySelectorAll(".msg");
-      assert.strictEqual(msgs.length, 3);
+      expect(msgs.length).toBe(3);
     } finally {
       cleanup();
     }
@@ -151,7 +150,7 @@ describe("MessageList component", () => {
     try {
       preactRender(<MessageList messages={[]} />, container);
       const msgs = container.querySelectorAll(".msg");
-      assert.strictEqual(msgs.length, 0);
+      expect(msgs.length).toBe(0);
     } finally {
       cleanup();
     }
@@ -175,8 +174,8 @@ describe("ChatArea component", () => {
         container,
       );
       const header = container.querySelector("#header") as HTMLElement;
-      assert.ok(header);
-      assert.ok(header.textContent?.includes("Select a room"));
+      expect(header).toBeTruthy();
+      expect(header.textContent?.includes("Select a room")).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -198,9 +197,12 @@ describe("ChatArea component", () => {
         container,
       );
       const header = container.querySelector("#header") as HTMLElement;
-      assert.ok(header.textContent?.includes("test-room"));
+      expect(header.textContent?.includes("test-room")).toBeTruthy();
       const leaveBtn = container.querySelector(".leave-btn") as HTMLElement;
-      assert.ok(leaveBtn, "leave button should be present when room is active");
+      expect(
+        leaveBtn,
+        "leave button should be present when room is active",
+      ).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -222,7 +224,7 @@ describe("ChatArea component", () => {
         container,
       );
       const header = container.querySelector("#header") as HTMLElement;
-      assert.ok(header.textContent?.includes("DM with agent-1"));
+      expect(header.textContent?.includes("DM with agent-1")).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -244,7 +246,7 @@ describe("ChatArea component", () => {
         container,
       );
       const leaveBtn = container.querySelector(".leave-btn");
-      assert.strictEqual(leaveBtn, null);
+      expect(leaveBtn).toBe(null);
     } finally {
       cleanup();
     }
@@ -266,9 +268,9 @@ describe("ChatArea component", () => {
         container,
       );
       const input = container.querySelector("#input") as HTMLElement;
-      assert.ok(input);
+      expect(input).toBeTruthy();
       const sendBtn = container.querySelector("#send-btn") as HTMLElement;
-      assert.ok(sendBtn);
+      expect(sendBtn).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -292,9 +294,9 @@ describe("Sidebar component", () => {
         container,
       );
       const roomItem = container.querySelector(".room-item") as HTMLElement;
-      assert.ok(roomItem);
-      assert.ok(roomItem.classList.contains("active"));
-      assert.ok(roomItem.textContent?.includes("Room 1"));
+      expect(roomItem).toBeTruthy();
+      expect(roomItem.classList.contains("active")).toBeTruthy();
+      expect(roomItem.textContent?.includes("Room 1")).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -316,11 +318,11 @@ describe("Sidebar component", () => {
         container,
       );
       const agentItem = container.querySelector(".agent-item") as HTMLElement;
-      assert.ok(agentItem);
-      assert.ok(agentItem.textContent?.includes("Agent 1"));
+      expect(agentItem).toBeTruthy();
+      expect(agentItem.textContent?.includes("Agent 1")).toBeTruthy();
       const dot = container.querySelector(".status-dot") as HTMLElement;
-      assert.ok(dot);
-      assert.ok(dot.classList.contains("active"));
+      expect(dot).toBeTruthy();
+      expect(dot.classList.contains("active")).toBeTruthy();
     } finally {
       cleanup();
     }
@@ -342,7 +344,7 @@ describe("Sidebar component", () => {
         container,
       );
       const agents = container.querySelectorAll(".agent-item");
-      assert.strictEqual(agents.length, 0);
+      expect(agents.length).toBe(0);
     } finally {
       cleanup();
     }
@@ -364,8 +366,8 @@ describe("Sidebar component", () => {
         container,
       );
       const btn = container.querySelector("#create-room-toggle") as HTMLElement;
-      assert.ok(btn);
-      assert.strictEqual(btn.textContent, "+");
+      expect(btn).toBeTruthy();
+      expect(btn.textContent).toBe("+");
     } finally {
       cleanup();
     }
@@ -387,7 +389,7 @@ describe("Sidebar component", () => {
         container,
       );
       const btn = container.querySelector("#join-toggle-btn") as HTMLElement;
-      assert.ok(btn);
+      expect(btn).toBeTruthy();
     } finally {
       cleanup();
     }

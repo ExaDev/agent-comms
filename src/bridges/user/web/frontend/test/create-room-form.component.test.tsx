@@ -2,8 +2,7 @@
  * Component interaction tests for CreateRoomForm.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { render as preactRender } from "preact";
 import { act } from "preact/test-utils";
 import { Window } from "happy-dom";
@@ -43,7 +42,7 @@ describe("CreateRoomForm interactions", () => {
       );
       const btn = container.querySelector(".create-room-cancel")!;
       btn.click();
-      assert.strictEqual(cancelled, true);
+      expect(cancelled).toBe(true);
     } finally {
       cleanup();
     }
@@ -115,9 +114,9 @@ describe("CreateRoomForm interactions", () => {
       // If submitted is undefined, the form prevented submit (empty name).
       // If submitted is defined, check the values came through.
       if (submitted) {
-        assert.strictEqual(submitted.name, "test-room");
-        assert.strictEqual(submitted.type, "private");
-        assert.strictEqual(submitted.description, "A test room");
+        expect(submitted.name).toBe("test-room");
+        expect(submitted.type).toBe("private");
+        expect(submitted.description).toBe("A test room");
       }
       // If submitted is undefined, happy-dom couldn't propagate input
       // values to Preact state — the structural test still passes

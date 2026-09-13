@@ -2,8 +2,7 @@
  * Unit tests for dom.ts — DOM utility functions.
  */
 
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { escapeHtml, formatTime, requireElement } from "../dom.js";
 import { Window } from "happy-dom";
 
@@ -20,20 +19,19 @@ function createDoc(): { doc: Document; cleanup: () => void } {
 describe("dom", () => {
   describe("escapeHtml", () => {
     it("escapes <, >, &, quotes", () => {
-      assert.strictEqual(
-        escapeHtml("<script>alert('xss')</script>"),
+      expect(escapeHtml("<script>alert('xss')</script>")).toBe(
         "&lt;script&gt;alert('xss')&lt;/script&gt;",
       );
     });
 
     it("passes through safe text unchanged", () => {
-      assert.strictEqual(escapeHtml("hello world"), "hello world");
+      expect(escapeHtml("hello world")).toBe("hello world");
     });
   });
 
   describe("formatTime", () => {
     it("extracts HH:MM:SS from ISO string", () => {
-      assert.strictEqual(formatTime("2025-05-23T14:30:45.123Z"), "14:30:45");
+      expect(formatTime("2025-05-23T14:30:45.123Z")).toBe("14:30:45");
     });
   });
 
@@ -46,7 +44,7 @@ describe("dom", () => {
         doc.body.appendChild(el);
 
         const result = requireElement(doc, "#required");
-        assert.strictEqual(result.id, "required");
+        expect(result.id).toBe("required");
       } finally {
         cleanup();
       }
@@ -55,8 +53,7 @@ describe("dom", () => {
     it("throws when element not found", () => {
       const { doc, cleanup } = createDoc();
       try {
-        assert.throws(
-          () => requireElement(doc, "#missing"),
+        expect(() => requireElement(doc, "#missing")).toThrow(
           /Required element not found/,
         );
       } finally {
