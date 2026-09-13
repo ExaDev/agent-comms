@@ -1,3 +1,9 @@
+## [2.18.3](https://github.com/ExaDev/agent-comms/compare/v2.18.2...v2.18.3) (2026-09-13)
+
+### Bug Fixes
+
+* **core:** renew identity by re-certifying the existing key pair ([f059230](https://github.com/ExaDev/agent-comms/commit/f05923067a6bdae2387a5f2cf38858eddd98f0bd))
+
 ## [2.18.2](https://github.com/ExaDev/agent-comms/compare/v2.18.1...v2.18.2) (2026-09-13)
 
 ### Bug Fixes
