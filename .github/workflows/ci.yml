@@ -54,11 +54,16 @@ jobs:
       - run: pnpm test:smoke
 
   mutation:
-    name: Mutation Testing
+    name: Mutation Testing (${{ matrix.file }})
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    # 60 minutes wasn't enough for the real 2,586-mutant baseline against 3 files -- the job hit that ceiling and was cancelled mid-run on the first real CI attempt. GitHub Actions' own per-job maximum is 360 minutes on a standard runner; budget generously rather than guess a second time.
-    timeout-minutes: 240
+    # One job per file instead of one job for all three: each gets its own runner (its own 4 vCPUs, not shared with the others), so the three files' mutants run genuinely in parallel across separate machines rather than sequentially through a single job's own worker pool. The prior single-job run took over an hour and was still going when a too-short timeout cancelled it -- this is the actual fix for that, not just a bigger number.
+    strategy:
+      fail-fast: false
+      matrix:
+        file: [identity, mesh-store, wire-mesh-transport]
+    # Half the prior single-job budget: a generous per-file allowance, not a precise measurement of any one file's real share of the 2,586-mutant baseline (the three files aren't equally sized, so an exact 1/3 split would be a guess dressed up as a calculation).
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -67,11 +72,11 @@ jobs:
           node-version-file: .tool-versions
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - run: pnpm run mutation
+      - run: pnpm exec stryker run stryker.config.ts --mutate "src/core/${{ matrix.file }}.ts"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mutation-report
+          name: mutation-report-${{ matrix.file }}
           path: reports/mutation/mutation.html
           retention-days: 30
 
