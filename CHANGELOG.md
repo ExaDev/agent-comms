@@ -1,3 +1,17 @@
+## [2.19.0](https://github.com/ExaDev/agent-comms/compare/v2.18.4...v2.19.0) (2026-09-13)
+
+### Features
+
+* add StrykerJS mutation testing scoped to src/core ([9abd460](https://github.com/ExaDev/agent-comms/commit/9abd460baf5893a0c6dbc8eb61c753ed2bb74832))
+* **ci:** run mutation testing against vitest on a dispatchable job ([0207e00](https://github.com/ExaDev/agent-comms/commit/0207e0080097c23b14185407f33aa5737edc9055))
+
+### Bug Fixes
+
+* **build:** exclude Stryker's own sandbox and report output from lint ([daa250b](https://github.com/ExaDev/agent-comms/commit/daa250b770acd0791aaf0033f491bb72fc6dd79b))
+* **ci:** force-include the built dist/ in each mutant sandbox ([ca99384](https://github.com/ExaDev/agent-comms/commit/ca993846c4a599ae198c8f96744305800a2c6fdf))
+* **core:** raise the mutation dry run's own absolute timeout ([af261e0](https://github.com/ExaDev/agent-comms/commit/af261e0a498111372e7f1eb329466cdc85e5a22a))
+* **core:** scope mutation testing to its own stated three files ([1b6ec83](https://github.com/ExaDev/agent-comms/commit/1b6ec83944d41e0bf96118d844b65209f08ca944))
+
 ## [2.18.4](https://github.com/ExaDev/agent-comms/compare/v2.18.3...v2.18.4) (2026-09-13)
 
 ### Bug Fixes
