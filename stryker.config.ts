@@ -5,8 +5,12 @@ import type { PartialStrykerOptions } from "@stryker-mutator/api/core";
 // testRunner is "command", not a native runner integration: this repo's own test script (`tsx --test --test-concurrency=1 'src/test/**/*.test.ts'`) runs node's built-in test runner directly against TS source via tsx, not vitest/jest/mocha, so there's no official Stryker runner plugin to reach for. The command runner re-runs the whole test command as a subprocess per mutant instead of driving the runner in-process, so it loses per-test coverage analysis (every mutant re-runs the entire suite rather than only its covering tests) but works correctly against any test command at all. No separate build step is needed first: the test script already runs directly against .ts source, so Stryker's own instrumented sandbox copy is tested exactly the way a real run is, with nothing to keep in sync between a build and a test step.
 const config: PartialStrykerOptions = {
   packageManager: "pnpm",
-  // Scoped to src/core/ specifically, per the issue that added this config: identity, mesh-store, and transport are the branch-heavy, security-relevant code a green suite can still be hiding an untested condition in. src/bridges/ (harness-specific wiring, exercised by its own integration tests) and src/test/ itself are out of scope for this first pass.
-  mutate: ["src/core/**/*.ts", "!src/core/**/*.test.ts"],
+  // Scoped to the three files the issue that added this config actually names, not the whole of src/core/: identity.ts, mesh-store.ts, and wire-mesh-transport.ts are the branch-heavy, security-relevant code a green suite can still be hiding an untested condition in. The rest of src/core/ (discovery, federation, push, bridge wiring) is exercised by its own integration tests and out of scope for this pass -- narrower than the glob this config originally shipped with, which matched every file under src/core/ despite this same comment always having named only these three.
+  mutate: [
+    "src/core/identity.ts",
+    "src/core/mesh-store.ts",
+    "src/core/wire-mesh-transport.ts",
+  ],
   testRunner: "command",
   commandRunner: {
     command: "npx tsx --test --test-concurrency=1 'src/test/**/*.test.ts'",
@@ -14,6 +18,10 @@ const config: PartialStrykerOptions = {
   plugins: ["@stryker-mutator/typescript-checker"],
   checkers: ["typescript"],
   tsconfigFile: "tsconfig.json",
+  // The default (true) batches multiple mutants into one compiler check for speed, but a batched check can produce a TypeScript diagnostic Stryker can't attribute back to any single file, which throws a hard, run-ending StrykerError rather than degrading gracefully -- hit for real on this exact config partway through a baseline run. Checking mutants individually costs more wall-clock time but is the only way to avoid that crash mode entirely.
+  typescriptChecker: {
+    prioritizePerformanceOverAccuracy: false,
+  },
   // The command runner only sees the subprocess's exit code, never which tests ran -- there's no per-test signal to analyse coverage from, so Stryker itself forces this to "off" for this runner regardless of what's configured here.
   coverageAnalysis: "off",
   incremental: true,
