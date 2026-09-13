@@ -179,9 +179,9 @@ function branchToNodesWithRooms(
       childPath,
       projectRoomsByPath,
     );
-    if (childNodes.length > 0) {
-      // Check if this directory has a project room
-      const room = projectRoomsByPath.get(childPath);
+    // Check if this directory has a project room
+    const room = projectRoomsByPath.get(childPath);
+    if (childNodes.length > 0 || room) {
       nodes.push({
         type: "directory",
         name,
