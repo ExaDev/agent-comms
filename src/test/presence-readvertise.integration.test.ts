@@ -35,10 +35,15 @@ describe("WireMeshTransport presence re-advertisement", () => {
   void test("a session periodically re-sends this side's presence, and the peer surfaces it via onPresenceAdvert", async () => {
     const identityA = generateIdentity();
     const identityB = generateIdentity();
-    const peerIdA = deviceIdToHex(await toIdentityPort(identityA).then((p) => p.deviceId));
-    const peerIdB = deviceIdToHex(await toIdentityPort(identityB).then((p) => p.deviceId));
+    const peerIdA = deviceIdToHex(
+      await toIdentityPort(identityA).then((p) => p.deviceId),
+    );
+    const peerIdB = deviceIdToHex(
+      await toIdentityPort(identityB).then((p) => p.deviceId),
+    );
 
-    const presenceSeenByB: { handle: ConnectionHandle; status: AgentStatus }[] = [];
+    const presenceSeenByB: { handle: ConnectionHandle; status: AgentStatus }[] =
+      [];
     let currentStatusA: AgentStatus = "active";
 
     const transportA = new WireMeshTransport(
@@ -59,7 +64,11 @@ describe("WireMeshTransport presence re-advertisement", () => {
     try {
       await transportA.startDataServer();
       await transportB.connectToPeer(
-        { id: peerIdA, port: transportA.dataPort, startedAt: new Date().toISOString() },
+        {
+          id: peerIdA,
+          port: transportA.dataPort,
+          startedAt: new Date().toISOString(),
+        },
         peerIdB,
       );
 
@@ -75,7 +84,9 @@ describe("WireMeshTransport presence re-advertisement", () => {
         "B observes A's updated idle presence after the next re-advertisement tick",
       );
 
-      const idleSighting = presenceSeenByB.find((seen) => seen.status === "idle");
+      const idleSighting = presenceSeenByB.find(
+        (seen) => seen.status === "idle",
+      );
       assert.equal(idleSighting?.handle.id, peerIdA);
     } finally {
       await transportB.shutdown();
@@ -86,10 +97,15 @@ describe("WireMeshTransport presence re-advertisement", () => {
   void test("a session with no presence source configured never re-advertises", async () => {
     const identityA = generateIdentity();
     const identityB = generateIdentity();
-    const peerIdA = deviceIdToHex(await toIdentityPort(identityA).then((p) => p.deviceId));
-    const peerIdB = deviceIdToHex(await toIdentityPort(identityB).then((p) => p.deviceId));
+    const peerIdA = deviceIdToHex(
+      await toIdentityPort(identityA).then((p) => p.deviceId),
+    );
+    const peerIdB = deviceIdToHex(
+      await toIdentityPort(identityB).then((p) => p.deviceId),
+    );
 
-    const presenceSeenByB: { handle: ConnectionHandle; status: AgentStatus }[] = [];
+    const presenceSeenByB: { handle: ConnectionHandle; status: AgentStatus }[] =
+      [];
 
     // No getCurrentPresence argument at all -- every construction site that predates this feature, and the exact configuration this test exists to prove stays inert rather than accidentally advertising a stale or default status.
     const transportA = new WireMeshTransport(
@@ -106,12 +122,18 @@ describe("WireMeshTransport presence re-advertisement", () => {
     try {
       await transportA.startDataServer();
       await transportB.connectToPeer(
-        { id: peerIdA, port: transportA.dataPort, startedAt: new Date().toISOString() },
+        {
+          id: peerIdA,
+          port: transportA.dataPort,
+          startedAt: new Date().toISOString(),
+        },
         peerIdB,
       );
 
       // Long enough to comfortably span several presence-readvertise ticks were one wired up (SHORT_PRESENCE_INTERVAL_MS above), short enough to keep the test fast -- the assertion below is a genuine "nothing happened", not a race against a real event we're waiting to observe.
-      await new Promise((resolve) => setTimeout(resolve, SHORT_PRESENCE_INTERVAL_MS * 3));
+      await new Promise((resolve) =>
+        setTimeout(resolve, SHORT_PRESENCE_INTERVAL_MS * 3),
+      );
       assert.equal(presenceSeenByB.length, 0);
     } finally {
       await transportB.shutdown();
