@@ -2,27 +2,18 @@ import { mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
+import {
+  INITIAL_RETRY_DELAY_MS,
+  MAX_TOTAL_RETRY_MS,
+  isNpmPropagationLag,
+  nextRetryDelayMs,
+} from "../src/core/mcp-registry-retry.js";
 
 function run(command: string, args: string[]): void {
   const result = spawnSync(command, args, { stdio: "inherit" });
   if (result.status !== 0) {
     throw new Error(`Command failed: ${command} ${args.join(" ")}`);
   }
-}
-
-// The MCP registry validates a publish against the npm registry, where the version semantic-release published seconds earlier may not be visible yet. The registry's own error text says to wait and retry, so retry that failure specifically instead of failing the release job on propagation lag.
-//
-// The previous fixed [15, 30, 60, 120] schedule (225s total) was observed to be too short: a real CI run hit npm propagation lag that outlasted it and failed the whole release job even though the npm publish itself had already succeeded. The release job carries no timeout-minutes of its own (.github/workflows/ci.yml), so there is no tight external deadline forcing a small budget -- retrying is bounded by MAX_TOTAL_RETRY_MS below purely so a genuinely broken publish (not just slow propagation) still fails within the same run rather than retrying for hours, not by any CI time pressure.
-const MAX_TOTAL_RETRY_MS = 15 * 60 * 1000;
-const INITIAL_RETRY_DELAY_MS = 15_000;
-const MAX_RETRY_DELAY_MS = 120_000;
-const RETRY_BACKOFF_MULTIPLIER = 2;
-
-function isNpmPropagationLag(output: string): boolean {
-  return (
-    output.includes("was not found") &&
-    output.includes("A newly published release can take a moment")
-  );
 }
 
 function sleepSync(ms: number): void {
@@ -46,10 +37,7 @@ function runPublishWithRetry(command: string, args: string[]): void {
         `mcp-publisher publish hit npm propagation lag (attempt ${String(attempt)}), retrying in ${String(delayMs / 1000)}s`,
       );
       sleepSync(delayMs);
-      delayMs = Math.min(
-        delayMs * RETRY_BACKOFF_MULTIPLIER,
-        MAX_RETRY_DELAY_MS,
-      );
+      delayMs = nextRetryDelayMs(delayMs);
       continue;
     }
     process.stdout.write(output);
@@ -57,28 +45,30 @@ function runPublishWithRetry(command: string, args: string[]): void {
   }
 }
 
-const os = process.platform;
-const arch = process.arch;
-
-let binaryArch: string;
-if (arch === "x64") {
-  binaryArch = "amd64";
-} else if (arch === "arm64") {
-  binaryArch = "arm64";
-} else {
+function binaryArchFor(arch: string): string {
+  if (arch === "x64") return "amd64";
+  if (arch === "arm64") return "arm64";
   throw new Error(`Unsupported architecture: ${arch}`);
 }
 
-const archiveUrl = `https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_${binaryArch}.tar.gz`;
-const tempDir = mkdtempSync(path.join(tmpdir(), "agent-comms-mcp-"));
+function main(): void {
+  const archiveUrl = `https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${process.platform}_${binaryArchFor(process.arch)}.tar.gz`;
+  const tempDir = mkdtempSync(path.join(tmpdir(), "agent-comms-mcp-"));
 
-try {
-  run("bash", [
-    "-lc",
-    `curl -fsSL "${archiveUrl}" | tar -xzf - -C "${tempDir}" mcp-publisher`,
-  ]);
-  run(path.join(tempDir, "mcp-publisher"), ["login", "github-oidc"]);
-  runPublishWithRetry(path.join(tempDir, "mcp-publisher"), ["publish"]);
-} finally {
-  rmSync(tempDir, { recursive: true, force: true });
+  try {
+    run("bash", [
+      "-lc",
+      `curl -fsSL "${archiveUrl}" | tar -xzf - -C "${tempDir}" mcp-publisher`,
+    ]);
+    run(path.join(tempDir, "mcp-publisher"), ["login", "github-oidc"]);
+    runPublishWithRetry(path.join(tempDir, "mcp-publisher"), ["publish"]);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+// Only run as a side effect when executed directly (semantic-release's own exec step), never on a plain import, which is how the test suite reaches nextRetryDelayMs()/isNpmPropagationLag() (via src/core/mcp-registry-retry.ts) without downloading mcp-publisher or attempting a real publish.
+const invokedPath = process.argv[1];
+if (invokedPath !== undefined && import.meta.url === `file://${invokedPath}`) {
+  main();
 }
