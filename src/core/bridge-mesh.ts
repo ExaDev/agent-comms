@@ -35,7 +35,13 @@ export function createBridgeMeshSync(
   const store = new MeshStore(coordinatorPort);
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   store.setTransport(
-    new WireMeshTransport(store.events, identity, store.roomVerbHandlers),
+    new WireMeshTransport(
+      store.events,
+      identity,
+      store.roomVerbHandlers,
+      undefined,
+      () => store.selfStatus,
+    ),
   );
   const tool = new CommsTool(store, store.discovery);
   const revocation = createRevocationView();

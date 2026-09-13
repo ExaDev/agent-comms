@@ -181,6 +181,11 @@ export class MeshStore implements CommsStore {
   private initialised = false;
   private pendingMarkReadTimers: ReturnType<typeof setTimeout>[] = [];
 
+  /** This store's own current AgentStatus, synchronously -- the value WireMeshTransport's presence re-advertisement timer reads on every tick. undefined before registerAgent has ever run (no self agent record exists yet), in which case there is nothing yet to advertise. */
+  get selfStatus(): AgentStatus | undefined {
+    return this.agents.get(this.peerId)?.status;
+  }
+
   /** Whether the mesh has a live coordinator connection. */
   get connected(): boolean {
     return (
@@ -684,7 +689,19 @@ export class MeshStore implements CommsStore {
       onRevocationAnnounce: (entry) => {
         void this.handleRevocationAnnounce(entry);
       },
+      onPresenceAdvert: (handle, status) => {
+        this.handlePresenceAdvert(handle.id, status);
+      },
     };
+  }
+
+  /** Applies a peer's gossiped presence status to this store's own local record, without broadcasting it back onto the mesh -- gossip itself is already how this fact propagates (each side's WireMeshTransport re-advertises its own status periodically), so re-broadcasting a received one would just bounce it around indefinitely. Silently ignored for a device-id this store doesn't yet have an agent record for: presence gossip is a transport-layer fact about an already-known peer's current status, not itself a source of truth for who that peer is -- that still comes only from agent_upsert/registerAgent, which carries the name/harness/cwd/tags a fabricated partial record here never could. */
+  private handlePresenceAdvert(agentId: string, status: AgentStatus): void {
+    const agent = this.agents.get(agentId);
+    if (agent === undefined || agent.status === status) return;
+    agent.status = status;
+    this.bump(agent);
+    void this.notifyRoomsOfStatus(agentId, status);
   }
 
   /** Verifies a gossiped revocation-entry and, if it verifies, records it in this store's own RevocationView -- future verifyRoomToken calls against this token's (token-id, issuer) pair fail with "revoked" from this point on. A failing entry is dropped silently: the same "hostile input produces a verdict, never a throw" contract verifyRevocationEntry itself already guarantees, so there is nothing further for a caller to react to. */
