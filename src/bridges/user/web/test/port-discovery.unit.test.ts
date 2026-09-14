@@ -6,19 +6,49 @@ import { describe, it, expect } from "vitest";
 import * as http from "node:http";
 import { findFreePort } from "../port-discovery.js";
 
-/** Create a server that blocks a specific port. Returns a cleanup function. */
-function blockPort(port: number): Promise<() => Promise<void>> {
-  return new Promise((resolve, reject) => {
-    const server = http.createServer();
-    server.on("error", reject);
-    server.listen(port, "127.0.0.1", () => {
-      resolve(async () => {
-        return new Promise<void>((res) => {
-          server.close(() => res());
+/** How many times to retry a single bind attempt against a transient EADDRINUSE before giving up for real. */
+const BLOCK_PORT_MAX_ATTEMPTS = 5;
+/** Delay between retries, long enough for a port an unrelated process grabbed as its own ephemeral source port to be released again. */
+const BLOCK_PORT_RETRY_DELAY_MS = 50;
+
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Create a server that blocks a specific port. Returns a cleanup function.
+ *
+ * These tests deliberately use fixed high port numbers so findFreePort's own sequential-scan behaviour is exercised deterministically, but that range overlaps the OS's own ephemeral/dynamic port allocation range -- an unrelated process anywhere on the machine opening an ordinary outbound connection can be kernel-assigned the exact port a test wants to bind as a server, entirely independent of anything this test suite itself does, and release it again moments later. Retrying briefly on EADDRINUSE handles that real, transient condition without weakening what the test actually asserts.
+ */
+async function blockPort(port: number): Promise<() => Promise<void>> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await new Promise((resolve, reject) => {
+        const server = http.createServer();
+        server.on("error", reject);
+        server.listen(port, "127.0.0.1", () => {
+          resolve(async () => {
+            return new Promise<void>((res) => {
+              server.close(() => res());
+            });
+          });
         });
       });
-    });
-  });
+    } catch (error) {
+      const isAddrInUse =
+        isErrnoException(error) && error.code === "EADDRINUSE";
+      if (!isAddrInUse || attempt >= BLOCK_PORT_MAX_ATTEMPTS) {
+        throw error;
+      }
+      await delay(BLOCK_PORT_RETRY_DELAY_MS);
+    }
+  }
 }
 
 describe("findFreePort", () => {
