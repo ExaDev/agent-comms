@@ -2,7 +2,7 @@
  * Unit tests for identity.ts — cryptographic identity generation.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { X509Certificate } from "node:crypto";
 import {
   generateIdentity,
@@ -112,6 +112,27 @@ describe("generateIdentity", () => {
       firstBytes.size,
       "serial numbers should vary across identities, not collapse onto one leading byte",
     ).toBeGreaterThan(1);
+  });
+
+  describe("certificate validity window", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("encodes notBefore/notAfter as exact zero-padded UTCTime, CERTIFICATE_VALIDITY_MS apart", () => {
+      // 2005-03-05T07:08:09Z: every date component below 10 (year%100, month, day, minute) so a missing zero-pad or an off-by-one in month arithmetic shifts the parsed date.
+      const fixedNow = new Date(Date.UTC(2005, 2, 5, 7, 8, 9));
+      vi.useFakeTimers();
+      vi.setSystemTime(fixedNow);
+
+      const { certificate } = generateIdentity();
+      const x509 = new X509Certificate(certificate);
+
+      expect(x509.validFromDate.toISOString()).toBe(fixedNow.toISOString());
+      expect(x509.validToDate.getTime() - x509.validFromDate.getTime()).toBe(
+        CERTIFICATE_VALIDITY_MS,
+      );
+    });
   });
 });
 
