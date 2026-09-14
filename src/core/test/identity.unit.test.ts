@@ -42,6 +42,24 @@ describe("generateIdentity", () => {
     );
   });
 
+  it("wraps the certificate's base64 body at 64 characters per line", () => {
+    const { certificate } = generateIdentity();
+    const bodyLines = certificate
+      .split("\n")
+      .filter(
+        (line) =>
+          line.length > 0 &&
+          line !== "-----BEGIN CERTIFICATE-----" &&
+          line !== "-----END CERTIFICATE-----",
+      );
+
+    expect(bodyLines.length).toBeGreaterThan(1);
+    for (const line of bodyLines.slice(0, -1)) {
+      expect(line.length).toBe(64);
+    }
+    expect(bodyLines.at(-1)?.length).toBeLessThanOrEqual(64);
+  });
+
   it("produces a fingerprint that is a 95-character SHA-256 hex string with colons", () => {
     const { fingerprint } = generateIdentity();
 
@@ -99,6 +117,15 @@ describe("generateIdentity", () => {
 
     const versionField = Buffer.from([0xa0, 0x03, 0x02, 0x01, 0x02]);
     expect(x509.raw.indexOf(versionField)).toBeGreaterThanOrEqual(0);
+  });
+
+  it("marks the Basic Constraints extension critical (DER BOOLEAN TRUE)", () => {
+    // RFC 5280 requires Basic Constraints to be marked critical; a non-critical CA:FALSE constraint is a spec violation that some strict X.509 validators reject outright, even though tls.createServer tolerates it.
+    const { certificate } = generateIdentity();
+    const x509 = new X509Certificate(certificate);
+    const criticalTrue = Buffer.from([0x01, 0x01, 0xff]);
+
+    expect(x509.raw.indexOf(criticalTrue)).toBeGreaterThanOrEqual(0);
   });
 
   it("does not systematically force the serial number's leading byte to a fixed value", () => {
