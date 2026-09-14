@@ -13,7 +13,15 @@ import type { AgentIdentity, AgentStatus } from "../core/types.js";
 import type { MeshStatePatch, PeerInfo } from "../core/wire-protocol.js";
 
 const PROBE_INTERVAL_MS = 5000;
-const OFFLINE_PURGE_THRESHOLD_MS = 30 * 60 * 1000;
+const OFFLINE_PURGE_THRESHOLD_MINUTES = 30;
+const SECONDS_PER_MINUTE = 60;
+const MS_PER_SECOND = 1000;
+const OFFLINE_PURGE_THRESHOLD_MS =
+  OFFLINE_PURGE_THRESHOLD_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
+/** How many probe intervals stop() must survive with zero further probing -- arbitrary beyond "more than one", chosen to make a lingering timer's own recurrence visible rather than a one-off fluke. */
+const HALT_CHECK_INTERVAL_COUNT = 3;
+/** How many purge thresholds old an agent's startedAt is in the "no matter how old" test -- arbitrary beyond "well past the threshold", chosen to make the point emphatically rather than sit right at the boundary (which the dedicated boundary test already covers precisely). */
+const FAR_PAST_THRESHOLD_MULTIPLIER = 10;
 const ALIVE_PID = 111;
 const DEAD_PID = 222;
 const FIXED_NOW_MS = 1_700_000_000_000;
@@ -147,7 +155,9 @@ describe("StaleAgentChecker", () => {
       await vi.advanceTimersByTimeAsync(PROBE_INTERVAL_MS);
       checker.stop();
       broadcastPatch.mockClear();
-      await vi.advanceTimersByTimeAsync(PROBE_INTERVAL_MS * 3);
+      await vi.advanceTimersByTimeAsync(
+        PROBE_INTERVAL_MS * HALT_CHECK_INTERVAL_COUNT,
+      );
       expect(broadcastPatch).not.toHaveBeenCalled();
     });
 
@@ -281,7 +291,7 @@ describe("StaleAgentChecker", () => {
           "a1",
           "active",
           ALIVE_PID,
-          isoAgeMs(OFFLINE_PURGE_THRESHOLD_MS * 10),
+          isoAgeMs(OFFLINE_PURGE_THRESHOLD_MS * FAR_PAST_THRESHOLD_MULTIPLIER),
         ),
       ]);
       checker.start();
