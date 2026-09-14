@@ -7,9 +7,9 @@ import * as http from "node:http";
 import { findFreePort } from "../port-discovery.js";
 
 /** How many times to retry a single bind attempt against a transient EADDRINUSE before giving up for real. */
-const BLOCK_PORT_MAX_ATTEMPTS = 5;
-/** Delay between retries, long enough for a port an unrelated process grabbed as its own ephemeral source port to be released again. */
-const BLOCK_PORT_RETRY_DELAY_MS = 50;
+const BLOCK_PORT_MAX_ATTEMPTS = 10;
+/** Delay between retries, long enough for a port an unrelated process grabbed as its own ephemeral source port to be released again. Raised from 50ms/5 attempts (a ~250ms total window) after that budget still wasn't always enough on a loaded CI runner -- 10 attempts at 100ms gives a ~1s window before genuinely giving up. */
+const BLOCK_PORT_RETRY_DELAY_MS = 100;
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
