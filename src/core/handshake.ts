@@ -28,12 +28,18 @@ export const AGENT_COMMS_DOMAIN = "dev.exadev.agent-comms/mesh";
 /** Handshake frames are tiny; anything larger than this is not a frame, it is garbage. */
 const MAX_HANDSHAKE_BYTES = 1024;
 
-/** CBOR map head byte range (0xa0–0xbf); JSON always starts with '{' (0x7b). */
+/** CBOR map head first byte, inclusive. */
+const CBOR_MAP_HEAD_MIN = 0xa0;
+/** CBOR map head last byte, inclusive. */
+const CBOR_MAP_HEAD_MAX = 0xbf;
+
+/** CBOR map head byte range (0xa0-0xbf); JSON always starts with the byte 0x7b. */
 function isCborMapHead(byte: number): boolean {
-  return byte >= 0xa0 && byte <= 0xbf;
+  return byte >= CBOR_MAP_HEAD_MIN && byte <= CBOR_MAP_HEAD_MAX;
 }
 
 const JSON_OBJECT_START = 0x7b; // '{'
+const HEX_RADIX = 16;
 
 interface HandshakeShape {
   type: "handshake";
@@ -81,11 +87,11 @@ export type HandshakeOutcome =
   | { kind: "refused"; reason: string };
 
 /**
- * Per-connection gate fed the incoming byte stream. Consumes the (optional) leading handshake frame and classifies the connection: negotiated (a version was agreed — for a server, the caller replies with `encodeHandshakeFrame()`), legacy (first byte was '{' — a pre-handshake peer, proceed exactly as before), or refused (a handshake we cannot speak: destroy the connection loudly rather than desync — the #31 enforcement point). After the first classification every subsequent feed passes the bytes through unchanged.
+ * Per-connection gate fed the incoming byte stream. Consumes the (optional) leading handshake frame and classifies the connection: negotiated (a version was agreed — for a server, the caller replies with `encodeHandshakeFrame()`), legacy (first byte was the JSON object-start byte — a pre-handshake peer, proceed exactly as before), or refused (a handshake we cannot speak: destroy the connection loudly rather than desync — the #31 enforcement point). After the first classification every subsequent feed passes the bytes through unchanged.
  */
 export class ConnectionHandshake {
   private decided: "legacy" | "negotiated" | null = null;
-  private pending: Buffer[] = [];
+  private readonly pending: Buffer[] = [];
   private pendingLength = 0;
 
   constructor(private readonly role: "client" | "server") {}
@@ -114,7 +120,7 @@ export class ConnectionHandshake {
       if (!isCborMapHead(first)) {
         return {
           kind: "refused",
-          reason: `unexpected first byte 0x${first.toString(16)} — not a handshake frame or JSON message`,
+          reason: `unexpected first byte 0x${first.toString(HEX_RADIX)} — not a handshake frame or JSON message`,
         };
       }
     }
@@ -181,9 +187,9 @@ export class ConnectionHandshake {
 
 /** The slice of the Node socket surface the handshake needs — satisfied by net.Socket and tls.TLSSocket alike. */
 export interface HandshakeSocket {
-  write(data: Uint8Array | string): unknown;
-  destroy(): void;
-  on(event: "data", listener: (data: Buffer) => void): unknown;
+  write: (data: Uint8Array | string) => unknown;
+  destroy: () => void;
+  on: (event: "data", listener: (data: Buffer) => void) => unknown;
 }
 
 /**
@@ -196,7 +202,7 @@ export interface HandshakeSocket {
  * replacing silent desync.
  */
 export function attachSocketHandshake(
-  socket: HandshakeSocket,
+  socket: Readonly<HandshakeSocket>,
   role: "client" | "server",
   onPayload: (data: Buffer) => void,
   onError?: (error: Error) => void,
@@ -307,13 +313,13 @@ export class WsHandshakeGate {
 
 /** The slice of the WebSocket surface the handshake needs. */
 export interface HandshakeWs {
-  send(data: string | Uint8Array): unknown;
-  terminate(): void;
+  send: (data: string | Uint8Array) => unknown;
+  terminate: () => void;
   // isBinary is the `ws` library's own frame-type flag (its `message` event always passes it as the second argument) -- the only reliable way to tell a text frame from a binary one, since `data` itself arrives as a Buffer in Node either way.
-  on(
+  on: (
     event: "message",
     listener: (raw: unknown, isBinary: boolean) => void,
-  ): unknown;
+  ) => unknown;
 }
 
 /**
@@ -324,7 +330,7 @@ export interface HandshakeWs {
  * connection and reports the reason.
  */
 export function attachWsHandshake(
-  ws: HandshakeWs,
+  ws: Readonly<HandshakeWs>,
   role: "client" | "server",
   onText: (raw: unknown) => void,
   onError?: (error: Error) => void,

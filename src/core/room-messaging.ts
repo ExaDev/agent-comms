@@ -18,7 +18,7 @@ import type {
   StreamingBehavior,
 } from "./types.js";
 
-/** The state and collaborators RoomMessaging needs from MeshStore. rooms/messages/dms/agents are direct references into MeshStore's own fields; roomProtocol and federation are the already-constructed instances (construction order: ... -> roomProtocol -> roomMessaging -> ...), narrowed to what sending a message or DM ever needs. */
+/** The state and collaborators RoomMessaging needs from MeshStore. rooms/messages/dms/agents are direct references into MeshStore's own fields; roomProtocol and federation are the already-constructed instances (construction order: ... -\> roomProtocol -\> roomMessaging -\> ...), narrowed to what sending a message or DM ever needs. */
 export interface RoomMessagingDeps {
   rooms: Map<string, Room>;
   messages: Map<string, RoomMessage[]>;
@@ -72,7 +72,7 @@ export class RoomMessaging {
     this.deps.messages.set(roomId, arr);
 
     // Forward to federated links if the room is federated
-    if (room.federated) {
+    if (room.federated === true) {
       await this.deps.federation.forwardRoomMessage(roomId, message);
     }
 
@@ -109,7 +109,7 @@ export class RoomMessaging {
   ): Promise<RoomMessage[]> {
     await Promise.resolve();
     const arr = this.deps.messages.get(roomId) ?? [];
-    if (!since) return [...arr];
+    if (since === undefined || since === "") return [...arr];
     return arr.filter((m) => m.timestamp > since);
   }
 

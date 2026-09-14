@@ -102,13 +102,15 @@ export class RoomLifecycle {
     saveRoomToken(slot, roomPath, verdict.token);
   }
 
-  async createRoom(opts: {
-    name: string;
-    type: RoomType;
-    owner: string;
-    description: string;
-    federated?: boolean;
-  }): Promise<Room> {
+  async createRoom(
+    opts: Readonly<{
+      name: string;
+      type: RoomType;
+      owner: string;
+      description: string;
+      federated?: boolean;
+    }>,
+  ): Promise<Room> {
     // slugRoomName sanitises an arbitrary caller-supplied name (e.g. from a live create_room tool call, not just an internal cwd basename) into the room-path grammar's [A-Za-z0-9_-]+ charset -- createRoom is the one choke point every room creation goes through, so this is the right place to do it rather than trusting every caller to have pre-slugged, the way the old bare-name id never required at all.
     const slugName = slugRoomName(opts.name);
     const localName = opts.type === "secret" ? `_${slugName}` : slugName;
@@ -401,7 +403,7 @@ export class RoomLifecycle {
     );
 
     // Notify federated links if the room is federated
-    if (room.federated) {
+    if (room.federated === true) {
       const agentName = agent?.name ?? agentId;
       await this.deps.federation.broadcastRoomJoin(roomId, agentId, agentName);
     }
@@ -418,7 +420,8 @@ export class RoomLifecycle {
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
     const peerId = this.deps.getPeerId();
     if (agentId === peerId && room.owner !== peerId) {
-      return this.leaveRemoteRoom(roomId, room.owner);
+      await this.leaveRemoteRoom(roomId, room.owner);
+      return;
     }
 
     this.deps.deliveryEngine.bump(room);
@@ -449,7 +452,7 @@ export class RoomLifecycle {
     });
 
     // Notify federated links if the room is federated
-    if (room.federated) {
+    if (room.federated === true) {
       await this.deps.federation.broadcastRoomLeave(roomId, agentId);
     }
 

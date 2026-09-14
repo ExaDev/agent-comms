@@ -47,11 +47,11 @@ export interface AdvertiseOptions {
 
 export interface DiscoveryBackend {
   readonly name: string;
-  startAdvertising(opts: AdvertiseOptions): Promise<string>;
-  stopAdvertising(id: string): Promise<void>;
-  discover(timeout?: number): Promise<DiscoveredMesh[]>;
+  startAdvertising: (opts: Readonly<AdvertiseOptions>) => Promise<string>;
+  stopAdvertising: (id: string) => Promise<void>;
+  discover: (timeout?: number) => Promise<DiscoveredMesh[]>;
   /** Stop all activity (timers, sockets) for this backend. */
-  stop(): Promise<void>;
+  stop: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,25 +59,25 @@ export interface DiscoveryBackend {
 // ---------------------------------------------------------------------------
 
 export class DiscoveryManager {
-  private backends = new Map<string, DiscoveryBackend>();
-  private activeAdvertisements = new Map<string, string>();
+  private readonly backends = new Map<string, DiscoveryBackend>();
+  private readonly activeAdvertisements = new Map<string, string>();
   private meshVisibility: MeshVisibility = "discoverable";
-  private perAdapterVisibility = new Map<string, MeshVisibility>();
+  private readonly perAdapterVisibility = new Map<string, MeshVisibility>();
   /** Advertisements that were paused due to visibility changes. */
-  private pausedAdvertisements = new Map<
+  private readonly pausedAdvertisements = new Map<
     string,
     { backendName: string; opts: AdvertiseOptions }
   >();
 
   /** Register a discovery backend. */
-  registerBackend(backend: DiscoveryBackend): void {
+  registerBackend(backend: Readonly<DiscoveryBackend>): void {
     this.backends.set(backend.name, backend);
   }
 
   /** Start advertising on a specific backend. Returns an advertisement ID. */
   async advertise(
     backendName: string,
-    opts: AdvertiseOptions,
+    opts: Readonly<AdvertiseOptions>,
   ): Promise<string> {
     const backend = this.backends.get(backendName);
     if (!backend) {
@@ -199,18 +199,18 @@ export class DiscoveryManager {
     }
   }
 
-  private resumeAllAdvertisements(): Promise<void> {
-    // Restart backends first (they may have been stopped in "dark" mode)
-    // Note: backends reinitialise their sockets on next startAdvertising/discover call.
+  private async resumeAllAdvertisements(): Promise<void> {
+    // Restart backends first (they may have been stopped in "dark" mode) Note: backends reinitialise their sockets on next startAdvertising/discover call.
     for (const [id] of this.pausedAdvertisements) {
       this.pausedAdvertisements.delete(id);
-      // We can't fully resume without original opts — the caller must
-      // re-advertise. Mark as not paused so new advertise calls work.
+      // We can't fully resume without original opts — the caller must re-advertise. Mark as not paused so new advertise calls work.
     }
     return Promise.resolve();
   }
 
-  private resumeAdvertisementsForBackend(backendName: string): Promise<void> {
+  private async resumeAdvertisementsForBackend(
+    backendName: string,
+  ): Promise<void> {
     for (const [id, entry] of this.pausedAdvertisements) {
       if (entry.backendName === backendName) {
         this.pausedAdvertisements.delete(id);
@@ -222,7 +222,7 @@ export class DiscoveryManager {
   /** Stop a previously started advertisement. */
   async stopAdvertising(id: string): Promise<void> {
     const backendName = this.activeAdvertisements.get(id);
-    if (!backendName) return;
+    if (backendName === undefined) return;
     const backend = this.backends.get(backendName);
     if (!backend) return;
     await backend.stopAdvertising(id);
@@ -258,7 +258,7 @@ export class DiscoveryManager {
     });
 
     const results = await Promise.all(
-      activeTargets.map((b) => b.discover(timeout)),
+      activeTargets.map(async (b) => b.discover(timeout)),
     );
 
     // Deduplicate by host+port

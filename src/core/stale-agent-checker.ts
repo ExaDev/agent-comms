@@ -19,7 +19,11 @@ export interface StaleAgentCheckerDeps {
 const PROBE_INTERVAL_MS = 5000;
 
 /** How long an agent may sit "offline" before its record is purged entirely, to prevent indefinite accumulation. */
-const OFFLINE_PURGE_THRESHOLD_MS = 30 * 60 * 1000;
+const OFFLINE_PURGE_THRESHOLD_MINUTES = 30;
+const SECONDS_PER_MINUTE = 60;
+const MS_PER_SECOND = 1000;
+const OFFLINE_PURGE_THRESHOLD_MS =
+  OFFLINE_PURGE_THRESHOLD_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
 
 export class StaleAgentChecker {
   private timer: ReturnType<typeof setInterval> | undefined;

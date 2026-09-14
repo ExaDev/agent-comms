@@ -29,13 +29,13 @@ export class ConnectionApproval {
   constructor(private readonly deps: ConnectionApprovalDeps) {}
 
   handleConnectionRequest(
-    handle: ConnectionHandle,
-    request: {
+    handle: Readonly<ConnectionHandle>,
+    request: Readonly<{
       peerId: string;
       dataPort: number;
       name: string;
       fingerprint: string;
-    },
+    }>,
   ): void {
     this.pendingInboundConnections.set(handle.id, {
       peerId: request.peerId,
@@ -98,10 +98,8 @@ export class ConnectionApproval {
     }));
   }
 
-  /** Initiate an outbound connection to a remote coordinator requiring approval.
-   *  Fires the connect_request and returns immediately. The connection
-   *  completes asynchronously when the coordinator accepts or rejects. */
-  connectToRemote(host: string, port: number): Promise<void> {
+  /** Initiate an outbound connection to a remote coordinator requiring approval. Fires the connect_request and returns immediately. The connection completes asynchronously when the coordinator accepts or rejects. */
+  async connectToRemote(host: string, port: number): Promise<void> {
     const peerId = this.deps.getPeerId();
     const agent = this.deps.agents.get(peerId);
     // Fire-and-forget: don't await the full approval handshake. The coordinator will either accept (triggering normal introduction flow) or reject (closing the socket). Handle rejection to avoid unhandled rejection.
@@ -122,8 +120,7 @@ export class ConnectionApproval {
     return Promise.resolve();
   }
 
-  /** Start only the data server without connecting to a coordinator.
-   *  Used for testing scenarios where the peer connects via connectToRemote. */
+  /** Start only the data server without connecting to a coordinator. Used for testing scenarios where the peer connects via connectToRemote. */
   async startDataServerOnly(): Promise<void> {
     await this.deps.requireTransport().startDataServer();
     const peerId = this.deps.getPeerId();

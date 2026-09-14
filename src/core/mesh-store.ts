@@ -19,7 +19,6 @@ import type { FedLink } from "./federation.js";
 import { getCertificateFingerprint } from "./identity.js";
 import { COORDINATOR_HOST } from "./mesh-store-shared.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
-export type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import { DeliveryEngine } from "./delivery-engine.js";
 import { FederationBridge } from "./federation-bridge.js";
 import { RoomProtocol } from "./room-protocol.js";
@@ -61,6 +60,8 @@ import type {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_COORDINATOR_PORT = 19876;
+/** Length of the randomly generated peer ID. */
+const PEER_ID_LENGTH = 8;
 
 // ---------------------------------------------------------------------------
 // MeshStore
@@ -138,7 +139,7 @@ export class MeshStore implements CommsStore {
   }
 
   constructor(coordinatorPort: number = DEFAULT_COORDINATOR_PORT) {
-    this.peerId = nanoid(8);
+    this.peerId = nanoid(PEER_ID_LENGTH);
     this.startedAt = new Date().toISOString();
     this.coordinatorPort = coordinatorPort;
 
@@ -162,7 +163,7 @@ export class MeshStore implements CommsStore {
       getOnPatch: () => this.onPatch,
       isShutDown: () => this.isShutDown,
       // RoomProtocol doesn't exist yet at this point in the constructor -- this closure resolves `this.roomProtocol` lazily, only once markRead actually calls it at runtime, well after the constructor has finished. Mirrors the lazy-`this`-capture pattern FederationManager's own callbacks use below.
-      sendRoomRequestToMember: (memberId, roomPath, token, params) =>
+      sendRoomRequestToMember: async (memberId, roomPath, token, params) =>
         this.roomProtocol.sendRoomRequestToMember(
           memberId,
           roomPath,
@@ -196,7 +197,7 @@ export class MeshStore implements CommsStore {
       requireTransport: () => this.requireTransport(),
       deliveryEngine: this.deliveryEngine,
       // RoomLifecycle doesn't exist yet at this point -- deferred the same way DeliveryEngine's sendRoomRequestToMember closure above is.
-      revokeMemberGrant: (roomId, memberId) =>
+      revokeMemberGrant: async (roomId, memberId) =>
         this.roomLifecycle.revokeMemberGrant(roomId, memberId),
     });
 
@@ -248,9 +249,10 @@ export class MeshStore implements CommsStore {
       deliveryQueues: this.deliveryQueues,
       identityCache: this.identityCache,
       peerInfo: this.peerInfo,
-      notifyRoomsOfStatus: (agentId, status) =>
+      notifyRoomsOfStatus: async (agentId, status) =>
         this.deliveryEngine.notifyRoomsOfStatus(agentId, status),
-      broadcastPatch: (patch) => this.deliveryEngine.broadcastPatch(patch),
+      broadcastPatch: async (patch) =>
+        this.deliveryEngine.broadcastPatch(patch),
     });
 
     this.peerLifecycle = new PeerLifecycle({
@@ -267,7 +269,7 @@ export class MeshStore implements CommsStore {
   }
 
   /** Sets the transport (e.g. WireMeshTransport for encrypted connections). Must be called before init() or any other transport-using method. */
-  setTransport(transport: MeshTransport): void {
+  setTransport(transport: Readonly<MeshTransport>): void {
     this.transport = transport;
   }
 
@@ -461,13 +463,15 @@ export class MeshStore implements CommsStore {
   // CommsStore — Rooms
   // -----------------------------------------------------------------------
 
-  async createRoom(opts: {
-    name: string;
-    type: RoomType;
-    owner: string;
-    description: string;
-    federated?: boolean;
-  }): Promise<Room> {
+  async createRoom(
+    opts: Readonly<{
+      name: string;
+      type: RoomType;
+      owner: string;
+      description: string;
+      federated?: boolean;
+    }>,
+  ): Promise<Room> {
     return this.roomLifecycle.createRoom(opts);
   }
 
@@ -626,7 +630,7 @@ export class MeshStore implements CommsStore {
   }
 
   /** Initiate an outbound connection to a remote coordinator requiring approval. */
-  connectToRemote(host: string, port: number): Promise<void> {
+  async connectToRemote(host: string, port: number): Promise<void> {
     return this.connectionApproval.connectToRemote(host, port);
   }
 
@@ -728,12 +732,12 @@ export class MeshStore implements CommsStore {
     return getCertificateFingerprint(this.federation.tlsIdentity.certificate);
   }
 
-  fedTrust(fingerprint: string): Promise<void> {
+  async fedTrust(fingerprint: string): Promise<void> {
     this.federation.addTrustedFingerprint(fingerprint);
     return Promise.resolve();
   }
 
-  fedUntrust(fingerprint: string): Promise<void> {
+  async fedUntrust(fingerprint: string): Promise<void> {
     this.federation.removeTrustedFingerprint(fingerprint);
     return Promise.resolve();
   }
@@ -742,11 +746,11 @@ export class MeshStore implements CommsStore {
     return this.federation.listTrustedFingerprints();
   }
 
-  fedListen(host: string, port: number): Promise<void> {
+  async fedListen(host: string, port: number): Promise<void> {
     return this.federation.listen(host, port);
   }
 
-  fedStopListening(): Promise<void> {
+  async fedStopListening(): Promise<void> {
     return this.federation.stopListening();
   }
 

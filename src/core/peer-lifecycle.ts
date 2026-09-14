@@ -15,7 +15,7 @@ import type { StaleAgentChecker } from "./stale-agent-checker.js";
 import type { ConnectionHandle, MeshTransport } from "./transport.js";
 import type { AgentIdentity } from "./types.js";
 
-/** The state and collaborators PeerLifecycle needs from MeshStore. peerInfo/agents are direct references into MeshStore's own fields; coordinatorPort is a readonly value copied once; serialise is MeshStore's own retained method (constraint: it must stay directly on MeshStore.prototype, so PeerLifecycle calls it through this closure rather than owning it); roomProtocol/deliveryEngine/staleAgentChecker are the already-constructed instances (construction order: ... -> roomProtocol -> ... -> staleAgentChecker -> peerLifecycle), narrowed to what peer-lifecycle bookkeeping ever needs. */
+/** The state and collaborators PeerLifecycle needs from MeshStore. peerInfo/agents are direct references into MeshStore's own fields; coordinatorPort is a readonly value copied once; serialise is MeshStore's own retained method (constraint: it must stay directly on MeshStore.prototype, so PeerLifecycle calls it through this closure rather than owning it); roomProtocol/deliveryEngine/staleAgentChecker are the already-constructed instances (construction order: ... -\> roomProtocol -\> ... -\> staleAgentChecker -\> peerLifecycle), narrowed to what peer-lifecycle bookkeeping ever needs. */
 export interface PeerLifecycleDeps {
   peerInfo: Map<string, PeerInfo>;
   agents: Map<string, AgentIdentity>;
@@ -31,7 +31,7 @@ export interface PeerLifecycleDeps {
 export class PeerLifecycle {
   constructor(private readonly deps: PeerLifecycleDeps) {}
 
-  handlePeerList(peers: PeerInfo[]): void {
+  handlePeerList(peers: readonly PeerInfo[]): void {
     const peerId = this.deps.getPeerId();
     for (const peer of peers) {
       this.deps.peerInfo.set(peer.id, peer);
@@ -41,7 +41,7 @@ export class PeerLifecycle {
     }
   }
 
-  handlePeerJoined(peer: PeerInfo): void {
+  handlePeerJoined(peer: Readonly<PeerInfo>): void {
     this.deps.peerInfo.set(peer.id, peer);
     const peerId = this.deps.getPeerId();
     if (peer.id === peerId) return;
@@ -49,8 +49,8 @@ export class PeerLifecycle {
   }
 
   async handleIntroduction(
-    handle: ConnectionHandle,
-    msg: { peerId: string; dataPort: number },
+    handle: Readonly<ConnectionHandle>,
+    msg: Readonly<{ peerId: string; dataPort: number }>,
   ): Promise<void> {
     const newPeer: PeerInfo = {
       id: msg.peerId,
@@ -77,8 +77,8 @@ export class PeerLifecycle {
   }
 
   async handlePeerConnected(
-    handle: ConnectionHandle,
-    _info: PeerInfo,
+    handle: Readonly<ConnectionHandle>,
+    _info: Readonly<PeerInfo>,
   ): Promise<void> {
     // If we have state and the peer doesn't, send state sync
     if (this.deps.agents.size > 0) {
@@ -92,7 +92,7 @@ export class PeerLifecycle {
   }
 
   async handleDataMessage(
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
     msg: MeshMessage,
   ): Promise<void> {
     if (msg.method === "state_sync") {
@@ -102,7 +102,7 @@ export class PeerLifecycle {
     }
   }
 
-  async handleBecomeCoordinator(peerList: PeerInfo[]): Promise<void> {
+  async handleBecomeCoordinator(peerList: readonly PeerInfo[]): Promise<void> {
     // Take over as coordinator using the data server we already have
     await this.deps
       .requireTransport()
@@ -116,7 +116,7 @@ export class PeerLifecycle {
     this.deps.staleAgentChecker.start();
   }
 
-  handlePeerDisconnected(handle: ConnectionHandle): void {
+  handlePeerDisconnected(handle: Readonly<ConnectionHandle>): void {
     this.deps.peerInfo.delete(handle.id);
   }
 }

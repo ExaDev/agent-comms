@@ -38,6 +38,12 @@ import type { CommsStore } from "./comms-store.js";
 // CommsError
 // ---------------------------------------------------------------------------
 
+/** Length of the random suffix used for a freshly minted agent id. */
+const AGENT_ID_LENGTH = 8;
+
+/** Length of the random suffix appended to a `<timestamp>-<suffix>` message/event id, to disambiguate ids minted within the same millisecond. */
+const MESSAGE_ID_SUFFIX_LENGTH = 6;
+
 export class CommsError extends Error {
   constructor(
     message: string,
@@ -150,7 +156,7 @@ export class FileStore implements CommsStore {
       });
     }
 
-    const id = nanoid(8);
+    const id = nanoid(AGENT_ID_LENGTH);
     const agent: AgentIdentity = {
       id,
       version: 1,
@@ -190,10 +196,13 @@ export class FileStore implements CommsStore {
     if (!agent)
       throw new CommsError(`Agent ${id} not found`, "AGENT_NOT_FOUND");
 
-    Object.assign(agent, patch);
-    agent.version += 1;
-    await this.writeJsonFile(this.agentPath(id), agent);
-    return agent;
+    const updated: AgentIdentity = {
+      ...agent,
+      ...patch,
+      version: agent.version + 1,
+    };
+    await this.writeJsonFile(this.agentPath(id), updated);
+    return updated;
   }
 
   async listAgents(requesterId: string): Promise<AgentIdentity[]> {
@@ -234,12 +243,14 @@ export class FileStore implements CommsStore {
   // Rooms
   // -------------------------------------------------------------------------
 
-  async createRoom(opts: {
-    name: string;
-    type: RoomType;
-    owner: string;
-    description: string;
-  }): Promise<Room> {
+  async createRoom(
+    opts: Readonly<{
+      name: string;
+      type: RoomType;
+      owner: string;
+      description: string;
+    }>,
+  ): Promise<Room> {
     const id = opts.type === "secret" ? `_${opts.name}` : opts.name;
     const existing = await this.getRoom(id);
     if (existing)
@@ -493,7 +504,7 @@ export class FileStore implements CommsStore {
     if (!room.members.includes(from))
       throw new CommsError(`Not a member of ${roomId}`, "NOT_MEMBER");
 
-    const id = `${String(Date.now())}-${nanoid(6)}`;
+    const id = `${String(Date.now())}-${nanoid(MESSAGE_ID_SUFFIX_LENGTH)}`;
     const message: RoomMessage = {
       id,
       from,
@@ -533,7 +544,7 @@ export class FileStore implements CommsStore {
         const msg = RoomMessageSchema.parse(
           await this.readJsonFile(path.join(dir, file)),
         );
-        if (!since || msg.timestamp > since) {
+        if (since === undefined || msg.timestamp > since) {
           messages.push(msg);
         }
       }
@@ -562,7 +573,7 @@ export class FileStore implements CommsStore {
         throw new CommsError(`Cannot DM agent ${to}`, "AGENT_NOT_FOUND");
     }
 
-    const id = `${String(Date.now())}-${nanoid(6)}`;
+    const id = `${String(Date.now())}-${nanoid(MESSAGE_ID_SUFFIX_LENGTH)}`;
     const message: DmMessage = {
       id,
       from,
@@ -589,7 +600,7 @@ export class FileStore implements CommsStore {
   async deliver(agentId: string, event: DeliveryEvent): Promise<void> {
     const dir = this.deliveryDir(agentId);
     await fs.mkdir(dir, { recursive: true });
-    const id = `${String(Date.now())}-${nanoid(6)}`;
+    const id = `${String(Date.now())}-${nanoid(MESSAGE_ID_SUFFIX_LENGTH)}`;
     await this.writeJsonFile(path.join(dir, `${id}.json`), event);
   }
 

@@ -60,10 +60,13 @@ const MS_PER_SECOND = 1000;
 const DEFAULT_PENDING_CONNECTION_TIMEOUT_MS =
   PENDING_CONNECTION_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
 
-/** How often this side re-sends its own presence status onto every live session's gossip self-advert. wire-mesh-core's own sendGossipUpdate deliberately owns no cadence of its own (a MeshSession only sends what it's told, when it's told) -- this is that cadence, chosen generously enough to avoid chattiness on an idle mesh while still keeping a remote peer's own picture of this agent's status fresh well within the tens-of-minutes staleness window a status change (active -> idle -> offline) is actually meaningful over. */
+/** How often this side re-sends its own presence status onto every live session's gossip self-advert. wire-mesh-core's own sendGossipUpdate deliberately owns no cadence of its own (a MeshSession only sends what it's told, when it's told) -- this is that cadence, chosen generously enough to avoid chattiness on an idle mesh while still keeping a remote peer's own picture of this agent's status fresh well within the tens-of-minutes staleness window a status change (active -\> idle -\> offline) is actually meaningful over. */
 const PRESENCE_READVERTISE_INTERVAL_SECONDS = 20;
 const PRESENCE_READVERTISE_INTERVAL_MS =
   PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND;
+
+/** Length of the random id minted for a tracked listener (the coordinator's own bootstrap listener, or one registered via addListener). */
+const LISTENER_ID_LENGTH = 8;
 
 /** The domain-qualified gossip extension key this transport reads/writes presence under, per wire-mesh's own gossip-extension-namespacing convention (spec/CONVENTIONS.md): `<domain>/<field>`, never a bare name a second application's own extension could collide with. */
 const PRESENCE_GOSSIP_KEY = "presence/status";
@@ -146,17 +149,17 @@ export class WireMeshTransport implements MeshTransport {
   private dataListener: Listener | undefined;
 
   // -- Coordinator listeners (the well-known bootstrap port, plus any additional adapters addListener creates) --
-  private coordinatorListeners = new Map<string, TrackedListener>();
+  private readonly coordinatorListeners = new Map<string, TrackedListener>();
   private defaultListenerId: string | undefined;
 
   // -- The session dialled via connectToCoordinator, when this instance is not itself the coordinator --
   private coordinatorSession: AcceptedMeshSession | undefined;
 
   // -- Every live session, keyed by the peer's authenticated device-id hex (== ConnectionHandle.id) -- covers coordinator-client, coordinator-accepted, and peer data sessions alike, since send()/broadcast() must reach whichever kind of session a peer happens to be reachable through. A single-slot-per-key map by construction: mesh formation genuinely establishes TWO independent sessions to the same peer (see the dataDials comment below), and the second one registered here simply overwrites the first as far as addressing goes -- fine for send()/broadcast() (either socket reaches the same peer), but NOT fine for shutdown, which must close every live session regardless of whether it's still reachable through this map. allSessions below exists specifically so shutdown never leaks the one this map's overwrite silently stopped tracking.
-  private peerSessions = new Map<string, AcceptedMeshSession>();
+  private readonly peerSessions = new Map<string, AcceptedMeshSession>();
 
   // -- Every live session this transport has ever created, accepted or dialled, for shutdown's own use only -- never used for addressing (peerSessions is), so it never loses track of one session to another sharing the same peer id.
-  private allSessions = new Set<AcceptedMeshSession>();
+  private readonly allSessions = new Set<AcceptedMeshSession>();
 
   /** Registers a session in both peerSessions (addressing -- last one in for a given peer wins) and allSessions (shutdown -- every session, always). */
   private trackSession(key: string, session: AcceptedMeshSession): void {
@@ -165,10 +168,10 @@ export class WireMeshTransport implements MeshTransport {
   }
 
   // -- Peers this side has dialled via connectToPeer specifically (in flight or established) -- deliberately separate from peerSessions, which also holds sessions this side reached the SAME peer through for an unrelated reason (most concretely, the coordinator-client session connectToCoordinator opens to the coordinator's own device-id). Mesh formation deliberately establishes a second, independent connection in each direction so each side's own acceptor can push its own state (see mesh-store.ts's own handlePeerConnected), so connectToPeer's "don't dial twice" guard must not be satisfied by an unrelated session that merely happens to share the same peer ID.
-  private dataDials = new Set<string>();
+  private readonly dataDials = new Set<string>();
 
   // -- connect_request frames awaiting a human accept/reject decision, keyed by the requester's device-id hex --
-  private pendingConnections = new Map<string, PendingConnection>();
+  private readonly pendingConnections = new Map<string, PendingConnection>();
 
   // -- The single consumer of every approved session's incomingManageRequests, once quarantine (if any) is past. Owns verb dispatch (the legacy opaque frame, plus whichever real core/room verbs later phases register handlers for) -- this transport itself no longer decodes or routes a MeshMessage at all beyond handing a session off here.
   private readonly roomRouter: RoomRouter;
@@ -181,7 +184,7 @@ export class WireMeshTransport implements MeshTransport {
   private presenceInterval: ReturnType<typeof setInterval> | undefined;
 
   constructor(
-    events: TransportEvents,
+    events: Readonly<TransportEvents>,
     identity: Readonly<PeerIdentity>,
     roomVerbHandlers?: Partial<Record<string, RoomVerbHandler>>,
     pendingConnectionTimeoutMs: number = DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
@@ -295,7 +298,7 @@ export class WireMeshTransport implements MeshTransport {
   /** Reads a not-yet-trusted session's requests until it's promoted (an `introduce`, handled and trusted immediately, matching the pre-existing coordinator-handoff trust boundary) or a `connect_request` arrives, at which point this same loop iteration blocks on the human decision Promise stored in pendingConnections -- resumed in place by acceptConnection/rejectConnection (or by watchForDisconnect, if the requester disconnects first) -- rather than ever stopping and later re-entering the session's incomingManageRequests from a second call, which would require assuming a fresh access yields a distinct, independently-advancing iterator rather than resuming the one already in progress. Anything else arriving before introduce/connect_request is a protocol violation from an unapproved peer and is refused and closed rather than routed. */
   private consumeQuarantined(
     session: AcceptedMeshSession,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
   ): void {
     void (async () => {
       let approved = false;
@@ -365,7 +368,7 @@ export class WireMeshTransport implements MeshTransport {
   /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch. */
   private consumeIncoming(
     session: AcceptedMeshSession,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
   ): void {
     this.roomRouter.drainSession(session, handle);
     this.drainRevocationAnnouncements(session);
@@ -382,7 +385,7 @@ export class WireMeshTransport implements MeshTransport {
 
   /** Surfaces a presence extension from the remote peer's own gossiped self-advert, if this event's directory carries a fresh one for exactly this session's peer -- never for any other device-id a multi-hop directory might mention, since only the session's own authenticated peer's advert is this session's business to report. A missing presence/status key, or a value that isn't a recognised AgentStatus, is silently ignored: an advert simply not participating in this convention, not an error (the same verifier obligation peer-advert's own open extension tail is documented under). */
   private reportPresenceAdvert(
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
     deviceIdHex: string,
     directory: readonly DirectoryEntry[],
   ): void {
@@ -397,7 +400,7 @@ export class WireMeshTransport implements MeshTransport {
 
   private watchForDisconnect(
     session: AcceptedMeshSession,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
     deviceIdHex: string,
   ): void {
     void (async () => {
@@ -495,7 +498,7 @@ export class WireMeshTransport implements MeshTransport {
   // -----------------------------------------------------------------------
 
   async becomeCoordinator(host: string, port: number): Promise<void> {
-    const id = nanoid(8);
+    const id = nanoid(LISTENER_ID_LENGTH);
     const listener = await this.wireTransport.listen(
       `${host}:${String(port)}`,
       (connection) => {
@@ -523,7 +526,10 @@ export class WireMeshTransport implements MeshTransport {
   // MeshTransport -- Peer-to-peer data connections
   // -----------------------------------------------------------------------
 
-  async connectToPeer(peer: PeerInfo, _ownPeerId: string): Promise<void> {
+  async connectToPeer(
+    peer: Readonly<PeerInfo>,
+    _ownPeerId: string,
+  ): Promise<void> {
     if (this.shutDown || this.dataDials.has(peer.id)) return;
     this.dataDials.add(peer.id);
     const connection = await this.wireTransport
@@ -579,7 +585,10 @@ export class WireMeshTransport implements MeshTransport {
   // MeshTransport -- Send / broadcast
   // -----------------------------------------------------------------------
 
-  async send(handle: ConnectionHandle, message: MeshMessage): Promise<void> {
+  async send(
+    handle: Readonly<ConnectionHandle>,
+    message: MeshMessage,
+  ): Promise<void> {
     const session = this.peerSessions.get(handle.id);
     if (session === undefined) return;
     await session
@@ -596,7 +605,7 @@ export class WireMeshTransport implements MeshTransport {
   async broadcast(message: MeshMessage): Promise<void> {
     const command = buildCommand(message);
     await Promise.all(
-      [...this.peerSessions.values()].map((session) =>
+      [...this.peerSessions.values()].map(async (session) =>
         session.sendManageRequest(command, FRAME_SCOPE).catch(() => undefined),
       ),
     );
@@ -606,7 +615,7 @@ export class WireMeshTransport implements MeshTransport {
     entries: readonly RevocationEntry[],
   ): Promise<void> {
     await Promise.all(
-      [...this.peerSessions.values()].map((session) =>
+      [...this.peerSessions.values()].map(async (session) =>
         session.sendRevocationAnnounce(entries).catch(() => undefined),
       ),
     );
@@ -667,7 +676,7 @@ export class WireMeshTransport implements MeshTransport {
     }
   }
 
-  async acceptConnection(handle: ConnectionHandle): Promise<void> {
+  async acceptConnection(handle: Readonly<ConnectionHandle>): Promise<void> {
     const pending = this.pendingConnections.get(handle.id);
     if (pending === undefined) {
       throw new Error(`No pending connection for handle ${handle.id}`);
@@ -690,7 +699,7 @@ export class WireMeshTransport implements MeshTransport {
   }
 
   async rejectConnection(
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
     reason: string,
   ): Promise<void> {
     const pending = this.pendingConnections.get(handle.id);
@@ -717,7 +726,7 @@ export class WireMeshTransport implements MeshTransport {
     port: number,
     policy: ListenerPolicy,
   ): Promise<string> {
-    const id = nanoid(8);
+    const id = nanoid(LISTENER_ID_LENGTH);
     const listener = await this.wireTransport.listen(
       `${host}:${String(port)}`,
       (connection) => {

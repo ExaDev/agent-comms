@@ -25,6 +25,12 @@ export interface VapidKeys {
 
 let cachedKeys: VapidKeys | undefined;
 
+/** Length in bytes of an uncompressed P-256 public key point (0x04 prefix + 32-byte X + 32-byte Y). */
+const P256_PUBLIC_KEY_BYTES = 65;
+
+/** Length in bytes of a P-256 private scalar. */
+const P256_PRIVATE_KEY_BYTES = 32;
+
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -46,13 +52,17 @@ export function generateVapidKeys(): VapidKeys {
   // Export public key as raw DER, extract the 65-byte uncompressed point.
   // SPKI DER for P-256 has a 26-byte header before the 65-byte point.
   const pubDer = publicKey.export({ type: "spki", format: "der" });
-  const publicKeyBuffer = pubDer.subarray(pubDer.length - 65);
+  const publicKeyBuffer = pubDer.subarray(
+    pubDer.length - P256_PUBLIC_KEY_BYTES,
+  );
 
   // Export private key as PKCS8 DER, extract the 32-byte private scalar.
   // PKCS8 DER for P-256 has a 39-byte header before the 32-byte scalar.
   // The scalar is the last 32 bytes (after the leading zero pad byte).
   const privDer = privateKey.export({ type: "pkcs8", format: "der" });
-  const privateKeyBuffer = privDer.subarray(privDer.length - 32);
+  const privateKeyBuffer = privDer.subarray(
+    privDer.length - P256_PRIVATE_KEY_BYTES,
+  );
 
   cachedKeys = {
     publicKey: base64url(publicKeyBuffer),

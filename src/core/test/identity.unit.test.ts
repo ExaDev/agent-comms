@@ -11,6 +11,25 @@ import {
   rawPublicKeyFromPrivateKey,
 } from "../identity.js";
 
+/** PEM's own base64 body wrap width (RFC 7468). */
+const PEM_LINE_LENGTH = 64;
+/** SHA-256 = 32 bytes = 64 hex chars + 31 colons = 95 chars. */
+const SHA256_COLON_FINGERPRINT_LENGTH = 95;
+/** The ASN.1 context-specific constructor tag [0] that wraps an X.509 certificate's version field. */
+const X509_VERSION_CONTEXT_TAG = 0xa0;
+/** Length in bytes of the version field's own DER-encoded INTEGER (tag + length + value). */
+const X509_VERSION_FIELD_LENGTH = 0x03;
+/** DER BOOLEAN TRUE. */
+const DER_BOOLEAN_TRUE = 0xff;
+/** How many identities to sample when checking serial numbers aren't collapsing onto one leading byte. */
+const SERIAL_NUMBER_SAMPLE_COUNT = 20;
+/** Days in the certificate validity period. */
+const CERTIFICATE_VALIDITY_DAYS = 365;
+const HOURS_PER_DAY = 24;
+const MINUTES_PER_HOUR = 60;
+const SECONDS_PER_MINUTE = 60;
+const MS_PER_SECOND = 1000;
+
 describe("generateIdentity", () => {
   it("returns a valid PeerIdentity with all required fields", () => {
     const identity = generateIdentity();
@@ -55,16 +74,15 @@ describe("generateIdentity", () => {
 
     expect(bodyLines.length).toBeGreaterThan(1);
     for (const line of bodyLines.slice(0, -1)) {
-      expect(line.length).toBe(64);
+      expect(line.length).toBe(PEM_LINE_LENGTH);
     }
-    expect(bodyLines.at(-1)?.length).toBeLessThanOrEqual(64);
+    expect(bodyLines.at(-1)?.length).toBeLessThanOrEqual(PEM_LINE_LENGTH);
   });
 
   it("produces a fingerprint that is a 95-character SHA-256 hex string with colons", () => {
     const { fingerprint } = generateIdentity();
 
-    // SHA-256 = 32 bytes = 64 hex chars + 31 colons = 95 chars
-    expect(fingerprint.length).toBe(95);
+    expect(fingerprint.length).toBe(SHA256_COLON_FINGERPRINT_LENGTH);
     expect(
       fingerprint,
       "fingerprint should be hex pairs separated by colons",
@@ -115,7 +133,13 @@ describe("generateIdentity", () => {
     const { certificate } = generateIdentity();
     const x509 = new X509Certificate(certificate);
 
-    const versionField = Buffer.from([0xa0, 0x03, 0x02, 0x01, 0x02]);
+    const versionField = Buffer.from([
+      X509_VERSION_CONTEXT_TAG,
+      X509_VERSION_FIELD_LENGTH,
+      0x02,
+      0x01,
+      0x02,
+    ]);
     expect(x509.raw.indexOf(versionField)).toBeGreaterThanOrEqual(0);
   });
 
@@ -123,14 +147,14 @@ describe("generateIdentity", () => {
     // RFC 5280 requires Basic Constraints to be marked critical; a non-critical CA:FALSE constraint is a spec violation that some strict X.509 validators reject outright, even though tls.createServer tolerates it.
     const { certificate } = generateIdentity();
     const x509 = new X509Certificate(certificate);
-    const criticalTrue = Buffer.from([0x01, 0x01, 0xff]);
+    const criticalTrue = Buffer.from([0x01, 0x01, DER_BOOLEAN_TRUE]);
 
     expect(x509.raw.indexOf(criticalTrue)).toBeGreaterThanOrEqual(0);
   });
 
   it("does not systematically force the serial number's leading byte to a fixed value", () => {
     const firstBytes = new Set<string>();
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < SERIAL_NUMBER_SAMPLE_COUNT; i++) {
       const { certificate } = generateIdentity();
       const x509 = new X509Certificate(certificate);
       firstBytes.add(x509.serialNumber.slice(0, 2));
@@ -149,7 +173,22 @@ describe("generateIdentity", () => {
 
     it("encodes notBefore/notAfter as exact zero-padded UTCTime, CERTIFICATE_VALIDITY_MS apart", () => {
       // 2005-03-05T07:08:09Z: every date component below 10 (year%100, month, day, minute) so a missing zero-pad or an off-by-one in month arithmetic shifts the parsed date.
-      const fixedNow = new Date(Date.UTC(2005, 2, 5, 7, 8, 9));
+      const fixedYear = 2005;
+      const fixedMonthIndex = 2; // March (Date.UTC months are 0-indexed)
+      const fixedDay = 5;
+      const fixedHour = 7;
+      const fixedMinute = 8;
+      const fixedSecond = 9;
+      const fixedNow = new Date(
+        Date.UTC(
+          fixedYear,
+          fixedMonthIndex,
+          fixedDay,
+          fixedHour,
+          fixedMinute,
+          fixedSecond,
+        ),
+      );
       vi.useFakeTimers();
       vi.setSystemTime(fixedNow);
 
@@ -166,7 +205,13 @@ describe("generateIdentity", () => {
 
 describe("CERTIFICATE_VALIDITY_MS", () => {
   it("is exactly 365 days in milliseconds", () => {
-    expect(CERTIFICATE_VALIDITY_MS).toBe(365 * 24 * 60 * 60 * 1000);
+    expect(CERTIFICATE_VALIDITY_MS).toBe(
+      CERTIFICATE_VALIDITY_DAYS *
+        HOURS_PER_DAY *
+        MINUTES_PER_HOUR *
+        SECONDS_PER_MINUTE *
+        MS_PER_SECOND,
+    );
   });
 });
 

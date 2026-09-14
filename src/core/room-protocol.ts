@@ -55,7 +55,7 @@ import type {
   RoomMessage,
 } from "./types.js";
 
-/** The state and collaborators RoomProtocol needs from MeshStore. rooms/messages/dms/agents/dmRequestsInitiatedByMe are direct references into MeshStore's own fields; deliveryEngine is the already-constructed instance, narrowed to what a room-verb handler ever needs; revokeMemberGrant is deferred (RoomLifecycle, which owns it, doesn't exist yet when RoomProtocol is constructed -- construction order: ... -> roomProtocol -> roomMessaging -> roomLifecycle -> ...), wired the same lazy-`this`-capture way DeliveryEngine's own sendRoomRequestToMember closure is. */
+/** The state and collaborators RoomProtocol needs from MeshStore. rooms/messages/dms/agents/dmRequestsInitiatedByMe are direct references into MeshStore's own fields; deliveryEngine is the already-constructed instance, narrowed to what a room-verb handler ever needs; revokeMemberGrant is deferred (RoomLifecycle, which owns it, doesn't exist yet when RoomProtocol is constructed -- construction order: ... -\> roomProtocol -\> roomMessaging -\> roomLifecycle -\> ...), wired the same lazy-`this`-capture way DeliveryEngine's own sendRoomRequestToMember closure is. */
 export interface RoomProtocolDeps {
   rooms: Map<string, Room>;
   messages: Map<string, RoomMessage[]>;
@@ -101,13 +101,17 @@ export class RoomProtocol {
   /** Room verb handlers this store registers with its own WireMeshTransport, keyed by params.verb per room-router.ts's own dispatch discipline. */
   get roomVerbHandlers(): Partial<Record<string, RoomVerbHandler>> {
     return {
-      "room.join": (request, handle) => this.handleRoomJoin(request, handle),
-      "room.send": (request, handle) => this.handleRoomSend(request, handle),
-      "room.read": (request, handle) => this.handleRoomRead(request, handle),
-      "room.members": (request, handle) =>
+      "room.join": async (request, handle) =>
+        this.handleRoomJoin(request, handle),
+      "room.send": async (request, handle) =>
+        this.handleRoomSend(request, handle),
+      "room.read": async (request, handle) =>
+        this.handleRoomRead(request, handle),
+      "room.members": async (request, handle) =>
         this.handleRoomMembers(request, handle),
-      "room.invite": (request) => this.handleRoomInvite(request),
-      "room.leave": (request, handle) => this.handleRoomLeave(request, handle),
+      "room.invite": async (request) => this.handleRoomInvite(request),
+      "room.leave": async (request, handle) =>
+        this.handleRoomLeave(request, handle),
     };
   }
 
@@ -134,7 +138,7 @@ export class RoomProtocol {
    */
   private async handleRoomSend(
     request: IncomingManageRequest,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
   ): Promise<ManageOutcome> {
     const roomPath = request.scope.path;
     if (roomPath === undefined) {
@@ -210,7 +214,7 @@ export class RoomProtocol {
    */
   private async handleRoomRead(
     request: IncomingManageRequest,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
   ): Promise<ManageOutcome> {
     const roomPath = request.scope.path;
     if (roomPath === undefined) {
@@ -268,7 +272,7 @@ export class RoomProtocol {
    */
   private async handleRoomMembers(
     request: IncomingManageRequest,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
   ): Promise<ManageOutcome> {
     const roomPath = request.scope.path;
     if (roomPath === undefined) {
@@ -411,7 +415,7 @@ export class RoomProtocol {
    */
   private async handleRoomJoin(
     request: IncomingManageRequest,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
   ): Promise<ManageOutcome> {
     const roomPath = request.scope.path;
     if (roomPath === undefined) {
@@ -438,7 +442,7 @@ export class RoomProtocol {
   /** Shared admission continuation for both room.join branches above: waits for a human decision (unless auto-approved), then mints and returns the requester's own independent, parent-less room:member grant. */
   private async admitRoomJoin(
     roomPath: string,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
     autoApprove: boolean,
   ): Promise<ManageOutcome> {
     const decision: RoomJoinDecision = autoApprove
@@ -556,7 +560,7 @@ export class RoomProtocol {
    */
   private async handleRoomLeave(
     request: IncomingManageRequest,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
   ): Promise<ManageOutcome> {
     const roomPath = request.scope.path;
     if (roomPath === undefined) {
