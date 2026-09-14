@@ -3,7 +3,7 @@
   "version": "2.21.6",
   "description": "Cross-harness communication mesh for LLM agents — rooms, DMs, presence, and real-time push delivery over TCP",
   "type": "module",
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@12.4.1+sha512.2e81e399d73fe8390dab25e06aa788ab7a5908248d2f5a370f82b481147a6a7a367bf8048f9a6fdb6460f21a66f0542dedb8b94ca2c8723596741920b1656d4c",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ExaDev/agent-comms.git"
@@ -66,6 +66,7 @@
     "@commitlint/types": "21.2.0",
     "@eslint/json": "2.0.1",
     "@eslint/markdown": "8.0.3",
+    "@exadev/eslint-config": "2.12.3",
     "@mariozechner/pi-ai": "0.73.1",
     "@mariozechner/pi-coding-agent": "0.73.1",
     "@playwright/test": "1.61.1",
@@ -112,7 +113,7 @@
   },
   "pi": {
     "extensions": [
-      "./src/bridges/pi/index.ts"
+      "./src/bridges/pi/extension.ts"
     ]
   }
 }
