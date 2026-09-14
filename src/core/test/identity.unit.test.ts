@@ -90,6 +90,29 @@ describe("generateIdentity", () => {
     expect(a.privateKey).not.toBe(b.privateKey);
     expect(a.certificate).not.toBe(b.certificate);
   });
+
+  it("encodes the certificate as X.509 v3 (context tag [0] EXPLICIT INTEGER 2)", () => {
+    // v3 is required for the Subject Alternative Name / Basic Constraints extensions to be legal at all -- a v1 certificate carrying extensions is malformed, so the version tag is load-bearing even though nothing else in this file reads it back.
+    const { certificate } = generateIdentity();
+    const x509 = new X509Certificate(certificate);
+
+    const versionField = Buffer.from([0xa0, 0x03, 0x02, 0x01, 0x02]);
+    expect(x509.raw.indexOf(versionField)).toBeGreaterThanOrEqual(0);
+  });
+
+  it("does not systematically force the serial number's leading byte to a fixed value", () => {
+    const firstBytes = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      const { certificate } = generateIdentity();
+      const x509 = new X509Certificate(certificate);
+      firstBytes.add(x509.serialNumber.slice(0, 2));
+    }
+
+    expect(
+      firstBytes.size,
+      "serial numbers should vary across identities, not collapse onto one leading byte",
+    ).toBeGreaterThan(1);
+  });
 });
 
 describe("CERTIFICATE_VALIDITY_MS", () => {
