@@ -9,7 +9,11 @@
  * is present.
  */
 
-import { test, expect } from "./fixtures.js";
+import { expect } from "@playwright/test";
+import { test } from "./fixtures.js";
+
+const CACHE_POPULATE_WAIT_MS = 2000;
+const HTTP_OK = 200;
 
 function hasSizes(value: unknown): value is { sizes: string } {
   return (
@@ -68,7 +72,7 @@ test.describe("PWA features", () => {
           const link = document.querySelector('link[rel="manifest"]');
           if (!link) return null;
           const href = link.getAttribute("href");
-          if (!href) return null;
+          if (href === null) return null;
           const res = await fetch(href);
           return res.json();
         },
@@ -147,7 +151,7 @@ test.describe("PWA features", () => {
 
       // Give the service worker time to populate the cache via its
       // install handler (cache.addAll happens in waitUntil).
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(CACHE_POPULATE_WAIT_MS);
 
       // Check that the agent-comms cache exists and has app shell entries
       const cacheEntries = await page.evaluate<{
@@ -156,7 +160,7 @@ test.describe("PWA features", () => {
       }>(async () => {
         const names = await caches.keys();
         const commsCache = names.find((n) => n.startsWith("agent-comms"));
-        if (!commsCache) return { found: false, entries: [] };
+        if (commsCache === undefined) return { found: false, entries: [] };
 
         const cache = await caches.open(commsCache);
         const requests = await cache.keys();
@@ -184,7 +188,7 @@ test.describe("PWA features", () => {
         },
         { timeout: 15000 },
       );
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(CACHE_POPULATE_WAIT_MS);
 
       // Reload so the SW controls the page
       await page.reload();
@@ -218,7 +222,7 @@ test.describe("PWA features", () => {
         },
         { timeout: 15000 },
       );
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(CACHE_POPULATE_WAIT_MS);
 
       // Reload so the SW controls the page
       await page.reload();
@@ -241,7 +245,7 @@ test.describe("PWA features", () => {
       });
 
       expect(bundleStatus.ok).toBe(true);
-      expect(bundleStatus.status).toBe(200);
+      expect(bundleStatus.status).toBe(HTTP_OK);
 
       await context.setOffline(false);
     });
@@ -265,7 +269,7 @@ test.describe("PWA features", () => {
         async () => {
           const link = document.querySelector('link[rel="manifest"]');
           const href = link?.getAttribute("href");
-          if (!href) return null;
+          if (href === null || href === undefined || href === "") return null;
           const res = await fetch(href);
           return res.json();
         },

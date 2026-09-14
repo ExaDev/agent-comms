@@ -187,7 +187,9 @@ describe("deliveryEventToMessage", () => {
       const result = deliveryEventToMessage(event, undefined);
       expect(result?.type).toBe("system");
       expect(result?.text?.includes("Alice")).toBeTruthy();
-      expect(!result?.text?.includes(" — ")).toBeTruthy();
+      expect(
+        result?.type === "system" && !result.text.includes(" — "),
+      ).toBeTruthy();
     });
   });
 

@@ -15,7 +15,7 @@ function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
-function delay(ms: number): Promise<void> {
+async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
@@ -51,33 +51,60 @@ async function blockPort(port: number): Promise<() => Promise<void>> {
   }
 }
 
+/** Base port for the "base port is free" scenario. */
+const TEST_PORT_AVAILABLE_BASE = 49000;
+/** Base port for the "single port taken" scenario. */
+const TEST_PORT_SINGLE_TAKEN_BASE = 49100;
+/** The port findFreePort should land on once TEST_PORT_SINGLE_TAKEN_BASE is blocked. */
+const TEST_PORT_SINGLE_TAKEN_RESULT = 49101;
+/** Base port for the "multiple consecutive ports taken" scenario. */
+const TEST_PORT_MULTIPLE_TAKEN_BASE = 49200;
+/** Second port blocked in the "multiple consecutive ports taken" scenario. */
+const TEST_PORT_MULTIPLE_TAKEN_SECOND = 49201;
+/** Third port blocked in the "multiple consecutive ports taken" scenario. */
+const TEST_PORT_MULTIPLE_TAKEN_THIRD = 49202;
+/** The port findFreePort should land on once all three ports above are blocked. */
+const TEST_PORT_MULTIPLE_TAKEN_RESULT = 49203;
+/** Base port for the "every port in range is taken" scenario. */
+const TEST_PORT_ALL_TAKEN_BASE = 49300;
+/** How many consecutive ports get blocked, and the maxAttempts passed to findFreePort, in the "every port in range is taken" scenario -- both are the same number by design so the scan exhausts exactly the blocked range. */
+const TEST_ALL_TAKEN_PORT_COUNT = 3;
+/** Base port for the "maxAttempts allows walking past taken ports" scenario. */
+const TEST_PORT_MAX_ATTEMPTS_BASE = 49400;
+/** Second port blocked in the "maxAttempts allows walking past taken ports" scenario. */
+const TEST_PORT_MAX_ATTEMPTS_SECOND = 49401;
+/** maxAttempts passed to findFreePort in the "maxAttempts allows walking past taken ports" scenario -- deliberately larger than the number of blocked ports so the scan walks past them. */
+const TEST_MAX_ATTEMPTS_LIMIT = 5;
+/** The port findFreePort should land on once both ports above are blocked. */
+const TEST_PORT_MAX_ATTEMPTS_RESULT = 49402;
+
 describe("findFreePort", () => {
   it("returns the base port when it is available", async () => {
     // Use a high port that's very unlikely to be in use
-    const port = await findFreePort(49000);
+    const port = await findFreePort(TEST_PORT_AVAILABLE_BASE);
     expect(typeof port).toBe("number");
-    expect(port).toBe(49000);
+    expect(port).toBe(TEST_PORT_AVAILABLE_BASE);
   });
 
   it("walks to the next port when the base is taken", async () => {
-    const unblock = await blockPort(49100);
+    const unblock = await blockPort(TEST_PORT_SINGLE_TAKEN_BASE);
     try {
-      const port = await findFreePort(49100);
+      const port = await findFreePort(TEST_PORT_SINGLE_TAKEN_BASE);
       expect(typeof port).toBe("number");
-      expect(port).toBe(49101);
+      expect(port).toBe(TEST_PORT_SINGLE_TAKEN_RESULT);
     } finally {
       await unblock();
     }
   });
 
   it("skips multiple taken ports", async () => {
-    const unblock1 = await blockPort(49200);
-    const unblock2 = await blockPort(49201);
-    const unblock3 = await blockPort(49202);
+    const unblock1 = await blockPort(TEST_PORT_MULTIPLE_TAKEN_BASE);
+    const unblock2 = await blockPort(TEST_PORT_MULTIPLE_TAKEN_SECOND);
+    const unblock3 = await blockPort(TEST_PORT_MULTIPLE_TAKEN_THIRD);
     try {
-      const port = await findFreePort(49200);
+      const port = await findFreePort(TEST_PORT_MULTIPLE_TAKEN_BASE);
       expect(typeof port).toBe("number");
-      expect(port).toBe(49203);
+      expect(port).toBe(TEST_PORT_MULTIPLE_TAKEN_RESULT);
     } finally {
       await unblock1();
       await unblock2();
@@ -86,13 +113,16 @@ describe("findFreePort", () => {
   });
 
   it("returns undefined when all ports in range are taken", async () => {
-    // Block 3 ports with maxAttempts=3
+    // Block TEST_ALL_TAKEN_PORT_COUNT ports with maxAttempts=TEST_ALL_TAKEN_PORT_COUNT
     const blockers: (() => Promise<void>)[] = [];
-    for (let i = 0; i < 3; i++) {
-      blockers.push(await blockPort(49300 + i));
+    for (let i = 0; i < TEST_ALL_TAKEN_PORT_COUNT; i++) {
+      blockers.push(await blockPort(TEST_PORT_ALL_TAKEN_BASE + i));
     }
     try {
-      const port = await findFreePort(49300, 3);
+      const port = await findFreePort(
+        TEST_PORT_ALL_TAKEN_BASE,
+        TEST_ALL_TAKEN_PORT_COUNT,
+      );
       expect(port).toBe(undefined);
     } finally {
       for (const unblock of blockers) {
@@ -102,13 +132,16 @@ describe("findFreePort", () => {
   });
 
   it("respects the maxAttempts parameter", async () => {
-    // Block 2 ports but allow 5 attempts — should walk past them
-    const unblock1 = await blockPort(49400);
-    const unblock2 = await blockPort(49401);
+    // Block 2 ports but allow TEST_MAX_ATTEMPTS_LIMIT attempts — should walk past them
+    const unblock1 = await blockPort(TEST_PORT_MAX_ATTEMPTS_BASE);
+    const unblock2 = await blockPort(TEST_PORT_MAX_ATTEMPTS_SECOND);
     try {
-      const port = await findFreePort(49400, 5);
+      const port = await findFreePort(
+        TEST_PORT_MAX_ATTEMPTS_BASE,
+        TEST_MAX_ATTEMPTS_LIMIT,
+      );
       expect(typeof port).toBe("number");
-      expect(port).toBe(49402);
+      expect(port).toBe(TEST_PORT_MAX_ATTEMPTS_RESULT);
     } finally {
       await unblock1();
       await unblock2();

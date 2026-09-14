@@ -9,6 +9,11 @@ import http from "node:http";
 import { createWebServer, type WebServerHandle } from "../server.js";
 import WS from "ws";
 
+/** HTTP 200 OK. */
+const HTTP_OK = 200;
+/** HTTP 404 Not Found. */
+const HTTP_NOT_FOUND = 404;
+
 let handle: WebServerHandle | undefined;
 
 async function setup(): Promise<{
@@ -19,7 +24,7 @@ async function setup(): Promise<{
 
   // Wait for the server to actually be listening
   await new Promise<void>((resolve) => {
-    if (handle?.server.listening) {
+    if (handle?.server.listening === true) {
       resolve();
       return;
     }
@@ -41,7 +46,7 @@ async function setup(): Promise<{
   };
 }
 
-function fetchJson(
+async function fetchJson(
   port: number,
   path: string,
 ): Promise<{ status: number; body: unknown }> {
@@ -69,9 +74,9 @@ function fetchJson(
   });
 }
 
-function postAction(
+async function postAction(
   port: number,
-  action: Record<string, string>,
+  action: Readonly<Record<string, string>>,
 ): Promise<{ status: number; body: unknown }> {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(action);
@@ -113,7 +118,7 @@ describe("Web server integration", () => {
     const { port, cleanup } = await setup();
     try {
       const { status, body } = await fetchJson(port, "/");
-      expect(status).toBe(200);
+      expect(status).toBe(HTTP_OK);
       expect(
         typeof body === "string" && body.includes("Agent Comms"),
         "HTML should contain 'Agent Comms'",
@@ -127,7 +132,7 @@ describe("Web server integration", () => {
     const { port, cleanup } = await setup();
     try {
       const { status, body } = await fetchJson(port, "/api/agents");
-      expect(status).toBe(200);
+      expect(status).toBe(HTTP_OK);
       expect(Array.isArray(body)).toBeTruthy();
     } finally {
       await cleanup();
@@ -138,7 +143,7 @@ describe("Web server integration", () => {
     const { port, cleanup } = await setup();
     try {
       const { status, body } = await fetchJson(port, "/api/rooms");
-      expect(status).toBe(200);
+      expect(status).toBe(HTTP_OK);
       expect(Array.isArray(body)).toBeTruthy();
     } finally {
       await cleanup();
@@ -153,7 +158,7 @@ describe("Web server integration", () => {
         name: "integration-test-room",
         type: "public",
       });
-      expect(status).toBe(200);
+      expect(status).toBe(HTTP_OK);
       expect(
         typeof body === "object" && body !== null && "content" in body,
         "should return a result object",
@@ -206,7 +211,7 @@ describe("Web server integration", () => {
     const { port, cleanup } = await setup();
     try {
       const { status } = await fetchJson(port, "/nonexistent");
-      expect(status).toBe(404);
+      expect(status).toBe(HTTP_NOT_FOUND);
     } finally {
       await cleanup();
     }

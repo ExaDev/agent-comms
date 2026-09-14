@@ -21,6 +21,8 @@ function makeAgent(overrides: Partial<Agent> & { id: string }): Agent {
   };
 }
 
+const EXPECTED_DIRECTORY_AND_AGENT_CHILD_COUNT = 4;
+
 function makeRoom(overrides: Partial<Room> & { id: string }): Room {
   return {
     id: overrides.id,
@@ -155,8 +157,8 @@ describe("buildProjectTree", () => {
     expect(dev?.type).toBe("directory");
     if (dev?.type !== "directory") return;
 
-    // 2 directories + 2 agents = 4 children
-    expect(dev.children.length).toBe(4);
+    // 2 directories + 2 agents
+    expect(dev.children.length).toBe(EXPECTED_DIRECTORY_AND_AGENT_CHILD_COUNT);
 
     // First two should be directories, sorted alphabetically
     expect(dev.children[0]?.type).toBe("directory");

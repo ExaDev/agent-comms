@@ -5,7 +5,8 @@
  * /leave, /rename, /dm, and agent list presence in the sidebar.
  */
 
-import { test, expect } from "./fixtures.js";
+import { expect } from "@playwright/test";
+import { test } from "./fixtures.js";
 
 let testCounter = 0;
 function uniqueName(prefix: string): string {

@@ -7,6 +7,9 @@ import { render as preactRender } from "preact";
 import { Window } from "happy-dom";
 import { CreateRoomForm } from "../components/CreateRoomForm.js";
 
+/** Number of room-type `<option>`s the form renders: public, private, secret. */
+const ROOM_TYPE_OPTION_COUNT = 3;
+
 let windowRef: Window | undefined;
 
 function setup(): { container: HTMLElement; cleanup: () => void } {
@@ -85,7 +88,7 @@ describe("CreateRoomForm", () => {
       );
 
       const options = container.querySelectorAll("select option");
-      expect(options.length).toBe(3);
+      expect(options.length).toBe(ROOM_TYPE_OPTION_COUNT);
       expect(options[0].getAttribute("value")).toBe("public");
       expect(options[1].getAttribute("value")).toBe("private");
       expect(options[2].getAttribute("value")).toBe("secret");
