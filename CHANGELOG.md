@@ -1,3 +1,14 @@
+## [2.21.8](https://github.com/ExaDev/agent-comms/compare/v2.21.7...v2.21.8) (2026-09-14)
+
+### Styles
+
+* **core:** satisfy the newly-adopted no-magic-numbers rule ([df2eefd](https://github.com/ExaDev/agent-comms/commit/df2eefd5e8e290f72ad9a91b6ef295e6cfe5fced))
+
+### Tests
+
+* **core:** add dedicated coverage for StaleAgentChecker ([66b7bba](https://github.com/ExaDev/agent-comms/commit/66b7bba8775c1cd1b6ec7a57c7fb2c73669c9b81))
+* **core:** kill start/stop and purge-boundary mutants in StaleAgentChecker ([b36e00a](https://github.com/ExaDev/agent-comms/commit/b36e00ae8bb084c1ed9c279b8c7a731ca83de685))
+
 ## [2.21.7](https://github.com/ExaDev/agent-comms/compare/v2.21.6...v2.21.7) (2026-09-14)
 
 ### Bug Fixes

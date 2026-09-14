@@ -1,7 +1,7 @@
 {
   "name": "agent-comms",
   "description": "Cross-harness LLM agent communication mesh — rooms, DMs, and presence",
-  "version": "2.21.7",
+  "version": "2.21.8",
   "author": {
     "name": "ExaDev"
   },
