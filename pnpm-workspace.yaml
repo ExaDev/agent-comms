@@ -1,13 +1,25 @@
+allowBuilds:
+  # Its own published scripts (preinstall, prepack) are no-ops, and the "prepare" script's target file isn't present in the published tarball -- nothing to run for a consumer.
+  '@google/genai': false
+  # postinstall downloads the platform-specific binary esbuild needs to run at all.
+  esbuild: true
+  # install prebuilds/fetches the native binary koffi's FFI calls depend on.
+  koffi: true
+  # No preinstall/install/postinstall script -- only dev-only build/bench scripts a consumer never runs.
+  protobufjs: false
+minimumReleaseAgeExclude:
+  - '@exadev/eslint-config'
 overrides:
-  fast-uri: ">=3.1.2"
-  protobufjs: "^7.6.1"
-  fast-xml-parser: ">=5.8.0"
-  ip-address: ">=10.2.0"
-  hono: "^4.12.18"
-  brace-expansion: ">=5.0.6"
-  qs: ">=6.15.2"
-  basic-ftp: ">=6.0.1"
   "@anthropic-ai/sdk": ">=0.91.1"
+  basic-ftp: ">=6.0.1"
+  brace-expansion: ">=5.0.6"
   # @semantic-release/release-notes-generator pins conventional-changelog-writer to
   # ^8.0.0, which predates the breaking Handlebars-to-render-function template rewrite that conventional-changelog-conventionalcommits@10.x now requires -- without this override, generateNotes silently produces an empty changelog body (just the version header, no Features/Bug Fixes sections), which is what happened to v1.24.1's entry. Confirmed upstream: https://github.com/semantic-release/release-notes-generator/issues/992
   conventional-changelog-writer: ^9.2.0
+  fast-uri: ">=3.1.2"
+  fast-xml-parser: ">=5.8.0"
+  hono: "^4.12.18"
+  ip-address: ">=10.2.0"
+  protobufjs: "^7.6.1"
+  qs: ">=6.15.2"
+saveExact: true

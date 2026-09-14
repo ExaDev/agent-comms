@@ -1,61 +1,13 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "eslint/config";
-import type { Rule } from "eslint";
 import json from "@eslint/json";
 import markdown from "@eslint/markdown";
 import eslintConfigPrettier from "eslint-config-prettier/flat";
 import eslintPluginPrettier from "eslint-plugin-prettier";
-import tseslint from "typescript-eslint";
+import exadev from "@exadev/eslint-config";
 
 const tsconfigRootDir = dirname(fileURLToPath(import.meta.url));
-
-// ─── Custom rules ────────────────────────────────────────────────────────────
-
-const noPointlessReassignments: Rule.RuleModule = {
-  meta: {
-    type: "problem",
-    messages: {
-      pointlessReassignment:
-        "Pointless reassignment. {{ name }} is just an alias for {{ value }}. Use the original directly instead.",
-    },
-  },
-  create(context) {
-    return {
-      VariableDeclarator(node) {
-        if (node.id.type !== "Identifier" || node.init?.type !== "Identifier") {
-          return;
-        }
-        if (node.id.name.startsWith("_")) {
-          return;
-        }
-        // A `let`/`var` binding can be legitimately reassigned later (e.g. a loop-mutated value initialised from a starting constant, then updated each iteration) -- only `const` genuinely guarantees the binding is nothing but a permanent alias for its initializer, since a `const` can never be written to again. Without this check the rule fired on exactly that pattern (`let delayMs = INITIAL_RETRY_DELAY_MS` ahead of a loop that reassigns `delayMs` every iteration), which is not a pointless reassignment at all.
-        if (
-          node.parent.type === "VariableDeclaration" &&
-          node.parent.kind !== "const"
-        ) {
-          return;
-        }
-        context.report({
-          node,
-          messageId: "pointlessReassignment",
-          data: {
-            name: node.id.name,
-            value: node.init.name,
-          },
-        });
-      },
-    };
-  },
-};
-
-const customPlugin = {
-  rules: {
-    "no-pointless-reassignments": noPointlessReassignments,
-  },
-};
-
-// ─── Config ──────────────────────────────────────────────────────────────────
 
 export default defineConfig(
   {
@@ -68,13 +20,14 @@ export default defineConfig(
       "reports/**",
     ],
   },
+  ...exadev,
+  // Several directories under src/ use index.ts as a real module (interfaces, functions, a default export), not a re-export barrel -- barrel-policy only restricts files that actually contain re-exports, so this override is scoped to permitting the pattern, not to exempting those files from anything they weren't already going to pass. src/core/index.ts is a genuine re-export barrel and the package's own entry point; every one of its re-exports comes from a direct sibling (confirmed directly), so 'siblings' -- not 'single', which only ever recognises the literal path src/index.ts -- is the mode that actually matches this repo's real layout. Scoped to TS/TSX: the exadev plugin namespace is only registered on the JS/TS-scoped config objects @exadev/eslint-config's own array contributes, so an unscoped override here would fail to resolve "exadev/barrel-policy" while linting a JSON or Markdown file.
   {
     files: ["**/*.{ts,tsx}"],
-    extends: [
-      ...tseslint.configs.recommendedTypeChecked,
-      ...tseslint.configs.strictTypeChecked,
-      ...tseslint.configs.stylisticTypeChecked,
-    ],
+    rules: { "exadev/barrel-policy": ["error", { mode: "siblings" }] },
+  },
+  {
+    files: ["**/*.{ts,tsx}"],
     languageOptions: {
       parserOptions: {
         projectService: {
@@ -98,18 +51,12 @@ export default defineConfig(
     },
     plugins: {
       prettier: eslintPluginPrettier,
-      custom: customPlugin,
     },
     rules: {
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_" },
       ],
-      "@typescript-eslint/consistent-type-assertions": [
-        "error",
-        { assertionStyle: "never" },
-      ],
-      "custom/no-pointless-reassignments": "error",
       "no-restricted-syntax": [
         "error",
         {
@@ -125,10 +72,6 @@ export default defineConfig(
       ],
       "prettier/prettier": "error",
       "@typescript-eslint/require-await": "warn",
-      "max-lines": [
-        "error",
-        { max: 800, skipBlankLines: true, skipComments: true },
-      ],
     },
   },
   eslintConfigPrettier,
