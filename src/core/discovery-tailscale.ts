@@ -12,15 +12,34 @@
 
 import * as http from "node:http";
 import * as net from "node:net";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execFile, type ExecException } from "node:child_process";
 import type {
   DiscoveredMesh,
   DiscoveryBackend,
   AdvertiseOptions,
 } from "./discovery.js";
 
-const execFileAsync = promisify(execFile);
+/** Runs `execFile` as a promise, resolving with its stdout/stderr rather than invoking a callback. */
+async function execFileAsync(
+  file: string,
+  args: readonly string[],
+): Promise<{ stdout: string; stderr: string }> {
+  const mutableArgs: string[] = [...args];
+  return new Promise((resolve, reject) => {
+    execFile(
+      file,
+      mutableArgs,
+      (error: ExecException | null, stdout: string, stderr: string) => {
+        if (error) {
+          reject(error instanceof Error ? error : new Error(error.message));
+          return;
+        }
+        resolve({ stdout, stderr });
+      },
+    );
+  });
+}
+
 const TCP_PROBE_TIMEOUT_MS = 500;
 const DEFAULT_DISCOVER_TIMEOUT_MS = 5_000;
 const COORDINATOR_PORT = 19876;
@@ -58,19 +77,18 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
   readonly name = "tailscale";
 
   /** No-op — the coordinator already listens on the Tailscale IP. */
-  startAdvertising(opts: AdvertiseOptions): Promise<string> {
+  async startAdvertising(opts: Readonly<AdvertiseOptions>): Promise<string> {
     return Promise.resolve(`tailscale-${String(opts.port)}`);
   }
 
   /** No-op — nothing to stop. */
-  stopAdvertising(): Promise<void> {
+  async stopAdvertising(): Promise<void> {
     return Promise.resolve();
   }
 
   /** Stop discovery — no-op since Tailscale has no persistent state to clean up. */
-  stop(): Promise<void> {
-    // Tailscale discovery is stateless — each discover() call probes peers fresh.
-    // No persistent connections or timers to tear down.
+  async stop(): Promise<void> {
+    // Tailscale discovery is stateless — each discover() call probes peers fresh. No persistent connections or timers to tear down.
     return Promise.resolve();
   }
 
@@ -82,7 +100,7 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
     const peers = await this.getPeers();
     if (peers.length === 0) return [];
 
-    const probes = peers.map((peer) => this.probePeer(peer));
+    const probes = peers.map(async (peer) => this.probePeer(peer));
     const results = await Promise.allSettled(probes);
 
     const discovered: DiscoveredMesh[] = [];
@@ -109,12 +127,12 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
 
     const peers: { ip: string; hostname: string }[] = [];
     for (const [, peer] of Object.entries(status.Peer)) {
-      if (!peer.Online) continue;
+      if (peer.Online !== true) continue;
       const ips = peer.TailscaleIPs;
       if (!ips || ips.length === 0) continue;
       // Use the first IPv4 address
       const ip = ips.find((addr) => addr.includes(".")) ?? ips[0];
-      if (!ip) continue;
+      if (ip === undefined || ip === "") continue;
       const hostname =
         peer.HostName ?? peer.DNSName?.replace(/\.tailnet.*$/, "") ?? ip;
       peers.push({ ip, hostname });
@@ -144,14 +162,16 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
   }
 
   /** Query the Tailscale local API at localhost:49156. */
-  private fetchLocalApi(): Promise<TailscaleStatus> {
+  private async fetchLocalApi(): Promise<TailscaleStatus> {
     return new Promise((resolve, reject) => {
       const req = http.get(
         `http://localhost:${String(TAILSCALE_API_PORT)}/localapi/v0/status`,
         { timeout: DEFAULT_DISCOVER_TIMEOUT_MS },
         (res) => {
           const chunks: Buffer[] = [];
-          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("data", (chunk: Buffer) => {
+            chunks.push(chunk);
+          });
           res.on("end", () => {
             try {
               resolve(
@@ -174,10 +194,9 @@ export class TailscaleDiscoveryBackend implements DiscoveryBackend {
   }
 
   /** Probe a single Tailscale peer for a listening mesh coordinator. */
-  private probePeer(peer: {
-    ip: string;
-    hostname: string;
-  }): Promise<DiscoveredMesh | undefined> {
+  private async probePeer(
+    peer: Readonly<{ ip: string; hostname: string }>,
+  ): Promise<DiscoveredMesh | undefined> {
     return new Promise((resolve) => {
       const socket = new net.Socket();
       const timer = setTimeout(() => {

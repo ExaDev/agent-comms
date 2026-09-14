@@ -44,7 +44,7 @@ export interface DeliveryEngineDeps {
     ((patch: MeshStatePatch) => void | Promise<void>) | undefined;
   isShutDown: () => boolean;
   /**
-   * Sends one directed room-domain request to a single member, queuing it for retry when unreachable -- RoomProtocol's own method. Deferred: RoomProtocol doesn't exist yet when DeliveryEngine is constructed (construction order: discovery -> deliveryEngine -> ... -> roomProtocol), so MeshStore wires this as `(...) => this.roomProtocol.sendRoomRequestToMember(...)`, a closure over `this` that only resolves `this.roomProtocol` when markRead actually calls it at runtime, well after the constructor has finished -- the same lazy-`this`-capture pattern the constructor already uses to wire FederationManager's own callbacks before `this.federation` exists.
+   * Sends one directed room-domain request to a single member, queuing it for retry when unreachable -- RoomProtocol's own method. Deferred: RoomProtocol doesn't exist yet when DeliveryEngine is constructed (construction order: discovery -\> deliveryEngine -\> ... -\> roomProtocol), so MeshStore wires this as `(...) => this.roomProtocol.sendRoomRequestToMember(...)`, a closure over `this` that only resolves `this.roomProtocol` when markRead actually calls it at runtime, well after the constructor has finished -- the same lazy-`this`-capture pattern the constructor already uses to wire FederationManager's own callbacks before `this.federation` exists.
    */
   sendRoomRequestToMember: (
     memberId: string,
@@ -53,6 +53,9 @@ export interface DeliveryEngineDeps {
     params: Record<string, unknown>,
   ) => Promise<void>;
 }
+
+/** Cap on `localDeliveryKeys`, the dedup set of already-delivered event keys kept per process; oldest entries are evicted once this is exceeded. */
+const MAX_LOCAL_DELIVERY_DEDUP_KEYS = 50;
 
 export class DeliveryEngine {
   constructor(private readonly deps: DeliveryEngineDeps) {}
@@ -155,8 +158,8 @@ export class DeliveryEngine {
 
   /** Merge per-agent operation maps by highest revision per agent. */
   private static mergeMemberOps(
-    local: Record<string, number>,
-    incoming: Record<string, number>,
+    local: Readonly<Record<string, number>>,
+    incoming: Readonly<Record<string, number>>,
   ): Record<string, number> {
     const merged: Record<string, number> = { ...local };
     for (const [id, stamp] of Object.entries(incoming)) {
@@ -214,7 +217,7 @@ export class DeliveryEngine {
         this.deps.messages.set(id, msgs);
         continue;
       }
-      mergeMessageHistories(existing, msgs);
+      this.deps.messages.set(id, mergeMessageHistories(existing, msgs));
     }
     for (const [id, dmMsgs] of incoming.dms) {
       const existing = this.deps.dms.get(id);
@@ -222,7 +225,7 @@ export class DeliveryEngine {
         this.deps.dms.set(id, dmMsgs);
         continue;
       }
-      mergeMessageHistories(existing, dmMsgs);
+      this.deps.dms.set(id, mergeMessageHistories(existing, dmMsgs));
     }
     for (const [agentId, events] of Object.entries(state.deliveryQueues)) {
       const seen = new Set(
@@ -310,7 +313,9 @@ export class DeliveryEngine {
           const eventKey = JSON.stringify(patch.event);
           if (this.deps.localDeliveryKeys.has(eventKey)) break;
           this.deps.localDeliveryKeys.add(eventKey);
-          if (this.deps.localDeliveryKeys.size > 50) {
+          if (
+            this.deps.localDeliveryKeys.size > MAX_LOCAL_DELIVERY_DEDUP_KEYS
+          ) {
             const oldest = this.deps.localDeliveryKeys.values().next().value;
             if (oldest !== undefined)
               this.deps.localDeliveryKeys.delete(oldest);
@@ -400,7 +405,7 @@ export class DeliveryEngine {
     if (this.deps.localDeliveryKeys.has(eventKey)) return;
     this.deps.localDeliveryKeys.add(eventKey);
     // Prevent unbounded growth — evict oldest when cap reached
-    if (this.deps.localDeliveryKeys.size > 50) {
+    if (this.deps.localDeliveryKeys.size > MAX_LOCAL_DELIVERY_DEDUP_KEYS) {
       const oldest = this.deps.localDeliveryKeys.values().next().value;
       if (oldest !== undefined) this.deps.localDeliveryKeys.delete(oldest);
     }
@@ -480,7 +485,7 @@ export class DeliveryEngine {
   ): Promise<void> {
     // Find the sender for this message
     const senderId = this.findMessageSender(messageId, room);
-    if (!senderId) return;
+    if (senderId === undefined) return;
     await this.deliverLocallyAndBroadcast(senderId, {
       type: "delivery_status",
       messageId,
@@ -494,7 +499,7 @@ export class DeliveryEngine {
     messageId: string,
     room?: string,
   ): string | undefined {
-    if (room) {
+    if (room !== undefined) {
       const msgs = this.deps.messages.get(room);
       if (msgs) {
         const msg = msgs.find((m) => m.id === messageId);

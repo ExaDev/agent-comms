@@ -42,19 +42,23 @@ export interface FedLink {
 /** Callbacks the FederationManager uses to interact with local mesh state. */
 export interface FedCallbacks {
   /** Called when a remote agent becomes visible over a federation link. */
-  onAgentVisible(agent: AgentIdentity): Promise<void>;
+  onAgentVisible: (agent: AgentIdentity) => Promise<void>;
   /** Called when a remote agent goes offline/disappears. */
-  onAgentGone(agentId: string): Promise<void>;
+  onAgentGone: (agentId: string) => Promise<void>;
   /** Called when a message arrives for a federated room. */
-  onRoomMessage(roomId: string, message: RoomMessage): Promise<void>;
+  onRoomMessage: (roomId: string, message: RoomMessage) => Promise<void>;
   /** Called when a remote agent joins a federated room. */
-  onRoomJoin(roomId: string, agentId: string, agentName: string): Promise<void>;
+  onRoomJoin: (
+    roomId: string,
+    agentId: string,
+    agentName: string,
+  ) => Promise<void>;
   /** Called when a remote agent leaves a federated room. */
-  onRoomLeave(roomId: string, agentId: string): Promise<void>;
+  onRoomLeave: (roomId: string, agentId: string) => Promise<void>;
   /** Get all visible agents in the local mesh (for syncing to new links). */
-  getVisibleAgents(): AgentIdentity[];
+  getVisibleAgents: () => AgentIdentity[];
   /** Get all federated rooms and their member lists (for syncing to new links). */
-  getFederatedRoomMemberships(): Map<string, string[]>;
+  getFederatedRoomMemberships: () => Map<string, string[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,27 +68,45 @@ export interface FedCallbacks {
 const FED_PING_INTERVAL_MS = 30_000;
 const FED_PING_TIMEOUT_MS = 10_000;
 const FED_VERSION = "1.0.0";
+/** Length (in bytes of entropy) of a locally-assigned federation link ID. */
+const FED_LINK_ID_LENGTH = 8;
+/** How long to wait for the remote side to complete the fed_handshake/fed_ack exchange before giving up. */
+const FED_HANDSHAKE_TIMEOUT_MS = 5000;
+/** How long to wait for the underlying TLS socket itself to connect before giving up. */
+const FED_CONNECT_TIMEOUT_MS = 5000;
+/** How often {@link FederationManager.waitForHandshake} polls link readiness. */
+const FED_HANDSHAKE_POLL_INTERVAL_MS = 50;
 
 // ---------------------------------------------------------------------------
 // FederationManager
 // ---------------------------------------------------------------------------
 
 export class FederationManager {
-  private links = new Map<string, FedLink>();
-  private identity: PeerIdentity;
-  private meshId: string;
-  private meshName: string;
-  private callbacks: FedCallbacks;
-  private pingTimers = new Map<string, ReturnType<typeof setInterval>>();
+  private readonly links = new Map<string, FedLink>();
+  private readonly identity: PeerIdentity;
+  private readonly meshId: string;
+  private readonly meshName: string;
+  private readonly callbacks: FedCallbacks;
+  private readonly pingTimers = new Map<
+    string,
+    ReturnType<typeof setInterval>
+  >();
   private shutDown = false;
-  private pendingPongs = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly pendingPongs = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
   /**
    * Certificate fingerprints this instance will federate with, inbound or outbound. Empty by default — federation trusts nobody until an operator explicitly pins a remote mesh's fingerprint, the same no-CA, pin-the-key trust model ordinary peer connections already use.
    */
-  private trustedFingerprints = new Set<string>();
+  private readonly trustedFingerprints = new Set<string>();
   private listener: tls.Server | undefined;
 
-  constructor(meshId: string, meshName: string, callbacks: FedCallbacks) {
+  constructor(
+    meshId: string,
+    meshName: string,
+    callbacks: Readonly<FedCallbacks>,
+  ) {
     this.meshId = meshId;
     this.meshName = meshName;
     this.callbacks = callbacks;
@@ -146,7 +168,7 @@ export class FederationManager {
   async connect(host: string, port: number, name?: string): Promise<string> {
     if (this.shutDown) throw new Error("FederationManager is shut down");
 
-    const linkId = nanoid(8);
+    const linkId = nanoid(FED_LINK_ID_LENGTH);
 
     const socket = await this.tlsConnect(host, port);
     if (this.verifyPeerOrDestroy(socket) === undefined) {
@@ -179,7 +201,7 @@ export class FederationManager {
     this.wireSocket(linkId, socket);
 
     // Wait for fed_ack (with timeout)
-    await this.waitForHandshake(linkId, 5000);
+    await this.waitForHandshake(linkId, FED_HANDSHAKE_TIMEOUT_MS);
 
     return linkId;
   }
@@ -205,7 +227,7 @@ export class FederationManager {
       );
     }
 
-    const linkId = nanoid(8);
+    const linkId = nanoid(FED_LINK_ID_LENGTH);
     const link: FedLink = {
       id: linkId,
       remoteMeshId: "",
@@ -219,7 +241,7 @@ export class FederationManager {
     this.wireSocket(linkId, socket);
 
     // Wait for the remote side's handshake
-    await this.waitForHandshake(linkId, 5000);
+    await this.waitForHandshake(linkId, FED_HANDSHAKE_TIMEOUT_MS);
 
     return linkId;
   }
@@ -229,7 +251,7 @@ export class FederationManager {
   // -----------------------------------------------------------------------
 
   /** Disconnect a specific federation link. */
-  disconnect(linkId: string): Promise<void> {
+  async disconnect(linkId: string): Promise<void> {
     const link = this.links.get(linkId);
     if (!link) return Promise.resolve();
 
@@ -302,7 +324,7 @@ export class FederationManager {
    *
    * Previously nothing in the shipped product called `handleInbound()` at all: it existed only as a function the integration test invoked directly against a hand-rolled `tls.createServer`. This is that server, promoted to real code.
    */
-  listen(host: string, port: number): Promise<void> {
+  async listen(host: string, port: number): Promise<void> {
     if (this.listener) {
       throw new Error("FederationManager is already listening");
     }
@@ -331,7 +353,7 @@ export class FederationManager {
   }
 
   /** Stop accepting new inbound federation connections. Existing links are unaffected. */
-  stopListening(): Promise<void> {
+  async stopListening(): Promise<void> {
     const server = this.listener;
     if (!server) return Promise.resolve();
     this.listener = undefined;
@@ -358,7 +380,7 @@ export class FederationManager {
   // Internal — TLS connection
   // -----------------------------------------------------------------------
 
-  private tlsConnect(host: string, port: number): Promise<tls.TLSSocket> {
+  private async tlsConnect(host: string, port: number): Promise<tls.TLSSocket> {
     return new Promise((resolve, reject) => {
       const socket = tls.connect(
         {
@@ -379,7 +401,7 @@ export class FederationManager {
         reject(
           new Error(`Federation connection timeout to ${host}:${String(port)}`),
         );
-      }, 5000);
+      }, FED_CONNECT_TIMEOUT_MS);
 
       socket.on("error", (err) => {
         clearTimeout(timer);
@@ -489,6 +511,17 @@ export class FederationManager {
         }
         break;
       }
+      case "state_sync":
+      case "state_update":
+      case "introduce":
+      case "connect_request":
+      case "peer_list":
+      case "peer_joined":
+      case "peer_left":
+      case "become_coordinator": {
+        // Local-mesh-only message kinds — never sent over a federation link; ignore rather than throw so an unexpected wire message can't tear down the link.
+        break;
+      }
     }
   }
 
@@ -502,7 +535,7 @@ export class FederationManager {
    */
   private async syncStateToLink(linkId: string): Promise<void> {
     const link = this.links.get(linkId);
-    if (!link?.ready) return;
+    if (link?.ready !== true) return;
 
     // Sync visible agents
     const agents = this.callbacks.getVisibleAgents();
@@ -534,13 +567,16 @@ export class FederationManager {
   // Internal — handshake waiting
   // -----------------------------------------------------------------------
 
-  private waitForHandshake(linkId: string, timeoutMs: number): Promise<void> {
+  private async waitForHandshake(
+    linkId: string,
+    timeoutMs: number,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
 
       const check = (): void => {
         const link = this.links.get(linkId);
-        if (link?.ready) {
+        if (link?.ready === true) {
           resolve();
           return;
         }
@@ -549,7 +585,7 @@ export class FederationManager {
           reject(new Error(`Federation handshake timeout for link ${linkId}`));
           return;
         }
-        setTimeout(check, 50);
+        setTimeout(check, FED_HANDSHAKE_POLL_INTERVAL_MS);
       };
 
       check();
@@ -572,7 +608,7 @@ export class FederationManager {
 
   private async sendPing(linkId: string): Promise<void> {
     const link = this.links.get(linkId);
-    if (!link?.ready) return;
+    if (link?.ready !== true) return;
 
     const msg: MeshMessage = { method: "fed_ping" };
     await this.writeToSocket(link.socket, msg);

@@ -12,12 +12,27 @@ import { z } from "zod";
 // Schema-attached type guard helper
 // ---------------------------------------------------------------------------
 
-function defineSchema<T extends z.ZodType>(schema: T) {
-  return Object.assign(schema, {
-    is(value: unknown): value is z.infer<T> {
-      return schema.safeParse(value).success;
-    },
+/** Narrows `value` to a schema already carrying an `is` guard -- used only to recover the type Object.defineProperty's own signature can't express, immediately after defineSchema has just added that exact property below. */
+function hasIsGuard<T extends z.ZodType>(
+  value: T,
+): value is T & { is: (v: unknown) => v is z.infer<T> } {
+  if (!("is" in value)) return false;
+  return typeof value.is === "function";
+}
+
+/** Attaches a type-guard `.is` method directly onto the given schema (mutating it in place, never copying it) and returns that same reference. Mutation in place is load-bearing: Zod v4 schemas carry their `.parse`/`.safeParse`/internal brand as own instance properties rather than prototype methods, so spreading into a fresh object (`{ ...schema, is }`) silently strips the brand `z.object()` checks for when this schema is nested as another schema's property value -- confirmed directly: a spread-built schema is rejected with "expected a Zod schema" the moment it's used as a nested property. */
+function defineSchema<T extends z.ZodType>(
+  schema: T,
+): T & { is: (value: unknown) => value is z.infer<T> } {
+  Object.defineProperty(schema, "is", {
+    value: (value: unknown): value is z.infer<T> =>
+      schema.safeParse(value).success,
+    enumerable: true,
   });
+  if (!hasIsGuard(schema)) {
+    throw new Error("unreachable: is was just defined above");
+  }
+  return schema;
 }
 
 // ---------------------------------------------------------------------------
@@ -34,17 +49,20 @@ export type RoomId = string;
 // Enums
 // ---------------------------------------------------------------------------
 
-export const MeshVisibility = defineSchema(
+// Each enum's schema is declared under a `Schema` suffix and re-exported under its bare name (matching this file's own object-schema convention) rather than sharing one identifier between the const and the inferred type -- @typescript-eslint/no-redeclare's `ignoreDeclarationMerge` allowlist covers interface/namespace/class/function/enum merges but not a value binding and a type alias sharing a name, so the two need genuinely distinct local identifiers. The re-export alias keeps the public name (and therefore every existing `import { X }` / `import type { X }` call site across the codebase) completely unchanged.
+const MeshVisibilitySchema = defineSchema(
   z.union([z.literal("discoverable"), z.literal("quiet"), z.literal("dark")]),
 );
-export type MeshVisibility = z.infer<typeof MeshVisibility>;
+export type MeshVisibility = z.infer<typeof MeshVisibilitySchema>;
+export { MeshVisibilitySchema as MeshVisibility };
 
-export const Visibility = defineSchema(
+const VisibilitySchema = defineSchema(
   z.union([z.literal("visible"), z.literal("hidden"), z.literal("ghost")]),
 );
-export type Visibility = z.infer<typeof Visibility>;
+export type Visibility = z.infer<typeof VisibilitySchema>;
+export { VisibilitySchema as Visibility };
 
-export const AgentStatus = defineSchema(
+const AgentStatusSchema = defineSchema(
   z.union([
     z.literal("active"),
     z.literal("idle"),
@@ -52,17 +70,20 @@ export const AgentStatus = defineSchema(
     z.literal("offline"),
   ]),
 );
-export type AgentStatus = z.infer<typeof AgentStatus>;
+export type AgentStatus = z.infer<typeof AgentStatusSchema>;
+export { AgentStatusSchema as AgentStatus };
 
-export const RoomType = defineSchema(
+const RoomTypeSchema = defineSchema(
   z.union([z.literal("public"), z.literal("private"), z.literal("secret")]),
 );
-export type RoomType = z.infer<typeof RoomType>;
+export type RoomType = z.infer<typeof RoomTypeSchema>;
+export { RoomTypeSchema as RoomType };
 
-export const StreamingBehavior = defineSchema(
+const StreamingBehaviorSchema = defineSchema(
   z.union([z.literal("steer"), z.literal("followUp"), z.literal("info")]),
 );
-export type StreamingBehavior = z.infer<typeof StreamingBehavior>;
+export type StreamingBehavior = z.infer<typeof StreamingBehaviorSchema>;
+export { StreamingBehaviorSchema as StreamingBehavior };
 
 // ---------------------------------------------------------------------------
 // AgentIdentity
@@ -78,8 +99,8 @@ export const AgentIdentitySchema = defineSchema(
     cwd: z.string(),
     pid: z.number(),
     startedAt: z.string(),
-    visibility: Visibility,
-    status: AgentStatus,
+    visibility: VisibilitySchema,
+    status: AgentStatusSchema,
     tags: z.array(z.string()),
     subscribedRooms: z.array(z.string()),
   }),
@@ -96,7 +117,7 @@ export const RoomSchema = defineSchema(
     /** Monotonic revision, bumped by the mutating store; sync merges take the higher value. */
     version: z.number(),
     name: z.string(),
-    type: RoomType,
+    type: RoomTypeSchema,
     owner: z.string(),
     createdAt: z.string(),
     description: z.string(),
@@ -132,7 +153,7 @@ export const RoomMessageSchema = defineSchema(
     timestamp: z.string(),
     replyTo: z.string().optional(),
     readBy: z.array(z.string()),
-    streamingBehavior: StreamingBehavior.optional(),
+    streamingBehavior: StreamingBehaviorSchema.optional(),
   }),
 );
 export type RoomMessage = z.infer<typeof RoomMessageSchema>;
@@ -145,15 +166,16 @@ export const DmMessageSchema = defineSchema(
     content: z.string(),
     timestamp: z.string(),
     readBy: z.array(z.string()),
-    streamingBehavior: StreamingBehavior.optional(),
+    streamingBehavior: StreamingBehaviorSchema.optional(),
   }),
 );
 export type DmMessage = z.infer<typeof DmMessageSchema>;
 
-export const DeliveryStatus = defineSchema(
+const DeliveryStatusSchema = defineSchema(
   z.union([z.literal("delivered"), z.literal("read")]),
 );
-export type DeliveryStatus = z.infer<typeof DeliveryStatus>;
+export type DeliveryStatus = z.infer<typeof DeliveryStatusSchema>;
+export { DeliveryStatusSchema as DeliveryStatus };
 
 // ---------------------------------------------------------------------------
 // Delivery events
@@ -163,7 +185,7 @@ export const RoomMemberSchema = defineSchema(
   z.object({
     id: z.string(),
     name: z.string(),
-    status: AgentStatus,
+    status: AgentStatusSchema,
   }),
 );
 export type RoomMember = z.infer<typeof RoomMemberSchema>;
@@ -205,13 +227,13 @@ export const DeliveryEventSchema = defineSchema(
       type: z.literal("member_status"),
       room: z.string(),
       agent: z.string(),
-      status: AgentStatus,
+      status: AgentStatusSchema,
     }),
     z.object({
       type: z.literal("delivery_status"),
       messageId: z.string(),
       agent: z.string(),
-      status: DeliveryStatus,
+      status: DeliveryStatusSchema,
       room: z.string().optional(),
     }),
     z.object({
@@ -259,13 +281,13 @@ export const CommsActionSchema = defineSchema(
     z.object({
       action: z.literal("register"),
       name: z.string(),
-      visibility: Visibility,
+      visibility: VisibilitySchema,
       tags: z.array(z.string()),
     }),
     z.object({
       action: z.literal("update"),
-      visibility: Visibility.optional(),
-      status: AgentStatus.optional(),
+      visibility: VisibilitySchema.optional(),
+      status: AgentStatusSchema.optional(),
       name: z.string().optional(),
       tags: z.array(z.string()).optional(),
     }),
@@ -273,7 +295,7 @@ export const CommsActionSchema = defineSchema(
     z.object({
       action: z.literal("create_room"),
       name: z.string(),
-      type: RoomType,
+      type: RoomTypeSchema,
       description: z.string(),
     }),
     z.object({ action: z.literal("list_rooms") }),
@@ -290,13 +312,13 @@ export const CommsActionSchema = defineSchema(
       target: z.string(),
       content: z.string(),
       replyTo: z.string().optional(),
-      streamingBehavior: StreamingBehavior.optional(),
+      streamingBehavior: StreamingBehaviorSchema.optional(),
     }),
     z.object({
       action: z.literal("dm"),
       target: z.string(),
       content: z.string(),
-      streamingBehavior: StreamingBehavior.optional(),
+      streamingBehavior: StreamingBehaviorSchema.optional(),
     }),
     z.object({ action: z.literal("list_agents") }),
     z.object({
@@ -380,7 +402,7 @@ export const CommsActionSchema = defineSchema(
     z.object({ action: z.literal("mesh_listeners") }),
     z.object({
       action: z.literal("mesh_set_visibility"),
-      visibility: MeshVisibility,
+      visibility: MeshVisibilitySchema,
       adapter: z.string().optional(),
     }),
     z.object({ action: z.literal("mesh_get_visibility") }),
