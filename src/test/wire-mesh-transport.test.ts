@@ -21,7 +21,6 @@ import type {
   TransportEvents,
   ListenerPolicy,
 } from "../core/transport.js";
-import type { AgentStatus } from "../core/types.js";
 import type { MeshMessage } from "../core/wire-protocol.js";
 import { waitFor } from "./test-transport.js";
 
