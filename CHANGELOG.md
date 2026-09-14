@@ -1,3 +1,9 @@
+## [2.21.2](https://github.com/ExaDev/agent-comms/compare/v2.21.1...v2.21.2) (2026-09-14)
+
+### Tests
+
+* **bridge:** widen blockPort's EADDRINUSE retry window ([0d3afb8](https://github.com/ExaDev/agent-comms/commit/0d3afb8ae4492c0340be658530a717650f26fe90))
+
 ## [2.21.1](https://github.com/ExaDev/agent-comms/compare/v2.21.0...v2.21.1) (2026-09-14)
 
 ### Chores
