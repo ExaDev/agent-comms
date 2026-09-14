@@ -89,7 +89,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - run: pnpm exec stryker run stryker.config.ts --mutate "src/core/${{ matrix.file }}.ts"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mutation-report-${{ matrix.file }}
