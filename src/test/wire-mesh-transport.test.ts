@@ -22,6 +22,7 @@ import type {
   ListenerPolicy,
 } from "../core/transport.js";
 import type { MeshMessage } from "../core/wire-protocol.js";
+import type { AgentStatus } from "../core/types.js";
 import { waitFor } from "./test-transport.js";
 
 function noopEvents(overrides: Partial<TransportEvents> = {}): TransportEvents {
@@ -664,6 +665,133 @@ describe("WireMeshTransport listener policy propagation into quarantine", () => 
       );
       const introduced = introductions.find((i) => i.handle.id === idB);
       expect(introduced?.handle.policy).toBe(observePolicy);
+    } finally {
+      await transportB.shutdown();
+      await transportA.shutdown();
+    }
+  });
+});
+
+describe("WireMeshTransport readvertisePresence body", () => {
+  test("a configured presence source that itself returns undefined on a given tick sends nothing that tick", async () => {
+    const identityA = generateIdentity();
+    const identityB = generateIdentity();
+    const idA = await peerId(await toIdentityPort(identityA));
+
+    const presenceSeenByB: AgentStatus[] = [];
+    let currentStatus: AgentStatus | undefined;
+    const SHORT_INTERVAL_MS = 40;
+    const transportA = new WireMeshTransport(
+      noopEvents(),
+      identityA,
+      undefined,
+      undefined,
+      () => currentStatus,
+      SHORT_INTERVAL_MS,
+    );
+    const transportB = new WireMeshTransport(
+      noopEvents({
+        onPresenceAdvert: (_h, status) => presenceSeenByB.push(status),
+      }),
+      identityB,
+    );
+    try {
+      await transportA.startDataServer();
+      await transportB.connectToPeer(
+        {
+          id: idA,
+          port: transportA.dataPort,
+          startedAt: new Date().toISOString(),
+        },
+        "self",
+      );
+
+      // Several ticks with getCurrentPresence returning undefined: the early return must skip sendGossipUpdate entirely, so B must never observe a presence advert from A.
+      await new Promise((resolve) =>
+        setTimeout(resolve, SHORT_INTERVAL_MS * 4),
+      );
+      expect(presenceSeenByB.length).toBe(0);
+
+      // Flipping to a real status proves the same interval, and the same early-return branch, genuinely does send once status is defined -- ruling out "the interval simply never fired at all" as an alternative explanation for the assertion above.
+      currentStatus = "active";
+      await waitFor(
+        () => presenceSeenByB.includes("active"),
+        "B observes A's presence once getCurrentPresence starts returning a real status",
+      );
+    } finally {
+      await transportB.shutdown();
+      await transportA.shutdown();
+    }
+  });
+
+  // A test proving readvertisePresence's own catch/onError path (a gossip send failing against a session whose remote end just closed) was attempted directly against two real transports, but the disconnect is detected and cleaned up (watchForDisconnect removing the session from allSessions) faster and more reliably than a genuinely broken-but-still-tracked send could be raced into -- every attempt hit the already-cleaned-up state instead of the failing-send state, making it an inherently flaky test rather than a deterministic one. Left as a documented gap: see this PR's own report for the reasoning.
+});
+
+describe("WireMeshTransport send/sendRoomRequest to an unknown or broken peer", () => {
+  test("send to a handle with no live session is a silent no-op", async () => {
+    const identity = generateIdentity();
+    const transport = new WireMeshTransport(noopEvents(), identity);
+    try {
+      await expect(
+        transport.send(
+          { id: "nobody-home" },
+          { method: "peer_left", peerId: "x" },
+        ),
+      ).resolves.toBeUndefined();
+    } finally {
+      await transport.shutdown();
+    }
+  });
+
+  test("sendRoomRequest to a member with no live session resolves not_connected rather than throwing", async () => {
+    const identity = generateIdentity();
+    const transport = new WireMeshTransport(noopEvents(), identity);
+    try {
+      const outcome = await transport.sendRoomRequest(
+        "nobody-home",
+        { verb: "room.send", params: {} },
+        { kind: "agent-comms-mesh" },
+      );
+      expect(outcome).toEqual({ result: "error", code: "not_connected" });
+    } finally {
+      await transport.shutdown();
+    }
+  });
+
+  // A test proving send()'s own catch/onError path (a send failing against a session whose remote end just closed) was attempted the same way and hit the identical flakiness as the gossip-failure test above -- watchForDisconnect's own cleanup consistently won the race against a still-tracked-but-broken session. Left as a documented gap for the same reason.
+});
+
+describe("WireMeshTransport pending-connection expiry", () => {
+  test("a connect_request left unanswered past the configured timeout is auto-rejected with the documented timeout message", async () => {
+    const identityA = generateIdentity();
+    const identityB = generateIdentity();
+    const idB = await peerId(await toIdentityPort(identityB));
+    const SHORT_TIMEOUT_MS = 150;
+
+    const transportA = new WireMeshTransport(
+      noopEvents(),
+      identityA,
+      undefined,
+      SHORT_TIMEOUT_MS,
+    );
+    const transportB = new WireMeshTransport(noopEvents(), identityB);
+    try {
+      await transportA.becomeCoordinator("127.0.0.1", 0);
+      const [listener] = transportA.listListeners();
+      if (listener === undefined) throw new Error("expected a bound listener");
+
+      const connectPromise = transportB.connectToRemote(
+        "127.0.0.1",
+        listener.port,
+        idB,
+        0,
+        "b",
+        "",
+      );
+
+      await expect(connectPromise).rejects.toThrow(
+        "no human decision within the pending-connection timeout",
+      );
     } finally {
       await transportB.shutdown();
       await transportA.shutdown();
