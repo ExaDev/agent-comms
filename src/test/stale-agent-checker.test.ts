@@ -1,3 +1,9 @@
+/**
+ * Two mutants Stryker raises against stale-agent-checker.ts are true equivalents, not gaps -- documented here rather than chased with a contrived test, per this repo's own "provably equivalent gets reasoning, not a forced test" convention:
+ *
+ * - `agents.set(id, agent)` right after `agent.status = "offline"` in the dead-process branch: `agent` is the exact same object reference `agents.get(id)` already returned, so mutating `.status` on it already mutates what the Map holds. Re-`.set()`-ing the same key to the same reference is a genuine no-op; no test can observe removing that call.
+ * - The purge loop's `purgeIds: string[] = []` seeded with an extra bogus id: `Map.delete()`/nothing on a key that was never present is itself a silent no-op by JS Map semantics, so a spurious extra entry in the purge list has zero observable effect on any of the four maps it's applied to, regardless of what else the test asserts.
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   StaleAgentChecker,
@@ -115,16 +121,22 @@ describe("StaleAgentChecker", () => {
       checker.stop();
     });
 
-    it("calling start() twice does not create a second timer", async () => {
-      const { checker, broadcastPatch } = harness([
-        agent("a1", "active", DEAD_PID, isoAgeMs(0)),
-      ]);
+    it("calling start() twice does not create a second timer", () => {
+      // broadcastPatch call counts can't distinguish this: probeStaleAgents mutates an agent's status to "offline" synchronously, before its own first await, so a second un-guarded timer firing in the same tick finds nothing left to mark dead even when a real (leaked) second interval exists underneath -- asserting directly on setInterval's own call count is what the guard in start() actually exists to control.
+      const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+      const { checker } = harness([]);
       checker.start();
       checker.start();
-      await vi.advanceTimersByTimeAsync(PROBE_INTERVAL_MS);
-      // A second, uncancelled timer firing on the same schedule would double every call count.
-      expect(broadcastPatch).toHaveBeenCalledTimes(1);
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1);
       checker.stop();
+    });
+
+    it("stop() clears the timer start() created", () => {
+      const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+      const { checker } = harness([]);
+      checker.start();
+      checker.stop();
+      expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
     });
 
     it("stop() halts further probing", async () => {
@@ -139,11 +151,13 @@ describe("StaleAgentChecker", () => {
       expect(broadcastPatch).not.toHaveBeenCalled();
     });
 
-    it("stop() before start() is a safe no-op", () => {
+    it("stop() before start() is a safe no-op that never calls clearInterval", () => {
+      const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
       const { checker } = harness([]);
       expect(() => {
         checker.stop();
       }).not.toThrow();
+      expect(clearIntervalSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -211,7 +225,7 @@ describe("StaleAgentChecker", () => {
   });
 
   describe("offline-agent purging", () => {
-    it("purges an agent offline for longer than the threshold, from every map", async () => {
+    it("purges an agent offline for longer than the threshold, from every map, and nothing else", async () => {
       const { deps, checker } = harness([
         agent(
           "a1",
@@ -228,6 +242,10 @@ describe("StaleAgentChecker", () => {
       expect(deps.peerInfo.has("a1")).toBe(false);
       expect(deps.identityCache.has("a1")).toBe(false);
       expect(deps.deliveryQueues.has("a1")).toBe(false);
+      expect(deps.agents.size).toBe(0);
+      expect(deps.peerInfo.size).toBe(0);
+      expect(deps.identityCache.size).toBe(0);
+      expect(deps.deliveryQueues.size).toBe(0);
     });
 
     it("does not purge an offline agent still within the threshold", async () => {
@@ -238,6 +256,17 @@ describe("StaleAgentChecker", () => {
           DEAD_PID,
           isoAgeMs(OFFLINE_PURGE_THRESHOLD_MS - 1),
         ),
+      ]);
+      checker.start();
+      await vi.advanceTimersByTimeAsync(PROBE_INTERVAL_MS);
+      checker.stop();
+
+      expect(deps.agents.has("a1")).toBe(true);
+    });
+
+    it("does not purge an offline agent exactly at the threshold (the comparison is strict-less-than, not less-or-equal)", async () => {
+      const { deps, checker } = harness([
+        agent("a1", "offline", DEAD_PID, isoAgeMs(OFFLINE_PURGE_THRESHOLD_MS)),
       ]);
       checker.start();
       await vi.advanceTimersByTimeAsync(PROBE_INTERVAL_MS);
