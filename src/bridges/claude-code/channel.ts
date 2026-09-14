@@ -48,6 +48,12 @@ function cwdSlug(cwd: string): string {
   return cwd.replace(/[^a-zA-Z0-9]/g, "_");
 }
 
+/** Maximum number of process-tree ancestors to walk when hunting for the Claude Code CLI PID. */
+const MAX_PID_WALK_HOPS = 10;
+
+/** Length of the random suffix appended to an auto-generated agent display name. */
+const AUTO_NAME_SUFFIX_LENGTH = 4;
+
 function pendingDir(): string {
   return path.join(os.homedir(), ".agents", "bus", "pending");
 }
@@ -66,7 +72,7 @@ function pendingDir(): string {
  */
 function findClaudeCodePid(): number | undefined {
   let pid = process.ppid;
-  for (let i = 0; i < 10 && pid > 1; i++) {
+  for (let i = 0; i < MAX_PID_WALK_HOPS && pid > 1; i++) {
     let out: string;
     try {
       out = execFileSync("ps", ["-o", "ppid=,comm=", "-p", String(pid)], {
@@ -219,11 +225,11 @@ export async function run(): Promise<void> {
     async (rawParams: unknown) => {
       const params = isRecord(rawParams) ? rawParams : {};
       const actionParam = params.action;
-      if (!agentId) {
+      if (agentId === undefined) {
         const name =
           actionParam === "register" && typeof params.name === "string"
             ? params.name
-            : `claude-code-${nanoid(4)}`;
+            : `claude-code-${nanoid(AUTO_NAME_SUFFIX_LENGTH)}`;
         const reg = await ensureRegistered({
           cwd: process.cwd(),
           store,
@@ -269,7 +275,7 @@ export async function run(): Promise<void> {
     cwd: process.cwd(),
     store,
     harness: "claude-code",
-    defaultName: `claude-code-${nanoid(4)}`,
+    defaultName: `claude-code-${nanoid(AUTO_NAME_SUFFIX_LENGTH)}`,
   });
   agentId = reg.agentId;
 

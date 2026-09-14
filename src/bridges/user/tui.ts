@@ -36,7 +36,7 @@ const CLEAR_LINE = "\r\x1b[2K";
 
 function prompt(controller: ChatController): string {
   const room = controller.activeRoom;
-  return room ? `${GREEN}${room}${RESET} > ` : `${DIM}>${RESET} `;
+  return room !== undefined ? `${GREEN}${room}${RESET} > ` : `${DIM}>${RESET} `;
 }
 
 export async function runTui(userName: string): Promise<void> {
@@ -76,7 +76,7 @@ export async function runTui(userName: string): Promise<void> {
 
     if (trimmed.startsWith("/")) {
       await handleCommand(trimmed, controller);
-    } else if (controller.activeRoom) {
+    } else if (controller.activeRoom !== undefined) {
       const result = await controller.sendToCurrentRoom(trimmed);
       if (result.isError) {
         process.stdout.write(`${RED}${result.content}${RESET}\n`);
@@ -118,7 +118,7 @@ async function handleCommand(input: string, c: ChatController): Promise<void> {
 
   switch (cmd) {
     case "join": {
-      if (!arg1) {
+      if (arg1 === undefined) {
         process.stdout.write(`${YELLOW}Usage: /join <room>${RESET}\n`);
         return;
       }
@@ -153,7 +153,7 @@ async function handleCommand(input: string, c: ChatController): Promise<void> {
       return;
     }
     case "dm": {
-      if (!arg1 || !arg2) {
+      if (arg1 === undefined || !arg2) {
         process.stdout.write(`${YELLOW}Usage: /dm <agent> <message>${RESET}\n`);
         return;
       }
@@ -162,7 +162,7 @@ async function handleCommand(input: string, c: ChatController): Promise<void> {
       return;
     }
     case "create": {
-      if (!arg1) {
+      if (arg1 === undefined) {
         process.stdout.write(`${YELLOW}Usage: /create <name>${RESET}\n`);
         return;
       }
@@ -172,7 +172,7 @@ async function handleCommand(input: string, c: ChatController): Promise<void> {
     }
     case "invite": {
       const agentId = parts[2];
-      if (!arg1 || !agentId) {
+      if (arg1 === undefined || agentId === undefined) {
         process.stdout.write(
           `${YELLOW}Usage: /invite <room> <agent>${RESET}\n`,
         );
@@ -184,7 +184,7 @@ async function handleCommand(input: string, c: ChatController): Promise<void> {
     }
     case "decline": {
       const reason = parts.slice(2).join(" ");
-      if (!arg1 || !reason) {
+      if (arg1 === undefined || !reason) {
         process.stdout.write(
           `${YELLOW}Usage: /decline <room> <reason>${RESET}\n`,
         );
@@ -196,7 +196,7 @@ async function handleCommand(input: string, c: ChatController): Promise<void> {
     }
     case "kick": {
       const agentId = parts[2];
-      if (!arg1 || !agentId) {
+      if (arg1 === undefined || agentId === undefined) {
         process.stdout.write(`${YELLOW}Usage: /kick <room> <agent>${RESET}\n`);
         return;
       }
@@ -205,7 +205,7 @@ async function handleCommand(input: string, c: ChatController): Promise<void> {
       return;
     }
     case "destroy": {
-      if (!arg1) {
+      if (arg1 === undefined) {
         process.stdout.write(`${YELLOW}Usage: /destroy <room>${RESET}\n`);
         return;
       }
@@ -233,6 +233,8 @@ async function handleCommand(input: string, c: ChatController): Promise<void> {
     case "quit":
       process.stdout.write(`${DIM}Goodbye!${RESET}\n`);
       process.exit(0);
+      return;
+    case undefined:
     default:
       process.stdout.write(
         `${YELLOW}Unknown command: /${String(cmd)}. Type /help for commands.${RESET}\n`,
@@ -244,7 +246,9 @@ async function handleCommand(input: string, c: ChatController): Promise<void> {
 // Formatting
 // ---------------------------------------------------------------------------
 
-function printResult(result: { content: string; isError: boolean }): void {
+function printResult(
+  result: Readonly<{ content: string; isError: boolean }>,
+): void {
   if (result.isError) {
     process.stdout.write(`${RED}${result.content}${RESET}\n`);
   } else {
@@ -282,5 +286,7 @@ function formatForTerminal(event: DeliveryEvent): string {
       return `${CYAN}✎ ${event.oldName} is now ${event.newName}${RESET}`;
     case "connection_request":
       return `${CYAN}🔗 Connection request from ${event.peerId} (${event.name})${RESET}`;
+    default:
+      return event satisfies never;
   }
 }

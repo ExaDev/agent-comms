@@ -26,6 +26,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Length of the random suffix appended to an auto-generated `codex-<suffix>` agent name. */
+const CODEX_AGENT_NAME_SUFFIX_LENGTH = 4;
+
 export async function run(): Promise<void> {
   // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us. The stdio server has no graceful shutdown hook; a stale lock self-heals via the pid probe.
   const identitySlot: IdentitySlot = { harness: "codex", cwd: process.cwd() };
@@ -55,11 +58,11 @@ export async function run(): Promise<void> {
     async (rawParams: unknown) => {
       const params = isRecord(rawParams) ? rawParams : {};
       const actionParam = params.action;
-      if (!agentId) {
+      if (agentId === undefined) {
         const name =
           actionParam === "register" && typeof params.name === "string"
             ? params.name
-            : `codex-${nanoid(4)}`;
+            : `codex-${nanoid(CODEX_AGENT_NAME_SUFFIX_LENGTH)}`;
         const reg = await ensureRegistered({
           cwd: process.cwd(),
           store,
@@ -104,7 +107,7 @@ export async function run(): Promise<void> {
     cwd: process.cwd(),
     store,
     harness: "codex",
-    defaultName: `codex-${nanoid(4)}`,
+    defaultName: `codex-${nanoid(CODEX_AGENT_NAME_SUFFIX_LENGTH)}`,
   });
   agentId = reg.agentId;
 }

@@ -13,7 +13,7 @@ import { ChatController } from "./controller.js";
 
 export async function runCli(
   command: string,
-  args: string[],
+  args: readonly string[],
   userName: string,
 ): Promise<void> {
   const controller = new ChatController(userName);
@@ -37,13 +37,13 @@ export async function runCli(
 async function dispatch(
   controller: ChatController,
   command: string,
-  args: string[],
+  args: readonly string[],
 ): Promise<{ content: string; isError: boolean }> {
   switch (command) {
     case "send": {
       const room = args[0];
       const content = args.slice(1).join(" ");
-      if (!room || !content) {
+      if (room === undefined || room === "" || !content) {
         return {
           content: "Usage: agent-comms send <room> <message>",
           isError: true,
@@ -57,7 +57,7 @@ async function dispatch(
     case "dm": {
       const agent = args[0];
       const content = args.slice(1).join(" ");
-      if (!agent || !content) {
+      if (agent === undefined || agent === "" || !content) {
         return {
           content: "Usage: agent-comms dm <agent-id> <message>",
           isError: true,
@@ -71,7 +71,7 @@ async function dispatch(
       return controller.listAgents();
     case "read": {
       const room = args[0];
-      if (!room) {
+      if (room === undefined || room === "") {
         return {
           content: "Usage: agent-comms read <room> [--since <iso>]",
           isError: true,

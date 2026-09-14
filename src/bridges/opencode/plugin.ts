@@ -20,18 +20,23 @@ import { nanoid } from "../../core/nanoid.js";
 // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us. A plugin unload has no hook here; a stale lock self-heals via the pid probe.
 const identitySlot: IdentitySlot = { harness: "opencode", cwd: process.cwd() };
 
+// Length (in characters) of the random suffix appended to the default auto-generated agent name.
+const DEFAULT_NAME_SUFFIX_LENGTH = 4;
+
 // Minimal interface for the OpenCode SDK client we actually use
 interface OpenCodeClient {
   tui: {
-    appendPrompt(body: { text: string }): Promise<unknown>;
-    submitPrompt(): Promise<unknown>;
+    appendPrompt: (body: Readonly<{ text: string }>) => Promise<unknown>;
+    submitPrompt: () => Promise<unknown>;
   };
   session: {
-    list(): Promise<{ data: { id: string }[] }>;
-    prompt(opts: {
-      path: { id: string };
-      body: { parts: { type: string; text: string }[] };
-    }): Promise<unknown>;
+    list: () => Promise<{ data: { id: string }[] }>;
+    prompt: (
+      opts: Readonly<{
+        path: { id: string };
+        body: { parts: { type: string; text: string }[] };
+      }>,
+    ) => Promise<unknown>;
   };
 }
 
@@ -62,7 +67,7 @@ export const AgentCommsPlugin = async (opts: {
     cwd: process.cwd(),
     store,
     harness: "opencode",
-    defaultName: `opencode-${nanoid(4)}`,
+    defaultName: `opencode-${nanoid(DEFAULT_NAME_SUFFIX_LENGTH)}`,
   });
   const agentId = reg.agentId;
 
