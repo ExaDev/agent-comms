@@ -1,3 +1,9 @@
+## [2.20.1](https://github.com/ExaDev/agent-comms/compare/v2.20.0...v2.20.1) (2026-09-14)
+
+### Bug Fixes
+
+* **bridge:** retry blockPort's bind against a transient EADDRINUSE ([b1cbd1e](https://github.com/ExaDev/agent-comms/commit/b1cbd1ed842140f36d2b7497d5711886f9558540))
+
 ## [2.20.0](https://github.com/ExaDev/agent-comms/compare/v2.19.1...v2.20.0) (2026-09-13)
 
 ### Features
