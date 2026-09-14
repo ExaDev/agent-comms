@@ -64,14 +64,14 @@ export function parseInput(
     return parseCommand(trimmed, currentRoom);
   }
 
-  if (currentRoom) {
+  if (currentRoom !== undefined && currentRoom !== "") {
     return {
       kind: "action",
       action: { action: "send", target: currentRoom, content: trimmed },
     };
   }
 
-  if (dmTarget) {
+  if (dmTarget !== undefined && dmTarget !== "") {
     return {
       kind: "action",
       action: { action: "dm", target: dmTarget, content: trimmed },
@@ -96,7 +96,7 @@ function parseCommand(
 
   switch (cmd) {
     case "join":
-      if (!parts[1]) {
+      if (parts[1] === undefined || parts[1] === "") {
         return {
           kind: "local",
           result: { type: "error", text: "Usage: /join <room>" },
@@ -129,7 +129,12 @@ function parseCommand(
       };
 
     case "dm":
-      if (!parts[1] || !parts[2]) {
+      if (
+        parts[1] === undefined ||
+        parts[1] === "" ||
+        parts[2] === undefined ||
+        parts[2] === ""
+      ) {
         return {
           kind: "local",
           result: {
@@ -148,7 +153,7 @@ function parseCommand(
       };
 
     case "create":
-      if (!parts[1]) {
+      if (parts[1] === undefined || parts[1] === "") {
         return {
           kind: "local",
           result: { type: "error", text: "Usage: /create <name>" },
@@ -164,7 +169,7 @@ function parseCommand(
       };
 
     case "destroy":
-      if (!parts[1]) {
+      if (parts[1] === undefined || parts[1] === "") {
         return {
           kind: "local",
           result: { type: "error", text: "Usage: /destroy <room>" },
@@ -176,7 +181,12 @@ function parseCommand(
       };
 
     case "rename":
-      if (!parts[1] || !parts[2]) {
+      if (
+        parts[1] === undefined ||
+        parts[1] === "" ||
+        parts[2] === undefined ||
+        parts[2] === ""
+      ) {
         return {
           kind: "local",
           result: {

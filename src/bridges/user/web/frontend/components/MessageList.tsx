@@ -6,7 +6,11 @@ import { useRef, useEffect } from "preact/hooks";
 import type { DisplayMessage } from "../types.js";
 import { Message } from "./Message.js";
 
-export function MessageList({ messages }: { messages: DisplayMessage[] }) {
+export function MessageList({
+  messages,
+}: {
+  messages: readonly DisplayMessage[];
+}) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

@@ -69,9 +69,10 @@ export async function fetchRoomMessages(
   roomId: string,
   since?: string,
 ): Promise<MessagesResponse> {
-  const url = since
-    ? `/api/rooms/${encodeURIComponent(roomId)}/messages?since=${encodeURIComponent(since)}`
-    : `/api/rooms/${encodeURIComponent(roomId)}/messages`;
+  const url =
+    since !== undefined
+      ? `/api/rooms/${encodeURIComponent(roomId)}/messages?since=${encodeURIComponent(since)}`
+      : `/api/rooms/${encodeURIComponent(roomId)}/messages`;
   const res = await fetch(url);
   const body: unknown = await res.json();
   if (!isMessagesResponse(body)) throw new Error("Invalid messages response");
@@ -93,6 +94,9 @@ export async function postAction(action: Action): Promise<ActionResult> {
 // WebSocket client
 // ---------------------------------------------------------------------------
 
+/** Delay before attempting to reconnect a dropped WebSocket connection. */
+const RECONNECT_DELAY_MS = 3000;
+
 export interface WsEventHandler {
   onOpen?: () => void;
   onClose?: () => void;
@@ -104,7 +108,7 @@ export class CommsWs {
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly handler: WsEventHandler;
 
-  constructor(handler: WsEventHandler) {
+  constructor(handler: Readonly<WsEventHandler>) {
     this.handler = handler;
   }
 
@@ -157,6 +161,6 @@ export class CommsWs {
   private scheduleReconnect(): void {
     this.reconnectTimer = setTimeout(() => {
       this.connect();
-    }, 3000);
+    }, RECONNECT_DELAY_MS);
   }
 }

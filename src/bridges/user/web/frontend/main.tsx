@@ -106,7 +106,11 @@ function handleFrame(frame: WsFrame): void {
     case "result":
       addMessage({ type: "system", text: frame.result.content });
       if (!frame.result.isError) {
-        if (pendingAction?.action === "join_room" && !state.get().currentRoom) {
+        if (
+          pendingAction?.action === "join_room" &&
+          (state.get().currentRoom === undefined ||
+            state.get().currentRoom === "")
+        ) {
           const roomId = pendingAction.room;
           state.setDmTarget(undefined);
           state.setCurrentRoom(roomId);
@@ -165,7 +169,7 @@ function onSelectAgent(agentId: string): void {
 
 function onLeaveRoom(): void {
   const currentRoom = state.get().currentRoom;
-  if (currentRoom) {
+  if (currentRoom !== undefined && currentRoom !== "") {
     sendAction({ action: "leave_room", room: currentRoom });
     state.setCurrentRoom(undefined);
     state.clearMessages();

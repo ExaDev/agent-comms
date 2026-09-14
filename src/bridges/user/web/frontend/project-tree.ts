@@ -16,7 +16,11 @@ interface Branch {
   agents: Agent[];
 }
 
-function insertIntoTrie(node: Branch, segments: string[], agent: Agent): void {
+function insertIntoTrie(
+  node: Branch,
+  segments: readonly string[],
+  agent: Agent,
+): void {
   const [seg, ...rest] = segments;
   if (seg === undefined) {
     node.agents.push(agent);
@@ -31,7 +35,7 @@ function insertIntoTrie(node: Branch, segments: string[], agent: Agent): void {
 }
 
 /** Ensure a branch path exists in the trie (creates intermediate nodes). */
-function ensureBranch(node: Branch, segments: string[]): void {
+function ensureBranch(node: Branch, segments: readonly string[]): void {
   const [seg, ...rest] = segments;
   if (seg === undefined) return;
   let child = node.children.get(seg);
@@ -63,7 +67,10 @@ function projectRoomCwd(room: Room): string {
   return room.description.slice(PROJECT_ROOM_PREFIX.length);
 }
 
-export function buildProjectTree(agents: Agent[], rooms: Room[]): ProjectTree {
+export function buildProjectTree(
+  agents: readonly Agent[],
+  rooms: readonly Room[],
+): ProjectTree {
   const manualRooms = rooms.filter((r) => !isProjectRoom(r));
 
   // Index project rooms by their cwd path
@@ -120,7 +127,7 @@ function splitPath(p: string): string[] {
   return p.split("/").filter((s) => s.length > 0);
 }
 
-function joinPath(...segments: string[]): string {
+function joinPath(...segments: readonly string[]): string {
   return "/" + segments.join("/");
 }
 
@@ -128,7 +135,7 @@ function joinPath(...segments: string[]): string {
  * Find the longest common parent directory among all paths.
  * Returns "/" if there's no common prefix beyond root.
  */
-function commonPathPrefix(paths: string[]): string {
+function commonPathPrefix(paths: readonly string[]): string {
   if (paths.length === 0) return "/";
 
   const split = paths.map(splitPath);
@@ -206,7 +213,7 @@ function branchToNodesWithRooms(
   return nodes;
 }
 
-function sortChildren(nodes: TreeNode[]): TreeNode[] {
+function sortChildren(nodes: readonly TreeNode[]): TreeNode[] {
   return [...nodes].sort((a, b) => {
     // Directories first, then agents
     if (a.type !== b.type) {

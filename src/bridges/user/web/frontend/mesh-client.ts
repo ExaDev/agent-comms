@@ -29,6 +29,11 @@ export interface MeshClientState {
   connected: boolean;
 }
 
+/** The web server's default port when standalone (coordinator default 19876 + 1), the base port `probeLocalMesh` starts walking up from. */
+const DEFAULT_WEB_SERVER_PORT = 19877;
+/** How many ports above `DEFAULT_WEB_SERVER_PORT` to probe before giving up, matching the server's own port-discovery walk-up range. */
+const MESH_PROBE_MAX_ATTEMPTS = 10;
+
 // ---------------------------------------------------------------------------
 // MeshClient
 // ---------------------------------------------------------------------------
@@ -45,7 +50,9 @@ export class MeshClient {
   private readonly pendingActions = new Map<
     string,
     {
-      resolve: (result: { content: string; isError: boolean }) => void;
+      resolve: (
+        result: Readonly<{ content: string; isError: boolean }>,
+      ) => void;
       reject: (error: Error) => void;
     }
   >();
@@ -73,19 +80,13 @@ export class MeshClient {
             break;
           if (!("agents" in raw.state) || !("rooms" in raw.state)) break;
           const state = raw.state;
-          // State from mesh SharedWorker is SerialisedState where agents/rooms
-          // are Record<string, T>. Object.values on object returns any[], which
-          // is the actual runtime shape.
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          const agents: AgentIdentity[] =
-            typeof state.agents === "object" && state.agents !== null
-              ? Object.values(state.agents)
-              : [];
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          const rooms: RoomLike[] =
-            typeof state.rooms === "object" && state.rooms !== null
-              ? Object.values(state.rooms)
-              : [];
+          // State from mesh SharedWorker is SerialisedState where agents/rooms are Record<string, T>. isAgentLike/isRoomLike validate at the same shallow depth as isOutboundMessage above, matching this file's "no Zod, just interfaces" convention -- filtering with a type predicate narrows Object.values' result to the declared element type without an unsafe assignment.
+          const agents: AgentIdentity[] = isRecord(state.agents)
+            ? Object.values(state.agents).filter(isAgentLike)
+            : [];
+          const rooms: RoomLike[] = isRecord(state.rooms)
+            ? Object.values(state.rooms).filter(isRoomLike)
+            : [];
           this.state = {
             ...this.state,
             agents,
@@ -132,7 +133,7 @@ export class MeshClient {
       // Standalone PWA (e.g. GitHub Pages) — probe localhost ports.
       // The web server binds at coordinatorPort + 1, walking up if taken.
       // Coordinator defaults to 19876, so web server starts at 19877.
-      this.probeLocalMesh(19877, 10);
+      this.probeLocalMesh(DEFAULT_WEB_SERVER_PORT, MESH_PROBE_MAX_ATTEMPTS);
     }
   }
 
@@ -218,4 +219,24 @@ interface OutboundMessage {
 
 function isOutboundMessage(value: unknown): value is OutboundMessage {
   return typeof value === "object" && value !== null && "type" in value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isAgentLike(value: unknown): value is AgentIdentity {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string"
+  );
+}
+
+function isRoomLike(value: unknown): value is RoomLike {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string"
+  );
 }

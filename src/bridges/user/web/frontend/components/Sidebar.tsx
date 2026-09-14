@@ -10,8 +10,8 @@ import { JoinForm } from "./JoinForm.js";
 import { ProjectTree } from "./ProjectTree.js";
 
 interface SidebarProps {
-  rooms: Room[];
-  agents: Agent[];
+  rooms: readonly Room[];
+  agents: readonly Agent[];
   currentRoom: string | undefined;
   collapsed: boolean;
   onJoinRoom: (roomId: string) => void;

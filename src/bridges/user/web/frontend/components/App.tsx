@@ -11,11 +11,11 @@ import { ChatArea } from "./ChatArea.js";
 import { Sidebar } from "./Sidebar.js";
 
 export interface AppProps {
-  rooms: Room[];
-  agents: Agent[];
+  rooms: readonly Room[];
+  agents: readonly Agent[];
   currentRoom: string | undefined;
   dmTarget: string | undefined;
-  messages: DisplayMessage[];
+  messages: readonly DisplayMessage[];
   connected: boolean;
   onJoinRoom: (roomId: string) => void;
   onSelectAgent: (agentId: string) => void;

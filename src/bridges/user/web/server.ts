@@ -22,7 +22,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { PushManager } from "../../../core/push-manager.js";
-import type { PushSubscription } from "../../../core/push-manager.js";
+import type { PushSubscription } from "../../../core/web-push.js";
 import { ChatController } from "../controller.js";
 import type { MeshStore } from "../../../core/mesh-store.js";
 import type {
@@ -31,6 +31,11 @@ import type {
 } from "../../../core/wire-protocol.js";
 
 const WEB_HOST = "127.0.0.1";
+
+const HTTP_NO_CONTENT = 204;
+const HTTP_OK = 200;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_NOT_FOUND = 404;
 
 // ---------------------------------------------------------------------------
 // Static assets — loaded into memory at module load
@@ -237,21 +242,21 @@ function handleRequest(
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
-    res.writeHead(204);
+    res.writeHead(HTTP_NO_CONTENT);
     res.end();
     return;
   }
 
   // Frontend HTML
   if (url.pathname === "/" && req.method === "GET") {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.writeHead(HTTP_OK, { "Content-Type": "text/html; charset=utf-8" });
     res.end(INDEX_HTML);
     return;
   }
 
   // Frontend JS bundle
   if (url.pathname === "/bundle.js" && req.method === "GET") {
-    res.writeHead(200, {
+    res.writeHead(HTTP_OK, {
       "Content-Type": "application/javascript; charset=utf-8",
     });
     res.end(BUNDLE_JS);
@@ -260,7 +265,7 @@ function handleRequest(
 
   // Mesh SharedWorker bundle
   if (url.pathname === "/mesh-worker.js" && req.method === "GET") {
-    res.writeHead(200, {
+    res.writeHead(HTTP_OK, {
       "Content-Type": "application/javascript; charset=utf-8",
     });
     res.end(MESH_WORKER_JS);
@@ -269,7 +274,7 @@ function handleRequest(
 
   // Service worker bundle
   if (url.pathname === "/sw.js" && req.method === "GET") {
-    res.writeHead(200, {
+    res.writeHead(HTTP_OK, {
       "Content-Type": "application/javascript; charset=utf-8",
       "Service-Worker-Allowed": "/",
     });
@@ -279,7 +284,7 @@ function handleRequest(
 
   // Web App Manifest
   if (url.pathname === "/manifest.json" && req.method === "GET") {
-    res.writeHead(200, {
+    res.writeHead(HTTP_OK, {
       "Content-Type": "application/manifest+json; charset=utf-8",
     });
     res.end(MANIFEST_JSON);
@@ -291,7 +296,7 @@ function handleRequest(
     const filename = url.pathname.slice("/icons/".length);
     const icon = ICONS[filename];
     if (icon) {
-      res.writeHead(200, {
+      res.writeHead(HTTP_OK, {
         "Content-Type": "image/svg+xml",
         "Cache-Control": "public, max-age=604800",
       });
@@ -334,8 +339,8 @@ function handleRequest(
   ) {
     void (async () => {
       const roomId = url.pathname.split("/")[3];
-      if (!roomId) {
-        jsonError(res, "Room ID required", 400);
+      if (roomId === undefined || roomId === "") {
+        jsonError(res, "Room ID required", HTTP_BAD_REQUEST);
         return;
       }
       const since = url.searchParams.get("since") ?? undefined;
@@ -350,7 +355,7 @@ function handleRequest(
       const body = await readBody(req);
       const parsed: unknown = JSON.parse(body);
       if (typeof parsed !== "object" || parsed === null) {
-        jsonError(res, "Invalid JSON", 400);
+        jsonError(res, "Invalid JSON", HTTP_BAD_REQUEST);
         return;
       }
       const params = Object.fromEntries(Object.entries(parsed));
@@ -361,7 +366,7 @@ function handleRequest(
     return;
   }
 
-  res.writeHead(404);
+  res.writeHead(HTTP_NOT_FOUND);
   res.end("Not found");
 }
 
@@ -575,7 +580,12 @@ async function executeAction(
     case "send": {
       const target = getString(params, "target");
       const content = getString(params, "content");
-      if (!target || !content) {
+      if (
+        target === undefined ||
+        target === "" ||
+        content === undefined ||
+        content === ""
+      ) {
         return { content: "Missing target or content", isError: true };
       }
       return controller.send(target, content);
@@ -583,14 +593,20 @@ async function executeAction(
     case "dm": {
       const target = getString(params, "target");
       const content = getString(params, "content");
-      if (!target || !content) {
+      if (
+        target === undefined ||
+        target === "" ||
+        content === undefined ||
+        content === ""
+      ) {
         return { content: "Missing target or content", isError: true };
       }
       return controller.dm(target, content);
     }
     case "join_room": {
       const room = getString(params, "room");
-      if (!room) return { content: "Missing room", isError: true };
+      if (room === undefined || room === "")
+        return { content: "Missing room", isError: true };
       const result = await controller.switchRoom(room);
       if (!result.isError) {
         const msgs = await controller.readRoom();
@@ -609,7 +625,8 @@ async function executeAction(
       const name = getString(params, "name");
       const type = getRoomType(params, "type") ?? "public";
       const description = getString(params, "description") ?? "";
-      if (!name) return { content: "Missing name", isError: true };
+      if (name === undefined || name === "")
+        return { content: "Missing name", isError: true };
       return controller.createRoom(name, type, description);
     }
     case "list_rooms":
@@ -622,34 +639,55 @@ async function executeAction(
     }
     case "destroy_room": {
       const room = getString(params, "room");
-      if (!room) return { content: "Missing room", isError: true };
+      if (room === undefined || room === "")
+        return { content: "Missing room", isError: true };
       return controller.destroyRoom(room);
     }
     case "invite": {
       const room = getString(params, "room");
       const agent = getString(params, "agent");
-      if (!room || !agent)
+      if (
+        room === undefined ||
+        room === "" ||
+        agent === undefined ||
+        agent === ""
+      )
         return { content: "Missing room or agent", isError: true };
       return controller.invite(room, agent);
     }
     case "decline_invite": {
       const room = getString(params, "room");
       const reason = getString(params, "reason");
-      if (!room || !reason)
+      if (
+        room === undefined ||
+        room === "" ||
+        reason === undefined ||
+        reason === ""
+      )
         return { content: "Missing room or reason", isError: true };
       return controller.declineInvite(room, reason);
     }
     case "kick": {
       const room = getString(params, "room");
       const agent = getString(params, "agent");
-      if (!room || !agent)
+      if (
+        room === undefined ||
+        room === "" ||
+        agent === undefined ||
+        agent === ""
+      )
         return { content: "Missing room or agent", isError: true };
       return controller.kick(room, agent);
     }
     case "rename_agent": {
       const agent = getString(params, "agent");
       const name = getString(params, "name");
-      if (!agent || !name)
+      if (
+        agent === undefined ||
+        agent === "" ||
+        name === undefined ||
+        name === ""
+      )
         return { content: "Missing agent or name", isError: true };
       return controller.renameAgent(agent, name);
     }
@@ -701,7 +739,7 @@ function parsePushSubscription(value: unknown): PushSubscription | undefined {
 // ---------------------------------------------------------------------------
 
 function json(res: http.ServerResponse, data: unknown): void {
-  res.writeHead(200, { "Content-Type": "application/json" });
+  res.writeHead(HTTP_OK, { "Content-Type": "application/json" });
   res.end(JSON.stringify(data));
 }
 
@@ -714,10 +752,12 @@ function jsonError(
   res.end(JSON.stringify({ error: message }));
 }
 
-function readBody(req: http.IncomingMessage): Promise<string> {
+async function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
     req.on("end", () => {
       resolve(Buffer.concat(chunks).toString());
     });

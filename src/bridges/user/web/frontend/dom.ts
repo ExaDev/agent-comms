@@ -22,7 +22,7 @@ export function requireElement(
 ): HTMLElement {
   const el = root.querySelector<HTMLElement>(selector);
   if (!el) throw new Error(`Required element not found: ${selector}`);
-  if (tag && el.tagName.toLowerCase() !== tag) {
+  if (tag !== undefined && el.tagName.toLowerCase() !== tag) {
     throw new Error(
       `Element ${selector} must be <${tag}>, got <${el.tagName.toLowerCase()}>`,
     );
@@ -46,8 +46,11 @@ export function escapeHtml(text: string): string {
 /**
  * Format an ISO timestamp to HH:MM:SS for display.
  */
+const ISO_TIME_OF_DAY_START = 11;
+const ISO_TIME_OF_DAY_END = 19;
+
 export function formatTime(timestamp: string): string {
-  return timestamp.slice(11, 19);
+  return timestamp.slice(ISO_TIME_OF_DAY_START, ISO_TIME_OF_DAY_END);
 }
 
 /**
