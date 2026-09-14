@@ -6,7 +6,7 @@ import type { FedCallbacks } from "./federation.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { AgentIdentity, Room, RoomMessage } from "./types.js";
 
-/** The state and DeliveryEngine operations FederationBridge needs from MeshStore -- the core agents/rooms/messages Maps are direct references into MeshStore's own fields, and deliveryEngine is the already-constructed instance (construction order: ... -> deliveryEngine -> federationBridge -> federation), narrowed to only the membership/broadcast/delivery operations a federation callback ever needs. */
+/** The state and DeliveryEngine operations FederationBridge needs from MeshStore -- the core agents/rooms/messages Maps are direct references into MeshStore's own fields, and deliveryEngine is the already-constructed instance (construction order: ... -\> deliveryEngine -\> federationBridge -\> federation), narrowed to only the membership/broadcast/delivery operations a federation callback ever needs. */
 export interface FederationBridgeDeps {
   agents: Map<string, AgentIdentity>;
   rooms: Map<string, Room>;
@@ -59,7 +59,7 @@ export class FederationBridge implements FedCallbacks {
   /** Called when a message arrives for a federated room -- stores it locally and delivers to all local room members. */
   async onRoomMessage(roomId: string, message: RoomMessage): Promise<void> {
     const room = this.deps.rooms.get(roomId);
-    if (!room?.federated) return;
+    if (room?.federated !== true) return;
 
     const arr = this.deps.messages.get(roomId) ?? [];
     arr.push(message);
@@ -80,7 +80,7 @@ export class FederationBridge implements FedCallbacks {
     _agentName: string,
   ): Promise<void> {
     const room = this.deps.rooms.get(roomId);
-    if (!room?.federated) return;
+    if (room?.federated !== true) return;
 
     const remoteId = `fed:${agentId}`;
 
@@ -105,7 +105,7 @@ export class FederationBridge implements FedCallbacks {
   /** Called when a remote agent leaves a federated room. */
   async onRoomLeave(roomId: string, agentId: string): Promise<void> {
     const room = this.deps.rooms.get(roomId);
-    if (!room?.federated) return;
+    if (room?.federated !== true) return;
 
     const remoteId = `fed:${agentId}`;
     this.deps.deliveryEngine.bump(room);
@@ -139,7 +139,7 @@ export class FederationBridge implements FedCallbacks {
   getFederatedRoomMemberships(): Map<string, string[]> {
     const result = new Map<string, string[]>();
     for (const [roomId, room] of this.deps.rooms) {
-      if (room.federated) {
+      if (room.federated === true) {
         const localMembers = room.members.filter((m) => !m.startsWith("fed:"));
         result.set(roomId, localMembers);
       }

@@ -60,79 +60,76 @@ export interface ConnectionHandle {
 
 export interface TransportEvents {
   /**
-   * A wire message was received from a peer.
-   * Called for every complete message after framing.
+   * A wire message was received from a peer. Called for every complete message after framing.
    */
-  onMessage(handle: ConnectionHandle, message: MeshMessage): void;
+  onMessage: (handle: Readonly<ConnectionHandle>, message: MeshMessage) => void;
 
   /**
-   * A new data connection was established and the peer identified itself
-   * via a pong message. MeshStore should wire up state handling for this peer.
+   * A new data connection was established and the peer identified itself via a pong message. MeshStore should wire up state handling for this peer.
    */
-  onPeerConnected(handle: ConnectionHandle, info: PeerInfo): void;
+  onPeerConnected: (
+    handle: Readonly<ConnectionHandle>,
+    info: Readonly<PeerInfo>,
+  ) => void;
 
   /**
    * A peer connection was lost (close, error, or timeout).
    */
-  onPeerDisconnected(handle: ConnectionHandle): void;
+  onPeerDisconnected: (handle: Readonly<ConnectionHandle>) => void;
 
   /**
    * A non-fatal error occurred that consumers should know about.
    */
-  onError?(error: Error): void;
+  onError?: (error: Error) => void;
 
   /**
-   * A peer introduced itself to the coordinator.
-   * Only fires on the coordinator instance.
-   * MeshStore should send the peer list and broadcast the arrival.
+   * A peer introduced itself to the coordinator. Only fires on the coordinator instance. MeshStore should send the peer list and broadcast the arrival.
    */
-  onIntroduction(
-    handle: ConnectionHandle,
-    msg: { peerId: string; dataPort: number },
-  ): void;
+  onIntroduction: (
+    handle: Readonly<ConnectionHandle>,
+    msg: Readonly<{ peerId: string; dataPort: number }>,
+  ) => void;
 
   /**
-   * A new peer introduced itself and is awaiting approval.
-   * Replaces onIntroduction when connection approval is active.
-   * Only fires on the coordinator instance.
-   * MeshStore should queue the request and deliver a connection_request
-   * event to the owning agent.
+   * A new peer introduced itself and is awaiting approval. Replaces onIntroduction when connection approval is active. Only fires on the coordinator instance. MeshStore should queue the request and deliver a connection_request event to the owning agent.
    */
-  onConnectionRequest(
-    handle: ConnectionHandle,
-    info: {
+  onConnectionRequest: (
+    handle: Readonly<ConnectionHandle>,
+    info: Readonly<{
       peerId: string;
       dataPort: number;
       name: string;
       fingerprint: string;
-    },
-  ): void;
+    }>,
+  ) => void;
 
   /**
-   * The coordinator sent us a peer list (received during initial connection).
-   * MeshStore should connect to each peer's data server.
+   * The coordinator sent us a peer list (received during initial connection). MeshStore should connect to each peer's data server.
    */
-  onPeerList(peers: PeerInfo[]): void;
+  onPeerList: (peers: readonly PeerInfo[]) => void;
 
   /**
    * The coordinator told us a new peer joined.
    */
-  onPeerJoined(peer: PeerInfo): void;
+  onPeerJoined: (peer: Readonly<PeerInfo>) => void;
 
   /**
    * We received a become_coordinator message — take over as coordinator.
    */
-  onBecomeCoordinator(peerList: PeerInfo[]): void;
+  onBecomeCoordinator: (peerList: readonly PeerInfo[]) => void;
 
   /**
    * A peer announced one already-minted revocation-entry over an established session (management.cddl's revocation-announce, flattened to one call per entry). MeshStore should verify it and, if it verifies, record it in its own RevocationView -- a bearer's already-issued token stays valid to every peer that never received this until it does, per the design's own honest "detection with propagation delay" limit.
    */
-  onRevocationAnnounce(entry: RevocationEntry): void;
+  onRevocationAnnounce: (entry: RevocationEntry) => void;
 
   /**
    * A peer's gossiped self-advert carried a `presence/status` extension (wire-mesh-core's peer-advert open extension tail, re-sent periodically via sendGossipUpdate). Fires only when that key is present and a recognised AgentStatus value -- an advert with no presence extension, or an unrecognised value, is a peer that simply isn't advertising presence over this mechanism, not an error.
    */
-  onPresenceAdvert(handle: ConnectionHandle, status: AgentStatus): void;
+  onPresenceAdvert: (
+    handle: Readonly<ConnectionHandle>,
+    status: AgentStatus,
+  ) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -153,113 +150,105 @@ export interface MeshTransport {
    * Start the data server on an OS-assigned port.
    * Resolves when the server is listening.
    */
-  startDataServer(): Promise<void>;
+  startDataServer: () => Promise<void>;
 
   /**
-   * Connect to the coordinator at the given host:port and send an
-   * introduction message. Resolves when the connection is established
-   * and the introduction has been sent.
-   * Rejects if no coordinator is reachable (caller should becomeCoordinator).
+   * Connect to the coordinator at the given host:port and send an introduction message. Resolves when the connection is established and the introduction has been sent. Rejects if no coordinator is reachable (caller should becomeCoordinator).
    */
-  connectToCoordinator(
+  connectToCoordinator: (
     host: string,
     port: number,
     peerId: string,
     dataPort: number,
-  ): Promise<void>;
+  ) => Promise<void>;
 
   /**
-   * Start listening as the coordinator on the given host:port.
-   * Resolves when the coordinator server is listening.
+   * Start listening as the coordinator on the given host:port. Resolves when the coordinator server is listening.
    */
-  becomeCoordinator(host: string, port: number): Promise<void>;
+  becomeCoordinator: (host: string, port: number) => Promise<void>;
 
   /**
-   * Connect to a peer's data server and send a pong identification.
-   * Resolves when the connection is established and pong sent.
-   * No-op if already connected to this peer.
+   * Connect to a peer's data server and send a pong identification. Resolves when the connection is established and pong sent. No-op if already connected to this peer.
    */
-  connectToPeer(peer: PeerInfo, ownPeerId: string): Promise<void>;
+  connectToPeer: (peer: Readonly<PeerInfo>, ownPeerId: string) => Promise<void>;
 
   /**
    * Send a wire message to a specific peer connection.
    */
-  send(handle: ConnectionHandle, message: MeshMessage): Promise<void>;
+  send: (
+    handle: Readonly<ConnectionHandle>,
+    message: MeshMessage,
+  ) => Promise<void>;
 
   /**
-   * Accept a pending connection. Sends connect_accepted and processes
-   * the introduction as normal (peer_list, peer_joined broadcast).
+   * Accept a pending connection. Sends connect_accepted and processes the introduction as normal (peer_list, peer_joined broadcast).
    */
-  acceptConnection(handle: ConnectionHandle): Promise<void>;
+  acceptConnection: (handle: Readonly<ConnectionHandle>) => Promise<void>;
 
   /**
    * Reject a pending connection. Sends connect_rejected and closes the socket.
    */
-  rejectConnection(handle: ConnectionHandle, reason: string): Promise<void>;
+  rejectConnection: (
+    handle: Readonly<ConnectionHandle>,
+    reason: string,
+  ) => Promise<void>;
 
   /**
-   * Initiate an outbound connection that requires approval.
-   * Sends connect_request instead of introduce and waits for
-   * connect_accepted or connect_rejected from the remote coordinator.
+   * Initiate an outbound connection that requires approval. Sends connect_request instead of introduce and waits for connect_accepted or connect_rejected from the remote coordinator.
    */
-  connectToRemote(
+  connectToRemote: (
     host: string,
     port: number,
     peerId: string,
     dataPort: number,
     name: string,
     fingerprint: string,
-  ): Promise<void>;
+  ) => Promise<void>;
 
   /**
    * Broadcast a wire message to all connected peer data connections.
    */
-  broadcast(message: MeshMessage): Promise<void>;
+  broadcast: (message: MeshMessage) => Promise<void>;
 
   /**
    * Announces one or more already-minted revocation-entries to every connected peer session, best-effort (an unreachable peer misses it and learns of the revocation later, if ever -- the same honest gossip-propagation-delay limit every other broadcast in this codebase already accepts).
    */
-  broadcastRevocation(entries: readonly RevocationEntry[]): Promise<void>;
+  broadcastRevocation: (entries: readonly RevocationEntry[]) => Promise<void>;
 
   /**
    * Sends a real core/room manage-request to a specific member's own established session, returning its outcome (e.g. a room.join request's granted-token, or a room.send's delivery receipt) rather than swallowing it the way send() does for the legacy opaque-frame path. Resolves to a not_connected error outcome if no live session to that member exists, rather than throwing -- the caller (currently room-join, and P3.5's directed fan-out once it lands) decides how to react to an unreachable member.
    */
-  sendRoomRequest(
+  sendRoomRequest: (
     memberId: string,
     command: ManageCommand,
     scope: Readonly<CapabilityScope>,
     token?: CapabilityToken,
-  ): Promise<ManageOutcome>;
+  ) => Promise<ManageOutcome>;
 
   /**
-   * Add a coordinator listener on a specific adapter.
-   * Only valid when this instance is the coordinator.
-   * Returns listener ID.
+   * Add a coordinator listener on a specific adapter. Only valid when this instance is the coordinator. Returns listener ID.
    */
-  addListener(
+  addListener: (
     host: string,
     port: number,
     policy: ListenerPolicy,
-  ): Promise<string>;
+  ) => Promise<string>;
 
   /**
    * Remove a listener by ID. Cannot remove the default localhost listener.
    */
-  removeListener(id: string): Promise<void>;
+  removeListener: (id: string) => Promise<void>;
 
   /** List all active listeners. */
-  listListeners(): ListenerInfo[];
+  listListeners: () => ListenerInfo[];
 
   /**
-   * Gracefully shut down all servers and connections.
-   * After shutdown, no further callbacks will fire.
+   * Gracefully shut down all servers and connections. After shutdown, no further callbacks will fire.
    */
-  shutdown(): Promise<void>;
+  shutdown: () => Promise<void>;
 
   /**
-   * Unref all root handles so the event loop can exit when the
-   * agent process shuts down. Sockets still function for I/O but
-   * don't keep the process alive.
+   * Unref all root handles so the event loop can exit when the agent process shuts down. Sockets still function for I/O but don't keep the process alive.
    */
-  unref(): void;
+  unref: () => void;
 }

@@ -47,7 +47,7 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
   private currentPayload: BeaconPayload | undefined;
   private isListening = false;
 
-  async startAdvertising(opts: AdvertiseOptions): Promise<string> {
+  async startAdvertising(opts: Readonly<AdvertiseOptions>): Promise<string> {
     const id = `mdns-${String(opts.port)}`;
 
     this.currentPayload = {
@@ -63,7 +63,7 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
     return id;
   }
 
-  stopAdvertising(): Promise<void> {
+  async stopAdvertising(): Promise<void> {
     if (this.beaconTimer !== undefined) {
       clearInterval(this.beaconTimer);
       this.beaconTimer = undefined;
@@ -73,16 +73,12 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
 
     // Only close the socket if we're not also discovering
     if (this.socket && !this.hasActiveListeners()) {
-      this.socket.close();
-      this.socket = undefined;
-      this.isListening = false;
+      await this.closeSocket();
     }
-
-    return Promise.resolve();
   }
 
   /** Stop all beacon activity and close the socket. */
-  stop(): Promise<void> {
+  async stop(): Promise<void> {
     if (this.beaconTimer !== undefined) {
       clearInterval(this.beaconTimer);
       this.beaconTimer = undefined;
@@ -91,12 +87,23 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
     this.currentPayload = undefined;
 
     if (this.socket) {
-      this.socket.close();
-      this.socket = undefined;
-      this.isListening = false;
+      await this.closeSocket();
     }
+  }
 
-    return Promise.resolve();
+  /** Close the UDP socket and wait for the underlying handle to actually release before resolving. */
+  private async closeSocket(): Promise<void> {
+    const socket = this.socket;
+    if (!socket) return;
+
+    await new Promise<void>((resolve) => {
+      socket.close(() => {
+        resolve();
+      });
+    });
+
+    this.socket = undefined;
+    this.isListening = false;
   }
 
   async discover(

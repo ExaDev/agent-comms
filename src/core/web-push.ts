@@ -11,7 +11,7 @@
  *   4. Prepend the sender's public key (65 bytes) to the ciphertext
  *
  * VAPID signing (RFC 8292):
- *   1. Build a JWT with { sub, exp, aud } claims
+ *   1. Build a JWT with sub, exp, and aud claims
  *   2. Sign with ES256 (ECDSA + P-256 + SHA-256)
  *   3. Append the public key and token to the Crypto-Key header
  */
@@ -45,6 +45,17 @@ const KEY_LENGTH = 16;
 const NONCE_LENGTH = 12;
 const SALT_LENGTH = 16;
 const MAX_PAYLOAD_SIZE = 4078;
+const EC_UNCOMPRESSED_POINT_LENGTH = 65;
+const RECORD_SIZE = 4096;
+const RECORD_SIZE_FIELD_LENGTH = 4;
+const VAPID_JWT_EXPIRY_HOURS = 12;
+const MINUTES_PER_HOUR = 60;
+const SECONDS_PER_MINUTE = 60;
+const MS_PER_SECOND = 1000;
+const HTTPS_DEFAULT_PORT = 443;
+const HTTP_DEFAULT_PORT = 80;
+const HTTP_STATUS_OK_MIN = 200;
+const HTTP_STATUS_OK_MAX = 299;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -58,8 +69,8 @@ const MAX_PAYLOAD_SIZE = 4078;
  */
 export async function sendWebPush(
   subscription: PushSubscription,
-  payload: PushPayload,
-  vapidKeys: VapidKeys,
+  payload: Readonly<PushPayload>,
+  vapidKeys: Readonly<VapidKeys>,
   subject: string,
 ): Promise<void> {
   const plaintext = JSON.stringify(payload);
@@ -102,7 +113,9 @@ function encrypt(plaintext: Buffer, keys: PushSubscription["keys"]): Buffer {
     type: "spki",
     format: "der",
   });
-  const senderPublicKey = senderPublicDer.subarray(senderPublicDer.length - 65);
+  const senderPublicKey = senderPublicDer.subarray(
+    senderPublicDer.length - EC_UNCOMPRESSED_POINT_LENGTH,
+  );
 
   // Derive the shared secret via ECDH
   const sharedSecret = crypto.diffieHellman({
@@ -146,8 +159,8 @@ function encrypt(plaintext: Buffer, keys: PushSubscription["keys"]): Buffer {
   const authTag = cipher.getAuthTag();
 
   // RFC 8291 §4: salt (16) || rs (4, big-endian, 4096) || sender pubkey (65) || ciphertext || tag
-  const rs = Buffer.alloc(4);
-  rs.writeUInt32BE(4096);
+  const rs = Buffer.alloc(RECORD_SIZE_FIELD_LENGTH);
+  rs.writeUInt32BE(RECORD_SIZE);
 
   return concat(salt, rs, senderPublicKey, ciphertext, authTag);
 }
@@ -175,12 +188,14 @@ function hkdfExpand(prk: Buffer, info: Buffer, length: number): Buffer {
 
 function buildVapidJwt(
   audience: string,
-  vapidKeys: VapidKeys,
+  vapidKeys: Readonly<VapidKeys>,
   subject: string,
 ): string {
   const header = base64url(Buffer.from('{"alg":"ES256","typ":"JWT"}', "utf-8"));
 
-  const exp = Math.floor(Date.now() / 1000) + 12 * 60 * 60; // 12 hours
+  const exp =
+    Math.floor(Date.now() / MS_PER_SECOND) +
+    VAPID_JWT_EXPIRY_HOURS * MINUTES_PER_HOUR * SECONDS_PER_MINUTE;
   const claims = JSON.stringify({ aud: audience, exp, sub: subject });
   const payload = base64url(Buffer.from(claims, "utf-8"));
 
@@ -217,7 +232,7 @@ function buildVapidJwt(
 function buildHeaders(
   encrypted: Buffer,
   endpoint: string,
-  vapidKeys: VapidKeys,
+  vapidKeys: Readonly<VapidKeys>,
   subject: string,
 ): Record<string, string> {
   const audience = new URL(endpoint).origin;
@@ -237,20 +252,24 @@ function buildHeaders(
 // HTTP POST
 // ---------------------------------------------------------------------------
 
-function post(
+async function post(
   endpoint: string,
-  headers: Record<string, string>,
+  headers: Readonly<Record<string, string>>,
   body: Buffer,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const url = new URL(endpoint);
     const isHttps = url.protocol === "https:";
     const mod = isHttps ? https : http;
+    const port =
+      url.port !== ""
+        ? url.port
+        : String(isHttps ? HTTPS_DEFAULT_PORT : HTTP_DEFAULT_PORT);
 
     const req = mod.request(
       {
         hostname: url.hostname,
-        port: url.port || (isHttps ? 443 : 80),
+        port,
         path: url.pathname + url.search,
         method: "POST",
         headers,
@@ -258,16 +277,19 @@ function post(
       (res) => {
         // Drain the response body
         const chunks: Buffer[] = [];
-        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("data", (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
         res.on("end", () => {
           if (
             res.statusCode !== undefined &&
-            (res.statusCode < 200 || res.statusCode > 299)
+            (res.statusCode < HTTP_STATUS_OK_MIN ||
+              res.statusCode > HTTP_STATUS_OK_MAX)
           ) {
-            const body = Buffer.concat(chunks).toString("utf-8");
+            const responseBody = Buffer.concat(chunks).toString("utf-8");
             reject(
               new Error(
-                `Push service returned ${String(res.statusCode)}: ${body}`,
+                `Push service returned ${String(res.statusCode)}: ${responseBody}`,
               ),
             );
           } else {
@@ -295,6 +317,6 @@ function base64url(input: Buffer): string {
   return input.toString("base64url");
 }
 
-function concat(...buffers: Buffer[]): Buffer {
+function concat(...buffers: readonly Buffer[]): Buffer {
   return Buffer.concat(buffers);
 }

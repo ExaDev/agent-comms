@@ -114,12 +114,12 @@ export class AgentRegistry {
 
     const oldStatus = agent.status;
     const oldName = agent.name;
-    Object.assign(agent, patch);
-    this.deps.deliveryEngine.bump(agent);
-    this.deps.agents.set(id, agent);
+    const updatedAgent: AgentIdentity = { ...agent, ...patch };
+    this.deps.deliveryEngine.bump(updatedAgent);
+    this.deps.agents.set(id, updatedAgent);
     await this.deps.deliveryEngine.broadcastPatch({
       type: "agent_upsert",
-      agent,
+      agent: updatedAgent,
     });
 
     if (patch.name !== undefined && patch.name !== oldName) {
@@ -134,7 +134,7 @@ export class AgentRegistry {
       await this.deps.deliveryEngine.notifyRoomsOfStatus(id, patch.status);
     }
 
-    return agent;
+    return updatedAgent;
   }
 
   async listAgents(requesterId: string): Promise<AgentIdentity[]> {

@@ -22,10 +22,26 @@ import {
 /** The uncompressed SEC1 point tag byte (RFC 5480 §2.2): 0x04 marks what follows as raw X||Y, never compressed or hybrid encoding. */
 const UNCOMPRESSED_POINT_TAG = 0x04;
 
+/** Days in the certificate validity period. */
+const CERTIFICATE_VALIDITY_DAYS = 365;
+/** Hours per day, used to convert the certificate validity period to milliseconds. */
+const HOURS_PER_DAY = 24;
+/** Minutes per hour, used to convert the certificate validity period to milliseconds. */
+const MINUTES_PER_HOUR = 60;
+/** Seconds per minute, used to convert the certificate validity period to milliseconds. */
+const SECONDS_PER_MINUTE = 60;
+/** Milliseconds per second, used to convert the certificate validity period to milliseconds. */
+const MS_PER_SECOND = 1000;
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 /** Self-signed certificate validity. Exported so identity persistence can derive its renewal margin. */
-export const CERTIFICATE_VALIDITY_MS = 365 * 24 * 60 * 60 * 1000;
+export const CERTIFICATE_VALIDITY_MS =
+  CERTIFICATE_VALIDITY_DAYS *
+  HOURS_PER_DAY *
+  MINUTES_PER_HOUR *
+  SECONDS_PER_MINUTE *
+  MS_PER_SECOND;
 
 export interface PeerIdentity {
   /** PEM-encoded PKCS#8 private key. */
@@ -42,11 +58,35 @@ export interface PeerIdentity {
 
 // ─── ASN.1 DER helpers ─────────────────────────────────────────────────────
 
+/** The high (0x80) bit of a byte -- the DER long-form length marker, the OID base-128 continuation bit, and the DER INTEGER sign bit all key off this same bit. */
+const HIGH_BIT = 0x80;
+/** Mask for the low 7 bits of a byte -- the payload bits in a DER long-form length prefix and in a base-128 OID subidentifier byte. */
+const LOW_7_BITS_MASK = 0x7f;
+/** Bits in a byte, used to split a DER length into its high and low bytes. */
+const BITS_PER_BYTE = 8;
+/** Mask for a single byte. */
+const BYTE_MASK = 0xff;
+/** Smallest length that needs a second DER long-form length byte (i.e. no longer fits in one byte). */
+const DER_LENGTH_TWO_BYTE_MIN = 0x100;
+/** DER long-form length prefix: one length byte follows. */
+const DER_LENGTH_PREFIX_1_BYTE = 0x81;
+/** DER long-form length prefix: two length bytes follow. */
+const DER_LENGTH_PREFIX_2_BYTES = 0x82;
+/** ASN.1 universal SEQUENCE tag. */
+const DER_TAG_SEQUENCE = 0x30;
+/** ASN.1 universal SET tag. */
+const DER_TAG_SET = 0x31;
+
 /** Encode a DER length field. */
 function derLength(length: number): Buffer {
-  if (length < 0x80) return Buffer.from([length]);
-  if (length < 0x100) return Buffer.from([0x81, length]);
-  return Buffer.from([0x82, (length >> 8) & 0xff, length & 0xff]);
+  if (length < HIGH_BIT) return Buffer.from([length]);
+  if (length < DER_LENGTH_TWO_BYTE_MIN)
+    return Buffer.from([DER_LENGTH_PREFIX_1_BYTE, length]);
+  return Buffer.from([
+    DER_LENGTH_PREFIX_2_BYTES,
+    (length >> BITS_PER_BYTE) & BYTE_MASK,
+    length & BYTE_MASK,
+  ]);
 }
 
 /** Wrap content bytes in a DER tag. */
@@ -59,14 +99,43 @@ function derWrap(tag: number, content: Buffer): Buffer {
 }
 
 /** DER SEQUENCE. */
-function derSequence(...items: Buffer[]): Buffer {
-  return derWrap(0x30, Buffer.concat(items));
+function derSequence(...items: readonly Buffer[]): Buffer {
+  return derWrap(DER_TAG_SEQUENCE, Buffer.concat(items));
 }
 
 /** DER SET. */
-function derSet(...items: Buffer[]): Buffer {
-  return derWrap(0x31, Buffer.concat(items));
+function derSet(...items: readonly Buffer[]): Buffer {
+  return derWrap(DER_TAG_SET, Buffer.concat(items));
 }
+
+/** X.690 rule for encoding an OID's first two arcs into a single byte: 40 * first-arc + second-arc. */
+const OID_FIRST_ARC_MULTIPLIER = 40;
+/** Bits carried per byte in an OID subidentifier's base-128 (7-bit group) varint encoding. */
+const BITS_PER_OID_GROUP = 7;
+/** ASN.1 universal OBJECT IDENTIFIER tag. */
+const DER_TAG_OID = 0x06;
+/** ASN.1 universal UTF8String tag. */
+const DER_TAG_UTF8_STRING = 0x0c;
+/** ASN.1 universal INTEGER tag. */
+const DER_TAG_INTEGER = 0x02;
+/** Leading zero byte prepended to a DER INTEGER whose first content byte has its sign bit set, so it is not misread as negative. */
+const DER_INTEGER_PADDING_BYTE = 0x00;
+/** ASN.1 universal BIT STRING tag. */
+const DER_TAG_BIT_STRING = 0x03;
+/** BIT STRING unused-bits prefix: this codec never leaves trailing unused bits. */
+const DER_BIT_STRING_NO_UNUSED_BITS = 0x00;
+/** ASN.1 universal OCTET STRING tag. */
+const DER_TAG_OCTET_STRING = 0x04;
+/** ASN.1 universal BOOLEAN tag. */
+const DER_TAG_BOOLEAN = 0x01;
+/** DER encodes a BOOLEAN true as an all-ones byte (X.690 §8.2.2 in DER mode). */
+const DER_BOOLEAN_TRUE_BYTE = 0xff;
+/** DER encodes a BOOLEAN false as an all-zeros byte. */
+const DER_BOOLEAN_FALSE_BYTE = 0x00;
+/** ASN.1 universal UTCTime tag. */
+const DER_TAG_UTCTIME = 0x17;
+/** UTCTime encodes the year as two digits, so the full year is taken modulo this. */
+const UTCTIME_YEAR_MODULUS = 100;
 
 /** DER OBJECT IDENTIFIER from dotted-decimal string. */
 function derOID(oid: string): Buffer {
@@ -76,59 +145,68 @@ function derOID(oid: string): Buffer {
   if (first === undefined || second === undefined) {
     throw new Error(`Invalid OID: ${oid}`);
   }
-  const bytes: number[] = [40 * first + second];
+  const bytes: number[] = [OID_FIRST_ARC_MULTIPLIER * first + second];
   for (let i = 2; i < parts.length; i++) {
     let value = parts[i];
     if (value === undefined) continue;
-    if (value < 128) {
+    if (value < HIGH_BIT) {
       bytes.push(value);
       continue;
     }
     const encoded: number[] = [];
-    encoded.push(value & 0x7f);
-    value >>= 7;
+    encoded.push(value & LOW_7_BITS_MASK);
+    value >>= BITS_PER_OID_GROUP;
     while (value > 0) {
-      encoded.push(0x80 | (value & 0x7f));
-      value >>= 7;
+      encoded.push(HIGH_BIT | (value & LOW_7_BITS_MASK));
+      value >>= BITS_PER_OID_GROUP;
     }
     bytes.push(...encoded.reverse());
   }
-  return derWrap(0x06, Buffer.from(bytes));
+  return derWrap(DER_TAG_OID, Buffer.from(bytes));
 }
 
 /** DER UTF8String. */
 function derUTF8String(value: string): Buffer {
-  return derWrap(0x0c, Buffer.from(value, "utf8"));
+  return derWrap(DER_TAG_UTF8_STRING, Buffer.from(value, "utf8"));
 }
 
 /** DER INTEGER from a raw byte buffer (adds leading zero if high bit set). */
 function derIntegerBytes(value: Buffer): Buffer {
   const firstByte = value[0];
-  if (firstByte === undefined || firstByte & 0x80) {
-    return derWrap(0x02, Buffer.concat([Buffer.from([0x00]), value]));
+  if (firstByte === undefined || firstByte & HIGH_BIT) {
+    return derWrap(
+      DER_TAG_INTEGER,
+      Buffer.concat([Buffer.from([DER_INTEGER_PADDING_BYTE]), value]),
+    );
   }
-  return derWrap(0x02, value);
+  return derWrap(DER_TAG_INTEGER, value);
 }
 
 /** DER BIT STRING (with zero unused-bits prefix). */
 function derBitString(content: Buffer): Buffer {
-  return derWrap(0x03, Buffer.concat([Buffer.from([0x00]), content]));
+  return derWrap(
+    DER_TAG_BIT_STRING,
+    Buffer.concat([Buffer.from([DER_BIT_STRING_NO_UNUSED_BITS]), content]),
+  );
 }
 
 /** DER OCTET STRING. */
 function derOctetString(content: Buffer): Buffer {
-  return derWrap(0x04, content);
+  return derWrap(DER_TAG_OCTET_STRING, content);
 }
 
 /** DER BOOLEAN. */
 function derBoolean(value: boolean): Buffer {
-  return derWrap(0x01, Buffer.from([value ? 0xff : 0x00]));
+  return derWrap(
+    DER_TAG_BOOLEAN,
+    Buffer.from([value ? DER_BOOLEAN_TRUE_BYTE : DER_BOOLEAN_FALSE_BYTE]),
+  );
 }
 
 /** DER UTCTime from a Date. Format: YYMMDDHHMMSSZ */
-function derUTCTime(date: Date): Buffer {
+function derUTCTime(date: Readonly<Date>): Buffer {
   const str = [
-    String(date.getUTCFullYear() % 100).padStart(2, "0"),
+    String(date.getUTCFullYear() % UTCTIME_YEAR_MODULUS).padStart(2, "0"),
     String(date.getUTCMonth() + 1).padStart(2, "0"),
     String(date.getUTCDate()).padStart(2, "0"),
     String(date.getUTCHours()).padStart(2, "0"),
@@ -136,7 +214,7 @@ function derUTCTime(date: Date): Buffer {
     String(date.getUTCSeconds()).padStart(2, "0"),
     "Z",
   ].join("");
-  return derWrap(0x17, Buffer.from(str, "ascii"));
+  return derWrap(DER_TAG_UTCTIME, Buffer.from(str, "ascii"));
 }
 
 // ─── OID constants ──────────────────────────────────────────────────────────
@@ -152,13 +230,27 @@ const OID_SAN = "2.5.29.17";
 /** Basic Constraints extension. */
 const OID_BASIC_CONSTRAINTS = "2.5.29.19";
 
+/** X.509 TBSCertificate `version` field's context-specific tag: `[0] EXPLICIT`. */
+const CONTEXT_TAG_VERSION = 0xa0;
+/** X.509 TBSCertificate `extensions` field's context-specific tag: `[3] EXPLICIT`. */
+const CONTEXT_TAG_EXTENSIONS = 0xa3;
+/** SAN GeneralName `dNSName` choice's context-specific tag: `[2] IMPLICIT`. */
+const SAN_TAG_DNS_NAME = 0x82;
+/** SAN GeneralName `iPAddress` choice's context-specific tag: `[7] IMPLICIT`. */
+const SAN_TAG_IP_ADDRESS = 0x87;
+/** First octet of the IPv4 loopback address (127.0.0.1) encoded into the SAN `iPAddress` extension. */
+const LOCALHOST_IPV4_FIRST_OCTET = 127;
+/** Random bytes hashed to seed the certificate serial number. */
+const SERIAL_SEED_BYTES = 16;
+/** Certificate serial number length in bytes (RFC 5280 recommends no more than 20 octets). */
+const SERIAL_LENGTH_BYTES = 20;
+
 // ─── Certificate building ───────────────────────────────────────────────────
 
 /**
  * Build a self-signed X.509 v3 certificate in DER format.
  *
- * Structure (RFC 5280 §4.1):
- *   Certificate ::= SEQUENCE { tbsCertificate, signatureAlgorithm, signatureValue }
+ * Structure (RFC 5280 §4.1): `Certificate ::= SEQUENCE { tbsCertificate, signatureAlgorithm, signatureValue }`
  */
 function buildCertificateDer(
   tbsCertificate: Buffer,
@@ -175,15 +267,7 @@ function buildCertificateDer(
 /**
  * Build the TBSCertificate DER structure.
  *
- * Structure (RFC 5280 §4.1.2):
- *   version [0] EXPLICIT INTEGER (v3 = 2),
- *   serialNumber INTEGER,
- *   signature AlgorithmIdentifier,
- *   issuer Name,
- *   validity { notBefore, notAfter },
- *   subject Name,
- *   subjectPublicKeyInfo SubjectPublicKeyInfo,
- *   extensions [3] EXPLICIT Extensions OPTIONAL
+ * Structure (RFC 5280 §4.1.2): `version [0] EXPLICIT INTEGER (v3 = 2), serialNumber INTEGER, signature AlgorithmIdentifier, issuer Name, validity { notBefore, notAfter }, subject Name, subjectPublicKeyInfo SubjectPublicKeyInfo, extensions [3] EXPLICIT Extensions OPTIONAL`
  */
 function buildTbsCertificate(
   serial: Buffer,
@@ -194,7 +278,10 @@ function buildTbsCertificate(
   extensions: Buffer,
 ): Buffer {
   // version: [0] EXPLICIT { INTEGER 2 } → a0 03 02 01 02
-  const version = derWrap(0xa0, derIntegerBytes(Buffer.from([2])));
+  const version = derWrap(
+    CONTEXT_TAG_VERSION,
+    derIntegerBytes(Buffer.from([2])),
+  );
 
   return derSequence(
     version,
@@ -204,7 +291,7 @@ function buildTbsCertificate(
     validity,
     issuerSubject, // subject (same as issuer for self-signed)
     subjectPublicKeyInfoDer,
-    derWrap(0xa3, derSequence(extensions)), // [3] EXPLICIT
+    derWrap(CONTEXT_TAG_EXTENSIONS, derSequence(extensions)), // [3] EXPLICIT
   );
 }
 
@@ -226,8 +313,11 @@ function buildExtensions(publicKeyDer: Buffer): Buffer {
 
   // Subject Alternative Name
   const sanValue = derSequence(
-    derWrap(0x82, Buffer.from("localhost", "ascii")), // dNSName
-    derWrap(0x87, Buffer.from([127, 0, 0, 1])), // iPAddress
+    derWrap(SAN_TAG_DNS_NAME, Buffer.from("localhost", "ascii")), // dNSName
+    derWrap(
+      SAN_TAG_IP_ADDRESS,
+      Buffer.from([LOCALHOST_IPV4_FIRST_OCTET, 0, 0, 1]),
+    ), // iPAddress
   );
   const sanExtension = derSequence(derOID(OID_SAN), derOctetString(sanValue));
 
@@ -268,14 +358,15 @@ export function certifyKeyPair(privateKeyPem: string): PeerIdentity {
     format: "der",
   });
 
-  // Random serial number (20 bytes). Clear the high bit to ensure positive.
+  // Random serial number (SERIAL_LENGTH_BYTES bytes). Clear the high bit to ensure positive.
   const serialBytes = createHash("sha256")
-    .update(randomBytes(16))
+    .update(randomBytes(SERIAL_SEED_BYTES))
     .digest()
-    .subarray(0, 20);
+    .subarray(0, SERIAL_LENGTH_BYTES);
   const serial = Buffer.from(serialBytes);
   const firstSerialByte = serial[0];
-  if (firstSerialByte !== undefined) serial[0] = firstSerialByte & 0x7f;
+  if (firstSerialByte !== undefined)
+    serial[0] = firstSerialByte & LOW_7_BITS_MASK;
   // DER INTEGERs are minimally encoded: a leading zero byte is only legal when the following byte's high bit is set. Clearing the sign bit above can leave 0x00 here, which OpenSSL rejects as illegal padding when the certificate is loaded (tls.createServer then fails despite retries), so pin it to a minimal non-zero value.
   if (serial[0] === 0) serial[0] = 1;
 

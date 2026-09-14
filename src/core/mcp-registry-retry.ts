@@ -6,7 +6,11 @@
 export const INITIAL_RETRY_DELAY_MS = 15_000;
 export const MAX_RETRY_DELAY_MS = 120_000;
 export const RETRY_BACKOFF_MULTIPLIER = 2;
-export const MAX_TOTAL_RETRY_MS = 15 * 60 * 1000;
+const MAX_TOTAL_RETRY_MINUTES = 15;
+const SECONDS_PER_MINUTE = 60;
+const MS_PER_SECOND = 1000;
+export const MAX_TOTAL_RETRY_MS =
+  MAX_TOTAL_RETRY_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
 
 /** The next delay in the doubling-with-cap backoff schedule, given the delay just used. */
 export function nextRetryDelayMs(previousDelayMs: number): number {

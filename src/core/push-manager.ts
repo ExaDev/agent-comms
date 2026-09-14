@@ -16,12 +16,6 @@ import {
 } from "./web-push.js";
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type { PushSubscription, PushPayload };
-
-// ---------------------------------------------------------------------------
 // PushManager
 // ---------------------------------------------------------------------------
 
@@ -63,7 +57,10 @@ export class PushManager {
    * No-ops silently if no subscription exists — callers should check
    * hasSubscription() first if they need to distinguish the two cases.
    */
-  async sendPush(agentId: string, payload: PushPayload): Promise<void> {
+  async sendPush(
+    agentId: string,
+    payload: Readonly<PushPayload>,
+  ): Promise<void> {
     const subscription = this.subscriptions.get(agentId);
     if (!subscription) return;
 

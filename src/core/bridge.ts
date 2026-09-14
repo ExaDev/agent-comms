@@ -365,6 +365,8 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       return { action: "mesh_fed_disconnect", linkId: p.id };
     case "mesh_fed_links":
       return { action: "mesh_fed_links" };
+    default:
+      return p.action satisfies never;
   }
 }
 
@@ -414,13 +416,15 @@ export function formatDeliveryEvent(event: DeliveryEvent): string {
     case "member_status":
       return `${event.agent} is now ${event.status} in ${event.room}`;
     case "delivery_status":
-      return `Message ${event.messageId} ${event.status} by ${event.agent}${event.room ? ` in ${event.room}` : ""}`;
+      return `Message ${event.messageId} ${event.status} by ${event.agent}${event.room !== undefined ? ` in ${event.room}` : ""}`;
     case "invite_declined":
       return `${event.agentName} declined invite to ${event.room}: "${event.reason}"`;
     case "name_changed":
       return `${event.oldName} is now known as ${event.newName}`;
     case "connection_request":
       return `Connection request from ${event.peerId} (${event.name}) fingerprint ${event.fingerprint}`;
+    default:
+      return event satisfies never;
   }
 }
 
@@ -451,6 +455,8 @@ export function isActionableEvent(event: DeliveryEvent): boolean {
     case "name_changed":
     case "connection_request":
       return false;
+    default:
+      return event satisfies never;
   }
 }
 
@@ -510,7 +516,7 @@ export async function ensureRegistered(opts: {
  * Every agent computes an owner-rooted path with itself as owner, so two agents in the same cwd do not currently converge on one shared room -- a real, deliberately deferred regression from the pre-core/room behaviour (see the design doc's OQ-2: deterministic lowest-device-id ownership is P3.4's own responsibility, once gossiped presence data is wired up here).
  */
 export async function ensureProjectRoom(
-  store: CommsStore,
+  store: Readonly<CommsStore>,
   agentId: string,
   cwd: string,
 ): Promise<string> {
@@ -543,7 +549,7 @@ export async function ensureProjectRoom(
 // ---------------------------------------------------------------------------
 
 export async function drainAndFormat(
-  store: CommsStore,
+  store: Readonly<CommsStore>,
   agentId: string,
 ): Promise<string[]> {
   const events = await store.drainDelivery(agentId);

@@ -27,8 +27,10 @@ export interface IdentitySlot {
   dir?: string;
 }
 
+/** Renewal margin is one twelfth of the certificate's total validity period. */
+const RENEWAL_MARGIN_FRACTION = 12;
 /** Renew during the final twelfth of the certificate's validity. */
-const RENEWAL_MARGIN_MS = CERTIFICATE_VALIDITY_MS / 12;
+const RENEWAL_MARGIN_MS = CERTIFICATE_VALIDITY_MS / RENEWAL_MARGIN_FRACTION;
 
 /** A CapabilityToken (COSE_Sign1: [protected header bytes, unprotected header map, payload bytes or null, signature bytes]) with every byte-string field base64-encoded for JSON storage. Only the two named unprotected-header fields (alg, kid) are round-tripped -- every token minted by wire-mesh-core today leaves the unprotected header empty (alg/kid live in the protected header instead), so the schema's own open catchall for arbitrary extra keys is left unhandled until a real caller actually needs one preserved. */
 type SerializedCapabilityToken = [
@@ -47,10 +49,14 @@ interface StoredIdentity {
   issuedGrants?: Record<string, string>;
 }
 
+/** A COSE_Sign1 tuple always has exactly 4 elements: protected header, unprotected header, payload, signature. */
+const COSE_SIGN1_TUPLE_LENGTH = 4;
+
 function isSerializedCapabilityToken(
   value: unknown,
 ): value is SerializedCapabilityToken {
-  if (!Array.isArray(value) || value.length !== 4) return false;
+  if (!Array.isArray(value) || value.length !== COSE_SIGN1_TUPLE_LENGTH)
+    return false;
   const protectedHeader: unknown = value[0];
   const unprotectedHeader: unknown = value[1];
   const payload: unknown = value[2];
@@ -136,7 +142,7 @@ function slugifyCwd(cwd: string): string {
   return cwd.replace(/[\\/:*?"<>|]/g, "_");
 }
 
-function slotPaths(slot: IdentitySlot): {
+function slotPaths(slot: Readonly<IdentitySlot>): {
   dir: string;
   identityFile: string;
   lockFile: string;
@@ -190,7 +196,9 @@ function persistIdentity(identityFile: string, identity: PeerIdentity): void {
 /**
  * Load the persisted identity for the slot, creating it on first use, and take the slot lock. Returns an ephemeral identity when the slot is already held by another live process.
  */
-export function loadOrCreateIdentity(slot: IdentitySlot): PeerIdentity {
+export function loadOrCreateIdentity(
+  slot: Readonly<IdentitySlot>,
+): PeerIdentity {
   const { dir, identityFile, lockFile } = slotPaths(slot);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 
@@ -259,7 +267,7 @@ function createIdentity(identityFile: string): PeerIdentity {
 /**
  * Release the slot lock on graceful shutdown. A lock held by another PID (taken over after this process crashed and restarted) is left alone.
  */
-export function releaseIdentityLock(slot: IdentitySlot): void {
+export function releaseIdentityLock(slot: Readonly<IdentitySlot>): void {
   const { lockFile } = slotPaths(slot);
   if (readLockPid(lockFile) === process.pid) {
     fs.rmSync(lockFile, { force: true });
@@ -291,7 +299,7 @@ function writeStoredIdentity(
  * Every room-membership capability token persisted for this slot, keyed by room path. Empty if the slot has never had one saved (or the identity file doesn't exist yet -- call loadOrCreateIdentity first).
  */
 export function loadRoomTokens(
-  slot: IdentitySlot,
+  slot: Readonly<IdentitySlot>,
 ): Record<string, CapabilityToken> {
   const { identityFile } = slotPaths(slot);
   const stored = readStoredIdentity(identityFile);
@@ -307,7 +315,7 @@ export function loadRoomTokens(
  * Persists a capability token for the given room path, surviving a restart the same way the identity it was minted against does. Overwrites any token already saved for that room; leaves every other room's token and the identity's own key material untouched.
  */
 export function saveRoomToken(
-  slot: IdentitySlot,
+  slot: Readonly<IdentitySlot>,
   roomPath: string,
   token: CapabilityToken,
 ): void {
@@ -326,12 +334,17 @@ export function saveRoomToken(
 }
 
 /** Removes the persisted token for one room path, if any. A no-op if none was saved for that path. */
-export function deleteRoomToken(slot: IdentitySlot, roomPath: string): void {
+export function deleteRoomToken(
+  slot: Readonly<IdentitySlot>,
+  roomPath: string,
+): void {
   const { identityFile } = slotPaths(slot);
   const stored = readStoredIdentity(identityFile);
   if (stored?.roomTokens === undefined) return;
   const roomTokens = Object.fromEntries(
-    Object.entries(stored.roomTokens).filter(([path]) => path !== roomPath),
+    Object.entries(stored.roomTokens).filter(
+      ([storedRoomPath]) => storedRoomPath !== roomPath,
+    ),
   );
   writeStoredIdentity(identityFile, { ...stored, roomTokens });
 }
@@ -344,7 +357,7 @@ function issuedGrantKey(roomPath: string, memberDeviceHex: string): string {
  * The token-id this identity itself minted for the given member's room:member grant, or undefined if none is on record (the slot has never admitted this member, or the record predates this bookkeeping). A room owner consults this to revoke a specific member's own grant later -- a token-id, unlike the token itself, is never presented on the wire and so is never obtainable except from this identity's own memory of having minted it.
  */
 export function loadIssuedRoomGrant(
-  slot: IdentitySlot,
+  slot: Readonly<IdentitySlot>,
   roomPath: string,
   memberDeviceHex: string,
 ): Uint8Array<ArrayBuffer> | undefined {
@@ -361,7 +374,7 @@ export function loadIssuedRoomGrant(
  * Records the token-id of a room:member grant this identity has just minted for memberDeviceHex in roomPath, surviving a restart the same way roomTokens does. Overwrites any earlier record for the same (roomPath, member) pair -- a fresh join/invite always supersedes the grant it replaces, so only the current token-id is ever worth revoking.
  */
 export function saveIssuedRoomGrant(
-  slot: IdentitySlot,
+  slot: Readonly<IdentitySlot>,
   roomPath: string,
   memberDeviceHex: string,
   tokenId: Uint8Array,
@@ -383,7 +396,7 @@ export function saveIssuedRoomGrant(
 
 /** Removes the recorded token-id for one (roomPath, member) grant, if any -- called once a kick has revoked it, so a later re-join mints and records a genuinely fresh one rather than leaving a stale entry alongside it. A no-op if none was recorded. */
 export function deleteIssuedRoomGrant(
-  slot: IdentitySlot,
+  slot: Readonly<IdentitySlot>,
   roomPath: string,
   memberDeviceHex: string,
 ): void {
