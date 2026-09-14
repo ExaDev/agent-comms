@@ -12,6 +12,9 @@ import { wireTestTransport } from "./test-transport.js";
 
 const TEST_PORT = 19879;
 
+// Time to let the coordinator's event loop process the ECONNRESET error event before asserting the process survived it.
+const ERROR_PROCESSING_DELAY_MS = 300;
+
 /**
  * When a peer connects to the coordinator and then abruptly resets
  * the connection (ECONNRESET), the coordinator process must not crash.
@@ -39,7 +42,9 @@ test("coordinator survives ECONNRESET on accepted socket", async () => {
   socket.resetAndDestroy();
 
   // Give the server time to process the error event
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  await new Promise((resolve) => {
+    setTimeout(resolve, ERROR_PROCESSING_DELAY_MS);
+  });
 
   // If we reach here, the process didn't crash from the unhandled error.
   // Verify the store is still functional.

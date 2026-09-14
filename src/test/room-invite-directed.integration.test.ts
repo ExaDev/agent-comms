@@ -113,7 +113,8 @@ test("inviting an unreachable target throws rather than silently dropping the in
       owner: owner.peerId,
       description: "",
     });
-    const strangerId = "b".repeat(64);
+    const DEVICE_ID_HEX_LENGTH = 64;
+    const strangerId = "b".repeat(DEVICE_ID_HEX_LENGTH);
     await expect(
       owner.inviteToRoom(room.id, strangerId, owner.peerId),
     ).rejects.toMatchObject({ code: "INVITE_FAILED" });

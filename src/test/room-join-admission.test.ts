@@ -30,7 +30,9 @@ import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import type { ConnectionHandle, MeshTransport } from "../core/transport.js";
 import { wireTestTransport } from "./test-transport.js";
 
-const REQUESTER_ID = "b".repeat(64);
+const DEVICE_ID_HEX_LENGTH = 64;
+const TOKEN_TTL_MS = 60_000;
+const REQUESTER_ID = "b".repeat(DEVICE_ID_HEX_LENGTH);
 
 function fakeRequest(scopePath: string): {
   request: IncomingManageRequest;
@@ -132,7 +134,7 @@ describe("handleRoomJoin (owner side)", () => {
     const store = new MeshStore();
     await wireTestTransport(store);
     // Neither "c"x64 nor "d"x64 is this store's own peerId, so this DM path names a conversation the store has no part in -- the dm-admission integration tests cover the genuinely-a-participant case end to end.
-    const dmPath = `${deviceIdToHex(deviceIdFromHex("c".repeat(64)))}+${deviceIdToHex(deviceIdFromHex("d".repeat(64)))}`;
+    const dmPath = `${deviceIdToHex(deviceIdFromHex("c".repeat(DEVICE_ID_HEX_LENGTH)))}+${deviceIdToHex(deviceIdFromHex("d".repeat(DEVICE_ID_HEX_LENGTH)))}`;
 
     const handler = store.roomVerbHandlers["room.join"];
     expect(handler).toBeTruthy();
@@ -150,7 +152,7 @@ describe("handleRoomJoin (owner side)", () => {
   it("refuses a named room this store doesn't own", async () => {
     const store = new MeshStore();
     await wireTestTransport(store);
-    const someoneElse = "e".repeat(64);
+    const someoneElse = "e".repeat(DEVICE_ID_HEX_LENGTH);
     const roomPath = ownerNamedRoomPath(someoneElse, "general");
 
     const handler = store.roomVerbHandlers["room.join"];
@@ -185,7 +187,7 @@ describe("joinRoom (requester side, remote path)", () => {
       revocation: createRevocationView(),
     });
 
-    const ownerId = "f".repeat(64);
+    const ownerId = "f".repeat(DEVICE_ID_HEX_LENGTH);
     const roomPath = ownerNamedRoomPath(ownerId, "general");
     // A real, validly-minted token -- roomJoinOkSchema validates the wire response's own granted-token shape against the real CapabilityToken schema, so a hand-rolled fixture would just fail that validation. Minted here by the requester's own identity purely as a stand-in for "any real token the owner could have sent"; who actually signed it plays no part in this test, only that saveRoomToken's own CapabilityToken contract is satisfied.
     const grantedTokenVerdict = await mintCapabilityToken({
@@ -195,7 +197,7 @@ describe("joinRoom (requester side, remote path)", () => {
       bearer: deviceIdFromHex(store.peerId),
       capability: "room:member",
       scope: { kind: "room", path: roomPath },
-      expires: Date.now() + 60_000,
+      expires: Date.now() + TOKEN_TTL_MS,
       delegationsRemaining: 0,
     });
     expect(

@@ -23,8 +23,29 @@ import { wireTestTransport } from "./test-transport.js";
 const MESH_A_PORT = 28876;
 const MESH_B_PORT = 28877;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// ---------------------------------------------------------------------------
+// Timing constants — settle windows for asynchronous mesh/federation propagation. There is no "operation complete" signal for these steps, so the test waits a fixed budget rather than polling.
+// ---------------------------------------------------------------------------
+
+/** Milliseconds to wait after a mesh-setup step (creating a mesh, starting the federation listener) for local state to settle. */
+const MESH_SETUP_SETTLE_MS = 100;
+/** Milliseconds to wait for a freshly established federation link to settle before exercising it. */
+const FED_LINK_SETTLE_MS = 200;
+/** Milliseconds to wait for a federated room (or a join against its mirror) to propagate across the federation link. */
+const FED_ROOM_SETTLE_MS = 200;
+/** Milliseconds to wait for a room message to propagate across an established federation link. */
+const FED_MESSAGE_PROPAGATION_MS = 500;
+/** Milliseconds to wait for a non-federated (local-only) room to settle after creation. */
+const LOCAL_ROOM_SETTLE_MS = 100;
+/** Milliseconds to wait for a local-only message to settle, confirming it does not leak across federation. */
+const LOCAL_MESSAGE_SETTLE_MS = 100;
+/** Milliseconds to wait for a federation link disconnect to propagate. */
+const FED_DISCONNECT_SETTLE_MS = 200;
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -59,8 +80,8 @@ async function createMesh(
 }
 
 /** Find a free port on localhost. */
-function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
+async function findFreePort(): Promise<number> {
+  return await new Promise((resolve, reject) => {
     const server = net.createServer();
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
@@ -84,18 +105,18 @@ async function main(): Promise<void> {
 
   console.log("Creating mesh A (coordinator)...");
   const a = await createMesh("mesh-a-agent", MESH_A_PORT);
-  await sleep(100);
+  await sleep(MESH_SETUP_SETTLE_MS);
 
   console.log("Creating mesh B (coordinator)...");
   const b = await createMesh("mesh-b-agent", MESH_B_PORT);
-  await sleep(100);
+  await sleep(MESH_SETUP_SETTLE_MS);
 
   const fedPort = await findFreePort();
   console.log(`Using federation port ${String(fedPort)}`);
 
   // Start A's real production federation listener (fedListen -> FederationManager.listen -> handleInbound, the same path a deployed coordinator uses — not a hand-rolled test-only TLS server).
   await a.store.fedListen("127.0.0.1", fedPort);
-  await sleep(100);
+  await sleep(MESH_SETUP_SETTLE_MS);
 
   // --- Test 0: untrusted inbound connection is rejected ---
   console.log("\nTest 0: untrusted connection is rejected...");
@@ -142,7 +163,7 @@ async function main(): Promise<void> {
     "Remote mesh ID should be present",
   ).toBeTruthy();
 
-  await sleep(200);
+  await sleep(FED_LINK_SETTLE_MS);
 
   // --- Test 2: Agent presence propagates ---
   console.log("Test 2: Agent presence propagates...");
@@ -174,7 +195,7 @@ async function main(): Promise<void> {
     federated: true,
   });
   console.log(`  Created federated room: ${fedRoom.id}`);
-  await sleep(200);
+  await sleep(FED_ROOM_SETTLE_MS);
 
   // Federation matches a room across the two separate meshes by literal id equality (handleFedRoomMessage/Join/Leave all key off the incoming roomId string directly) -- an owner-rooted path only coincides on both sides when both sides construct it from the same owner, so B's mirror of A's room is created with A's own peerId as owner, not B's.
   const fedRoomB = await b.store.createRoom({
@@ -187,7 +208,7 @@ async function main(): Promise<void> {
   console.log(`  Created matching federated room on B: ${fedRoomB.id}`);
   // createRoom's default members is [owner] -- since owner is A's peerId (to make the id match), B's own local agent must explicitly join its mirror for handleFedRoomMessage's local-delivery loop to reach it.
   await b.store.joinRoom(fedRoomB.id, b.store.peerId);
-  await sleep(200);
+  await sleep(FED_ROOM_SETTLE_MS);
 
   a.deliveries.length = 0;
   b.deliveries.length = 0;
@@ -198,7 +219,7 @@ async function main(): Promise<void> {
     "Hello from mesh A!",
   );
   console.log(`  A sent: "${msg.content}"`);
-  await sleep(500);
+  await sleep(FED_MESSAGE_PROPAGATION_MS);
 
   const fedMsgs = b.deliveries.filter(
     (e) =>
@@ -225,7 +246,7 @@ async function main(): Promise<void> {
   console.log(
     `  Created non-federated room: ${localRoom.id}, federated=${String(localRoom.federated)}`,
   );
-  await sleep(100);
+  await sleep(LOCAL_ROOM_SETTLE_MS);
 
   b.deliveries.length = 0;
 
@@ -236,7 +257,7 @@ async function main(): Promise<void> {
     "Secret local message",
   );
   console.log("  Message sent.");
-  await sleep(100);
+  await sleep(LOCAL_MESSAGE_SETTLE_MS);
 
   const leakedMsgs = b.deliveries.filter(
     (e) =>
@@ -257,7 +278,7 @@ async function main(): Promise<void> {
   // --- Test 6: Disconnect federation link ---
   console.log("Test 6: Disconnect federation link...");
   await b.store.fedDisconnect(linkId);
-  await sleep(200);
+  await sleep(FED_DISCONNECT_SETTLE_MS);
 
   const linksAfter = b.store.fedLinks();
   expect(

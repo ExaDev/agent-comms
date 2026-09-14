@@ -25,7 +25,9 @@ import type { MeshMessage } from "../core/wire-protocol.js";
 import type { AgentStatus } from "../core/types.js";
 import { waitFor } from "./test-transport.js";
 
-function noopEvents(overrides: Partial<TransportEvents> = {}): TransportEvents {
+function noopEvents(
+  overrides: Readonly<Partial<TransportEvents>> = {},
+): TransportEvents {
   return {
     onMessage: () => undefined,
     onPeerConnected: () => undefined,
@@ -42,7 +44,7 @@ function noopEvents(overrides: Partial<TransportEvents> = {}): TransportEvents {
 }
 
 /** Finds a free localhost port by binding to port 0 and immediately releasing it -- used both for uniquePort()-style allocation and, when nothing is subsequently listened on it, as a guaranteed-refused dial target. */
-function findFreePort(): Promise<number> {
+async function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.listen(0, "127.0.0.1", () => {
@@ -57,6 +59,11 @@ function findFreePort(): Promise<number> {
 async function peerId(identity: { deviceId: Uint8Array }): Promise<string> {
   // Uint8Array.from(...) normalises identity.deviceId's own ArrayBufferLike-backed type to the plain ArrayBuffer-backed Uint8Array deviceIdToHex expects -- the same normalisation test-transport.ts's own wireTestTransport already applies for the identical reason.
   return deviceIdToHex(Uint8Array.from(identity.deviceId));
+}
+
+/** Waits `ms` milliseconds -- shared boilerplate for this file's fixed settle-time waits, so each one only needs a named constant at the call site rather than its own Promise/setTimeout shape. */
+async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => void setTimeout(resolve, ms));
 }
 
 describe("WireMeshTransport wire-level constants", () => {
@@ -103,8 +110,10 @@ describe("WireMeshTransport presence-interval construction", () => {
         () => "active",
         // Deliberately omitted: relying on the constructor's own default presenceReadvertiseIntervalMs argument is the point of this test -- it proves PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND actually computes 20_000, not merely that *some* interval gets scheduled.
       );
+      // Mirrors WireMeshTransport's own default cadence (PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND).
+      const READVERTISE_MS = 20_000;
       expect(setIntervalSpy).toHaveBeenCalledTimes(1);
-      expect(setIntervalSpy.mock.calls[0]?.[1]).toBe(20_000);
+      expect(setIntervalSpy.mock.calls[0]?.[1]).toBe(READVERTISE_MS);
       expect(unrefSpy).toHaveBeenCalledTimes(1);
     } finally {
       setIntervalSpy.mockRestore();
@@ -134,7 +143,7 @@ describe("WireMeshTransport coordinator/getter state", () => {
     const transportA = new WireMeshTransport(noopEvents(), identityA);
     const disconnects: ConnectionHandle[] = [];
     const transportB = new WireMeshTransport(
-      noopEvents({ onPeerDisconnected: (h) => disconnects.push(h) }),
+      noopEvents({ onPeerDisconnected: (h) => void disconnects.push(h) }),
       identityB,
     );
     try {
@@ -168,8 +177,8 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
     const requestsSeenByA: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(
       noopEvents({
-        onConnectionRequest: (handle) => requestsSeenByA.push(handle),
-        onPeerDisconnected: (handle) => disconnectsSeenByA.push(handle),
+        onConnectionRequest: (handle) => void requestsSeenByA.push(handle),
+        onPeerDisconnected: (handle) => void disconnectsSeenByA.push(handle),
       }),
       identityA,
     );
@@ -214,7 +223,8 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
       await session.close();
 
       // No positive event to poll for here (the assertion below proves an absence), so a fixed wait is the right shape, matching approval.integration.test.ts's own "reject closes with reason" convention -- long enough for A's watchForDisconnect handler to have processed the closed session event.
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      const DISCONNECT_SETTLE_MS = 300;
+      await delay(DISCONNECT_SETTLE_MS);
 
       // The strongest available proof the pending entry was actually cleaned up (not merely "not yet decided", which would be equally true before disconnect too): a decision made afterwards must fail exactly like it does for any other unknown handle.
       await expect(
@@ -237,7 +247,7 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
 
     const requests: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({ onConnectionRequest: (h) => requests.push(h) }),
+      noopEvents({ onConnectionRequest: (h) => void requests.push(h) }),
       identityA,
     );
     const transportB = new WireMeshTransport(noopEvents(), identityB);
@@ -292,8 +302,8 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
     const messagesSeenByA: MeshMessage[] = [];
     const transportA = new WireMeshTransport(
       noopEvents({
-        onConnectionRequest: (h) => requests.push(h),
-        onMessage: (_h, m) => messagesSeenByA.push(m),
+        onConnectionRequest: (h) => void requests.push(h),
+        onMessage: (_h, m) => void messagesSeenByA.push(m),
       }),
       identityA,
     );
@@ -327,7 +337,8 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
       await transportB
         .send({ id: idA }, { method: "peer_left", peerId: "nobody" })
         .catch(() => undefined);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      const SEND_SETTLE_MS = 200;
+      await delay(SEND_SETTLE_MS);
       expect(messagesSeenByA.length).toBe(0);
     } finally {
       await transportB.shutdown();
@@ -346,13 +357,13 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
     const messagesSeenByB: MeshMessage[] = [];
     const transportA = new WireMeshTransport(
       noopEvents({
-        onConnectionRequest: (h) => requests.push(h),
-        onMessage: (_h, m) => messagesSeenByA.push(m),
+        onConnectionRequest: (h) => void requests.push(h),
+        onMessage: (_h, m) => void messagesSeenByA.push(m),
       }),
       identityA,
     );
     const transportB = new WireMeshTransport(
-      noopEvents({ onMessage: (_h, m) => messagesSeenByB.push(m) }),
+      noopEvents({ onMessage: (_h, m) => void messagesSeenByB.push(m) }),
       identityB,
     );
     try {
@@ -419,11 +430,11 @@ describe("WireMeshTransport connectToPeer", () => {
     const messagesSeenByA: MeshMessage[] = [];
     const messagesSeenByB: MeshMessage[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({ onMessage: (_h, m) => messagesSeenByA.push(m) }),
+      noopEvents({ onMessage: (_h, m) => void messagesSeenByA.push(m) }),
       identityA,
     );
     const transportB = new WireMeshTransport(
-      noopEvents({ onMessage: (_h, m) => messagesSeenByB.push(m) }),
+      noopEvents({ onMessage: (_h, m) => void messagesSeenByB.push(m) }),
       identityB,
     );
     try {
@@ -474,7 +485,7 @@ describe("WireMeshTransport connectToPeer", () => {
     const errors: Error[] = [];
     const transportA = new WireMeshTransport(noopEvents(), identityA);
     const transportB = new WireMeshTransport(
-      noopEvents({ onError: (e) => errors.push(e) }),
+      noopEvents({ onError: (e) => void errors.push(e) }),
       identityB,
     );
     try {
@@ -506,7 +517,7 @@ describe("WireMeshTransport connectToPeer", () => {
     const identityB = generateIdentity();
     const errors: Error[] = [];
     const transportB = new WireMeshTransport(
-      noopEvents({ onError: (e) => errors.push(e) }),
+      noopEvents({ onError: (e) => void errors.push(e) }),
       identityB,
     );
     try {
@@ -541,7 +552,7 @@ describe("WireMeshTransport shutdown", () => {
 
     const requests: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({ onConnectionRequest: (h) => requests.push(h) }),
+      noopEvents({ onConnectionRequest: (h) => void requests.push(h) }),
       identityA,
       undefined,
       undefined,
@@ -592,7 +603,9 @@ describe("WireMeshTransport shutdown", () => {
     const disconnectsSeenByB: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(noopEvents(), identityA);
     const transportB = new WireMeshTransport(
-      noopEvents({ onPeerDisconnected: (h) => disconnectsSeenByB.push(h) }),
+      noopEvents({
+        onPeerDisconnected: (h) => void disconnectsSeenByB.push(h),
+      }),
       identityB,
     );
     try {
@@ -627,8 +640,8 @@ describe("WireMeshTransport listener policy propagation into quarantine", () => 
     const requests: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(
       noopEvents({
-        onConnectionRequest: (h) => requests.push(h),
-        onIntroduction: (handle) => introductions.push({ handle }),
+        onConnectionRequest: (h) => void requests.push(h),
+        onIntroduction: (handle) => void introductions.push({ handle }),
       }),
       identityA,
     );
@@ -691,7 +704,7 @@ describe("WireMeshTransport readvertisePresence body", () => {
     );
     const transportB = new WireMeshTransport(
       noopEvents({
-        onPresenceAdvert: (_h, status) => presenceSeenByB.push(status),
+        onPresenceAdvert: (_h, status) => void presenceSeenByB.push(status),
       }),
       identityB,
     );
@@ -707,9 +720,8 @@ describe("WireMeshTransport readvertisePresence body", () => {
       );
 
       // Several ticks with getCurrentPresence returning undefined: the early return must skip sendGossipUpdate entirely, so B must never observe a presence advert from A.
-      await new Promise((resolve) =>
-        setTimeout(resolve, SHORT_INTERVAL_MS * 4),
-      );
+      const PRESENCE_TICKS_TO_SKIP = 4;
+      await delay(SHORT_INTERVAL_MS * PRESENCE_TICKS_TO_SKIP);
       expect(presenceSeenByB.length).toBe(0);
 
       // Flipping to a real status proves the same interval, and the same early-return branch, genuinely does send once status is defined -- ruling out "the interval simply never fired at all" as an alternative explanation for the assertion above.
@@ -807,7 +819,9 @@ describe("WireMeshTransport accepting side's own disconnect wiring and dial dedu
 
     const disconnectsSeenByA: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({ onPeerDisconnected: (h) => disconnectsSeenByA.push(h) }),
+      noopEvents({
+        onPeerDisconnected: (h) => void disconnectsSeenByA.push(h),
+      }),
       identityA,
     );
     const transportB = new WireMeshTransport(noopEvents(), identityB);
@@ -841,7 +855,7 @@ describe("WireMeshTransport accepting side's own disconnect wiring and dial dedu
     // transportA1 and transportA2 both hold identityA -- the same peer id -- but are two separate transport instances so the first can go through shutdown() (a terminal, one-way state for whichever transport calls it) while a genuinely fresh listener stands in for "the same peer, reachable again" for the second dial. transportB itself is never shut down: it's the one whose own dataDials bookkeeping this test is about.
     const connectsSeenByA: ConnectionHandle[] = [];
     const transportA1 = new WireMeshTransport(
-      noopEvents({ onPeerConnected: (h) => connectsSeenByA.push(h) }),
+      noopEvents({ onPeerConnected: (h) => void connectsSeenByA.push(h) }),
       identityA,
     );
     const transportB = new WireMeshTransport(noopEvents(), identityB);
@@ -863,10 +877,11 @@ describe("WireMeshTransport accepting side's own disconnect wiring and dial dedu
 
       // The first A instance goes away; B's own watchForDisconnect must clear idA out of its dataDials so a second connectToPeer for the same peer id is not silently treated as "already dialled" and skipped.
       await transportA1.shutdown();
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      const DEDUP_SETTLE_MS = 200;
+      await delay(DEDUP_SETTLE_MS);
 
       transportA2 = new WireMeshTransport(
-        noopEvents({ onPeerConnected: (h) => connectsSeenByA.push(h) }),
+        noopEvents({ onPeerConnected: (h) => void connectsSeenByA.push(h) }),
         identityA,
       );
       await transportA2.startDataServer();

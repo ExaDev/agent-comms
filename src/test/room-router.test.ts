@@ -5,21 +5,23 @@ import { FRAME_VERB, buildCommand } from "../core/wire-mesh-transport.js";
 import { createRoomRouter } from "../core/room-router.js";
 import type { ConnectionHandle, TransportEvents } from "../core/transport.js";
 
-const TEST_HANDLE: ConnectionHandle = { id: "a".repeat(64) };
+// Matches the real 32-byte device-id's hex encoding length.
+const DEVICE_ID_HEX_LENGTH = 64;
+const TEST_HANDLE: ConnectionHandle = { id: "a".repeat(DEVICE_ID_HEX_LENGTH) };
 
 function fakeEvents(): TransportEvents {
   return {
-    onMessage: vi.fn(),
-    onIntroduction: vi.fn(),
-    onConnectionRequest: vi.fn(),
-    onPeerConnected: vi.fn(),
-    onPeerDisconnected: vi.fn(),
-    onPeerList: vi.fn(),
-    onPeerJoined: vi.fn(),
-    onBecomeCoordinator: vi.fn(),
-    onError: vi.fn(),
-    onRevocationAnnounce: vi.fn(),
-    onPresenceAdvert: vi.fn(),
+    onMessage: vi.fn<() => void>(),
+    onIntroduction: vi.fn<() => void>(),
+    onConnectionRequest: vi.fn<() => void>(),
+    onPeerConnected: vi.fn<() => void>(),
+    onPeerDisconnected: vi.fn<() => void>(),
+    onPeerList: vi.fn<() => void>(),
+    onPeerJoined: vi.fn<() => void>(),
+    onBecomeCoordinator: vi.fn<() => void>(),
+    onError: vi.fn<() => void>(),
+    onRevocationAnnounce: vi.fn<() => void>(),
+    onPresenceAdvert: vi.fn<() => void>(),
   };
 }
 

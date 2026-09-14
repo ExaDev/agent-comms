@@ -15,6 +15,9 @@ function freshPort(): number {
   return nextPort;
 }
 
+/** How long to wait for B's own drain loop to have processed the kick's revocation-announce off the wire, since there's no observable side effect from outside B's own store to wait on affirmatively instead. */
+const REVOCATION_ANNOUNCE_SETTLE_DELAY_MS = 300;
+
 async function makeRegisteredStore(
   port: number,
   name: string,
@@ -96,7 +99,9 @@ test("kicking a member revokes their room:member token for every peer, not just 
 
     await owner.kickFromRoom(room.id, memberA.peerId, owner.peerId);
     // Settles the revocation-announce this kick just broadcast: B's own drain loop processes it asynchronously off the wire, with no observable side effect from outside B's own store to wait on affirmatively.
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => {
+      setTimeout(resolve, REVOCATION_ANNOUNCE_SETTLE_DELAY_MS);
+    });
 
     // sendRoomMessage (not used here) re-checks this store's own local CRDT room.members list, which the kick's own legacy room_upsert patch has by now also reached A through -- that would mask exactly what this test needs to isolate. sendRoomMessageDirected instead only ever consults A's own persisted bearer token (never revoked by kickFromRoom, which revokes the OWNER's own record of having issued it, not A's own copy), so it genuinely simulates a still-token-holding A trying to reach B directly -- the real scenario a token-side revocation exists to stop, independent of whatever A's own CRDT view happens to already know. B's own handleRoomSend rejects it with "unauthorized" (the announced revocation now verifies as revoked on B's own independent check), which sendRoomMessageDirected surfaces as a thrown error rather than swallowing it the way the fan-out path does.
     await expect(

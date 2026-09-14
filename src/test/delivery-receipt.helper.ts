@@ -25,8 +25,31 @@ if (testName === undefined) {
   process.exit(1);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// ---------------------------------------------------------------------------
+// Timing constants — settle windows for asynchronous mesh propagation. The mesh has no "operation complete" signal for these steps, so tests wait a fixed budget rather than polling; values were picked empirically to be comfortably longer than the real round trip on a local TCP loopback.
+// ---------------------------------------------------------------------------
+
+/** Milliseconds to wait for a newly registered peer's own local state to settle before a second peer registers. */
+const REGISTER_SETTLE_MS = 100;
+/** Milliseconds to wait for two mesh peers to complete bidirectional registration sync after the second peer registers. */
+const PEER_SYNC_SETTLE_MS = 300;
+/** Milliseconds to wait for a created room to propagate across the mesh before members join it. */
+const ROOM_CREATE_SETTLE_MS = 200;
+/** Milliseconds to wait for a sent message (or a drained delivery's resulting read receipt) to propagate across the mesh. */
+const MESH_PROPAGATION_SETTLE_MS = 300;
+/** Milliseconds to wait for a push-delivered message's read receipt to round-trip back to the sender. */
+const READ_RECEIPT_SETTLE_MS = 500;
+/** Milliseconds to wait for a sent message's readBy array to be updated. */
+const READBY_SETTLE_MS = 800;
+/** Total budget pollUntil waits before giving up and throwing. */
+const POLL_TIMEOUT_MS = 5000;
+/** Interval between pollUntil predicate re-checks. */
+const POLL_INTERVAL_MS = 50;
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 /**
@@ -41,7 +64,7 @@ async function allocFreePort(): Promise<number> {
     // SO_REUSEADDR avoids TIME_WAIT on close
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
-      const port = addr && typeof addr === "object" ? addr.port : 0;
+      const port = addr !== null && typeof addr === "object" ? addr.port : 0;
       server.close(() => {
         resolve(port);
       });
@@ -50,7 +73,7 @@ async function allocFreePort(): Promise<number> {
   });
 }
 
-async function cleanup(...stores: MeshStore[]): Promise<void> {
+async function cleanup(...stores: readonly MeshStore[]): Promise<void> {
   for (const s of stores) {
     await s.shutdown();
   }
@@ -61,12 +84,12 @@ async function pollUntil(
   predicate: () => boolean | Promise<boolean>,
   what: string,
 ): Promise<void> {
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
   while (!(await predicate())) {
     if (Date.now() >= deadline) {
       throw new Error(`timed out waiting for ${what}`);
     }
-    await sleep(50);
+    await sleep(POLL_INTERVAL_MS);
   }
 }
 
@@ -130,7 +153,7 @@ async function testPushRoom(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(100);
+  await sleep(REGISTER_SETTLE_MS);
 
   const b = new MeshStore(port);
   await wireTestTransport(b);
@@ -147,7 +170,7 @@ async function testPushRoom(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(300);
+  await sleep(PEER_SYNC_SETTLE_MS);
 
   const room = await a.createRoom({
     name: `push-room-${String(port)}`,
@@ -155,12 +178,12 @@ async function testPushRoom(): Promise<void> {
     owner: a.peerId,
     description: "Push delivery test",
   });
-  await sleep(200);
+  await sleep(ROOM_CREATE_SETTLE_MS);
   await joinAndAccept(a, b, room.id);
 
   deliveriesB.length = 0;
   await a.sendRoomMessage(room.id, a.peerId, "Hello push!");
-  await sleep(300);
+  await sleep(MESH_PROPAGATION_SETTLE_MS);
 
   assert.ok(
     deliveriesB.length >= 1,
@@ -194,7 +217,7 @@ async function testPushDm(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(100);
+  await sleep(REGISTER_SETTLE_MS);
 
   const b = new MeshStore(port);
   await wireTestTransport(b);
@@ -211,13 +234,13 @@ async function testPushDm(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(300);
+  await sleep(PEER_SYNC_SETTLE_MS);
 
   await dmConsent(a, b);
 
   deliveriesB.length = 0;
   await a.sendDm(a.peerId, b.peerId, "Direct push!");
-  await sleep(300);
+  await sleep(MESH_PROPAGATION_SETTLE_MS);
 
   assert.ok(
     deliveriesB.length >= 1,
@@ -244,7 +267,7 @@ async function testDrainRoom(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(100);
+  await sleep(REGISTER_SETTLE_MS);
 
   // B has NO onDelivery — events queue for drain
   const b = new MeshStore(port);
@@ -258,7 +281,7 @@ async function testDrainRoom(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(300);
+  await sleep(PEER_SYNC_SETTLE_MS);
 
   const room = await a.createRoom({
     name: `drain-room-${String(port)}`,
@@ -266,11 +289,11 @@ async function testDrainRoom(): Promise<void> {
     owner: a.peerId,
     description: "Drain delivery test",
   });
-  await sleep(200);
+  await sleep(ROOM_CREATE_SETTLE_MS);
   await joinAndAccept(a, b, room.id);
 
   await a.sendRoomMessage(room.id, a.peerId, "Hello drain!");
-  await sleep(300);
+  await sleep(MESH_PROPAGATION_SETTLE_MS);
 
   const drained = await b.drainDelivery(b.peerId);
   assert.ok(
@@ -307,7 +330,7 @@ async function testDrainDm(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(100);
+  await sleep(REGISTER_SETTLE_MS);
 
   const b = new MeshStore(port);
   await wireTestTransport(b);
@@ -320,11 +343,11 @@ async function testDrainDm(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(300);
+  await sleep(PEER_SYNC_SETTLE_MS);
 
   await dmConsent(a, b);
   await a.sendDm(a.peerId, b.peerId, "Direct drain!");
-  await sleep(300);
+  await sleep(MESH_PROPAGATION_SETTLE_MS);
 
   const drained = await b.drainDelivery(b.peerId);
   assert.ok(
@@ -356,7 +379,7 @@ async function testReadReceiptPush(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(100);
+  await sleep(REGISTER_SETTLE_MS);
 
   const b = new MeshStore(port);
   await wireTestTransport(b);
@@ -372,7 +395,7 @@ async function testReadReceiptPush(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(300);
+  await sleep(PEER_SYNC_SETTLE_MS);
 
   const room = await a.createRoom({
     name: `read-push-${String(port)}`,
@@ -380,12 +403,12 @@ async function testReadReceiptPush(): Promise<void> {
     owner: a.peerId,
     description: "Read receipt push test",
   });
-  await sleep(200);
+  await sleep(ROOM_CREATE_SETTLE_MS);
   await joinAndAccept(a, b, room.id);
 
   deliveriesA.length = 0;
   await a.sendRoomMessage(room.id, a.peerId, "Read me");
-  await sleep(500);
+  await sleep(READ_RECEIPT_SETTLE_MS);
 
   const readReceipt = deliveriesA.find(
     (ev): ev is Extract<DeliveryEvent, { type: "delivery_status" }> =>
@@ -414,7 +437,7 @@ async function testReadReceiptDrain(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(100);
+  await sleep(REGISTER_SETTLE_MS);
 
   // B has NO onDelivery — drain triggers markRead
   const b = new MeshStore(port);
@@ -428,7 +451,7 @@ async function testReadReceiptDrain(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(300);
+  await sleep(PEER_SYNC_SETTLE_MS);
 
   const room = await a.createRoom({
     name: `read-drain-${String(port)}`,
@@ -436,16 +459,16 @@ async function testReadReceiptDrain(): Promise<void> {
     owner: a.peerId,
     description: "Read receipt drain test",
   });
-  await sleep(200);
+  await sleep(ROOM_CREATE_SETTLE_MS);
   await joinAndAccept(a, b, room.id);
 
   deliveriesA.length = 0;
   await a.sendRoomMessage(room.id, a.peerId, "Drain then read");
-  await sleep(300);
+  await sleep(MESH_PROPAGATION_SETTLE_MS);
 
   const drained = await b.drainDelivery(b.peerId);
   assert.ok(drained.length >= 1, "Drain should return the message");
-  await sleep(300);
+  await sleep(MESH_PROPAGATION_SETTLE_MS);
 
   const readReceipt = deliveriesA.find(
     (ev) => ev.type === "delivery_status" && ev.status === "read",
@@ -474,7 +497,7 @@ async function testReadbyArray(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(100);
+  await sleep(REGISTER_SETTLE_MS);
 
   const b = new MeshStore(port);
   await wireTestTransport(b);
@@ -490,7 +513,7 @@ async function testReadbyArray(): Promise<void> {
     visibility: "visible",
     tags: [],
   });
-  await sleep(300);
+  await sleep(PEER_SYNC_SETTLE_MS);
 
   const room = await a.createRoom({
     name: `readby-${String(port)}`,
@@ -498,11 +521,11 @@ async function testReadbyArray(): Promise<void> {
     owner: a.peerId,
     description: "readBy test",
   });
-  await sleep(200);
+  await sleep(ROOM_CREATE_SETTLE_MS);
   await joinAndAccept(a, b, room.id);
 
   const msg = await a.sendRoomMessage(room.id, a.peerId, "Check readBy");
-  await sleep(800);
+  await sleep(READBY_SETTLE_MS);
 
   const messages = await a.readRoomMessages(room.id);
   const sent = messages.find((m) => m.id === msg.id);
@@ -549,7 +572,9 @@ fn()
         ._getActiveHandles ?? (() => []);
     const handles: unknown[] = getHandles();
     while (handles.length > 0 && Date.now() - start < maxWait) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, POLL_INTERVAL_MS);
+      });
     }
     process.exit(0);
   })

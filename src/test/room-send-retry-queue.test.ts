@@ -9,7 +9,8 @@ import type { MeshTransport } from "../core/transport.js";
 import { deleteRoomToken } from "../core/identity-store.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 
-const MEMBER_ID = "b".repeat(64);
+const DEVICE_ID_HEX_LENGTH = 64;
+const MEMBER_ID = "b".repeat(DEVICE_ID_HEX_LENGTH);
 const QUEUE_CAP = 100;
 
 /** A MeshTransport whose sendRoomRequest always fails until told otherwise -- flippable mid-test to simulate the member becoming reachable, and recording every attempt made against it (including retries) so a test can assert exactly which sends were retried. */
@@ -176,6 +177,9 @@ test("a flush drops (not re-queues) a send whose room this store no longer holds
     { id: MEMBER_ID, port: 0, startedAt: new Date().toISOString() },
   );
   // No token to present -- give the flush a moment to run, then confirm it made no further attempt.
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  const FLUSH_GRACE_MS = 50;
+  await new Promise((resolve) => {
+    setTimeout(resolve, FLUSH_GRACE_MS);
+  });
   expect(attempts.length).toBe(1);
 });

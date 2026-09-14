@@ -23,24 +23,49 @@ function tempSlot(harness: string): { slot: IdentitySlot; dir: string } {
   return { slot: { harness, cwd: "/tmp/project", dir }, dir };
 }
 
-function buf(bytes: number[]): Uint8Array<ArrayBuffer> {
+function buf(bytes: readonly number[]): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(bytes);
 }
 
+// Arbitrary distinct byte values distinguishing each COSE_Sign1 segment across TOKEN_A/TOKEN_B in round-trip assertions -- the values themselves carry no meaning beyond being distinguishable.
+const TOKEN_A_PROTECTED_HEADER_BYTE_3 = 3;
+const TOKEN_A_PAYLOAD_BYTE_1 = 4;
+const TOKEN_A_PAYLOAD_BYTE_2 = 5;
+const TOKEN_A_PAYLOAD_BYTE_3 = 6;
+const TOKEN_A_SIGNATURE_BYTE_1 = 7;
+const TOKEN_A_SIGNATURE_BYTE_2 = 8;
+const TOKEN_A_SIGNATURE_BYTE_3 = 9;
+const TOKEN_B_PROTECTED_HEADER_BYTE_1 = 10;
+const TOKEN_B_PROTECTED_HEADER_BYTE_2 = 11;
+const TOKEN_B_SIGNATURE_BYTE_1 = 12;
+const TOKEN_B_SIGNATURE_BYTE_2 = 13;
+const TOKEN_B_SIGNATURE_BYTE_3 = 14;
+
 const TOKEN_A: CapabilityToken = [
-  buf([1, 2, 3]),
+  buf([1, 2, TOKEN_A_PROTECTED_HEADER_BYTE_3]),
   {},
-  buf([4, 5, 6]),
-  buf([7, 8, 9]),
+  buf([TOKEN_A_PAYLOAD_BYTE_1, TOKEN_A_PAYLOAD_BYTE_2, TOKEN_A_PAYLOAD_BYTE_3]),
+  buf([
+    TOKEN_A_SIGNATURE_BYTE_1,
+    TOKEN_A_SIGNATURE_BYTE_2,
+    TOKEN_A_SIGNATURE_BYTE_3,
+  ]),
 ];
 const TOKEN_B: CapabilityToken = [
-  buf([10, 11]),
+  buf([TOKEN_B_PROTECTED_HEADER_BYTE_1, TOKEN_B_PROTECTED_HEADER_BYTE_2]),
   { 1: -7 },
   null,
-  buf([12, 13, 14]),
+  buf([
+    TOKEN_B_SIGNATURE_BYTE_1,
+    TOKEN_B_SIGNATURE_BYTE_2,
+    TOKEN_B_SIGNATURE_BYTE_3,
+  ]),
 ];
-const ROOM_A = "aa".repeat(32) + "/general";
-const ROOM_B = "bb".repeat(32) + "/other-room";
+
+// Length of each synthetic room-ID's hex-device-id prefix, matching the real 32-byte device-id's hex encoding.
+const ROOM_ID_HEX_PAIR_COUNT = 32;
+const ROOM_A = "aa".repeat(ROOM_ID_HEX_PAIR_COUNT) + "/general";
+const ROOM_B = "bb".repeat(ROOM_ID_HEX_PAIR_COUNT) + "/other-room";
 
 test("loadRoomTokens returns an empty map before anything is saved", () => {
   const { slot } = tempSlot("pi");

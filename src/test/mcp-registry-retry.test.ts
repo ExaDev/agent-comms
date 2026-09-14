@@ -7,20 +7,35 @@ import {
   nextRetryDelayMs,
 } from "../core/mcp-registry-retry.js";
 
+const DELAY_DOUBLING_FACTOR = 2;
+const MULTIPLIER_WELL_BEYOND_MAX_DELAY = 10;
+const MS_PER_SECOND = 1000;
+const LEGACY_SCHEDULE_STEP_1_SECONDS = 15;
+const LEGACY_SCHEDULE_STEP_2_SECONDS = 30;
+const LEGACY_SCHEDULE_STEP_3_SECONDS = 60;
+const LEGACY_SCHEDULE_STEP_4_SECONDS = 120;
+
 describe("nextRetryDelayMs", () => {
   it("doubles the previous delay", () => {
     expect(nextRetryDelayMs(INITIAL_RETRY_DELAY_MS)).toBe(
-      INITIAL_RETRY_DELAY_MS * 2,
+      INITIAL_RETRY_DELAY_MS * DELAY_DOUBLING_FACTOR,
     );
   });
 
   it("caps at MAX_RETRY_DELAY_MS", () => {
     expect(nextRetryDelayMs(MAX_RETRY_DELAY_MS)).toBe(MAX_RETRY_DELAY_MS);
-    expect(nextRetryDelayMs(MAX_RETRY_DELAY_MS * 10)).toBe(MAX_RETRY_DELAY_MS);
+    expect(
+      nextRetryDelayMs(MAX_RETRY_DELAY_MS * MULTIPLIER_WELL_BEYOND_MAX_DELAY),
+    ).toBe(MAX_RETRY_DELAY_MS);
   });
 
   it("accumulates to comfortably exceed the previous, confirmed-insufficient 225-second retry budget (agent-comms v2.18.0's release job exhausted a fixed [15, 30, 60, 120] schedule while npm's own CDN still hadn't propagated the just-published version)", () => {
-    const previousBudgetMs = (15 + 30 + 60 + 120) * 1000;
+    const previousBudgetMs =
+      (LEGACY_SCHEDULE_STEP_1_SECONDS +
+        LEGACY_SCHEDULE_STEP_2_SECONDS +
+        LEGACY_SCHEDULE_STEP_3_SECONDS +
+        LEGACY_SCHEDULE_STEP_4_SECONDS) *
+      MS_PER_SECOND;
     let delayMs = INITIAL_RETRY_DELAY_MS;
     let totalMs = 0;
     while (totalMs < MAX_TOTAL_RETRY_MS) {

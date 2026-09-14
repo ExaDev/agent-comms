@@ -6,6 +6,8 @@ import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 
+const REVOCATION_DRAIN_SETTLE_MS = 300;
+
 let nextPort = 21_410;
 function freshPort(): number {
   nextPort += 1;
@@ -74,7 +76,9 @@ test("destroying a room revokes every member's own grant for every peer, not jus
 
     await owner.destroyRoom(room.id, owner.peerId);
     // Settles the revocation-announce destroyRoom just broadcast for every member: B's own drain loop processes it asynchronously off the wire, with no observable side effect from outside B's own store to wait on affirmatively.
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => {
+      setTimeout(resolve, REVOCATION_DRAIN_SETTLE_MS);
+    });
 
     await expect(
       memberA.sendRoomMessageDirected(room.id, memberB.peerId, "still here?"),

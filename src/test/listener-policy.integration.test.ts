@@ -25,6 +25,7 @@ import { test, describe, expect } from "vitest";
 import { wireTestTransport } from "./test-transport.js";
 
 const TEST_PORT = 19880;
+const PARSED_ACTION_TEST_PORT = 9999;
 
 describe("listener policy", () => {
   test("coordinator starts with a single default localhost listener", async () => {
@@ -306,13 +307,13 @@ describe("listener policy", () => {
     const action = buildAction({
       action: "mesh_listen",
       host: "192.168.1.1",
-      port: 9999,
+      port: PARSED_ACTION_TEST_PORT,
       policy: "observe",
     });
     expect(action.action).toBe("mesh_listen");
     if (action.action === "mesh_listen") {
       expect(action.host).toBe("192.168.1.1");
-      expect(action.port).toBe(9999);
+      expect(action.port).toBe(PARSED_ACTION_TEST_PORT);
       expect(action.policy).toBe("observe");
     }
   });
