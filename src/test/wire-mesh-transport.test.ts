@@ -798,3 +798,94 @@ describe("WireMeshTransport pending-connection expiry", () => {
     }
   });
 });
+
+describe("WireMeshTransport accepting side's own disconnect wiring and dial dedup", () => {
+  test("the accepting side observes onPeerDisconnected when the peer it accepted a connection from disconnects", async () => {
+    const identityA = generateIdentity();
+    const identityB = generateIdentity();
+    const idB = await peerId(await toIdentityPort(identityB));
+
+    const disconnectsSeenByA: ConnectionHandle[] = [];
+    const transportA = new WireMeshTransport(
+      noopEvents({ onPeerDisconnected: (h) => disconnectsSeenByA.push(h) }),
+      identityA,
+    );
+    const transportB = new WireMeshTransport(noopEvents(), identityB);
+    try {
+      await transportA.startDataServer();
+      await transportB.connectToPeer(
+        {
+          id: await peerId(await toIdentityPort(identityA)),
+          port: transportA.dataPort,
+          startedAt: new Date().toISOString(),
+        },
+        idB,
+      );
+
+      // B, the dialled-to side's peer, disconnects -- this must surface through A's OWN watchForDisconnect wiring (registered when A itself accepted the incoming connection in handleAcceptedConnection), not merely through B's own symmetric wiring on the dialling side.
+      await transportB.shutdown();
+      await waitFor(
+        () => disconnectsSeenByA.some((h) => h.id === idB),
+        "A observes B's disconnection via its own accepting-side wiring",
+      );
+    } finally {
+      await transportA.shutdown();
+    }
+  });
+
+  test("a peer that disconnects is removed from the dial-dedup set, so it can be dialled again afterwards", async () => {
+    const identityA = generateIdentity();
+    const identityB = generateIdentity();
+    const idA = await peerId(await toIdentityPort(identityA));
+
+    // transportA1 and transportA2 both hold identityA -- the same peer id -- but are two separate transport instances so the first can go through shutdown() (a terminal, one-way state for whichever transport calls it) while a genuinely fresh listener stands in for "the same peer, reachable again" for the second dial. transportB itself is never shut down: it's the one whose own dataDials bookkeeping this test is about.
+    const connectsSeenByA: ConnectionHandle[] = [];
+    const transportA1 = new WireMeshTransport(
+      noopEvents({ onPeerConnected: (h) => connectsSeenByA.push(h) }),
+      identityA,
+    );
+    const transportB = new WireMeshTransport(noopEvents(), identityB);
+    let transportA2: WireMeshTransport | undefined;
+    try {
+      await transportA1.startDataServer();
+      await transportB.connectToPeer(
+        {
+          id: idA,
+          port: transportA1.dataPort,
+          startedAt: new Date().toISOString(),
+        },
+        "self",
+      );
+      await waitFor(
+        () => connectsSeenByA.length === 1,
+        "A observes the first connection",
+      );
+
+      // The first A instance goes away; B's own watchForDisconnect must clear idA out of its dataDials so a second connectToPeer for the same peer id is not silently treated as "already dialled" and skipped.
+      await transportA1.shutdown();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      transportA2 = new WireMeshTransport(
+        noopEvents({ onPeerConnected: (h) => connectsSeenByA.push(h) }),
+        identityA,
+      );
+      await transportA2.startDataServer();
+      await transportB.connectToPeer(
+        {
+          id: idA,
+          port: transportA2.dataPort,
+          startedAt: new Date().toISOString(),
+        },
+        "self",
+      );
+      await waitFor(
+        () => connectsSeenByA.length === 2,
+        "A observes a genuinely new second connection, proving the earlier dial was not silently deduplicated away",
+      );
+    } finally {
+      await transportB.shutdown();
+      await transportA1.shutdown();
+      await transportA2?.shutdown();
+    }
+  });
+});
