@@ -15,7 +15,7 @@
  *   npx agent-comms read <room>               # read room messages
  *
  * The bridge subcommand lets harnesses invoke the bridge via npx:
- *   .mcp.json:  { "command": "npx", "args": ["agent-comms", "bridge", "claude-code"] }
+ *   .mcp.json:  \{ "command": "npx", "args": ["agent-comms", "bridge", "claude-code"] \}
  *   config.toml: command = "npx", args = ["agent-comms", "bridge", "codex"]
  */
 
@@ -24,7 +24,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { execSync } from "node:child_process";
 import { z } from "zod";
-import { bridges } from "./bridges/index.js";
+import { bridges } from "./bridges/registry.js";
 import { runTui } from "./bridges/user/tui.js";
 import { runCli } from "./bridges/user/cli.js";
 
@@ -181,6 +181,9 @@ const harnesses: HarnessDef[] = [
 // Main
 // ---------------------------------------------------------------------------
 
+// process.argv[0] is the node binary, [1] the script path, [2] the subcommand -- everything from here on is the subcommand's own args.
+const CLI_ARGS_START_INDEX = 3;
+
 const command = process.argv[2] ?? "setup";
 
 switch (command) {
@@ -195,7 +198,7 @@ switch (command) {
     break;
   case "bridge": {
     const bridgeId = process.argv[3];
-    if (!bridgeId) {
+    if (bridgeId === undefined) {
       console.error("Usage: agent-comms bridge <id>");
       process.exit(1);
     }
@@ -203,7 +206,7 @@ switch (command) {
     break;
   }
   case "chat": {
-    const chatArgs = process.argv.slice(3);
+    const chatArgs = process.argv.slice(CLI_ARGS_START_INDEX);
     runChat(chatArgs);
     break;
   }
@@ -212,7 +215,7 @@ switch (command) {
   case "rooms":
   case "agents":
   case "read": {
-    const cliArgs = process.argv.slice(3);
+    const cliArgs = process.argv.slice(CLI_ARGS_START_INDEX);
     runUserCli(command, cliArgs);
     break;
   }
@@ -241,7 +244,10 @@ function runBridge(id: string): void {
   });
 }
 
-function parseNameArg(args: string[]): { name: string; rest: string[] } {
+function parseNameArg(args: readonly string[]): {
+  name: string;
+  rest: readonly string[];
+} {
   const nameIdx = args.indexOf("--name");
   if (nameIdx !== -1) {
     const val = args[nameIdx + 1];
@@ -255,7 +261,7 @@ function parseNameArg(args: string[]): { name: string; rest: string[] } {
   return { name: "Joe", rest: args };
 }
 
-function runChat(args: string[]): void {
+function runChat(args: readonly string[]): void {
   const { name } = parseNameArg(args);
   runTui(name).catch((err: unknown) => {
     console.error(err);
@@ -263,9 +269,9 @@ function runChat(args: string[]): void {
   });
 }
 
-function runUserCli(command: string, args: string[]): void {
+function runUserCli(cliCommand: string, args: readonly string[]): void {
   const { name, rest } = parseNameArg(args);
-  runCli(command, rest, name).catch((err: unknown) => {
+  runCli(cliCommand, rest, name).catch((err: unknown) => {
     console.error(err);
     process.exit(1);
   });

@@ -9,7 +9,9 @@ import {
   nextRetryDelayMs,
 } from "../src/core/mcp-registry-retry.js";
 
-function run(command: string, args: string[]): void {
+const MS_PER_SECOND = 1000;
+
+function run(command: string, args: readonly string[]): void {
   const result = spawnSync(command, args, { stdio: "inherit" });
   if (result.status !== 0) {
     throw new Error(`Command failed: ${command} ${args.join(" ")}`);
@@ -17,10 +19,10 @@ function run(command: string, args: string[]): void {
 }
 
 function sleepSync(ms: number): void {
-  spawnSync("sleep", [String(ms / 1000)]);
+  spawnSync("sleep", [String(ms / MS_PER_SECOND)]);
 }
 
-function runPublishWithRetry(command: string, args: string[]): void {
+function runPublishWithRetry(command: string, args: readonly string[]): void {
   const deadline = Date.now() + MAX_TOTAL_RETRY_MS;
   let delayMs = INITIAL_RETRY_DELAY_MS;
   for (let attempt = 1; ; attempt++) {
@@ -34,7 +36,7 @@ function runPublishWithRetry(command: string, args: string[]): void {
       isRetryablePublishFailure(output) && Date.now() + delayMs < deadline;
     if (canRetry) {
       console.error(
-        `mcp-publisher publish hit a retryable failure (attempt ${String(attempt)}), retrying in ${String(delayMs / 1000)}s`,
+        `mcp-publisher publish hit a retryable failure (attempt ${String(attempt)}), retrying in ${String(delayMs / MS_PER_SECOND)}s`,
       );
       sleepSync(delayMs);
       delayMs = nextRetryDelayMs(delayMs);
