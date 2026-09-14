@@ -44,7 +44,9 @@ describe("state", () => {
   it("sets current room and notifies", () => {
     const state = new State();
     const notified: ReturnType<State["get"]>[] = [];
-    state.subscribe((s) => notified.push(s));
+    state.subscribe((s) => {
+      notified.push(s);
+    });
 
     state.setCurrentRoom("room-1");
     expect(state.get().currentRoom).toBe("room-1");
@@ -73,7 +75,9 @@ describe("state", () => {
   it("applyState sets agents and rooms atomically", () => {
     const state = new State();
     const notified = Array<boolean>();
-    state.subscribe(() => notified.push(true));
+    state.subscribe(() => {
+      notified.push(true);
+    });
 
     state.applyState([MOCK_AGENT], [MOCK_ROOM]);
     expect(state.get().agents).toEqual([MOCK_AGENT]);
@@ -84,7 +88,9 @@ describe("state", () => {
   it("sets dmTarget and notifies", () => {
     const state = new State();
     const notified: ReturnType<State["get"]>[] = [];
-    state.subscribe((s) => notified.push(s));
+    state.subscribe((s) => {
+      notified.push(s);
+    });
 
     state.setDmTarget("agent-42");
     expect(state.get().dmTarget).toBe("agent-42");
@@ -95,7 +101,9 @@ describe("state", () => {
   it("sets dmTarget and notifies", () => {
     const state = new State();
     const notified: ReturnType<State["get"]>[] = [];
-    state.subscribe((s) => notified.push(s));
+    state.subscribe((s) => {
+      notified.push(s);
+    });
 
     state.setDmTarget("agent-42");
     expect(state.get().dmTarget).toBe("agent-42");

@@ -130,6 +130,8 @@ describe("Message component", () => {
   });
 });
 
+const MOCK_MESSAGE_COUNT = 3;
+
 describe("MessageList component", () => {
   it("renders multiple messages", () => {
     const { container, cleanup } = setup();
@@ -139,7 +141,7 @@ describe("MessageList component", () => {
         container,
       );
       const msgs = container.querySelectorAll(".msg");
-      expect(msgs.length).toBe(3);
+      expect(msgs.length).toBe(MOCK_MESSAGE_COUNT);
     } finally {
       cleanup();
     }

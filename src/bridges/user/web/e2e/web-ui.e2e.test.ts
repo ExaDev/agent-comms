@@ -7,7 +7,8 @@
  * Each test uses a unique room name to avoid collisions.
  */
 
-import { test, expect } from "./fixtures.js";
+import { expect } from "@playwright/test";
+import { test } from "./fixtures.js";
 import WS from "ws";
 
 let testCounter = 0;
@@ -285,8 +286,8 @@ test.describe("Web UI", () => {
 
     // Connect WebSocket and collect frames
     const ws = await new Promise<WS>((resolve) => {
-      const ws = new WS(`ws://127.0.0.1:${port}`);
-      ws.on("open", () => resolve(ws));
+      const socket = new WS(`ws://127.0.0.1:${port}`);
+      socket.on("open", () => resolve(socket));
     });
 
     const frames: Record<string, unknown>[] = [];
@@ -305,7 +306,10 @@ test.describe("Web UI", () => {
     );
 
     // Wait for frames to accumulate
-    await new Promise((r) => setTimeout(r, 500));
+    const FRAME_ACCUMULATION_WAIT_MS = 500;
+    await new Promise((r) => {
+      setTimeout(r, FRAME_ACCUMULATION_WAIT_MS);
+    });
 
     const results = frames.filter(
       (f) =>

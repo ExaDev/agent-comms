@@ -6,7 +6,8 @@
  * and attempt localhost port probing on connect.
  */
 
-import { test, expect } from "./fixtures.js";
+import { expect } from "@playwright/test";
+import { test } from "./fixtures.js";
 
 test.describe("Standalone PWA mode", () => {
   test("page loads and shows connect prompt", async ({ page, port }) => {
@@ -101,7 +102,7 @@ test.describe("Standalone PWA mode", () => {
 
     // Now intercept all fetch requests and abort them to simulate
     // the standalone PWA scenario where there's no backend.
-    await page.route("**/api/**", (route) => route.abort());
+    await page.route("**/api/**", async (route) => route.abort());
 
     // Reload — page should still render without crashing
     await page.reload();

@@ -243,7 +243,9 @@ describe("Sidebar interactions", () => {
         />,
         container,
       );
-      expect(container.querySelectorAll(".room-item").length).toBe(3);
+      expect(container.querySelectorAll(".room-item").length).toBe(
+        rooms.length,
+      );
     } finally {
       cleanup();
     }

@@ -12,7 +12,8 @@
  */
 
 import type { Page } from "@playwright/test";
-import { test, expect } from "./fixtures.js";
+import { expect } from "@playwright/test";
+import { test } from "./fixtures.js";
 
 /**
  * Injects stub WebSocket and SharedWorker constructors that never connect.
@@ -25,7 +26,7 @@ async function blockNetworkConnections(page: Page): Promise<void> {
       static CONNECTING = 0;
       static OPEN = 1;
       static CLOSING = 2;
-      static CLOSED = 3;
+      static readonly CLOSED = 3;
       readyState = 0;
       bufferedAmount = 0;
       protocol = "";

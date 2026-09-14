@@ -5,12 +5,12 @@
  * Imports from source (tsx resolves at runtime).
  */
 
-import { test as base, expect } from "@playwright/test";
+import { test as base } from "@playwright/test";
 import { createWebServer, type WebServerHandle } from "../server.js";
 import net from "node:net";
 
 /** Allocate a random free port by binding to port 0. */
-function allocFreePort(): Promise<number> {
+async function allocFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const srv = net.createServer();
     srv.listen(0, "127.0.0.1", () => {
@@ -30,7 +30,10 @@ interface Fixtures {
 }
 
 export const test = base.extend<Fixtures>({
-  server: async ({}, use: (handle: WebServerHandle) => Promise<void>) => {
+  server: async (
+    _fixtures,
+    use: (handle: WebServerHandle) => Promise<void>,
+  ) => {
     // Each test gets its own coordinator port to avoid EADDRINUSE races
     // when the previous test's TLS transport hasn't released 19876 yet.
     const coordinatorPort = await allocFreePort();
@@ -57,5 +60,3 @@ export const test = base.extend<Fixtures>({
     await use(port);
   },
 });
-
-export { expect };
