@@ -19,6 +19,7 @@ import type { FedLink } from "./federation.js";
 import { getCertificateFingerprint } from "./identity.js";
 import { COORDINATOR_HOST } from "./mesh-store-shared.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
+export type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import { DeliveryEngine } from "./delivery-engine.js";
 import { FederationBridge } from "./federation-bridge.js";
 import { RoomProtocol } from "./room-protocol.js";
