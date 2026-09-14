@@ -1,3 +1,27 @@
+## [2.21.0](https://github.com/ExaDev/agent-comms/compare/v2.20.2...v2.21.0) (2026-09-14)
+
+### Features
+
+* **build:** cap source file length at 800 lines ([8f2de6f](https://github.com/ExaDev/agent-comms/commit/8f2de6fe1a934d0adb96a47d94aa24760527768e))
+
+### Bug Fixes
+
+* **core:** re-export MeshStoreIdentity from mesh-store.ts ([d5af1fd](https://github.com/ExaDev/agent-comms/commit/d5af1fd316d9ba724e1bbcac2bb3e5ca33c38424))
+
+### Refactoring
+
+* **core:** add AgentRegistry ([6f6e88e](https://github.com/ExaDev/agent-comms/commit/6f6e88ec0aa36a4c0deeda029e3ec0c1004d8749))
+* **core:** add ConnectionApproval ([348be88](https://github.com/ExaDev/agent-comms/commit/348be880744fcc8e6243d7386bc27022d2ecfc12))
+* **core:** add DeliveryEngine ([fa1117b](https://github.com/ExaDev/agent-comms/commit/fa1117b3944ac70f7291244f2daee6633c96990a))
+* **core:** add FederationBridge ([7edd943](https://github.com/ExaDev/agent-comms/commit/7edd943c6a93434dd7bbe85e247b205ace506b03))
+* **core:** add mesh-store constants and room-wire extension helpers ([8851758](https://github.com/ExaDev/agent-comms/commit/885175801789282828ac0596775edd6075faf499))
+* **core:** add PeerLifecycle ([57f382c](https://github.com/ExaDev/agent-comms/commit/57f382c1170e14f94d07c5fb18af88e55fbd9f56))
+* **core:** add RoomLifecycle ([0757049](https://github.com/ExaDev/agent-comms/commit/07570492663b36273b0f3ff97cdc256364546cf8))
+* **core:** add RoomMessaging ([ddd183b](https://github.com/ExaDev/agent-comms/commit/ddd183b7d34c580ec0c53a4725735806588f3d38))
+* **core:** add RoomProtocol ([d3cfc25](https://github.com/ExaDev/agent-comms/commit/d3cfc251169c8833d244a3a007cf049c135698f7))
+* **core:** add StaleAgentChecker ([6191a2d](https://github.com/ExaDev/agent-comms/commit/6191a2d0dc55448a345f94c02bbef1925e14aaa9))
+* **core:** wire mesh-store.ts to delegate to its collaborators ([950f757](https://github.com/ExaDev/agent-comms/commit/950f757424c6b9d1dc1893cc6383ee8b70c2ac28))
+
 ## [2.20.2](https://github.com/ExaDev/agent-comms/compare/v2.20.1...v2.20.2) (2026-09-14)
 
 ### Bug Fixes
