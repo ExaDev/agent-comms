@@ -1,3 +1,9 @@
+## [2.21.3](https://github.com/ExaDev/agent-comms/compare/v2.21.2...v2.21.3) (2026-09-14)
+
+### Bug Fixes
+
+* **core:** exclude .stryker-tmp from vitest test discovery ([4d329ae](https://github.com/ExaDev/agent-comms/commit/4d329aee213c3cec3d6c79fa185513fea587140c))
+
 ## [2.21.2](https://github.com/ExaDev/agent-comms/compare/v2.21.1...v2.21.2) (2026-09-14)
 
 ### Tests
