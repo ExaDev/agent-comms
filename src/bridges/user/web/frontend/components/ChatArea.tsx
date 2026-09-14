@@ -9,7 +9,7 @@ import { parseInput } from "../input.js";
 import { MessageList } from "./MessageList.js";
 
 interface ChatAreaProps {
-  messages: DisplayMessage[];
+  messages: readonly DisplayMessage[];
   currentRoom: string | undefined;
   dmTarget: string | undefined;
   connected: boolean;
@@ -30,7 +30,8 @@ export function ChatArea({
   const [inputText, setInputText] = useState("");
 
   const headerText =
-    currentRoom ?? (dmTarget ? `DM with ${dmTarget}` : "Select a room");
+    currentRoom ??
+    (dmTarget !== undefined ? `DM with ${dmTarget}` : "Select a room");
 
   const handleSend = () => {
     const trimmed = inputText.trim();
@@ -58,7 +59,7 @@ export function ChatArea({
     <div id="main">
       <div id="header">
         {headerText}
-        {currentRoom && (
+        {currentRoom !== undefined && (
           <button class="leave-btn" onClick={onLeaveRoom}>
             Leave
           </button>

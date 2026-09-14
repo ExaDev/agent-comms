@@ -141,7 +141,7 @@ function DirectoryView({
         <span
           class={`tree-directory-label${isCurrentRoom ? " active" : ""}${hasRoom ? " clickable" : ""}`}
           onClick={() => {
-            if (node.roomId) onJoinRoom(node.roomId);
+            if (node.roomId !== undefined) onJoinRoom(node.roomId);
           }}
         >
           {node.name}

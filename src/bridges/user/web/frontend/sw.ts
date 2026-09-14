@@ -18,12 +18,12 @@
 // ---------------------------------------------------------------------------
 
 interface ExtendableEvent extends Event {
-  waitUntil(promise: Promise<unknown>): void;
+  waitUntil: (promise: Readonly<Promise<unknown>>) => void;
 }
 
 interface PushMessageData {
-  json(): Record<string, unknown>;
-  text(): string;
+  json: () => Record<string, unknown>;
+  text: () => string;
 }
 
 interface PushEvent extends ExtendableEvent {
@@ -39,39 +39,41 @@ interface NotificationEvent extends ExtendableEvent {
 
 interface FetchEvent extends ExtendableEvent {
   readonly request: Request;
-  respondWith(response: Promise<Response>): void;
+  respondWith: (response: Readonly<Promise<Response>>) => void;
 }
 
 interface Client {
   url: string;
-  focus(): Promise<Client>;
+  focus: () => Promise<Client>;
 }
 
 interface Clients {
-  matchAll(opts: {
-    type: "window";
-    includeUncontrolled: boolean;
-  }): Promise<Client[]>;
-  openWindow(url: string): Promise<Client>;
+  matchAll: (
+    opts: Readonly<{
+      type: "window";
+      includeUncontrolled: boolean;
+    }>,
+  ) => Promise<Client[]>;
+  openWindow: (url: string) => Promise<Client>;
 }
 
 interface CacheStorage {
-  open(name: string): Promise<Cache>;
-  delete(name: string): Promise<boolean>;
-  keys(): Promise<string[]>;
+  open: (name: string) => Promise<Cache>;
+  delete: (name: string) => Promise<boolean>;
+  keys: () => Promise<string[]>;
 }
 
 interface Cache {
-  addAll(requests: string[]): Promise<void>;
-  match(request: Request): Promise<Response | undefined>;
-  put(request: Request, response: Response): Promise<void>;
+  addAll: (requests: readonly string[]) => Promise<void>;
+  match: (request: Request) => Promise<Response | undefined>;
+  put: (request: Request, response: Response) => Promise<void>;
 }
 
 interface ServiceWorkerRegistration {
-  showNotification(
+  showNotification: (
     title: string,
     options?: NotificationOptions & { data?: Record<string, unknown> },
-  ): Promise<void>;
+  ) => Promise<void>;
 }
 
 interface ServiceWorkerGlobalScope {
@@ -79,17 +81,20 @@ interface ServiceWorkerGlobalScope {
   registration: ServiceWorkerRegistration;
   clients: Clients;
   caches: CacheStorage;
-  addEventListener(type: "push", listener: (event: PushEvent) => void): void;
-  addEventListener(
-    type: "notificationclick",
-    listener: (event: NotificationEvent) => void,
-  ): void;
-  addEventListener(
-    type: "install" | "activate",
-    listener: (event: ExtendableEvent) => void,
-  ): void;
-  addEventListener(type: "fetch", listener: (event: FetchEvent) => void): void;
-  skipWaiting(): Promise<void>;
+  addEventListener: ((
+    type: "push",
+    listener: (event: PushEvent) => void,
+  ) => void) &
+    ((
+      type: "notificationclick",
+      listener: (event: NotificationEvent) => void,
+    ) => void) &
+    ((
+      type: "install" | "activate",
+      listener: (event: ExtendableEvent) => void,
+    ) => void) &
+    ((type: "fetch", listener: (event: FetchEvent) => void) => void);
+  skipWaiting: () => Promise<void>;
 }
 
 declare const self: ServiceWorkerGlobalScope;
@@ -118,8 +123,8 @@ self.addEventListener("install", (event: ExtendableEvent) => {
   event.waitUntil(
     self.caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting()),
+      .then(async (cache) => cache.addAll(APP_SHELL))
+      .then(async () => self.skipWaiting()),
   );
 });
 
@@ -131,11 +136,11 @@ self.addEventListener("activate", (event: ExtendableEvent) => {
   event.waitUntil(
     self.caches
       .keys()
-      .then((names) =>
+      .then(async (names) =>
         Promise.all(
           names
             .filter((name) => name !== CACHE_NAME)
-            .map((name) => self.caches.delete(name)),
+            .map(async (name) => self.caches.delete(name)),
         ),
       ),
   );
@@ -144,6 +149,24 @@ self.addEventListener("activate", (event: ExtendableEvent) => {
 // ---------------------------------------------------------------------------
 // Fetch — network-first for API, cache-first for everything else
 // ---------------------------------------------------------------------------
+
+/** Lower bound (inclusive) of the HTTP success status range worth caching. */
+const HTTP_STATUS_OK_MIN = 200;
+
+/** Upper bound (exclusive) of the HTTP success status range worth caching. */
+const HTTP_STATUS_OK_MAX_EXCLUSIVE = 300;
+
+/** True for a GET response whose status falls in the cacheable success range. */
+function isCacheableGetResponse(
+  request: Readonly<Request>,
+  response: Readonly<Response>,
+): boolean {
+  return (
+    request.method === "GET" &&
+    response.status >= HTTP_STATUS_OK_MIN &&
+    response.status < HTTP_STATUS_OK_MAX_EXCLUSIVE
+  );
+}
 
 self.addEventListener("fetch", (event: FetchEvent) => {
   const url = new URL(event.request.url);
@@ -154,22 +177,18 @@ self.addEventListener("fetch", (event: FetchEvent) => {
       fetch(event.request)
         .then((response) => {
           // Only cache successful GET responses
-          if (
-            event.request.method === "GET" &&
-            response.status >= 200 &&
-            response.status < 300
-          ) {
+          if (isCacheableGetResponse(event.request, response)) {
             const cloned = response.clone();
             void self.caches
               .open(CACHE_NAME)
-              .then((cache) => cache.put(event.request, cloned));
+              .then(async (cache) => cache.put(event.request, cloned));
           }
           return response;
         })
-        .catch(() =>
+        .catch(async () =>
           self.caches
             .open(CACHE_NAME)
-            .then((cache) => cache.match(event.request))
+            .then(async (cache) => cache.match(event.request))
             .then(
               (cached) => cached ?? new Response("Offline", { status: 503 }),
             ),
@@ -182,20 +201,16 @@ self.addEventListener("fetch", (event: FetchEvent) => {
   event.respondWith(
     self.caches
       .open(CACHE_NAME)
-      .then((cache) => cache.match(event.request))
-      .then((cached) => {
+      .then(async (cache) => cache.match(event.request))
+      .then(async (cached) => {
         if (cached) return cached;
         return fetch(event.request).then((response) => {
           // Cache successful GET responses for future offline use
-          if (
-            event.request.method === "GET" &&
-            response.status >= 200 &&
-            response.status < 300
-          ) {
+          if (isCacheableGetResponse(event.request, response)) {
             const cloned = response.clone();
             void self.caches
               .open(CACHE_NAME)
-              .then((cache) => cache.put(event.request, cloned));
+              .then(async (cache) => cache.put(event.request, cloned));
           }
           return response;
         });
@@ -251,7 +266,7 @@ self.addEventListener("notificationclick", (event: NotificationEvent) => {
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clientList: Client[]) => {
+      .then(async (clientList: readonly Client[]) => {
         for (const client of clientList) {
           if (client.url === targetUrl && "focus" in client) {
             return client.focus();

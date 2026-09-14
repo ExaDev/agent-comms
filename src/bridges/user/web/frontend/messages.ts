@@ -81,6 +81,9 @@ export function deliveryEventToMessage(
         type: "system",
         text: `${event.oldName} is now known as ${event.newName}`,
       };
+
+    default:
+      return event satisfies never;
   }
 }
 

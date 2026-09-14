@@ -44,13 +44,13 @@ export function parseDeepLink(search: string): DeepLink | undefined {
   const params = new URLSearchParams(search);
 
   const room = params.get("room");
-  if (room) return { kind: "room", roomId: room };
+  if (room !== null && room !== "") return { kind: "room", roomId: room };
 
   const dm = params.get("dm");
-  if (dm) return { kind: "dm", agentId: dm };
+  if (dm !== null && dm !== "") return { kind: "dm", agentId: dm };
 
   const cwd = params.get("cwd");
-  if (cwd) return { kind: "cwd", path: cwd };
+  if (cwd !== null && cwd !== "") return { kind: "cwd", path: cwd };
 
   return undefined;
 }
@@ -73,7 +73,7 @@ export interface ResolvedNav {
  */
 export function resolveDeepLink(
   link: DeepLink,
-  rooms: Room[],
+  rooms: readonly Room[],
 ): ResolvedNav | undefined {
   switch (link.kind) {
     case "room":
@@ -94,6 +94,9 @@ export function resolveDeepLink(
       }
       return undefined;
     }
+
+    default:
+      return link satisfies never;
   }
 }
 
@@ -101,10 +104,12 @@ export function resolveDeepLink(
 // URL sync — keep the address bar reflecting the current view
 // ---------------------------------------------------------------------------
 
-export function syncUrl(params: {
-  currentRoom: string | undefined;
-  dmTarget: string | undefined;
-}): void {
+export function syncUrl(
+  params: Readonly<{
+    currentRoom: string | undefined;
+    dmTarget: string | undefined;
+  }>,
+): void {
   const url = new URL(location.href);
 
   // Clear previous nav params
@@ -112,9 +117,9 @@ export function syncUrl(params: {
   url.searchParams.delete("dm");
   url.searchParams.delete("cwd");
 
-  if (params.currentRoom) {
+  if (params.currentRoom !== undefined && params.currentRoom !== "") {
     url.searchParams.set("room", params.currentRoom);
-  } else if (params.dmTarget) {
+  } else if (params.dmTarget !== undefined && params.dmTarget !== "") {
     url.searchParams.set("dm", params.dmTarget);
   }
 

@@ -16,7 +16,7 @@ export const DEFAULT_MAX_ATTEMPTS = 10;
  * Try binding sequentially from `base`.
  * Returns the first port that succeeds, or undefined if all are taken.
  */
-export function findFreePort(
+export async function findFreePort(
   base: number,
   maxAttempts: number = DEFAULT_MAX_ATTEMPTS,
 ): Promise<number | undefined> {

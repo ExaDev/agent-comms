@@ -12,9 +12,9 @@ export type StateChangeListener = (state: Readonly<ClientState>) => void;
 export interface ClientState {
   currentRoom: string | undefined;
   dmTarget: string | undefined;
-  agents: Agent[];
-  rooms: Room[];
-  messages: DisplayMessage[];
+  agents: readonly Agent[];
+  rooms: readonly Room[];
+  messages: readonly DisplayMessage[];
   connected: boolean;
 }
 
@@ -58,12 +58,12 @@ export class State {
     this.notify();
   }
 
-  setAgents(agents: Agent[]): void {
+  setAgents(agents: readonly Agent[]): void {
     this.state = { ...this.state, agents };
     this.notify();
   }
 
-  setRooms(rooms: Room[]): void {
+  setRooms(rooms: readonly Room[]): void {
     this.state = { ...this.state, rooms };
     this.notify();
   }
@@ -80,7 +80,7 @@ export class State {
   }
 
   /** Replace all messages (e.g. when loading history). */
-  setMessages(messages: DisplayMessage[]): void {
+  setMessages(messages: readonly DisplayMessage[]): void {
     this.state = { ...this.state, messages };
     this.notify();
   }
@@ -92,7 +92,7 @@ export class State {
   }
 
   /** Bulk update from a state frame (initial WS connection). */
-  applyState(agents: Agent[], rooms: Room[]): void {
+  applyState(agents: readonly Agent[], rooms: readonly Room[]): void {
     this.state = { ...this.state, agents, rooms };
     this.notify();
   }

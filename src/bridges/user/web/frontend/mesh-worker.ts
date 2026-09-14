@@ -16,16 +16,16 @@
 // ---------------------------------------------------------------------------
 
 interface SharedWorkerGlobalScope {
-  addEventListener(
+  addEventListener: (
     type: "connect",
     listener: (event: MessageEvent) => void,
-  ): void;
-  close(): void;
+  ) => void;
+  close: () => void;
 }
 
 interface MessagePortLike {
-  postMessage(message: unknown): void;
-  close(): void;
+  postMessage: (message: unknown) => void;
+  close: () => void;
   onmessage: ((event: MessageEvent) => void) | null;
 }
 
@@ -207,7 +207,7 @@ function applyPatch(patch: MeshStatePatch): void {
       // Delivery events are forwarded to the main thread as patches.
       break;
     case "message_read": {
-      if (patch.room) {
+      if (patch.room !== undefined) {
         const msgs = messages.get(patch.room);
         if (msgs) {
           const msg = msgs.find((m) => m.id === patch.messageId);
@@ -275,11 +275,14 @@ function connect(url: string): void {
   };
 }
 
+/** Delay before retrying a dropped mesh WebSocket connection. */
+const RECONNECT_DELAY_MS = 3000;
+
 function scheduleReconnect(): void {
-  if (!wsUrl) return;
+  if (wsUrl === undefined) return;
   reconnectTimer = setTimeout(() => {
-    if (wsUrl) connect(wsUrl);
-  }, 3000);
+    if (wsUrl !== undefined) connect(wsUrl);
+  }, RECONNECT_DELAY_MS);
 }
 
 function handleServerMessage(raw: unknown): void {
