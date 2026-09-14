@@ -5,11 +5,22 @@ import type { PartialStrykerOptions } from "@stryker-mutator/api/core";
 // testRunner is "command", not "@stryker-mutator/vitest-runner", despite this repo's own test script now running on vitest: vitest-runner@10.0.0 crashes on init against vitest@5.0.0 with "TypeError: Converting circular structure to JSON" while serialising vitest's own resolved config, a confirmed upstream incompatibility with no fix or compatible version pairing available (see wire-mesh-core's own stryker.config.ts, which hit the identical crash first). The command runner re-runs `pnpm test` as a subprocess per mutant instead of driving vitest in-process, so it loses per-test coverage analysis (every mutant re-runs the entire suite rather than only its covering tests) but actually produces a real result. Revisit once vitest-runner ships a fix. No separate build step is needed first: the test script already runs directly against .ts source, so Stryker's own instrumented sandbox copy is tested exactly the way a real run is, with nothing to keep in sync between a build and a test step.
 const config: PartialStrykerOptions = {
   packageManager: "pnpm",
-  // Scoped to the three files the issue that added this config actually names, not the whole of src/core/: identity.ts, mesh-store.ts, and wire-mesh-transport.ts are the branch-heavy, security-relevant code a green suite can still be hiding an untested condition in. The rest of src/core/ (discovery, federation, push, bridge wiring) is exercised by its own integration tests and out of scope for this pass -- narrower than the glob this config originally shipped with, which matched every file under src/core/ despite this same comment always having named only these three.
+  // Scoped to the branch-heavy, security-relevant code a green suite can still be hiding an untested condition in -- not the whole of src/core/. The rest of src/core/ (discovery, federation, push, bridge wiring) is exercised by its own integration tests and stays out of scope. Originally just identity.ts, mesh-store.ts, and wire-mesh-transport.ts; mesh-store.ts's own capability-token/room-membership/delivery logic was later split across ten collaborator files (mesh-store.ts itself is now a thin orchestrator delegating to them), so the mutate list grew to cover each of those files individually rather than leaving the split-out logic untested -- the files changed, the actual code under test and the reasoning for testing it did not.
   mutate: [
     "src/core/identity.ts",
     "src/core/mesh-store.ts",
     "src/core/wire-mesh-transport.ts",
+    "src/core/agent-registry.ts",
+    "src/core/connection-approval.ts",
+    "src/core/delivery-engine.ts",
+    "src/core/federation-bridge.ts",
+    "src/core/mesh-store-shared.ts",
+    "src/core/peer-lifecycle.ts",
+    "src/core/room-lifecycle.ts",
+    "src/core/room-messaging.ts",
+    "src/core/room-protocol.ts",
+    "src/core/room-wire-extensions.ts",
+    "src/core/stale-agent-checker.ts",
   ],
   testRunner: "command",
   commandRunner: {

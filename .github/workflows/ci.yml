@@ -57,11 +57,27 @@ jobs:
     name: Mutation Testing (${{ matrix.file }})
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    # One job per file instead of one job for all three: each gets its own runner (its own 4 vCPUs, not shared with the others), so the three files' mutants run genuinely in parallel across separate machines rather than sequentially through a single job's own worker pool. The prior single-job run took over an hour and was still going when a too-short timeout cancelled it -- this is the actual fix for that, not just a bigger number.
+    # One job per file instead of one job for all of them: each gets its own runner (its own 4 vCPUs, not shared with the others), so every file's mutants run genuinely in parallel across separate machines rather than sequentially through a single job's own worker pool. The prior single-job run took over an hour and was still going when a too-short timeout cancelled it -- this is the actual fix for that, not just a bigger number. The list grew from the original three files once mesh-store.ts's own logic was split across ten collaborator files -- each now gets its own matrix entry and its own mutation score, matching stryker.config.ts's own mutate list.
     strategy:
       fail-fast: false
       matrix:
-        file: [identity, mesh-store, wire-mesh-transport]
+        file:
+          [
+            identity,
+            mesh-store,
+            wire-mesh-transport,
+            agent-registry,
+            connection-approval,
+            delivery-engine,
+            federation-bridge,
+            mesh-store-shared,
+            peer-lifecycle,
+            room-lifecycle,
+            room-messaging,
+            room-protocol,
+            room-wire-extensions,
+            stale-agent-checker,
+          ]
     # 120 minutes wasn't enough for mesh-store.ts specifically -- it was still running (identity.ts finished in 20 minutes, wire-mesh-transport.ts's own dry run failed in under 2) when that ceiling cancelled it on the first real matrix dispatch. Raised back to the same generous budget the prior single-job run used; a shorter-lived file finishing early costs the other matrix entries nothing, since each runs on its own independent runner.
     timeout-minutes: 240
     steps:
