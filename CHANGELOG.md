@@ -1,3 +1,20 @@
+## [2.21.7](https://github.com/ExaDev/agent-comms/compare/v2.21.6...v2.21.7) (2026-09-14)
+
+### Bug Fixes
+
+* **bridge:** isolate the web-server test suite's coordinator port ([e6edc27](https://github.com/ExaDev/agent-comms/commit/e6edc27834a431a6b5d071599186d8e639f65a4a))
+* **bridge:** resolve @exadev/eslint-config fallout in non-web bridges ([c7dfb03](https://github.com/ExaDev/agent-comms/commit/c7dfb0311727a88770049317b7bf0addafa887eb))
+* **bridge:** resolve @exadev/eslint-config fallout in web frontend/server ([b4ba944](https://github.com/ExaDev/agent-comms/commit/b4ba94406368c61e0170fb557f733e7b0e628650))
+* **bridge:** resolve @exadev/eslint-config fallout in web tests ([246340f](https://github.com/ExaDev/agent-comms/commit/246340f085de7e3d135d90d4d1999ed033c70545))
+* **cli:** resolve @exadev/eslint-config fallout in cli.ts and scripts ([484ef0f](https://github.com/ExaDev/agent-comms/commit/484ef0f21f8da0d11037a82fe1e6d9bfd66bece9))
+* **core:** resolve @exadev/eslint-config fallout in src/test ([6039f77](https://github.com/ExaDev/agent-comms/commit/6039f77de6192bd741e9c29cf4b6c9b863c213ed))
+* **core:** resolve exadev/eslint-config fallout with real behavioural fixes ([1b52de1](https://github.com/ExaDev/agent-comms/commit/1b52de117b013957ff65dee967148d9ababeafe9))
+* **core:** resolve remaining @exadev/eslint-config fallout in src/core ([f390757](https://github.com/ExaDev/agent-comms/commit/f39075764b27ebab2874612791069aa527ceafed))
+
+### Build
+
+* **deps:** adopt @exadev/eslint-config and bump to pnpm 12.4.1 ([bf38aab](https://github.com/ExaDev/agent-comms/commit/bf38aab2fa3395422a3e6b9cdf16b227f5388610))
+
 ## [2.21.6](https://github.com/ExaDev/agent-comms/compare/v2.21.5...v2.21.6) (2026-09-14)
 
 ### Tests
