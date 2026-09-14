@@ -62,8 +62,8 @@ jobs:
       fail-fast: false
       matrix:
         file: [identity, mesh-store, wire-mesh-transport]
-    # Half the prior single-job budget: a generous per-file allowance, not a precise measurement of any one file's real share of the 2,586-mutant baseline (the three files aren't equally sized, so an exact 1/3 split would be a guess dressed up as a calculation).
-    timeout-minutes: 120
+    # 120 minutes wasn't enough for mesh-store.ts specifically -- it was still running (identity.ts finished in 20 minutes, wire-mesh-transport.ts's own dry run failed in under 2) when that ceiling cancelled it on the first real matrix dispatch. Raised back to the same generous budget the prior single-job run used; a shorter-lived file finishing early costs the other matrix entries nothing, since each runs on its own independent runner.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
