@@ -1,3 +1,13 @@
+## [2.21.4](https://github.com/ExaDev/agent-comms/compare/v2.21.3...v2.21.4) (2026-09-14)
+
+### Tests
+
+* **core:** assert Basic Constraints criticality and PEM line wrapping ([5027e62](https://github.com/ExaDev/agent-comms/commit/5027e620b7160d2a2a34c2a356fc33b858eff112))
+* **core:** assert notBefore/notAfter as an exact zero-padded date ([315275e](https://github.com/ExaDev/agent-comms/commit/315275edd2a6f279683f35da7b58b0422e7a9298))
+* **core:** assert rawPublicKeyFromPrivateKey rejects non-EC keys ([f6291c9](https://github.com/ExaDev/agent-comms/commit/f6291c9ae70d108b938d4a6a6386a284e87823a5))
+* **core:** assert the certificate's X.509 v3 tag and serial byte spread ([71ab639](https://github.com/ExaDev/agent-comms/commit/71ab6398611e9bd70075e354214369e6f0a30bd2))
+* **core:** pin CERTIFICATE_VALIDITY_MS to its exact millisecond value ([f1d80ac](https://github.com/ExaDev/agent-comms/commit/f1d80ac91c1960b60150c83cfe453ad382d37074))
+
 ## [2.21.3](https://github.com/ExaDev/agent-comms/compare/v2.21.2...v2.21.3) (2026-09-14)
 
 ### Bug Fixes
