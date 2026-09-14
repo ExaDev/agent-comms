@@ -4,7 +4,11 @@
 
 import { describe, it, expect } from "vitest";
 import { X509Certificate } from "node:crypto";
-import { generateIdentity, getCertificateFingerprint } from "../identity.js";
+import {
+  generateIdentity,
+  getCertificateFingerprint,
+  CERTIFICATE_VALIDITY_MS,
+} from "../identity.js";
 
 describe("generateIdentity", () => {
   it("returns a valid PeerIdentity with all required fields", () => {
@@ -85,6 +89,12 @@ describe("generateIdentity", () => {
     expect(a.fingerprint).not.toBe(b.fingerprint);
     expect(a.privateKey).not.toBe(b.privateKey);
     expect(a.certificate).not.toBe(b.certificate);
+  });
+});
+
+describe("CERTIFICATE_VALIDITY_MS", () => {
+  it("is exactly 365 days in milliseconds", () => {
+    expect(CERTIFICATE_VALIDITY_MS).toBe(365 * 24 * 60 * 60 * 1000);
   });
 });
 
