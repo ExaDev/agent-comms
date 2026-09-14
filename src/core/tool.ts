@@ -22,6 +22,28 @@ import type { DiscoveryManager } from "./discovery.js";
 import type { FedLink } from "./federation.js";
 import { CommsError } from "./store.js";
 
+/** Table column widths for the plain-text listing helpers below, chosen to line up with the existing aligned output. */
+const ROOM_TYPE_COLUMN_WIDTH = 7;
+const AGENT_NAME_COLUMN_WIDTH = 25;
+const AGENT_HARNESS_COLUMN_WIDTH = 12;
+const AGENT_STATUS_COLUMN_WIDTH = 7;
+const AGENT_VISIBILITY_COLUMN_WIDTH = 9;
+const INTERFACE_NAME_COLUMN_WIDTH = 12;
+const INTERFACE_FAMILY_COLUMN_WIDTH = 4;
+const LISTENER_HOST_COLUMN_WIDTH = 15;
+const LISTENER_PORT_COLUMN_WIDTH = 6;
+const LISTENER_POLICY_COLUMN_WIDTH = 11;
+
+/** Start/end indices into an ISO-8601 timestamp string ("YYYY-MM-DDTHH:MM:SS.sssZ") that slice out the "HH:MM:SS" portion. */
+const ISO_TIME_START_INDEX = 11;
+const ISO_TIME_END_INDEX = 19;
+
+/** Maximum length of the JSON preview shown for an unrecognised action. */
+const UNKNOWN_ACTION_PREVIEW_LENGTH = 100;
+
+/** Default port the mesh coordinator listens on when advertising with no explicit port given. */
+const DEFAULT_MESH_COORDINATOR_PORT = 19876;
+
 export interface CommsContext {
   agentId: AgentId;
   harness: AgentIdentity["harness"];
@@ -39,34 +61,38 @@ export interface CommsResult {
  * Listener management, federation, and connection approval: transport concerns CommsStore deliberately excludes (see comms-store.ts's own header) since only MeshStore, never FileStore, can support them. Every method here is optional for exactly that reason -- a CommsTool backed by a FileStore simply doesn't have them, and each call site below reports that as an ordinary CommsResult error rather than assuming they exist.
  */
 export interface MeshOnlyFeatures {
-  addListener?(host: string, port: number, policy: string): Promise<string>;
-  removeListener?(id: string): Promise<void>;
-  listListeners?(): ListenerInfo[];
-  getNetworkInterfaces?(): NetworkInterface[];
-  fedConnect?(host: string, port: number, name?: string): Promise<string>;
-  fedDisconnect?(linkId: string): Promise<void>;
-  fedLinks?(): FedLink[];
-  getFederationFingerprint?(): string;
-  fedTrust?(fingerprint: string): Promise<void>;
-  fedUntrust?(fingerprint: string): Promise<void>;
-  fedTrustedFingerprints?(): string[];
-  fedListen?(host: string, port: number): Promise<void>;
-  fedStopListening?(): Promise<void>;
-  acceptConnection?(connectionId: string): Promise<void>;
-  rejectConnection?(connectionId: string, reason: string): Promise<void>;
-  listPendingConnections?(): {
+  addListener?: (host: string, port: number, policy: string) => Promise<string>;
+  removeListener?: (id: string) => Promise<void>;
+  listListeners?: () => ListenerInfo[];
+  getNetworkInterfaces?: () => NetworkInterface[];
+  fedConnect?: (host: string, port: number, name?: string) => Promise<string>;
+  fedDisconnect?: (linkId: string) => Promise<void>;
+  fedLinks?: () => FedLink[];
+  getFederationFingerprint?: () => string;
+  fedTrust?: (fingerprint: string) => Promise<void>;
+  fedUntrust?: (fingerprint: string) => Promise<void>;
+  fedTrustedFingerprints?: () => string[];
+  fedListen?: (host: string, port: number) => Promise<void>;
+  fedStopListening?: () => Promise<void>;
+  acceptConnection?: (connectionId: string) => Promise<void>;
+  rejectConnection?: (connectionId: string, reason: string) => Promise<void>;
+  listPendingConnections?: () => {
     connectionId: string;
     peerId: string;
     dataPort: number;
     name: string;
     fingerprint: string;
   }[];
-  acceptRoomJoin?(roomPath: string, requesterId: string): void;
-  rejectRoomJoin?(roomPath: string, requesterId: string, reason?: string): void;
-  listPendingRoomJoins?(): { roomPath: string; requesterId: string }[];
-  connectToRemote?(host: string, port: number): Promise<void>;
-  setVisibility?(level: MeshVisibility, adapter?: string): Promise<void>;
-  getVisibility?(adapter?: string): MeshVisibility;
+  acceptRoomJoin?: (roomPath: string, requesterId: string) => void;
+  rejectRoomJoin?: (
+    roomPath: string,
+    requesterId: string,
+    reason?: string,
+  ) => void;
+  listPendingRoomJoins?: () => { roomPath: string; requesterId: string }[];
+  connectToRemote?: (host: string, port: number) => Promise<void>;
+  setVisibility?: (level: MeshVisibility, adapter?: string) => Promise<void>;
+  getVisibility?: (adapter?: string) => MeshVisibility;
 }
 
 /** Uniform "this bridge isn't backed by a mesh transport" result for a MeshOnlyFeatures method that isn't present on the current store. */
@@ -77,13 +103,43 @@ function notMeshBacked(action: string): CommsResult {
   };
 }
 
+/** Runs a mesh/federation store call that may throw, converting a thrown error into a CommsResult instead of repeating the same try/catch at every call site. `action` performs the call and returns the success message directly. */
+async function tryMeshAction(
+  verb: string,
+  action: () => Promise<string>,
+): Promise<CommsResult> {
+  try {
+    return { content: await action(), isError: false };
+  } catch (err) {
+    return {
+      content: `Failed to ${verb}: ${err instanceof Error ? err.message : String(err)}`,
+      isError: true,
+    };
+  }
+}
+
+/** Synchronous counterpart to tryMeshAction, for the room-join accept/reject calls, which aren't promise-returning. */
+function trySyncAction(verb: string, action: () => string): CommsResult {
+  try {
+    return { content: action(), isError: false };
+  } catch (err) {
+    return {
+      content: `Failed to ${verb}: ${err instanceof Error ? err.message : String(err)}`,
+      isError: true,
+    };
+  }
+}
+
 export class CommsTool {
   constructor(
     private readonly store: CommsStore & MeshOnlyFeatures,
     private readonly discovery?: DiscoveryManager,
   ) {}
 
-  async handle(ctx: CommsContext, action: CommsAction): Promise<CommsResult> {
+  async handle(
+    ctx: Readonly<CommsContext>,
+    action: CommsAction,
+  ): Promise<CommsResult> {
     try {
       switch (action.action) {
         case "register":
@@ -168,7 +224,7 @@ export class CommsTool {
           return await this.meshFedStopListening(ctx);
         default:
           return {
-            content: `Unknown action: ${JSON.stringify(action).slice(0, 100)}`,
+            content: `Unknown action: ${JSON.stringify(action).slice(0, UNKNOWN_ACTION_PREVIEW_LENGTH)}`,
             isError: true,
           };
       }
@@ -187,7 +243,7 @@ export class CommsTool {
   }
 
   private async register(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "register" },
   ): Promise<CommsResult> {
     const agent = await this.store.registerAgent({
@@ -205,7 +261,7 @@ export class CommsTool {
   }
 
   private async update(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "update" },
   ): Promise<CommsResult> {
     const patch: Partial<
@@ -222,7 +278,7 @@ export class CommsTool {
     };
   }
 
-  private async whoami(ctx: CommsContext): Promise<CommsResult> {
+  private async whoami(ctx: Readonly<CommsContext>): Promise<CommsResult> {
     const agent = await this.store.getAgent(ctx.agentId);
     if (!agent) return { content: "Not registered.", isError: true };
     return {
@@ -240,7 +296,7 @@ export class CommsTool {
   }
 
   private async createRoom(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "create_room" },
   ): Promise<CommsResult> {
     const room = await this.store.createRoom({
@@ -257,14 +313,14 @@ export class CommsTool {
     };
   }
 
-  private async listRooms(ctx: CommsContext): Promise<CommsResult> {
+  private async listRooms(ctx: Readonly<CommsContext>): Promise<CommsResult> {
     const rooms = await this.store.listRooms(ctx.agentId);
     if (rooms.length === 0)
       return { content: "No rooms found.", isError: false };
 
     const lines = rooms.map((r: Room) => {
       const memberFlag = r.members.includes(ctx.agentId) ? "✓" : " ";
-      return `[${memberFlag}] ${r.type.padEnd(7)} ${r.name} (${String(r.members.length)} members) — ${r.description}`;
+      return `[${memberFlag}] ${r.type.padEnd(ROOM_TYPE_COLUMN_WIDTH)} ${r.name} (${String(r.members.length)} members) — ${r.description}`;
     });
     return {
       content: `Rooms ([✓] = joined):\n${lines.join("\n")}`,
@@ -273,7 +329,7 @@ export class CommsTool {
   }
 
   private async joinRoom(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "join_room" },
   ): Promise<CommsResult> {
     const roomId = action.room;
@@ -285,7 +341,7 @@ export class CommsTool {
   }
 
   private async leaveRoom(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "leave_room" },
   ): Promise<CommsResult> {
     await this.store.leaveRoom(action.room, ctx.agentId);
@@ -293,7 +349,7 @@ export class CommsTool {
   }
 
   private async send(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "send" },
   ): Promise<CommsResult> {
     const roomId = action.target;
@@ -311,7 +367,7 @@ export class CommsTool {
   }
 
   private async dm(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "dm" },
   ): Promise<CommsResult> {
     const targetId = action.target;
@@ -327,7 +383,7 @@ export class CommsTool {
     };
   }
 
-  private async listAgents(ctx: CommsContext): Promise<CommsResult> {
+  private async listAgents(ctx: Readonly<CommsContext>): Promise<CommsResult> {
     const agents = await this.store.listAgents(ctx.agentId);
     if (agents.length === 0)
       return { content: "No other agents online.", isError: false };
@@ -343,7 +399,7 @@ export class CommsTool {
       const cwd = abbreviateCwd(a.cwd);
       const rooms =
         a.subscribedRooms.length > 0 ? a.subscribedRooms.join(", ") : "none";
-      return `${a.id}  ${a.name.padEnd(25)} ${a.harness.padEnd(12)} ${a.status.padEnd(7)} ${a.visibility.padEnd(9)} ${cwd}${self}\n        Rooms: ${rooms}`;
+      return `${a.id}  ${a.name.padEnd(AGENT_NAME_COLUMN_WIDTH)} ${a.harness.padEnd(AGENT_HARNESS_COLUMN_WIDTH)} ${a.status.padEnd(AGENT_STATUS_COLUMN_WIDTH)} ${a.visibility.padEnd(AGENT_VISIBILITY_COLUMN_WIDTH)} ${cwd}${self}\n        Rooms: ${rooms}`;
     });
     return {
       content: `Agents:\n  ID      Name                      Harness      Status  Visibility  CWD\n${lines.map((l) => `  ${l}`).join("\n")}`,
@@ -352,7 +408,7 @@ export class CommsTool {
   }
 
   private async readRoom(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "read_room" },
   ): Promise<CommsResult> {
     const roomId = action.room;
@@ -361,14 +417,14 @@ export class CommsTool {
       return { content: "No messages.", isError: false };
 
     const lines = messages.map((m: RoomMessage) => {
-      const time = m.timestamp.slice(11, 19);
+      const time = m.timestamp.slice(ISO_TIME_START_INDEX, ISO_TIME_END_INDEX);
       return `[${time}] ${m.from}: ${m.content}`;
     });
     return { content: lines.join("\n"), isError: false };
   }
 
   private async invite(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "invite" },
   ): Promise<CommsResult> {
     await this.store.inviteToRoom(action.room, action.agent, ctx.agentId);
@@ -379,7 +435,7 @@ export class CommsTool {
   }
 
   private async declineInvite(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "decline_invite" },
   ): Promise<CommsResult> {
     await this.store.declineInvite(action.room, ctx.agentId, action.reason);
@@ -390,7 +446,7 @@ export class CommsTool {
   }
 
   private async kick(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "kick" },
   ): Promise<CommsResult> {
     await this.store.kickFromRoom(action.room, action.agent, ctx.agentId);
@@ -401,7 +457,7 @@ export class CommsTool {
   }
 
   private async destroyRoom(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "destroy_room" },
   ): Promise<CommsResult> {
     await this.store.destroyRoom(action.room, ctx.agentId);
@@ -432,7 +488,7 @@ export class CommsTool {
   }
 
   private async meshAdvertise(
-    ctx: CommsContext,
+    ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_advertise" },
   ): Promise<CommsResult> {
     if (!this.discovery) {
@@ -442,7 +498,7 @@ export class CommsTool {
       };
     }
     // Default to the mesh coordinator port if not specified
-    const port = action.port ?? 19876;
+    const port = action.port ?? DEFAULT_MESH_COORDINATOR_PORT;
     const opts: { name: string; port: number; adapter?: string } = {
       name: action.name,
       port,
@@ -462,9 +518,9 @@ export class CommsTool {
     if (interfaces.length === 0)
       return { content: "No network interfaces found.", isError: false };
 
-    const lines = interfaces.map((iface: NetworkInterface) => {
+    const lines = interfaces.map((iface: Readonly<NetworkInterface>) => {
       const internal = iface.internal ? " (internal)" : "";
-      return `${iface.name.padEnd(12)} ${iface.family.padEnd(4)} ${iface.address}${internal}`;
+      return `${iface.name.padEnd(INTERFACE_NAME_COLUMN_WIDTH)} ${iface.family.padEnd(INTERFACE_FAMILY_COLUMN_WIDTH)} ${iface.address}${internal}`;
     });
     return {
       content: `Interfaces:\n${lines.join("\n")}`,
@@ -486,7 +542,7 @@ export class CommsTool {
   }
 
   private async meshListen(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_listen" },
   ): Promise<CommsResult> {
     const policy = action.policy ?? "full";
@@ -498,49 +554,34 @@ export class CommsTool {
       };
     }
     if (!this.store.addListener) return notMeshBacked("mesh_listen");
-    try {
-      const id = await this.store.addListener(
-        action.host,
-        action.port ?? 0,
-        policy,
-      );
-      return {
-        content: `Listener added: ${id} on ${action.host}${String(action.port ?? "auto")} with policy ${policy}.`,
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to add listener: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const addListener = this.store.addListener.bind(this.store);
+    return tryMeshAction("add listener", async () => {
+      const id = await addListener(action.host, action.port ?? 0, policy);
+      return `Listener added: ${id} on ${action.host}${String(action.port ?? "auto")} with policy ${policy}.`;
+    });
   }
 
   private async meshUnlisten(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_unlisten" },
   ): Promise<CommsResult> {
     if (!this.store.removeListener) return notMeshBacked("mesh_unlisten");
-    try {
-      await this.store.removeListener(action.id);
-      return { content: `Listener ${action.id} removed.`, isError: false };
-    } catch (err) {
-      return {
-        content: `Failed to remove listener: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const removeListener = this.store.removeListener.bind(this.store);
+    return tryMeshAction("remove listener", async () => {
+      await removeListener(action.id);
+      return `Listener ${action.id} removed.`;
+    });
   }
 
-  private meshListeners(_ctx: CommsContext): CommsResult {
+  private meshListeners(_ctx: Readonly<CommsContext>): CommsResult {
     if (!this.store.listListeners) return notMeshBacked("mesh_listeners");
     const listeners = this.store.listListeners();
     if (listeners.length === 0)
       return { content: "No listeners (not coordinator).", isError: false };
 
-    const lines = listeners.map((l: ListenerInfo) => {
+    const lines = listeners.map((l: Readonly<ListenerInfo>) => {
       const flag = l.isDefault ? " (default)" : "";
-      return `${l.id}  ${l.host.padEnd(15)} ${String(l.port).padEnd(6)} ${l.policy.padEnd(11)}${flag}`;
+      return `${l.id}  ${l.host.padEnd(LISTENER_HOST_COLUMN_WIDTH)} ${String(l.port).padEnd(LISTENER_PORT_COLUMN_WIDTH)} ${l.policy.padEnd(LISTENER_POLICY_COLUMN_WIDTH)}${flag}`;
     });
     return {
       content: `Listeners:\n  ID      Host             Port   Policy      \n${lines.map((l) => `  ${l}`).join("\n")}`,
@@ -558,7 +599,8 @@ export class CommsTool {
       };
     }
     await this.store.setVisibility(action.visibility, action.adapter);
-    const adapter = action.adapter ? ` on adapter "${action.adapter}"` : "";
+    const adapter =
+      action.adapter !== undefined ? ` on adapter "${action.adapter}"` : "";
     return {
       content: `Mesh visibility set to "${action.visibility}"${adapter}.`,
       isError: false,
@@ -582,86 +624,54 @@ export class CommsTool {
   }
 
   private async meshFedConnect(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_fed_connect" },
   ): Promise<CommsResult> {
     if (!this.store.fedConnect) return notMeshBacked("mesh_fed_connect");
-    try {
-      const linkId = await this.store.fedConnect(
-        action.host,
-        action.port,
-        action.name,
-      );
-      return {
-        content: `Federation link established: ${linkId} to ${action.host}:${String(action.port)}`,
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to establish federation link: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const fedConnect = this.store.fedConnect.bind(this.store);
+    return tryMeshAction("establish federation link", async () => {
+      const linkId = await fedConnect(action.host, action.port, action.name);
+      return `Federation link established: ${linkId} to ${action.host}:${String(action.port)}`;
+    });
   }
 
   private async meshConnect(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_connect" },
   ): Promise<CommsResult> {
     if (!this.store.connectToRemote) return notMeshBacked("mesh_connect");
-    try {
-      await this.store.connectToRemote(action.host, action.port);
-      return {
-        content: `Connection request sent to ${action.host}:${String(action.port)}.`,
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to connect: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const connectToRemote = this.store.connectToRemote.bind(this.store);
+    return tryMeshAction("connect", async () => {
+      await connectToRemote(action.host, action.port);
+      return `Connection request sent to ${action.host}:${String(action.port)}.`;
+    });
   }
 
   private async meshFedDisconnect(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_fed_disconnect" },
   ): Promise<CommsResult> {
     if (!this.store.fedDisconnect) return notMeshBacked("mesh_fed_disconnect");
-    try {
-      await this.store.fedDisconnect(action.linkId);
-      return {
-        content: `Federation link ${action.linkId} closed.`,
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to close federation link: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const fedDisconnect = this.store.fedDisconnect.bind(this.store);
+    return tryMeshAction("close federation link", async () => {
+      await fedDisconnect(action.linkId);
+      return `Federation link ${action.linkId} closed.`;
+    });
   }
 
   private async meshAccept(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_accept" },
   ): Promise<CommsResult> {
     if (!this.store.acceptConnection) return notMeshBacked("mesh_accept");
-    try {
-      await this.store.acceptConnection(action.connectionId);
-      return {
-        content: `Accepted connection ${action.connectionId}.`,
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to accept: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const acceptConnection = this.store.acceptConnection.bind(this.store);
+    return tryMeshAction("accept", async () => {
+      await acceptConnection(action.connectionId);
+      return `Accepted connection ${action.connectionId}.`;
+    });
   }
 
-  private meshFedLinks(_ctx: CommsContext): CommsResult {
+  private meshFedLinks(_ctx: Readonly<CommsContext>): CommsResult {
     if (!this.store.fedLinks) return notMeshBacked("mesh_fed_links");
     const links = this.store.fedLinks();
     if (links.length === 0)
@@ -677,7 +687,7 @@ export class CommsTool {
     };
   }
 
-  private meshFedFingerprint(_ctx: CommsContext): CommsResult {
+  private meshFedFingerprint(_ctx: Readonly<CommsContext>): CommsResult {
     if (!this.store.getFederationFingerprint)
       return notMeshBacked("mesh_fed_fingerprint");
     const fingerprint = this.store.getFederationFingerprint();
@@ -688,44 +698,30 @@ export class CommsTool {
   }
 
   private async meshFedTrust(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_fed_trust" },
   ): Promise<CommsResult> {
     if (!this.store.fedTrust) return notMeshBacked("mesh_fed_trust");
-    try {
-      await this.store.fedTrust(action.fingerprint);
-      return {
-        content: `Trusted federation fingerprint: ${action.fingerprint}`,
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to trust fingerprint: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const fedTrust = this.store.fedTrust.bind(this.store);
+    return tryMeshAction("trust fingerprint", async () => {
+      await fedTrust(action.fingerprint);
+      return `Trusted federation fingerprint: ${action.fingerprint}`;
+    });
   }
 
   private async meshFedUntrust(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_fed_untrust" },
   ): Promise<CommsResult> {
     if (!this.store.fedUntrust) return notMeshBacked("mesh_fed_untrust");
-    try {
-      await this.store.fedUntrust(action.fingerprint);
-      return {
-        content: `Untrusted federation fingerprint: ${action.fingerprint}`,
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to untrust fingerprint: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const fedUntrust = this.store.fedUntrust.bind(this.store);
+    return tryMeshAction("untrust fingerprint", async () => {
+      await fedUntrust(action.fingerprint);
+      return `Untrusted federation fingerprint: ${action.fingerprint}`;
+    });
   }
 
-  private meshFedTrusted(_ctx: CommsContext): CommsResult {
+  private meshFedTrusted(_ctx: Readonly<CommsContext>): CommsResult {
     if (!this.store.fedTrustedFingerprints)
       return notMeshBacked("mesh_fed_trusted");
     const fingerprints = this.store.fedTrustedFingerprints();
@@ -738,61 +734,42 @@ export class CommsTool {
   }
 
   private async meshFedListen(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_fed_listen" },
   ): Promise<CommsResult> {
     if (!this.store.fedListen) return notMeshBacked("mesh_fed_listen");
-    try {
-      await this.store.fedListen(action.host, action.port);
-      return {
-        content: `Listening for inbound federation links on ${action.host}:${String(action.port)}. Only connections presenting a trusted fingerprint (mesh_fed_trust) will be accepted.`,
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to start federation listener: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const fedListen = this.store.fedListen.bind(this.store);
+    return tryMeshAction("start federation listener", async () => {
+      await fedListen(action.host, action.port);
+      return `Listening for inbound federation links on ${action.host}:${String(action.port)}. Only connections presenting a trusted fingerprint (mesh_fed_trust) will be accepted.`;
+    });
   }
 
-  private async meshFedStopListening(_ctx: CommsContext): Promise<CommsResult> {
+  private async meshFedStopListening(
+    _ctx: Readonly<CommsContext>,
+  ): Promise<CommsResult> {
     if (!this.store.fedStopListening)
       return notMeshBacked("mesh_fed_stop_listening");
-    try {
-      await this.store.fedStopListening();
-      return {
-        content: "Stopped accepting inbound federation connections.",
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to stop federation listener: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const fedStopListening = this.store.fedStopListening.bind(this.store);
+    return tryMeshAction("stop federation listener", async () => {
+      await fedStopListening();
+      return "Stopped accepting inbound federation connections.";
+    });
   }
 
   private async meshReject(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_reject" },
   ): Promise<CommsResult> {
     if (!this.store.rejectConnection) return notMeshBacked("mesh_reject");
-    try {
-      await this.store.rejectConnection(action.connectionId, action.reason);
-      return {
-        content: `Rejected connection ${action.connectionId}: ${action.reason}`,
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to reject: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const rejectConnection = this.store.rejectConnection.bind(this.store);
+    return tryMeshAction("reject", async () => {
+      await rejectConnection(action.connectionId, action.reason);
+      return `Rejected connection ${action.connectionId}: ${action.reason}`;
+    });
   }
 
-  private meshPending(_ctx: CommsContext): CommsResult {
+  private meshPending(_ctx: Readonly<CommsContext>): CommsResult {
     if (!this.store.listPendingConnections)
       return notMeshBacked("mesh_pending");
     const pending = this.store.listPendingConnections();
@@ -810,44 +787,30 @@ export class CommsTool {
   }
 
   private roomAccept(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "room_accept" },
   ): CommsResult {
     if (!this.store.acceptRoomJoin) return notMeshBacked("room_accept");
-    try {
-      this.store.acceptRoomJoin(action.room, action.requesterId);
-      return {
-        content: `Accepted ${action.requesterId}'s request to join ${action.room}.`,
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to accept: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const acceptRoomJoin = this.store.acceptRoomJoin.bind(this.store);
+    return trySyncAction("accept", () => {
+      acceptRoomJoin(action.room, action.requesterId);
+      return `Accepted ${action.requesterId}'s request to join ${action.room}.`;
+    });
   }
 
   private roomReject(
-    _ctx: CommsContext,
+    _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "room_reject" },
   ): CommsResult {
     if (!this.store.rejectRoomJoin) return notMeshBacked("room_reject");
-    try {
-      this.store.rejectRoomJoin(action.room, action.requesterId, action.reason);
-      return {
-        content: `Rejected ${action.requesterId}'s request to join ${action.room}.`,
-        isError: false,
-      };
-    } catch (err) {
-      return {
-        content: `Failed to reject: ${err instanceof Error ? err.message : String(err)}`,
-        isError: true,
-      };
-    }
+    const rejectRoomJoin = this.store.rejectRoomJoin.bind(this.store);
+    return trySyncAction("reject", () => {
+      rejectRoomJoin(action.room, action.requesterId, action.reason);
+      return `Rejected ${action.requesterId}'s request to join ${action.room}.`;
+    });
   }
 
-  private roomPending(_ctx: CommsContext): CommsResult {
+  private roomPending(_ctx: Readonly<CommsContext>): CommsResult {
     if (!this.store.listPendingRoomJoins) return notMeshBacked("room_pending");
     const pending = this.store.listPendingRoomJoins();
     if (pending.length === 0)

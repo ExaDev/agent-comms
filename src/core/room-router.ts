@@ -30,9 +30,9 @@ export function extractMessage(
 
 /** Routes an already-decoded legacy MeshMessage to the matching TransportEvents callback -- moved verbatim from WireMeshTransport's own former route() method. */
 function routeLegacyMessage(
-  handle: ConnectionHandle,
+  handle: Readonly<ConnectionHandle>,
   message: MeshMessage,
-  events: TransportEvents,
+  events: Readonly<TransportEvents>,
 ): void {
   switch (message.method) {
     case "introduce": {
@@ -55,11 +55,29 @@ function routeLegacyMessage(
       return;
     }
     case "connect_request": {
-      // Only ever reaches here if a session was somehow promoted without going through WireMeshTransport's own consumeQuarantined handling of it -- can't happen given every requiresApproval accept path routes through consumeQuarantined first, kept here only so an unrecognised-in-context method fails closed rather than falling to the default onMessage case below.
+      // Only ever reaches here if a session was somehow promoted without going through WireMeshTransport's own consumeQuarantined handling of it -- can't happen given every requiresApproval accept path routes through consumeQuarantined first, kept here only so an unrecognised-in-context method fails closed rather than falling to the onMessage case below.
+      return;
+    }
+    // Every other wire method -- mesh-state gossip (state_sync/state_update/peer_left) and the coordinator-to-coordinator federation methods -- has no dedicated TransportEvents callback and falls to the generic onMessage handler, exactly as the old unconditional default case did.
+    case "state_sync":
+    case "state_update":
+    case "peer_left":
+    case "fed_handshake":
+    case "fed_ack":
+    case "fed_agent_visible":
+    case "fed_agent_gone":
+    case "fed_room_message":
+    case "fed_room_join":
+    case "fed_room_leave":
+    case "fed_ping":
+    case "fed_pong": {
+      events.onMessage(handle, message);
       return;
     }
     default: {
+      // A peer running a newer build can send a wire method this closed union doesn't know about yet -- isMeshMessage's own runtime check only requires a string method field, deliberately looser than MeshMessage's compile-time type, so this branch is reachable at runtime even though every known case above is already covered.
       events.onMessage(handle, message);
+      return;
     }
   }
 }
@@ -74,7 +92,7 @@ function extractParamsVerb(params: unknown): string | undefined {
 /** Handles one already-verified-and-approved incoming request, given its authenticated connection handle. Registered per params.verb (room.send, room.join, ...), never per command.verb (the shared room:member capability every ordinary membership verb rides under) -- see this file's own header comment. */
 export type RoomVerbHandler = (
   request: IncomingManageRequest,
-  handle: ConnectionHandle,
+  handle: Readonly<ConnectionHandle>,
 ) => Promise<ManageOutcome>;
 
 export interface RoomRouterOptions {
@@ -88,19 +106,19 @@ export interface RoomRouter {
   /** Handles one already-received request. Exported for direct unit testing; drainSession below is the thin per-session loop wrapper real callers use. */
   handleRequest: (
     request: IncomingManageRequest,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
   ) => Promise<void>;
   /** Consumes one session's incomingManageRequests until it ends, dispatching each request via handleRequest. Becomes the single consumer of that iterable from this point on -- the caller must not also iterate the same session's incomingManageRequests itself once this is called. */
   drainSession: (
     session: AcceptedMeshSession,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
   ) => void;
 }
 
 export function createRoomRouter(options: RoomRouterOptions): RoomRouter {
   async function handleRequest(
     request: IncomingManageRequest,
-    handle: ConnectionHandle,
+    handle: Readonly<ConnectionHandle>,
   ): Promise<void> {
     if (request.command.verb === FRAME_VERB) {
       const message = extractMessage(request.command);
