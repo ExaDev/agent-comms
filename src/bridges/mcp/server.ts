@@ -22,6 +22,9 @@ import type { IdentitySlot } from "../../core/identity-store.js";
 import { tryStartWebServer } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
+/** Length of the random suffix appended to a default `mcp-<suffix>` agent name when no explicit name is registered. */
+const DEFAULT_AGENT_NAME_SUFFIX_LENGTH = 4;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -56,11 +59,11 @@ export async function run(): Promise<void> {
       const params = isRecord(rawParams) ? rawParams : {};
       const actionParam = params.action;
 
-      if (!agentId) {
+      if (agentId === undefined) {
         const name =
           actionParam === "register" && typeof params.name === "string"
             ? params.name
-            : `mcp-${nanoid(4)}`;
+            : `mcp-${nanoid(DEFAULT_AGENT_NAME_SUFFIX_LENGTH)}`;
         const reg = await ensureRegistered({
           cwd: process.cwd(),
           store,
@@ -105,7 +108,7 @@ export async function run(): Promise<void> {
     cwd: process.cwd(),
     store,
     harness: "mcp",
-    defaultName: `mcp-${nanoid(4)}`,
+    defaultName: `mcp-${nanoid(DEFAULT_AGENT_NAME_SUFFIX_LENGTH)}`,
   });
   agentId = reg.agentId;
 }

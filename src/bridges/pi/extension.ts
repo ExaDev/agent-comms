@@ -55,14 +55,16 @@ export default function (pi: ExtensionAPI) {
   // LRU-style dedup for delivery events
   const recentDeliveries = new Set<string>();
   const MAX_DEDUP_ENTRIES = 100;
+  const AUTO_NAME_SUFFIX_LENGTH = 4;
 
   function refreshStatus(): void {
     if (!uiCtx) return;
     const parts: string[] = [];
-    if (projectRoom) parts.push(`💬 ${projectRoom}`);
+    if (projectRoom !== undefined) parts.push(`💬 ${projectRoom}`);
     if (webHandle) {
       const port = getWebPort(webHandle);
-      if (port) parts.push(`http://127.0.0.1:${String(port)}`);
+      if (port !== undefined && port !== 0)
+        parts.push(`http://127.0.0.1:${String(port)}`);
     }
     if (informationalBuffer.length > 0) {
       parts.push(`📬 ${String(informationalBuffer.length)}`);
@@ -138,7 +140,7 @@ export default function (pi: ExtensionAPI) {
         store,
         cwd: process.cwd(),
         harness: "pi",
-        defaultName: `pi-${nanoid(4)}`,
+        defaultName: `pi-${nanoid(AUTO_NAME_SUFFIX_LENGTH)}`,
       });
       agentId = reg.agentId;
 
@@ -173,7 +175,7 @@ export default function (pi: ExtensionAPI) {
       webHandle.server.close();
       webHandle = undefined;
     }
-    if (agentId) {
+    if (agentId !== undefined) {
       await store.setAgentOffline(agentId);
     }
     releaseIdentityLock(identitySlot);
@@ -186,18 +188,18 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("comms-url", {
     description: "Show the Agent Comms web UI URL",
-    // eslint-disable-next-line @typescript-eslint/require-await -- SDK requires Promise<void> return
     handler: async (_args, ctx) => {
       if (!webHandle) {
         ctx.ui.notify("Web UI is not running.", "error");
-        return;
+        return Promise.resolve();
       }
       const port = getWebPort(webHandle);
-      if (!port) {
+      if (port === undefined || port === 0) {
         ctx.ui.notify("Web UI port not yet assigned.", "error");
-        return;
+        return Promise.resolve();
       }
       ctx.ui.notify(`http://127.0.0.1:${String(port)}`, "info");
+      return Promise.resolve();
     },
   });
 
@@ -305,7 +307,7 @@ export default function (pi: ExtensionAPI) {
           };
         }
         const port = getWebPort(webHandle);
-        if (!port) {
+        if (port === undefined || port === 0) {
           return {
             content: [{ type: "text", text: "Web UI port not yet assigned." }],
             details: { action: "web_url" },
@@ -319,7 +321,7 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      if (!agentId) {
+      if (agentId === undefined) {
         return {
           content: [{ type: "text", text: "Error: not registered" }],
           details: {},

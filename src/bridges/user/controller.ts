@@ -6,8 +6,8 @@
  */
 
 import { EventEmitter } from "node:events";
+import type { MeshStore } from "../../core/index.js";
 import {
-  MeshStore,
   CommsTool,
   createBridgeMesh,
   ensureRegistered,
@@ -44,8 +44,8 @@ export class ChatController extends EventEmitter {
   private currentRoom: string | undefined;
 
   constructor(
-    private userName: string,
-    private coordinatorPort?: number,
+    private readonly userName: string,
+    private readonly coordinatorPort?: number,
   ) {
     super();
   }
@@ -57,7 +57,10 @@ export class ChatController extends EventEmitter {
    * (e.g. pi, Claude Code) so the web UI shares the same mesh peer
    * instead of creating a redundant one.
    */
-  static fromExisting(store: MeshStore, ctx: CommsContext): ChatController {
+  static fromExisting(
+    store: MeshStore,
+    ctx: Readonly<CommsContext>,
+  ): ChatController {
     const ctrl = new ChatController("");
     // Replace the store with the existing one
     ctrl.store = store;
@@ -154,7 +157,7 @@ export class ChatController extends EventEmitter {
 
   async leaveRoom(roomId?: string): Promise<CommsResult> {
     const target = roomId ?? this.currentRoom;
-    if (!target) {
+    if (target === undefined || target === "") {
       return { content: "No room to leave. Join a room first.", isError: true };
     }
     const result = await this.tool.handle(this.ctx, {
@@ -172,7 +175,7 @@ export class ChatController extends EventEmitter {
   }
 
   async sendToCurrentRoom(content: string): Promise<CommsResult> {
-    if (!this.currentRoom) {
+    if (this.currentRoom === undefined || this.currentRoom === "") {
       return { content: "No active room. Join a room first.", isError: true };
     }
     return this.send(this.currentRoom, content);
@@ -188,13 +191,13 @@ export class ChatController extends EventEmitter {
 
   async readRoom(roomId?: string, since?: string): Promise<CommsResult> {
     const target = roomId ?? this.currentRoom;
-    if (!target) {
+    if (target === undefined || target === "") {
       return { content: "No room to read. Join a room first.", isError: true };
     }
     return this.tool.handle(this.ctx, {
       action: "read_room",
       room: target,
-      ...(since && { since }),
+      ...(since !== undefined && since !== "" && { since }),
     });
   }
 
