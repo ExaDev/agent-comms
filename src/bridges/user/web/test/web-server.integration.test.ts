@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from "vitest";
 import http from "node:http";
+import net from "node:net";
 import { createWebServer, type WebServerHandle } from "../server.js";
 import WS from "ws";
 
@@ -14,13 +15,27 @@ const HTTP_OK = 200;
 /** HTTP 404 Not Found. */
 const HTTP_NOT_FOUND = 404;
 
+/** Find a free port on localhost by binding to port 0, matching the pattern used by the mesh core's own integration tests -- an isolated coordinator port keeps this suite from colliding with a real agent-comms mesh already running on the developer's machine (the default coordinator port, 19876, is a well-known constant every real bridge instance binds). */
+async function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr !== null ? addr.port : 0;
+      server.close(() => resolve(port));
+    });
+    server.on("error", reject);
+  });
+}
+
 let handle: WebServerHandle | undefined;
 
 async function setup(): Promise<{
   port: number;
   cleanup: () => Promise<void>;
 }> {
-  handle = await createWebServer(0);
+  const coordinatorPort = await findFreePort();
+  handle = await createWebServer(0, undefined, coordinatorPort);
 
   // Wait for the server to actually be listening
   await new Promise<void>((resolve) => {
