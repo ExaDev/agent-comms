@@ -1,3 +1,11 @@
+## [2.21.5](https://github.com/ExaDev/agent-comms/compare/v2.21.4...v2.21.5) (2026-09-14)
+
+### Tests
+
+* **core:** cover presence early-return and pending-connection expiry message ([6987407](https://github.com/ExaDev/agent-comms/commit/69874070c4a96765f2b8e5f05ccdab847d43903f))
+* **core:** cover WireMeshTransport constants, presence interval, and connect_request lifecycle ([af64ab7](https://github.com/ExaDev/agent-comms/commit/af64ab7b9c3d222d6794256f9d1b84bcb5c7eaba))
+* **core:** drop unused AgentStatus type import ([258e5df](https://github.com/ExaDev/agent-comms/commit/258e5df90ce671fed5317d1b63e10ab68fc5b370))
+
 ## [2.21.4](https://github.com/ExaDev/agent-comms/compare/v2.21.3...v2.21.4) (2026-09-14)
 
 ### Tests
