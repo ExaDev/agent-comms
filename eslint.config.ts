@@ -125,6 +125,10 @@ export default defineConfig(
       ],
       "prettier/prettier": "error",
       "@typescript-eslint/require-await": "warn",
+      "max-lines": [
+        "error",
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
     },
   },
   eslintConfigPrettier,
