@@ -3,11 +3,12 @@
  */
 
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { X509Certificate } from "node:crypto";
+import { X509Certificate, generateKeyPairSync } from "node:crypto";
 import {
   generateIdentity,
   getCertificateFingerprint,
   CERTIFICATE_VALIDITY_MS,
+  rawPublicKeyFromPrivateKey,
 } from "../identity.js";
 
 describe("generateIdentity", () => {
@@ -139,6 +140,20 @@ describe("generateIdentity", () => {
 describe("CERTIFICATE_VALIDITY_MS", () => {
   it("is exactly 365 days in milliseconds", () => {
     expect(CERTIFICATE_VALIDITY_MS).toBe(365 * 24 * 60 * 60 * 1000);
+  });
+});
+
+describe("rawPublicKeyFromPrivateKey", () => {
+  it("throws for a private key whose JWK export has no EC x/y coordinates", () => {
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+
+    expect(() => rawPublicKeyFromPrivateKey(privateKey)).toThrow(
+      "expected an EC JWK with x/y coordinates",
+    );
   });
 });
 
