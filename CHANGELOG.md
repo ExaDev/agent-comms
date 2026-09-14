@@ -1,3 +1,9 @@
+## [2.21.6](https://github.com/ExaDev/agent-comms/compare/v2.21.5...v2.21.6) (2026-09-14)
+
+### Tests
+
+* **core:** cover accepting-side disconnect wiring and dial dedup cleanup ([e408ca1](https://github.com/ExaDev/agent-comms/commit/e408ca187076e0507dee409b44ed73b3df6f0bad))
+
 ## [2.21.5](https://github.com/ExaDev/agent-comms/compare/v2.21.4...v2.21.5) (2026-09-14)
 
 ### Tests
