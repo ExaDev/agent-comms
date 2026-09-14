@@ -1,0 +1,122 @@
+/**
+ * PeerLifecycle — the TransportEvents callbacks around a peer's own comings and goings on the mesh: peer-list/peer-joined bookkeeping, the coordinator's own new-peer introduction handshake, post-connection state-sync, inbound data-message routing (state_sync/state_update), taking over as coordinator, and peer disconnection. Split out of mesh-store.ts to reduce it under the repo's max-lines cap.
+ */
+
+import { normaliseWireState } from "./wire-protocol.js";
+import type {
+  MeshMessage,
+  PeerInfo,
+  SerialisedState,
+} from "./wire-protocol.js";
+import { COORDINATOR_HOST } from "./mesh-store-shared.js";
+import type { DeliveryEngine } from "./delivery-engine.js";
+import type { RoomProtocol } from "./room-protocol.js";
+import type { StaleAgentChecker } from "./stale-agent-checker.js";
+import type { ConnectionHandle, MeshTransport } from "./transport.js";
+import type { AgentIdentity } from "./types.js";
+
+/** The state and collaborators PeerLifecycle needs from MeshStore. peerInfo/agents are direct references into MeshStore's own fields; coordinatorPort is a readonly value copied once; serialise is MeshStore's own retained method (constraint: it must stay directly on MeshStore.prototype, so PeerLifecycle calls it through this closure rather than owning it); roomProtocol/deliveryEngine/staleAgentChecker are the already-constructed instances (construction order: ... -> roomProtocol -> ... -> staleAgentChecker -> peerLifecycle), narrowed to what peer-lifecycle bookkeeping ever needs. */
+export interface PeerLifecycleDeps {
+  peerInfo: Map<string, PeerInfo>;
+  agents: Map<string, AgentIdentity>;
+  coordinatorPort: number;
+  getPeerId: () => string;
+  requireTransport: () => MeshTransport;
+  serialise: () => SerialisedState;
+  roomProtocol: Pick<RoomProtocol, "flushPendingRoomRequests">;
+  deliveryEngine: Pick<DeliveryEngine, "applyStateSync" | "applyPatch">;
+  staleAgentChecker: Pick<StaleAgentChecker, "start">;
+}
+
+export class PeerLifecycle {
+  constructor(private readonly deps: PeerLifecycleDeps) {}
+
+  handlePeerList(peers: PeerInfo[]): void {
+    const peerId = this.deps.getPeerId();
+    for (const peer of peers) {
+      this.deps.peerInfo.set(peer.id, peer);
+      // The list always includes this store's own entry — dialling yourself is a wasted connection attempt (and, on some platforms, an immediate self-inflicted ECONNRESET) that never needs to happen.
+      if (peer.id === peerId) continue;
+      void this.deps.requireTransport().connectToPeer(peer, peerId);
+    }
+  }
+
+  handlePeerJoined(peer: PeerInfo): void {
+    this.deps.peerInfo.set(peer.id, peer);
+    const peerId = this.deps.getPeerId();
+    if (peer.id === peerId) return;
+    void this.deps.requireTransport().connectToPeer(peer, peerId);
+  }
+
+  async handleIntroduction(
+    handle: ConnectionHandle,
+    msg: { peerId: string; dataPort: number },
+  ): Promise<void> {
+    const newPeer: PeerInfo = {
+      id: msg.peerId,
+      port: msg.dataPort,
+      startedAt: new Date().toISOString(),
+    };
+    this.deps.peerInfo.set(msg.peerId, newPeer);
+
+    // Send full peer list to the new peer
+    const peerList: MeshMessage = {
+      method: "peer_list",
+      peers: [...this.deps.peerInfo.values()],
+    };
+    await this.deps.requireTransport().send(handle, peerList);
+
+    // Broadcast arrival to all existing peers
+    const joined: MeshMessage = { method: "peer_joined", peer: newPeer };
+    await this.deps.requireTransport().broadcast(joined);
+
+    // Connect to the new peer's data server
+    void this.deps
+      .requireTransport()
+      .connectToPeer(newPeer, this.deps.getPeerId());
+  }
+
+  async handlePeerConnected(
+    handle: ConnectionHandle,
+    _info: PeerInfo,
+  ): Promise<void> {
+    // If we have state and the peer doesn't, send state sync
+    if (this.deps.agents.size > 0) {
+      const state: SerialisedState = this.deps.serialise();
+      await this.deps.requireTransport().send(handle, {
+        method: "state_sync",
+        state,
+      });
+    }
+    await this.deps.roomProtocol.flushPendingRoomRequests(handle.id);
+  }
+
+  async handleDataMessage(
+    handle: ConnectionHandle,
+    msg: MeshMessage,
+  ): Promise<void> {
+    if (msg.method === "state_sync") {
+      this.deps.deliveryEngine.applyStateSync(normaliseWireState(msg.state));
+    } else if (msg.method === "state_update") {
+      await this.deps.deliveryEngine.applyPatch(msg.patch);
+    }
+  }
+
+  async handleBecomeCoordinator(peerList: PeerInfo[]): Promise<void> {
+    // Take over as coordinator using the data server we already have
+    await this.deps
+      .requireTransport()
+      .becomeCoordinator(COORDINATOR_HOST, this.deps.coordinatorPort);
+    this.deps.peerInfo.clear();
+    const peerId = this.deps.getPeerId();
+    for (const peer of peerList) {
+      this.deps.peerInfo.set(peer.id, peer);
+      void this.deps.requireTransport().connectToPeer(peer, peerId);
+    }
+    this.deps.staleAgentChecker.start();
+  }
+
+  handlePeerDisconnected(handle: ConnectionHandle): void {
+    this.deps.peerInfo.delete(handle.id);
+  }
+}

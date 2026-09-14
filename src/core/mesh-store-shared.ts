@@ -29,6 +29,9 @@ export type RoomJoinDecision =
  */
 export const MAX_QUEUED_DELIVERIES_PER_AGENT = 100;
 
+/** The coordinator's own bind host -- always loopback, since the mesh coordinator role only ever needs to be reachable from other local peers on this machine. Shared between mesh-store.ts's own init() and PeerLifecycle's handleBecomeCoordinator. */
+export const COORDINATOR_HOST = "127.0.0.1";
+
 /**
  * Merge an incoming append-only message history into the local one: add entries the local list does not have and union read receipts on the ones it does. Local ordering is preserved; unseen entries are appended.
  */
