@@ -1,3 +1,9 @@
+## [2.21.9](https://github.com/ExaDev/agent-comms/compare/v2.21.8...v2.21.9) (2026-09-14)
+
+### Tests
+
+* **core:** add dedicated coverage for mesh-store-shared ([d9a5c4d](https://github.com/ExaDev/agent-comms/commit/d9a5c4d7da45b062738ceeadd1d27b1fbcf48854))
+
 ## [2.21.8](https://github.com/ExaDev/agent-comms/compare/v2.21.7...v2.21.8) (2026-09-14)
 
 ### Styles
