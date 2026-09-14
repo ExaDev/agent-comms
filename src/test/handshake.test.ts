@@ -95,13 +95,19 @@ describe("ConnectionHandshake", () => {
 
   it("refuses undecodable leading bytes that are neither CBOR maps nor JSON", () => {
     const gate = new ConnectionHandshake("server");
-    const outcome = gate.feed(Buffer.from([0xff, 0x00, 0x01]));
+    /** Lead byte that is neither a valid CBOR map head nor a JSON opening brace. */
+    const UNDECODABLE_LEAD_BYTE = 0xff;
+    const outcome = gate.feed(Buffer.from([UNDECODABLE_LEAD_BYTE, 0x00, 0x01]));
     expect(outcome.kind).toBe("refused");
   });
 
   it("refuses a binary blob far beyond any handshake frame size", () => {
     const gate = new ConnectionHandshake("server");
-    const big = Buffer.alloc(2048, 0x61); // 'a' — neither CBOR map head nor '{'
+    /** Length of the oversized test blob, comfortably beyond any real handshake frame. */
+    const OVERSIZED_BLOB_LENGTH = 2048;
+    /** ASCII 'a' — neither a CBOR map head nor a JSON opening brace. */
+    const ASCII_LOWERCASE_A = 0x61;
+    const big = Buffer.alloc(OVERSIZED_BLOB_LENGTH, ASCII_LOWERCASE_A);
     expect(gate.feed(big).kind).toBe("refused");
   });
 });
@@ -138,9 +144,9 @@ describe("normaliseWireState (#31 direction 2)", () => {
 describe("ConnectionHandshake over a real socket pair", () => {
   it("client sends frame first; both sides reach negotiated", async () => {
     const server = net.createServer();
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve),
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     const port = (server.address() as net.AddressInfo).port;
 
     const serverOutcome = new Promise<"negotiated" | "legacy" | "refused">(
@@ -181,9 +187,9 @@ describe("ConnectionHandshake over a real socket pair", () => {
 
   it("a legacy peer (no handshake frame) is tolerated: JSON bytes pass straight through both sides", async () => {
     const server = net.createServer();
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve),
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     const port = (server.address() as net.AddressInfo).port;
 
     const serverReceived = new Promise<string>((resolve, reject) => {
@@ -199,7 +205,9 @@ describe("ConnectionHandshake over a real socket pair", () => {
 
     // A pre-#31 peer: writes its JSON line directly, sends no handshake frame at all.
     const client = net.createConnection({ port, host: "127.0.0.1" });
-    await new Promise<void>((resolve) => client.on("connect", resolve));
+    await new Promise<void>((resolve) => {
+      client.on("connect", resolve);
+    });
     client.write('{"method":"introduce"}\n');
 
     expect(await serverReceived).toMatch(/introduce/);
@@ -210,9 +218,9 @@ describe("ConnectionHandshake over a real socket pair", () => {
 
   it("an incompatible handshake (no shared domain) is refused loudly: the connection is destroyed rather than desynced", async () => {
     const server = net.createServer();
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve),
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     const port = (server.address() as net.AddressInfo).port;
 
     const serverError = new Promise<Error>((resolve) => {
@@ -231,7 +239,9 @@ describe("ConnectionHandshake over a real socket pair", () => {
     });
 
     const client = net.createConnection({ port, host: "127.0.0.1" });
-    await new Promise<void>((resolve) => client.on("connect", resolve));
+    await new Promise<void>((resolve) => {
+      client.on("connect", resolve);
+    });
     const foreignFrame = cborEncode(
       {
         type: "handshake",

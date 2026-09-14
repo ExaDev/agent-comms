@@ -23,8 +23,17 @@ import {
 import type { DeliveryEvent, AgentIdentity } from "../core/types.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 
+/** How long to let the coordinator settle (bind its listener, finish registering its agent) before a connecting peer dials in. */
+const COORDINATOR_SETTLE_DELAY_MS = 100;
+/** How long to wait for a reject to propagate when there is no positive event to poll for (the assertion proves an absence). */
+const REJECTION_PROPAGATION_WAIT_MS = 200;
+/** How long to let the coordinator settle before driving the mesh_connect/mesh_accept/mesh_reject/mesh_pending flow through the tool layer. */
+const TOOL_FLOW_SETTLE_DELAY_MS = 200;
+/** Extra margin past a pending connection's own configured timeout, to be sure it has actually expired before asserting on that. */
+const PENDING_CONNECTION_EXPIRY_BUFFER_MS = 500;
+
 /** Find a free port on localhost by binding to port 0. */
-function findFreePort(): Promise<number> {
+async function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.listen(0, "127.0.0.1", () => {
@@ -37,12 +46,14 @@ function findFreePort(): Promise<number> {
 }
 
 /** Find a free port for a single test's use. An alias for findFreePort(): asking the OS for a fresh ephemeral port each call already guarantees distinctness from any other currently-bound port, so no arithmetic offset is layered on top -- a prior +offset scheme could push an already-high OS-assigned port past 65535 and fail with ERR_SOCKET_BAD_PORT. */
-function uniquePort(): Promise<number> {
+async function uniquePort(): Promise<number> {
   return findFreePort();
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 describe("connection approval", () => {
@@ -75,7 +86,7 @@ describe("connection approval", () => {
         tags: [],
       });
 
-      await sleep(100);
+      await sleep(COORDINATOR_SETTLE_DELAY_MS);
 
       // Set up connecting peer (store B) that uses connectToRemote
       await storeB.startDataServerOnly();
@@ -149,7 +160,7 @@ describe("connection approval", () => {
         tags: [],
       });
 
-      await sleep(100);
+      await sleep(COORDINATOR_SETTLE_DELAY_MS);
 
       await storeB.startDataServerOnly();
       await storeB.registerAgent({
@@ -230,7 +241,7 @@ describe("connection approval", () => {
         tags: [],
       });
 
-      await sleep(100);
+      await sleep(COORDINATOR_SETTLE_DELAY_MS);
 
       await storeB.startDataServerOnly();
       await storeB.registerAgent({
@@ -262,7 +273,7 @@ describe("connection approval", () => {
       await storeA.rejectConnection(request.connectionId, "unauthorised");
 
       // Give the rejection time to propagate -- there is no positive event to poll for here (the assertion below proves an absence), so a fixed wait is the right shape, unlike the accept-flow tests above.
-      await sleep(200);
+      await sleep(REJECTION_PROPAGATION_WAIT_MS);
 
       // Verify the coordinator no longer sees the connector agent
       const agentsA = await storeA.listAgents(storeA.peerId);
@@ -305,7 +316,7 @@ describe("connection approval", () => {
         tags: [],
       });
 
-      await sleep(100);
+      await sleep(COORDINATOR_SETTLE_DELAY_MS);
 
       await storeB.startDataServerOnly();
       await storeB.registerAgent({
@@ -329,7 +340,10 @@ describe("connection approval", () => {
         throw new Error("expected a pending connection request");
 
       // No accept/reject call at all -- wait past the configured timeout with the request left untouched.
-      await sleep(SHORT_PENDING_CONNECTION_TIMEOUT_MS + 500);
+      await sleep(
+        SHORT_PENDING_CONNECTION_TIMEOUT_MS +
+          PENDING_CONNECTION_EXPIRY_BUFFER_MS,
+      );
 
       // The strongest available proof the entry actually expired (not merely "still pending, not yet an agent," which would be equally true before any decision): acceptConnection on an expired request must fail exactly the way it fails for any other unknown handle, since expirePendingConnection has already deleted it.
       await expect(
@@ -368,7 +382,7 @@ describe("connection approval", () => {
         tags: [],
       });
 
-      await sleep(100);
+      await sleep(COORDINATOR_SETTLE_DELAY_MS);
 
       await storeB.startDataServerOnly();
       await storeB.registerAgent({
@@ -452,7 +466,7 @@ describe("connection approval", () => {
       });
       const toolA = new CommsTool(storeA);
 
-      await sleep(100);
+      await sleep(COORDINATOR_SETTLE_DELAY_MS);
 
       await storeB.startDataServerOnly();
       await storeB.registerAgent({
@@ -473,7 +487,7 @@ describe("connection approval", () => {
       });
 
       // Give coordinator time to settle
-      await sleep(200);
+      await sleep(TOOL_FLOW_SETTLE_DELAY_MS);
 
       // Verify coordinator is listening
       const listeners = storeA.listListeners();
@@ -598,7 +612,7 @@ describe("connection approval", () => {
       });
       const toolA = new CommsTool(storeA);
 
-      await sleep(100);
+      await sleep(COORDINATOR_SETTLE_DELAY_MS);
 
       await storeB.startDataServerOnly();
       await storeB.registerAgent({

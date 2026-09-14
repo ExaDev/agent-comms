@@ -15,6 +15,7 @@ import type { IdentitySlot } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 
+const TOKEN_TTL_MS = 60_000;
 let nextPort = 20_970;
 function freshPort(): number {
   nextPort += 1;
@@ -60,8 +61,8 @@ async function makeConnectedPair(port: number): Promise<{
 
 /** Mints a member grant directly, under the owner's own persisted identity, and persists it into the member's own slot -- bypassing the wire-level room.join round trip entirely, per this file's own header comment on why that round trip can't be exercised in a live two-peer test here. */
 async function grantMembership(
-  ownerSlot: IdentitySlot,
-  memberSlot: IdentitySlot,
+  ownerSlot: Readonly<IdentitySlot>,
+  memberSlot: Readonly<IdentitySlot>,
   roomPath: string,
   memberDeviceHex: string,
 ): Promise<void> {
@@ -74,7 +75,7 @@ async function grantMembership(
     bearer: deviceIdFromHex(memberDeviceHex),
     capability: "room:member",
     scope: { kind: "room", path: roomPath },
-    expires: clock.now() + 60_000,
+    expires: clock.now() + TOKEN_TTL_MS,
     delegationsRemaining: 0,
   });
   expect(

@@ -59,9 +59,11 @@ async function makeConnectedPair(port: number): Promise<{
 }
 
 /** Mints a member grant directly under the owner's own persisted identity, for both directions: memberDeviceHex needs a persisted token in bearerSlot to authorise its own future sends (room.send or room.read) for roomPath. */
+const GRANT_EXPIRY_MS = 60_000;
+
 async function grantMembership(
-  ownerSlot: IdentitySlot,
-  bearerSlot: IdentitySlot,
+  ownerSlot: Readonly<IdentitySlot>,
+  bearerSlot: Readonly<IdentitySlot>,
   roomPath: string,
   bearerDeviceHex: string,
 ): Promise<void> {
@@ -74,7 +76,7 @@ async function grantMembership(
     bearer: deviceIdFromHex(bearerDeviceHex),
     capability: "room:member",
     scope: { kind: "room", path: roomPath },
-    expires: clock.now() + 60_000,
+    expires: clock.now() + GRANT_EXPIRY_MS,
     delegationsRemaining: 0,
   });
   expect(
@@ -174,7 +176,10 @@ test("reading a message from a peer with no room:member token for it does nothin
     );
 
     // Give the auto-mark-read timer a real chance to fire and (incorrectly) notify owner before asserting it never did.
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    const AUTO_MARK_READ_GRACE_MS = 300;
+    await new Promise((resolve) => {
+      setTimeout(resolve, AUTO_MARK_READ_GRACE_MS);
+    });
     expect(
       ownerDeliveries.some((event) => event.type === "delivery_status"),
     ).toBe(false);

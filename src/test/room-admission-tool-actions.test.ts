@@ -9,7 +9,8 @@ import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
 import { wireTestTransport } from "./test-transport.js";
 
-const REQUESTER_ID = "b".repeat(64);
+const DEVICE_ID_HEX_LENGTH = 64;
+const REQUESTER_ID = "b".repeat(DEVICE_ID_HEX_LENGTH);
 
 function fakeJoinRequest(roomPath: string): IncomingManageRequest {
   return {

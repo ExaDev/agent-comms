@@ -1,5 +1,5 @@
 /**
- * P4 presence: WireMeshTransport's periodic self-advert re-send (readvertisePresence) and its counterpart on the receiving side (reportPresenceAdvert -> TransportEvents.onPresenceAdvert). Constructed directly against two real WireMeshTransport instances joined by a genuine data connection, deliberately bypassing MeshStore -- MeshStore's own updateAgent already propagates a status change via the pre-existing broadcastPatch/broadcast() path (P3.8 has not retired that yet), which would make a MeshStore-level test unable to tell whether presence gossip specifically worked, as opposed to the older mechanism that still runs alongside it.
+ * P4 presence: WireMeshTransport's periodic self-advert re-send (readvertisePresence) and its counterpart on the receiving side (reportPresenceAdvert, surfaced via TransportEvents.onPresenceAdvert). Constructed directly against two real WireMeshTransport instances joined by a genuine data connection, deliberately bypassing MeshStore -- MeshStore's own updateAgent already propagates a status change via the pre-existing broadcastPatch/broadcast() path (P3.8 has not retired that yet), which would make a MeshStore-level test unable to tell whether presence gossip specifically worked, as opposed to the older mechanism that still runs alongside it.
  */
 
 import { test, describe, expect } from "vitest";
@@ -12,9 +12,10 @@ import type { AgentStatus } from "../core/types.js";
 import { waitFor } from "./test-transport.js";
 
 const SHORT_PRESENCE_INTERVAL_MS = 50;
+const PRESENCE_INTERVAL_TICKS_TO_SPAN = 3;
 
 function eventsRecordingPresence(
-  onPresence: (handle: ConnectionHandle, status: AgentStatus) => void,
+  onPresence: (handle: Readonly<ConnectionHandle>, status: AgentStatus) => void,
 ): TransportEvents {
   return {
     onMessage: () => undefined,
@@ -130,9 +131,12 @@ describe("WireMeshTransport presence re-advertisement", () => {
       );
 
       // Long enough to comfortably span several presence-readvertise ticks were one wired up (SHORT_PRESENCE_INTERVAL_MS above), short enough to keep the test fast -- the assertion below is a genuine "nothing happened", not a race against a real event we're waiting to observe.
-      await new Promise((resolve) =>
-        setTimeout(resolve, SHORT_PRESENCE_INTERVAL_MS * 3),
-      );
+      await new Promise((resolve) => {
+        setTimeout(
+          resolve,
+          SHORT_PRESENCE_INTERVAL_MS * PRESENCE_INTERVAL_TICKS_TO_SPAN,
+        );
+      });
       expect(presenceSeenByB.length).toBe(0);
     } finally {
       await transportB.shutdown();

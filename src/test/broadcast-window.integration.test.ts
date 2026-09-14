@@ -12,7 +12,12 @@ import { generateIdentity } from "../core/identity.js";
 import type { PeerIdentity } from "../core/identity.js";
 
 const TEST_PORT = 19890;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const POLL_ATTEMPTS = 20;
+const POLL_INTERVAL_MS = 100;
+const sleep = async (ms: number): Promise<void> =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 /** A peer wired like a real bridge: WireMeshTransport, device-id peer ID. */
 function makePeer(identity: PeerIdentity): MeshStore {
@@ -27,9 +32,9 @@ async function waitFor(
   what: string,
   check: () => Promise<boolean>,
 ): Promise<void> {
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < POLL_ATTEMPTS; i++) {
     if (await check()) return;
-    await sleep(100);
+    await sleep(POLL_INTERVAL_MS);
   }
   expect(false, `timed out waiting for ${what}`).toBeTruthy();
 }

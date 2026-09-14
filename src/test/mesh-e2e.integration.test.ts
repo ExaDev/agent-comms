@@ -14,6 +14,23 @@ import { waitFor, wireTestTransport } from "./test-transport.js";
 
 const E2E_PORT = 19878;
 
+// ---------------------------------------------------------------------------
+// Timing constants — settle windows for asynchronous mesh propagation. There is no "operation complete" signal for these steps, so the test waits a fixed budget rather than polling.
+// ---------------------------------------------------------------------------
+
+/** Milliseconds to give the coordinator time to bind its listening port. */
+const COORDINATOR_BIND_SETTLE_MS = 100;
+/** Milliseconds to give a newly joined peer time to connect and sync with the coordinator. */
+const PEER_SYNC_SETTLE_MS = 300;
+/** Milliseconds to wait for agent-list state to sync across the mesh. */
+const STATE_SYNC_SETTLE_MS = 200;
+/** Milliseconds to wait for a created room to propagate to other peers. */
+const ROOM_CREATE_SETTLE_MS = 200;
+/** Milliseconds to wait for an accepted room join to settle on both sides. */
+const ROOM_JOIN_SETTLE_MS = 200;
+/** Milliseconds to wait for a sent message (room message, DM, or tool-driven send) to be delivered. */
+const MESSAGE_DELIVERY_SETTLE_MS = 300;
+
 async function createStore(
   name: string,
   harness: string,
@@ -46,13 +63,13 @@ async function main(): Promise<void> {
   const a = await createStore("peer-a", "test-a");
 
   // Give coordinator time to bind
-  await sleep(100);
+  await sleep(COORDINATOR_BIND_SETTLE_MS);
 
   console.log("Creating peer B (joins mesh)...");
   const b = await createStore("peer-b", "test-b");
 
   // Give peer B time to connect and sync
-  await sleep(300);
+  await sleep(PEER_SYNC_SETTLE_MS);
 
   // --- Test: list agents ---
   console.log("Test: list agents from A...");
@@ -61,7 +78,7 @@ async function main(): Promise<void> {
   expect(agentsA.length >= 2, "A should see both agents").toBeTruthy();
 
   // Wait for state sync
-  await sleep(200);
+  await sleep(STATE_SYNC_SETTLE_MS);
 
   console.log("Test: list agents from B...");
   const agentsB = await b.store.listAgents(b.store.peerId);
@@ -79,7 +96,7 @@ async function main(): Promise<void> {
   });
   console.log(`  Created room: ${room.id}`);
 
-  await sleep(200);
+  await sleep(ROOM_CREATE_SETTLE_MS);
 
   // --- Test: B sees the room ---
   console.log("Test: B lists rooms...");
@@ -102,7 +119,7 @@ async function main(): Promise<void> {
   a.store.acceptRoomJoin(room.id, b.store.peerId);
   await joinPromise;
 
-  await sleep(200);
+  await sleep(ROOM_JOIN_SETTLE_MS);
 
   // --- Test: room membership visible on both sides ---
   console.log("Test: room membership on A and B...");
@@ -118,7 +135,7 @@ async function main(): Promise<void> {
   b.deliveries.length = 0;
   await a.store.sendRoomMessage(room.id, a.store.peerId, "Hello from A!");
 
-  await sleep(300);
+  await sleep(MESSAGE_DELIVERY_SETTLE_MS);
 
   console.log(`  B received ${String(b.deliveries.length)} delivery event(s)`);
   expect(
@@ -155,7 +172,7 @@ async function main(): Promise<void> {
   b.deliveries.length = 0;
   await a.store.sendDm(a.store.peerId, b.store.peerId, "Hey B!");
 
-  await sleep(300);
+  await sleep(MESSAGE_DELIVERY_SETTLE_MS);
 
   console.log(`  B received ${String(b.deliveries.length)} DM event(s)`);
   expect(b.deliveries.length >= 1, "B should receive the DM").toBeTruthy();
@@ -188,7 +205,7 @@ async function main(): Promise<void> {
     action,
   );
 
-  await sleep(300);
+  await sleep(MESSAGE_DELIVERY_SETTLE_MS);
 
   console.log(`  A received ${String(a.deliveries.length)} delivery event(s)`);
   expect(a.deliveries.length >= 1, "A should receive B's message").toBeTruthy();
@@ -201,8 +218,10 @@ async function main(): Promise<void> {
   console.log("\n✓ All tests passed!");
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function sleep(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 test("two MeshStore instances discover each other, create a shared room, message, and push-deliver over a real TCP peer mesh", async () => {

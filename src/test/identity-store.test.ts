@@ -42,10 +42,12 @@ function spawnLiveProcess(): { pid: number; exit: () => Promise<void> } {
     throw new Error("expected the spawned child to have a pid");
   return {
     pid: child.pid,
-    exit: () =>
+    exit: async () =>
       new Promise((resolve) => {
         child.kill("SIGKILL");
-        child.on("exit", () => resolve());
+        child.on("exit", () => {
+          resolve();
+        });
       }),
   };
 }
@@ -65,11 +67,19 @@ test("loadOrCreateIdentity persists and reloads the same key material", () => {
   expect(fs.existsSync(lockFile)).toBe(false);
 });
 
+// Offset (in milliseconds) from now used to write a stored identity's expiresAt just inside the renewal window, without it having already expired outright.
+const NEAR_EXPIRY_OFFSET_MS = 1000;
+
+// Mask isolating the permission bits from a stat mode's file-type bits.
+const PERMISSION_BITS_MASK = 0o777;
+// Expected owner-only read/write permission bits for a persisted identity file.
+const OWNER_ONLY_RW_PERMISSIONS = 0o600;
+
 test("identity file is created with owner-only permissions", () => {
   const { slot, dir } = tempSlot("claude-code");
   loadOrCreateIdentity(slot);
-  const mode = fs.statSync(slotFile(dir, ".json")).mode & 0o777;
-  expect(mode).toBe(0o600);
+  const mode = fs.statSync(slotFile(dir, ".json")).mode & PERMISSION_BITS_MASK;
+  expect(mode).toBe(OWNER_ONLY_RW_PERMISSIONS);
   releaseIdentityLock(slot);
 });
 
@@ -112,7 +122,7 @@ test("a near-expiry identity is renewed", () => {
   const stored = JSON.parse(fs.readFileSync(identityFile, "utf-8")) as {
     expiresAt: string;
   };
-  stored.expiresAt = new Date(Date.now() + 1000).toISOString();
+  stored.expiresAt = new Date(Date.now() + NEAR_EXPIRY_OFFSET_MS).toISOString();
   fs.writeFileSync(identityFile, JSON.stringify(stored));
 
   const renewed = loadOrCreateIdentity(slot);
@@ -128,7 +138,7 @@ test("a near-expiry identity is renewed without rotating the device-id", () => {
   const stored = JSON.parse(fs.readFileSync(identityFile, "utf-8")) as {
     expiresAt: string;
   };
-  stored.expiresAt = new Date(Date.now() + 1000).toISOString();
+  stored.expiresAt = new Date(Date.now() + NEAR_EXPIRY_OFFSET_MS).toISOString();
   fs.writeFileSync(identityFile, JSON.stringify(stored));
 
   const renewed = loadOrCreateIdentity(slot);

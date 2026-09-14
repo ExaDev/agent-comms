@@ -14,6 +14,11 @@ import {
 } from "../core/identity-store.js";
 import { waitFor } from "./test-transport.js";
 
+// Base of the ephemeral coordinator-port range used to avoid colliding with the mesh's real well-known port.
+const TEST_COORDINATOR_PORT_BASE = 20_900;
+// Width of the randomised offset added to TEST_COORDINATOR_PORT_BASE so concurrent test runs don't collide on the same port.
+const TEST_COORDINATOR_PORT_RANGE = 100;
+
 function tempSlot(harness: string): IdentitySlot {
   const dir = fs.mkdtempSync(
     path.join(tmpdir(), "agent-comms-bridge-mesh-test-"),
@@ -50,7 +55,9 @@ test("createBridgeMesh wires a WireMeshTransport", async () => {
 test("createBridgeMesh passes an explicit coordinatorPort through to MeshStore, forming one shared mesh", async () => {
   const slotA = tempSlot("test-harness-a");
   const slotB = tempSlot("test-harness-b");
-  const port = 20_900 + Math.floor(Math.random() * 100);
+  const port =
+    TEST_COORDINATOR_PORT_BASE +
+    Math.floor(Math.random() * TEST_COORDINATOR_PORT_RANGE);
   const a = await createBridgeMesh(slotA, port);
   const b = await createBridgeMesh(slotB, port);
   try {

@@ -6,8 +6,9 @@ import {
   slugRoomName,
 } from "../core/room-path.js";
 
-const OWNER = "1".repeat(64);
-const OTHER = "2".repeat(64);
+const DEVICE_ID_HEX_LENGTH = 64;
+const OWNER = "1".repeat(DEVICE_ID_HEX_LENGTH);
+const OTHER = "2".repeat(DEVICE_ID_HEX_LENGTH);
 
 test("ownerNamedRoomPath joins the owner and local name with a slash", () => {
   expect(ownerNamedRoomPath(OWNER, "general")).toBe(`${OWNER}/general`);

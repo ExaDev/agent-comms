@@ -15,6 +15,8 @@ import { loadOrCreateIdentity, saveRoomToken } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { wireTestTransport } from "./test-transport.js";
 
+const GRANT_EXPIRY_MS = 60_000;
+
 /** A local-only store: transport is set (registerAgent's own broadcastPatch needs one) but never started, so no ports and no flake -- the stores in these tests never actually connect. */
 async function makeStore(): Promise<MeshStore> {
   const store = new MeshStore();
@@ -118,7 +120,7 @@ test("room membership changes converge and stale member lists are rejected", asy
     bearer: deviceIdFromHex(joiner.id),
     capability: "room:member",
     scope: { kind: "room", path: roomId },
-    expires: bClock.now() + 60_000,
+    expires: bClock.now() + GRANT_EXPIRY_MS,
     delegationsRemaining: 0,
   });
   expect(

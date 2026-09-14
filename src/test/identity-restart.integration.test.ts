@@ -24,7 +24,16 @@ import type { DeliveryEvent } from "../core/types.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
 
 const TEST_PORT = 19889;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Attempts {@link waitFor} polls before giving up. */
+const MAX_WAIT_ATTEMPTS = 20;
+/** Delay between {@link waitFor} poll attempts, in milliseconds. */
+const WAIT_POLL_INTERVAL_MS = 100;
+/** Delay allowing mesh state to settle across peers before the next step, in milliseconds. */
+const SETTLE_DELAY_MS = 200;
+const sleep = async (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 interface Peer {
   store: MeshStore;
@@ -34,7 +43,7 @@ interface Peer {
 /** A peer wired like a real bridge: WireMeshTransport, device-id peer ID, and a persisted identity slot so createRoom can mint and persist the owner's own room:member grant. */
 async function makePeer(
   identity: PeerIdentity,
-  slot: IdentitySlot,
+  slot: Readonly<IdentitySlot>,
 ): Promise<Peer> {
   const store = new MeshStore(TEST_PORT);
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
@@ -56,9 +65,9 @@ async function waitFor(
   what: string,
   check: () => Promise<boolean>,
 ): Promise<void> {
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < MAX_WAIT_ATTEMPTS; i++) {
     if (await check()) return;
-    await sleep(100);
+    await sleep(WAIT_POLL_INTERVAL_MS);
   }
   expect(false, `timed out waiting for ${what}`).toBeTruthy();
 }
@@ -86,7 +95,7 @@ async function main(): Promise<void> {
   b.store.onDelivery = (_id, ev) => {
     b.deliveries.push(ev);
   };
-  await sleep(200);
+  await sleep(SETTLE_DELAY_MS);
 
   // First lifecycle of peer A: persistent identity, registers and creates a room.
   const identityA = loadOrCreateIdentity(slot);
@@ -107,7 +116,7 @@ async function main(): Promise<void> {
     owner: a1.store.peerId,
     description: "issue 14 acceptance",
   });
-  await sleep(200);
+  await sleep(SETTLE_DELAY_MS);
   // The room already replicated to B via legacy full-state-sync, but knowing about a room is not the same as holding a room:member token for it -- B's own join still goes through real wire-level admission, held open until A approves it.
   const joinPromise = b.store.joinRoom(roomId, b.store.peerId);
   await waitFor("A to see B's pending join request", async () =>
@@ -119,12 +128,12 @@ async function main(): Promise<void> {
   );
   a1.store.acceptRoomJoin(roomId, b.store.peerId);
   await joinPromise;
-  await sleep(200);
+  await sleep(SETTLE_DELAY_MS);
   const agentIdA = a1.store.peerId;
 
   // A goes away without marking its agent offline (crash simulation).
   await a1.store.shutdown();
-  await sleep(200);
+  await sleep(SETTLE_DELAY_MS);
 
   // A restarts in the same slot: same key material, same agent ID.
   const identityA2 = loadOrCreateIdentity(slot);

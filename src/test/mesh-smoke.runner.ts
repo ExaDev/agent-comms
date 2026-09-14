@@ -161,7 +161,7 @@ const WAIT_FOR_PORT_TIMEOUT_MS = 15_000;
 const WAIT_FOR_PORT_RETRY_MS = 50;
 
 /** Retries a single connection attempt until the port accepts one or the deadline passes, rather than a single attempt after a flat sleep -- binding the port now waits on real, load-dependent work (identity load/generation, then an async WebCrypto key import for the room-token identity) before the coordinator listener opens, so a fixed pre-sleep is exactly the fragile pattern this codebase's own waitFor helpers already avoid elsewhere. */
-function waitForPort(port: number, host: string): Promise<void> {
+async function waitForPort(port: number, host: string): Promise<void> {
   const deadline = Date.now() + WAIT_FOR_PORT_TIMEOUT_MS;
   return new Promise((resolve, reject) => {
     function attempt(): void {
@@ -188,7 +188,7 @@ function waitForPort(port: number, host: string): Promise<void> {
 }
 
 function findMsg(
-  messages: TestMessage[],
+  messages: readonly TestMessage[],
   type: string,
 ): TestMessage | undefined {
   return messages.find((m) => m.type === type);

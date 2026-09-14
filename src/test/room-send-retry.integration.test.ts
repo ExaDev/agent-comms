@@ -22,7 +22,22 @@ import type { PeerIdentity } from "../core/identity.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
 
 const TEST_PORT = 19897;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** How many polling attempts {@link waitFor} makes before failing. */
+const WAIT_FOR_MAX_ATTEMPTS = 20;
+/** Delay between each {@link waitFor} polling attempt. */
+const WAIT_FOR_POLL_INTERVAL_MS = 100;
+/** Settle time after creating the room, before B attempts to join it. */
+const ROOM_CREATE_SETTLE_MS = 200;
+/** Registration must wait for the TLS data connections to establish (#23). */
+const TLS_CONNECT_SETTLE_MS = 300;
+/** Settle time after B's bridge shuts down, before A sends the downtime message. */
+const MEMBER_SHUTDOWN_SETTLE_MS = 200;
+/** Settle time after A sends the downtime message, before B restarts. */
+const ROOM_SEND_SETTLE_MS = 200;
+const sleep = async (ms: number) =>
+  new Promise((r) => {
+    setTimeout(r, ms);
+  });
 
 interface Peer {
   store: MeshStore;
@@ -32,7 +47,7 @@ interface Peer {
 /** A peer wired like a real bridge: WireMeshTransport, device-id peer ID, and a persisted identity slot so createRoom can mint and persist the owner's own room:member grant. */
 async function makePeer(
   identity: PeerIdentity,
-  slot: IdentitySlot,
+  slot: Readonly<IdentitySlot>,
 ): Promise<Peer> {
   const store = new MeshStore(TEST_PORT);
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
@@ -54,9 +69,9 @@ async function waitFor(
   what: string,
   check: () => Promise<boolean>,
 ): Promise<void> {
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < WAIT_FOR_MAX_ATTEMPTS; i++) {
     if (await check()) return;
-    await sleep(100);
+    await sleep(WAIT_FOR_POLL_INTERVAL_MS);
   }
   expect(false, `timed out waiting for ${what}`).toBeTruthy();
 }
@@ -88,14 +103,14 @@ async function main(): Promise<void> {
     owner: a.store.peerId,
     description: "issue 28 acceptance",
   });
-  await sleep(200);
+  await sleep(ROOM_CREATE_SETTLE_MS);
 
   // B joins with a persisted identity and becomes a room member -- a real admitted join, since the room already replicating to B via legacy full-state-sync says nothing about B holding a room:member token for it.
   const identityB = loadOrCreateIdentity(slot);
   const b1 = await makePeer(identityB, slot);
   await b1.store.init();
   // Registration must wait for the TLS data connections to establish (#23).
-  await sleep(300);
+  await sleep(TLS_CONNECT_SETTLE_MS);
   await b1.store.registerAgent({
     name: "peer-b",
     harness: "pi",
@@ -119,11 +134,11 @@ async function main(): Promise<void> {
 
   // B goes down.
   await b1.store.shutdown();
-  await sleep(200);
+  await sleep(MEMBER_SHUTDOWN_SETTLE_MS);
 
   // A sends a room message while B is down: the directed send to B fails immediately (B isn't connected), so it's queued for retry rather than thrown or silently dropped.
   await a.store.sendRoomMessage(roomId, a.store.peerId, "while you were down");
-  await sleep(200);
+  await sleep(ROOM_SEND_SETTLE_MS);
 
   // B restarts in the same slot: same identity, same agent ID, same persisted room:member token -- the queued send retries the moment the reconnection to A completes.
   const identityB2 = loadOrCreateIdentity(slot);

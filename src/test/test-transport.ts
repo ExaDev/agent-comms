@@ -13,6 +13,9 @@ import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { nanoid } from "../core/nanoid.js";
 import type { MeshStore } from "../core/mesh-store.js";
 
+/** Short enough to keep generated test identity slots readable, long enough that two concurrent test runs won't collide on the same throwaway cwd. */
+const TEST_IDENTITY_CWD_ID_LENGTH = 8;
+
 /** Wires store onto a fresh WireMeshTransport and a persisted identity slot, returning the slot so a test can inspect (or reuse) the persisted room tokens directly via loadRoomTokens(). Defaults to a throwaway temp-dir slot per call -- pass an explicit slot when a test needs the same identity to survive across more than one wireTestTransport call (e.g. simulating a restart). pendingConnectionTimeoutMs overrides WireMeshTransport's own default 5-minute connect_request expiry -- a test proving that expiry behaviour needs it far shorter than any real approval window. presenceReadvertiseIntervalMs likewise overrides the default 20s presence re-advertisement cadence -- a test proving that behaviour needs it far shorter too, or a test that doesn't care about presence at all wants it long enough to never fire spuriously mid-test. */
 export async function wireTestTransport(
   store: MeshStore,
@@ -22,7 +25,7 @@ export async function wireTestTransport(
 ): Promise<IdentitySlot> {
   const resolvedSlot: IdentitySlot = slot ?? {
     harness: "test",
-    cwd: nanoid(8),
+    cwd: nanoid(TEST_IDENTITY_CWD_ID_LENGTH),
     dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-identity-")),
   };
   const identity = loadOrCreateIdentity(resolvedSlot);
@@ -56,7 +59,7 @@ const DEFAULT_WAIT_FOR_TIMEOUT_MS = 20_000;
 const WAIT_FOR_POLL_INTERVAL_MS = 20;
 
 /**
- * Polls condition() until it returns true or timeoutMs elapses, rather than a fixed sleep() before a single check. A real TLS handshake plus the peer_list -> connectToPeer -> state_sync -> handlePeerConnected round trip genuinely takes variable, load-dependent wall-clock time -- comfortably inside a fixed sleep on a fast local machine, not reliably so under a throttled CI runner. Throws with a descriptive message on timeout rather than letting the caller's own assertion fail with a less specific one.
+ * Polls condition() until it returns true or timeoutMs elapses, rather than a fixed sleep() before a single check. A real TLS handshake plus the peer_list -\> connectToPeer -\> state_sync -\> handlePeerConnected round trip genuinely takes variable, load-dependent wall-clock time -- comfortably inside a fixed sleep on a fast local machine, not reliably so under a throttled CI runner. Throws with a descriptive message on timeout rather than letting the caller's own assertion fail with a less specific one.
  */
 export async function waitFor(
   condition: () => boolean,
@@ -70,8 +73,8 @@ export async function waitFor(
         `waitFor timed out after ${String(timeoutMs)}ms: ${description}`,
       );
     }
-    await new Promise((resolve) =>
-      setTimeout(resolve, WAIT_FOR_POLL_INTERVAL_MS),
-    );
+    await new Promise((resolve) => {
+      setTimeout(resolve, WAIT_FOR_POLL_INTERVAL_MS);
+    });
   }
 }
