@@ -1,3 +1,9 @@
+## [2.21.1](https://github.com/ExaDev/agent-comms/compare/v2.21.0...v2.21.1) (2026-09-14)
+
+### Chores
+
+* **ci:** expand mutation-testing scope to mesh-store.ts's split files ([b8a70e3](https://github.com/ExaDev/agent-comms/commit/b8a70e3e9b4986f6205e64555180ff3071cf7d72))
+
 ## [2.21.0](https://github.com/ExaDev/agent-comms/compare/v2.20.2...v2.21.0) (2026-09-14)
 
 ### Features
