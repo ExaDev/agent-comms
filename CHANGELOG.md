@@ -1,3 +1,9 @@
+## [2.20.2](https://github.com/ExaDev/agent-comms/compare/v2.20.1...v2.20.2) (2026-09-14)
+
+### Bug Fixes
+
+* **ci:** raise the mutation matrix's per-file timeout to 240 minutes ([fc791b9](https://github.com/ExaDev/agent-comms/commit/fc791b9f1903d2d7196eff3da8eab037557977e1))
+
 ## [2.20.1](https://github.com/ExaDev/agent-comms/compare/v2.20.0...v2.20.1) (2026-09-14)
 
 ### Bug Fixes
