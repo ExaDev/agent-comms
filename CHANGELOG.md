@@ -1,3 +1,11 @@
+## [2.21.15](https://github.com/ExaDev/agent-comms/compare/v2.21.14...v2.21.15) (2026-09-15)
+
+### Tests
+
+* **core:** assert RoomMessaging's optional-field spreads and DM key derivation directly ([ba88af3](https://github.com/ExaDev/agent-comms/commit/ba88af365a23a1c4dd9609e189976a0031310090))
+* **core:** close three real gaps, document readRoomMessages' since='' equivalent ([6f594e8](https://github.com/ExaDev/agent-comms/commit/6f594e813e0ec52ffd3225d265b30a0f818070b3))
+* **core:** correct equivalent-mutant documentation for readRoomMessages ([d68d991](https://github.com/ExaDev/agent-comms/commit/d68d991eb67678abf6341462fe8a60871debc37c))
+
 ## [2.21.14](https://github.com/ExaDev/agent-comms/compare/v2.21.13...v2.21.14) (2026-09-15)
 
 ### Tests
