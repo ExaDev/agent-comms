@@ -1,5 +1,7 @@
 /**
  * Direct, DI-based unit tests for FederationBridge -- it was previously exercised only indirectly through end-to-end federation.integration.test.ts scenarios, leaving many individual branches, the fed:-prefix startsWith-vs-endsWith distinction, and getVisibleAgents/getFederatedRoomMemberships' filtering unobserved. FederationBridgeDeps is a narrow, injectable surface built exactly for this: a fake deps object with vi.fn() collaborators lets every branch be asserted on directly.
+ *
+ * Three mutants Stryker raises are true equivalents, not gaps -- documented here rather than chased with a contrived test, matching stale-agent-checker.test.ts's and agent-registry.test.ts's own precedent for the identical pattern: `onAgentGone`'s `this.deps.agents.set(localId, agent)`, and `onRoomJoin`/`onRoomLeave`'s two `this.deps.rooms.set(roomId, room)` calls, each re-set the same key to the exact same object reference the map's own `.get()` already returned. `bump`/`recordMemberOp`/`refreshMembership` all mutate that object in place (bump does `entity.version += 1`; recordMemberOp writes into `room.memberJoins`/`memberLeaves`; refreshMembership reassigns `room.members`/`invited`), so the map already holds the fully up-to-date object before the redundant `.set()` call -- no test can observe removing it.
  */
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -272,6 +274,7 @@ describe("FederationBridge — onRoomLeave", () => {
       "leave",
       "fed:remote-agent",
     );
+    expect(h.refreshMembership).toHaveBeenCalledTimes(1);
     expect(h.broadcastPatch).toHaveBeenCalledWith({
       type: "room_upsert",
       room: expect.anything(),
