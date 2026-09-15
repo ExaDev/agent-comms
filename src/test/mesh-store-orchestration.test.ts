@@ -147,6 +147,9 @@ describe("MeshStore — init()", () => {
     expect(onError.mock.calls[0]?.[0]?.message).toContain(
       "could not join or create mesh",
     );
+    expect(onError.mock.calls[0]?.[0]?.message).toContain(
+      "Running without mesh — agent-comms will be unavailable.",
+    );
     expect(transport.unref).not.toHaveBeenCalled();
   });
 
@@ -610,6 +613,26 @@ describe("MeshStore — shutdown()", () => {
     } finally {
       clearTimeoutSpy.mockRestore();
     }
+  });
+
+  it("actually sets isShutDown, observable via DeliveryEngine no longer scheduling markRead timers afterward", async () => {
+    vi.spyOn(store.federation, "shutdown").mockResolvedValue(undefined);
+    await store.shutdown();
+
+    const pending = collaborator(store, "pendingMarkReadTimers") as unknown[];
+    await store.deliver(store.peerId, {
+      type: "room_message",
+      message: {
+        id: "m",
+        from: "a",
+        room: "r",
+        content: "hi",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        readBy: [],
+      },
+    });
+
+    expect(pending).toHaveLength(0);
   });
 
   it("does not broadcast agent_offline when no self agent was ever registered", async () => {
