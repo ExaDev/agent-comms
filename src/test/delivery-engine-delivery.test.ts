@@ -339,24 +339,6 @@ describe("DeliveryEngine — applyPatch(delivery)", () => {
   });
 });
 
-describe("DeliveryEngine — applyPatch onPatch callback", () => {
-  it("invokes onPatch with the exact patch after applying it, when one is set", async () => {
-    const h = makeHarness();
-    const onPatch = vi.fn();
-    h.setOnPatch(onPatch);
-    const patch: MeshStatePatch = { type: "room_delete", roomId: "room-1" };
-    await h.engine.applyPatch(patch);
-    expect(onPatch).toHaveBeenCalledWith(patch);
-  });
-
-  it("does not throw when no onPatch callback is set", async () => {
-    const h = makeHarness();
-    await expect(
-      h.engine.applyPatch({ type: "room_delete", roomId: "room-1" }),
-    ).resolves.toBeUndefined();
-  });
-});
-
 // ---------------------------------------------------------------------------
 // broadcastPatch
 // ---------------------------------------------------------------------------
@@ -463,6 +445,15 @@ describe("DeliveryEngine — fireLocalDelivery", () => {
       type: "room_message",
       message: msg,
     });
+    expect(delivered).not.toHaveBeenCalled();
+  });
+
+  it("skips a dm this agent has already read", () => {
+    const h = makeHarness();
+    const delivered = vi.fn();
+    h.setOnDelivery(delivered);
+    const msg = dmMessage({ readBy: [PEER_ID] });
+    h.engine.fireLocalDelivery(PEER_ID, { type: "dm", message: msg });
     expect(delivered).not.toHaveBeenCalled();
   });
 
@@ -578,6 +569,25 @@ describe("DeliveryEngine — fireLocalDelivery", () => {
         FAKE_TOKEN,
         expect.objectContaining({ verb: "room.read" }),
       );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("skips the scheduled mark-read work via fireLocalDelivery if the store is shut down by the time the timer fires", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = makeHarness();
+      h.setOnDelivery(vi.fn());
+      const msg = roomMessage({ from: OTHER_ID, id: messageId() });
+      h.deps.messages.set("room-1", [msg]);
+      h.engine.fireLocalDelivery(PEER_ID, {
+        type: "room_message",
+        message: msg,
+      });
+      h.setShutDown(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.sendRoomRequestToMember).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -767,6 +777,46 @@ describe("DeliveryEngine — markRead via drainDelivery", () => {
     expect(msg.readBy).toEqual([PEER_ID]);
   });
 
+  it("finds the exact target room message by id among several others in the same room, not merely the first", async () => {
+    const h = makeHarness();
+    const target = roomMessage({ id: messageId(), from: OTHER_ID, readBy: [] });
+    h.deps.messages.set("room-1", [
+      roomMessage({ id: messageId(), from: THIRD_ID }),
+      target,
+    ]);
+    h.deps.deliveryQueues.set(PEER_ID, [
+      { type: "room_message", message: target },
+    ]);
+    await h.engine.drainDelivery(PEER_ID);
+    expect(target.readBy).toEqual([PEER_ID]);
+    expect(h.sendRoomRequestToMember).toHaveBeenCalledWith(
+      OTHER_ID,
+      "room-1",
+      FAKE_TOKEN,
+      expect.objectContaining({ verb: "room.read" }),
+    );
+  });
+
+  it("finds the exact target dm by id among several others in the same dm history, not merely the first", async () => {
+    const h = makeHarness();
+    const dmKey = "self:multi";
+    const target = dmMessage({ id: messageId(), from: OTHER_ID, readBy: [] });
+    h.deps.dms.set(dmKey, [
+      dmMessage({ id: messageId(), from: THIRD_ID }),
+      target,
+    ]);
+    vi.mocked(loadRoomTokens).mockReturnValue({ [dmKey]: FAKE_TOKEN });
+    h.deps.deliveryQueues.set(PEER_ID, [{ type: "dm", message: target }]);
+    await h.engine.drainDelivery(PEER_ID);
+    expect(target.readBy).toEqual([PEER_ID]);
+    expect(h.sendRoomRequestToMember).toHaveBeenCalledWith(
+      OTHER_ID,
+      dmKey,
+      FAKE_TOKEN,
+      expect.objectContaining({ verb: "room.read" }),
+    );
+  });
+
   it("does not notify the author when the reader marking read is the author themselves", async () => {
     const h = makeHarness();
     const msg = roomMessage({ id: messageId(), from: PEER_ID, readBy: [] });
@@ -814,74 +864,6 @@ describe("DeliveryEngine — markRead via drainDelivery", () => {
       { type: "room_message", message: roomMessage({ id: messageId() }) },
     ]);
     await expect(h.engine.drainDelivery(PEER_ID)).resolves.toBeDefined();
-    expect(h.sendRoomRequestToMember).not.toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// deliver / drainDelivery
-// ---------------------------------------------------------------------------
-
-describe("DeliveryEngine — deliver", () => {
-  it("delegates to deliverLocallyAndBroadcast, queueing and broadcasting the event", async () => {
-    const h = makeHarness();
-    await h.engine.deliver(OTHER_ID, {
-      type: "member_left",
-      room: "room-1",
-      agent: OTHER_ID,
-    });
-    expect(h.deps.deliveryQueues.get(OTHER_ID)).toHaveLength(1);
-    expect(h.transport.broadcast).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("DeliveryEngine — drainDelivery", () => {
-  it("returns the queued events and empties the queue", async () => {
-    const h = makeHarness();
-    const event: DeliveryEvent = {
-      type: "member_left",
-      room: "room-1",
-      agent: OTHER_ID,
-    };
-    h.deps.deliveryQueues.set(PEER_ID, [event]);
-    const drained = await h.engine.drainDelivery(PEER_ID);
-    expect(drained).toEqual([event]);
-    expect(h.deps.deliveryQueues.get(PEER_ID)).toEqual([]);
-  });
-
-  it("returns an empty array for an agent with no queued events", async () => {
-    const h = makeHarness();
-    const drained = await h.engine.drainDelivery(OTHER_ID);
-    expect(drained).toEqual([]);
-  });
-
-  it("marks a drained dm as read via markRead, mirroring the room_message case", async () => {
-    const h = makeHarness();
-    const msg = dmMessage({ id: messageId(), from: OTHER_ID, readBy: [] });
-    h.deps.dms.set("self:z", [msg]);
-    vi.mocked(loadRoomTokens).mockReturnValue({ "self:z": FAKE_TOKEN });
-    h.deps.deliveryQueues.set(PEER_ID, [{ type: "dm", message: msg }]);
-    await h.engine.drainDelivery(PEER_ID);
-    expect(msg.readBy).toEqual([PEER_ID]);
-    expect(h.sendRoomRequestToMember).toHaveBeenCalledWith(
-      OTHER_ID,
-      "self:z",
-      FAKE_TOKEN,
-      expect.objectContaining({ verb: "room.read" }),
-    );
-  });
-
-  it("does not attempt to mark read a transient event with no message of its own", async () => {
-    const h = makeHarness();
-    h.deps.deliveryQueues.set(PEER_ID, [
-      {
-        type: "member_status",
-        room: "room-1",
-        agent: OTHER_ID,
-        status: "idle",
-      },
-    ]);
-    await expect(h.engine.drainDelivery(PEER_ID)).resolves.toHaveLength(1);
     expect(h.sendRoomRequestToMember).not.toHaveBeenCalled();
   });
 });

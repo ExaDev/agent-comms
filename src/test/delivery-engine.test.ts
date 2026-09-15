@@ -1,5 +1,5 @@
 /**
- * Direct, DI-based unit tests for DeliveryEngine -- the busiest collaborator in mesh-store.ts's own split (see its file header), previously exercised only indirectly through end-to-end room-send/state-sync integration tests, leaving many individual branches (version-gate boundaries, subscribedRooms union-vs-replace, dedup caps, timer-scheduled auto-mark-read, replay's per-type fire rules) unobserved. DeliveryEngineDeps is a narrow, injectable surface built exactly for this: every Map/Set is a real instance so effects are asserted by inspecting them directly, and every collaborator boundary (transport, sendRoomRequestToMember, onDelivery/onPatch callbacks, isShutDown) is a vi.fn() this file controls per test. loadRoomTokens is a free function reading a real identity file, not part of the injectable deps -- mocked here since markRead only ever forwards its return value opaquely, never inspects or verifies it. Split from delivery-engine-delivery.test.ts to satisfy the repo's max-lines cap: this file covers the presence/queueing/membership-merge/state-sync/patch-application half; delivery-engine-delivery.test.ts covers the local-delivery/broadcast/notification/mark-read half. Both files share an identical preamble (helpers, fakes, makeHarness) by necessity of the split.
+ * Direct, DI-based unit tests for DeliveryEngine -- the busiest collaborator in mesh-store.ts's own split (see its file header), previously exercised only indirectly through end-to-end room-send/state-sync integration tests, leaving many individual branches (version-gate boundaries, subscribedRooms union-vs-replace, dedup caps, timer-scheduled auto-mark-read, replay's per-type fire rules) unobserved. DeliveryEngineDeps is a narrow, injectable surface built exactly for this: every Map/Set is a real instance so effects are asserted by inspecting them directly, and every collaborator boundary (transport, sendRoomRequestToMember, onDelivery/onPatch callbacks, isShutDown) is a vi.fn() this file controls per test. loadRoomTokens is a free function reading a real identity file, not part of the injectable deps -- mocked here since markRead only ever forwards its return value opaquely, never inspects or verifies it. Split from delivery-engine-delivery.test.ts to satisfy the repo's max-lines cap: this file covers presence/queueing/membership-merge/state-sync/patch-application plus the top-level deliver/drainDelivery entry points (the latter two moved here from delivery-engine-delivery.test.ts to rebalance both files under the cap after a later round of survivor-closing tests grew it past 800 lines); delivery-engine-delivery.test.ts covers broadcast/fireLocalDelivery/notification/markRead. Both files share an identical preamble (helpers, fakes, makeHarness) by necessity of the split.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadRoomTokens } from "../core/identity-store.js";
@@ -311,6 +311,16 @@ describe("DeliveryEngine — mergeRoom via applyPatch(room_upsert)", () => {
       room: room({ version: 2 }),
     });
     expect(h.deps.rooms.get("room-1")?.version).toBe(2);
+  });
+
+  it("merges rather than dropping a room_upsert patch at exactly the same version as the local copy", async () => {
+    const h = makeHarness();
+    h.deps.rooms.set("room-1", room({ version: 2, name: "old-name" }));
+    await h.engine.applyPatch({
+      type: "room_upsert",
+      room: room({ version: 2, name: "new-name" }),
+    });
+    expect(h.deps.rooms.get("room-1")?.name).toBe("new-name");
   });
 
   it("retains the existing federated flag when the incoming room leaves it undefined", async () => {
@@ -716,5 +726,87 @@ describe("DeliveryEngine — applyPatch(room_delete/message_add/dm_add)", () => 
     const msg = dmMessage({ id: messageId() });
     await h.engine.applyPatch({ type: "dm_add", key: "dm-key", message: msg });
     expect(h.deps.dms.get("dm-key")).toEqual([msg]);
+  });
+});
+
+describe("DeliveryEngine — applyPatch onPatch callback", () => {
+  it("invokes onPatch with the exact patch after applying it, when one is set", async () => {
+    const h = makeHarness();
+    const onPatch = vi.fn();
+    h.setOnPatch(onPatch);
+    const patch: MeshStatePatch = { type: "room_delete", roomId: "room-1" };
+    await h.engine.applyPatch(patch);
+    expect(onPatch).toHaveBeenCalledWith(patch);
+  });
+
+  it("does not throw when no onPatch callback is set", async () => {
+    const h = makeHarness();
+    await expect(
+      h.engine.applyPatch({ type: "room_delete", roomId: "room-1" }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("DeliveryEngine — deliver", () => {
+  it("delegates to deliverLocallyAndBroadcast, queueing and broadcasting the event", async () => {
+    const h = makeHarness();
+    await h.engine.deliver(OTHER_ID, {
+      type: "member_left",
+      room: "room-1",
+      agent: OTHER_ID,
+    });
+    expect(h.deps.deliveryQueues.get(OTHER_ID)).toHaveLength(1);
+    expect(h.transport.broadcast).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("DeliveryEngine — drainDelivery", () => {
+  it("returns the queued events and empties the queue", async () => {
+    const h = makeHarness();
+    const event: DeliveryEvent = {
+      type: "member_left",
+      room: "room-1",
+      agent: OTHER_ID,
+    };
+    h.deps.deliveryQueues.set(PEER_ID, [event]);
+    const drained = await h.engine.drainDelivery(PEER_ID);
+    expect(drained).toEqual([event]);
+    expect(h.deps.deliveryQueues.get(PEER_ID)).toEqual([]);
+  });
+
+  it("returns an empty array for an agent with no queued events", async () => {
+    const h = makeHarness();
+    const drained = await h.engine.drainDelivery(OTHER_ID);
+    expect(drained).toEqual([]);
+  });
+
+  it("marks a drained dm as read via markRead, mirroring the room_message case", async () => {
+    const h = makeHarness();
+    const msg = dmMessage({ id: messageId(), from: OTHER_ID, readBy: [] });
+    h.deps.dms.set("self:z", [msg]);
+    vi.mocked(loadRoomTokens).mockReturnValue({ "self:z": FAKE_TOKEN });
+    h.deps.deliveryQueues.set(PEER_ID, [{ type: "dm", message: msg }]);
+    await h.engine.drainDelivery(PEER_ID);
+    expect(msg.readBy).toEqual([PEER_ID]);
+    expect(h.sendRoomRequestToMember).toHaveBeenCalledWith(
+      OTHER_ID,
+      "self:z",
+      FAKE_TOKEN,
+      expect.objectContaining({ verb: "room.read" }),
+    );
+  });
+
+  it("does not attempt to mark read a transient event with no message of its own", async () => {
+    const h = makeHarness();
+    h.deps.deliveryQueues.set(PEER_ID, [
+      {
+        type: "member_status",
+        room: "room-1",
+        agent: OTHER_ID,
+        status: "idle",
+      },
+    ]);
+    await expect(h.engine.drainDelivery(PEER_ID)).resolves.toHaveLength(1);
+    expect(h.sendRoomRequestToMember).not.toHaveBeenCalled();
   });
 });
