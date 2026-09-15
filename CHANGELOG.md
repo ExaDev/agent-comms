@@ -1,3 +1,10 @@
+## [2.21.14](https://github.com/ExaDev/agent-comms/compare/v2.21.13...v2.21.14) (2026-09-15)
+
+### Tests
+
+* **core:** assert FederationBridge's fed:-prefix and filtering logic directly ([a774a84](https://github.com/ExaDev/agent-comms/commit/a774a844ea0bda6c866353c9efe96d48df285808))
+* **core:** assert onRoomLeave calls refreshMembership, document equivalent Map.set mutants ([884170b](https://github.com/ExaDev/agent-comms/commit/884170b33f3632382f98125c9fbc269e1253c9b1))
+
 ## [2.21.13](https://github.com/ExaDev/agent-comms/compare/v2.21.12...v2.21.13) (2026-09-15)
 
 ### Tests
