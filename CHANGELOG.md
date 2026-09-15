@@ -1,3 +1,12 @@
+## [2.21.18](https://github.com/ExaDev/agent-comms/compare/v2.21.17...v2.21.18) (2026-09-15)
+
+### Tests
+
+* **core:** assert DeliveryEngine's queueing, merge, and delivery logic directly ([82bb16b](https://github.com/ExaDev/agent-comms/commit/82bb16bda8728fb6a6e99d3817fb56b6a73a9146))
+* **core:** close applyPatch(agent_offline)'s missing gap, document a real equivalent ([843e019](https://github.com/ExaDev/agent-comms/commit/843e019915c9f62e05ab890ab47736d86e6f8098))
+* **core:** close six real gaps in DeliveryEngine mutation coverage ([e32969b](https://github.com/ExaDev/agent-comms/commit/e32969b98b3c26b349ec585d42c1b973313c35bd))
+* **core:** document the three remaining equivalent DeliveryEngine mutants ([3982352](https://github.com/ExaDev/agent-comms/commit/39823526e6e9d38f9f1bbd19153493f878db203d))
+
 ## [2.21.17](https://github.com/ExaDev/agent-comms/compare/v2.21.16...v2.21.17) (2026-09-15)
 
 ### Tests
