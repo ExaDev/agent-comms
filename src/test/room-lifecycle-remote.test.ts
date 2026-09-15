@@ -1,5 +1,5 @@
 /**
- * Direct, DI-based unit tests for RoomLifecycle's own remote-request-sending half -- refreshRoomMembers, requestDmAccess, and getRoom, moved here from room-lifecycle.test.ts/room-lifecycle-membership.test.ts to stay under this repo's max-lines cap after later gap-closing passes. See room-lifecycle.test.ts for createRoom/listRooms/joinRoom/joinRemoteRoom, and room-lifecycle-membership.test.ts for leaveRoom/leaveRemoteRoom/inviteToRoom/declineInvite/revokeMemberGrant/kickFromRoom/destroyRoom -- and either file's own header for the full rationale. Real identities and real minted tokens throughout (not opaque placeholders): RoomLifecycle genuinely mints capability tokens and parses roomJoinOkSchema/roomMembersOkSchema's own structural shape (a real COSE_Sign1 tuple, though never signature-verified by this class), so an arbitrary placeholder string fails the schema outright where room-messaging.test.ts's forwarding-only case could get away with one.
+ * Direct, DI-based unit tests for RoomLifecycle's own remote-request-sending half -- refreshRoomMembers, requestDmAccess, getRoom, revokeMemberGrant, and declineInvite, moved here from room-lifecycle.test.ts/room-lifecycle-membership.test.ts to stay under this repo's max-lines cap after later gap-closing passes. See room-lifecycle.test.ts for createRoom/listRooms/joinRoom/joinRemoteRoom, and room-lifecycle-membership.test.ts for leaveRoom/leaveRemoteRoom/inviteToRoom/kickFromRoom/destroyRoom -- and either file's own header for the full rationale. Real identities and real minted tokens throughout (not opaque placeholders): RoomLifecycle genuinely mints capability tokens and parses roomJoinOkSchema/roomMembersOkSchema's own structural shape (a real COSE_Sign1 tuple, though never signature-verified by this class), so an arbitrary placeholder string fails the schema outright where room-messaging.test.ts's forwarding-only case could get away with one.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
@@ -315,6 +315,7 @@ describe("RoomLifecycle — refreshRoomMembers", () => {
     expect(refreshed.description).toBe("");
     expect(refreshed.federated).toBe(false);
     expect(refreshed.memberJoins).toEqual({ [h.ids.ownerId]: 1 });
+    expect(refreshed.invited).toEqual([]);
   });
 
   it("increments the version relative to the existing local copy, and preserves its federated flag", async () => {
@@ -466,5 +467,51 @@ describe("RoomLifecycle — revokeMemberGrant", () => {
     expect(h.broadcastRevocation).toHaveBeenCalledTimes(1);
     const { slot } = h.deps.requireIdentity();
     expect(loadIssuedRoomGrant(slot, "room-1", h.ids.memberId)).toBeUndefined();
+  });
+});
+
+describe("RoomLifecycle — declineInvite", () => {
+  it("throws NOT_SELF when declining on behalf of another agent", async () => {
+    const h = await makeHarness();
+    await expect(
+      h.lifecycle.declineInvite("room-1", h.ids.memberId, "no thanks"),
+    ).rejects.toMatchObject({
+      message: `Cannot decline an invite on behalf of ${h.ids.memberId}`,
+      code: "NOT_SELF",
+    });
+  });
+
+  it("throws ROOM_NOT_FOUND for a non-owner-named path (e.g. a DM path)", async () => {
+    const h = await makeHarness();
+    const dmPath = dmRoomPath(h.ids.ownerId, h.ids.memberId);
+    await expect(
+      h.lifecycle.declineInvite(dmPath, h.ids.ownerId, "no thanks"),
+    ).rejects.toMatchObject({
+      message: `Room ${dmPath} not found`,
+      code: "ROOM_NOT_FOUND",
+    });
+  });
+
+  it("delegates to a real room.leave request against the room's own owner, carrying the decline reason", async () => {
+    const h = await makeHarness();
+    const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
+    const { slot } = h.deps.requireIdentity();
+    const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
+    saveRoomToken(slot, roomPath, token);
+    h.sendRoomRequest.mockResolvedValue({
+      result: "ok",
+    } satisfies ManageOutcome);
+    await h.lifecycle.declineInvite(roomPath, h.ids.ownerId, "no thanks");
+    expect(h.sendRoomRequest).toHaveBeenCalledWith(
+      h.ids.memberId,
+      expect.objectContaining({
+        params: expect.objectContaining({
+          verb: "room.leave",
+          reason: "no thanks",
+        }),
+      }),
+      { kind: "room", path: roomPath },
+      token,
+    );
   });
 });
