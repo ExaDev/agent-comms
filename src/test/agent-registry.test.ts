@@ -1,5 +1,7 @@
 /**
  * Direct, DI-based unit tests for AgentRegistry -- it was previously exercised only indirectly through MeshStore/room-kick-revocation integration tests, which left many individual branches, string literals, and array literals unobserved. AgentRegistryDeps is a narrow, injectable surface built exactly for this: a fake deps object with vi.fn() collaborators lets every branch be asserted on directly.
+ *
+ * One mutant Stryker raises against setAgentOffline is a true equivalent, not a gap -- documented here rather than chased with a contrived test, matching stale-agent-checker.test.ts's own precedent for the identical pattern: `this.deps.agents.set(id, agent)` right after `agent.status = "offline"` re-sets the same key to the exact same object reference `this.deps.agents.get(id)` already returned, so mutating `.status` on it has already mutated what the Map holds. No test can observe removing that call.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
