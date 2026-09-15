@@ -1,3 +1,9 @@
+## [2.21.13](https://github.com/ExaDev/agent-comms/compare/v2.21.12...v2.21.13) (2026-09-15)
+
+### Tests
+
+* **core:** assert PeerLifecycle's dispatch and self-connect guards directly ([4ec2e40](https://github.com/ExaDev/agent-comms/commit/4ec2e400a7dabab0d2ccd35e1ffa83b196337003))
+
 ## [2.21.12](https://github.com/ExaDev/agent-comms/compare/v2.21.11...v2.21.12) (2026-09-15)
 
 ### Tests
