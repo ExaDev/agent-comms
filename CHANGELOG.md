@@ -1,3 +1,10 @@
+## [2.21.17](https://github.com/ExaDev/agent-comms/compare/v2.21.16...v2.21.17) (2026-09-15)
+
+### Tests
+
+* **core:** assert RoomProtocol's wire-verb handlers and token verification directly ([08f1a77](https://github.com/ExaDev/agent-comms/commit/08f1a773caf919e081b3eeb3cbe60f03a8428094))
+* **core:** close two real gaps in DM-send and handleRoomMembers coverage ([0a6e69a](https://github.com/ExaDev/agent-comms/commit/0a6e69a51d74f22b4caaaf80ae3548e37bd4a848))
+
 ## [2.21.16](https://github.com/ExaDev/agent-comms/compare/v2.21.15...v2.21.16) (2026-09-15)
 
 ### Tests
