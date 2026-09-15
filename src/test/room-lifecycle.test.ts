@@ -1,5 +1,5 @@
 /**
- * Direct, DI-based unit tests for RoomLifecycle -- room CRUD and the requester's own outbound half of the wire protocol, split across two files to stay under this repo's max-lines cap: this file covers createRoom, listRooms, joinRoom/joinRemoteRoom, refreshRoomMembers, and requestDmAccess. See room-lifecycle-membership.test.ts for getRoom and leaveRoom/leaveRemoteRoom (both moved there to rebalance line counts after later gap-closing passes), inviteToRoom, declineInvite, revokeMemberGrant, kickFromRoom, and destroyRoom, and its own copy of this header for the full rationale. Real identities and real minted tokens throughout (not opaque placeholders): RoomLifecycle genuinely mints capability tokens and parses roomJoinOkSchema/roomMembersOkSchema's own structural shape (a real COSE_Sign1 tuple, though never signature-verified by this class), so an arbitrary placeholder string fails the schema outright where room-messaging.test.ts's forwarding-only case could get away with one.
+ * Direct, DI-based unit tests for RoomLifecycle -- room CRUD and the requester's own outbound half of the wire protocol, split across three files to stay under this repo's max-lines cap: this file covers createRoom, listRooms, and joinRoom/joinRemoteRoom. See room-lifecycle-remote.test.ts for refreshRoomMembers/requestDmAccess and room-lifecycle-membership.test.ts for getRoom/leaveRoom/leaveRemoteRoom/inviteToRoom/declineInvite/revokeMemberGrant/kickFromRoom/destroyRoom (both moved out to rebalance line counts after later gap-closing passes). Real identities and real minted tokens throughout (not opaque placeholders): RoomLifecycle genuinely mints capability tokens and parses roomJoinOkSchema/roomMembersOkSchema's own structural shape (a real COSE_Sign1 tuple, though never signature-verified by this class), so an arbitrary placeholder string fails the schema outright where room-messaging.test.ts's forwarding-only case could get away with one.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
@@ -228,6 +228,7 @@ function roomMembersOkOutcome(
   } as unknown as ManageOutcome;
 }
 
+// mintOwnerRootGrant's `if (!verdict.ok)` failure branch (and the two StringLiteral mutants Stryker raises inside its error message) is genuinely unreachable with the real crypto this test suite uses throughout: mintCapabilityToken only fails its own internal delegation-narrowing checks, and a parent-less, delegationsRemaining:0 root mint against a validly-generated identity has no narrowing to fail. Forcing a failure here would need either a fake identity port (defeating the whole point of using real crypto to catch real signature/schema bugs elsewhere in this file) or reaching into mintCapabilityToken's own internals -- left undocumented-but-untested rather than chased with a contrived fixture, matching this session's own diminishing-returns precedent for similarly unreachable mint-failure branches.
 describe("RoomLifecycle — createRoom", () => {
   it("mints and persists the owner's own root grant", async () => {
     const h = await makeHarness();
@@ -369,6 +370,7 @@ describe("RoomLifecycle — listRooms", () => {
   });
 });
 
+// joinRoom's own `this.deps.rooms.set(roomId, room)` call has one provable equivalent mutant Stryker still raises: removing it. `room` here is the same object reference already fetched via `this.deps.rooms.get(roomId)`, and every mutation up to this point (bump/recordMemberOp/refreshMembership) already happened in place on that reference -- so re-setting the map entry to the identical reference it already holds changes nothing observable, the same Map.set-same-reference pattern documented throughout this repo's own mutation-testing work (agent-registry.ts's setAgentOffline, delivery-engine.ts's applyPatch(agent_offline)).
 describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
   it("goes remote when this store's own agent has no local token, even if a local room record exists", async () => {
     const h = await makeHarness();
@@ -433,7 +435,10 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
     const roomPath = ownerNamedRoomPath(h.ids.memberId, "unseen");
     await expect(
       h.lifecycle.joinRoom(roomPath, h.ids.memberId),
-    ).rejects.toMatchObject({ code: "ROOM_NOT_FOUND" });
+    ).rejects.toMatchObject({
+      message: `Room ${roomPath} not found`,
+      code: "ROOM_NOT_FOUND",
+    });
     // (h.ids.memberId isn't this store's own peer, so joinRemoteRoom's own agentId-mismatch guard fires.)
   });
 
@@ -442,7 +447,10 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
     const dmPath = dmRoomPath(h.ids.ownerId, h.ids.memberId);
     await expect(
       h.lifecycle.joinRoom(dmPath, h.ids.ownerId),
-    ).rejects.toMatchObject({ code: "ROOM_NOT_FOUND" });
+    ).rejects.toMatchObject({
+      message: `Room ${dmPath} not found`,
+      code: "ROOM_NOT_FOUND",
+    });
   });
 
   it("joinRemoteRoom throws JOIN_REFUSED naming the outcome code on a non-ok outcome", async () => {
@@ -469,10 +477,13 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
     });
     await expect(
       h.lifecycle.joinRoom(roomPath, h.ids.ownerId),
-    ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+    ).rejects.toMatchObject({
+      message: `Join response for ${roomPath} was malformed`,
+      code: "MALFORMED_RESPONSE",
+    });
   });
 
-  it("joinRemoteRoom persists the granted token and builds the room from the response", async () => {
+  it("joinRemoteRoom persists the granted token and builds the room from the response, including its memberJoins", async () => {
     const h = await makeHarness();
     const roomPath = ownerNamedRoomPath(h.ids.memberId, "unseen");
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
@@ -492,6 +503,11 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
     expect(stored?.members.sort()).toEqual(
       [h.ids.ownerId, h.ids.memberId].sort(),
     );
+    expect(stored?.memberJoins).toEqual({
+      [h.ids.ownerId]: 1,
+      [h.ids.memberId]: 1,
+    });
+    expect(stored?.federated).toBe(false);
     const { slot } = h.deps.requireIdentity();
     expect(loadRoomTokens(slot)[roomPath]).toBeDefined();
   });
@@ -595,7 +611,7 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
     );
   });
 
-  it("updates subscribedRooms and broadcasts agent_upsert only for a known agent not already subscribed", async () => {
+  it("updates subscribedRooms, bumps the agent's version, and broadcasts agent_upsert only for a known agent not already subscribed", async () => {
     const h = await makeHarness();
     h.deps.rooms.set(
       "room-1",
@@ -603,12 +619,12 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
     );
     h.deps.agents.set(
       h.ids.memberId,
-      agent({ id: h.ids.memberId, subscribedRooms: [] }),
+      agent({ id: h.ids.memberId, subscribedRooms: [], version: 1 }),
     );
     await h.lifecycle.joinRoom("room-1", h.ids.memberId);
-    expect(h.deps.agents.get(h.ids.memberId)?.subscribedRooms).toContain(
-      "room-1",
-    );
+    const updated = h.deps.agents.get(h.ids.memberId);
+    expect(updated?.subscribedRooms).toContain("room-1");
+    expect(updated?.version).toBe(2);
     expect(h.broadcastPatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: "agent_upsert" }),
     );
@@ -694,157 +710,5 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
     );
     await plain.lifecycle.joinRoom("room-1", plain.ids.memberId);
     expect(plain.broadcastRoomJoin).not.toHaveBeenCalled();
-  });
-});
-
-describe("RoomLifecycle — refreshRoomMembers", () => {
-  it("throws ROOM_NOT_FOUND for a non-owner-named path", async () => {
-    const h = await makeHarness();
-    const dmPath = dmRoomPath(h.ids.ownerId, h.ids.memberId);
-    await expect(h.lifecycle.refreshRoomMembers(dmPath)).rejects.toMatchObject({
-      code: "ROOM_NOT_FOUND",
-    });
-  });
-
-  it("throws NOT_MEMBER when no room:member token is persisted", async () => {
-    const h = await makeHarness();
-    const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
-    await expect(
-      h.lifecycle.refreshRoomMembers(roomPath),
-    ).rejects.toMatchObject({
-      message: `No room:member token for ${roomPath}`,
-      code: "NOT_MEMBER",
-    });
-  });
-
-  it("throws REFRESH_FAILED naming the outcome code on a non-ok outcome", async () => {
-    const h = await makeHarness();
-    const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
-    const { slot } = h.deps.requireIdentity();
-    const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
-    h.sendRoomRequest.mockResolvedValue({
-      result: "error",
-      code: "not_a_member",
-    } satisfies ManageOutcome);
-    await expect(
-      h.lifecycle.refreshRoomMembers(roomPath),
-    ).rejects.toMatchObject({
-      message: `room.members refresh for ${roomPath} failed (not_a_member)`,
-      code: "REFRESH_FAILED",
-    });
-  });
-
-  it("throws MALFORMED_RESPONSE when the outcome fails the roomMembersOk schema", async () => {
-    const h = await makeHarness();
-    const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
-    const { slot } = h.deps.requireIdentity();
-    const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
-    h.sendRoomRequest.mockResolvedValue({
-      result: "ok",
-      nonsense: true,
-    });
-    await expect(
-      h.lifecycle.refreshRoomMembers(roomPath),
-    ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
-  });
-
-  it("starts the version at 1 with no existing local copy", async () => {
-    const h = await makeHarness();
-    const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
-    const { slot } = h.deps.requireIdentity();
-    const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
-    h.sendRoomRequest.mockResolvedValue(roomMembersOkOutcome([h.ids.ownerId]));
-    const refreshed = await h.lifecycle.refreshRoomMembers(roomPath);
-    expect(refreshed.version).toBe(1);
-  });
-
-  it("increments the version relative to the existing local copy", async () => {
-    const h = await makeHarness();
-    const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
-    h.deps.rooms.set(roomPath, room({ id: roomPath, version: 1 }));
-    const { slot } = h.deps.requireIdentity();
-    const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
-    h.sendRoomRequest.mockResolvedValue(roomMembersOkOutcome([h.ids.ownerId]));
-    const refreshed = await h.lifecycle.refreshRoomMembers(roomPath);
-    expect(refreshed.version).toBe(2);
-  });
-
-  it("prefers the room-state extension's own fields over the existing local copy's", async () => {
-    const h = await makeHarness();
-    const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
-    h.deps.rooms.set(
-      roomPath,
-      room({ id: roomPath, name: "old-name", description: "old-desc" }),
-    );
-    const { slot } = h.deps.requireIdentity();
-    const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
-    h.sendRoomRequest.mockResolvedValue(
-      roomMembersOkOutcome([h.ids.ownerId], {
-        "room-state": {
-          name: "new-name",
-          description: "new-desc",
-          type: "private",
-        },
-      }),
-    );
-    const refreshed = await h.lifecycle.refreshRoomMembers(roomPath);
-    expect(refreshed.name).toBe("new-name");
-    expect(refreshed.description).toBe("new-desc");
-  });
-});
-
-describe("RoomLifecycle — requestDmAccess", () => {
-  it("records the dm path as initiated by this store before sending", async () => {
-    const h = await makeHarness();
-    h.sendRoomRequest.mockResolvedValue({
-      result: "error",
-      code: "not_invited",
-    } satisfies ManageOutcome);
-    await expect(
-      h.lifecycle.requestDmAccess(h.ids.memberId),
-    ).rejects.toBeDefined();
-    expect(h.deps.dmRequestsInitiatedByMe).toContain(
-      dmRoomPath(h.ids.ownerId, h.ids.memberId),
-    );
-  });
-
-  it("throws JOIN_REFUSED naming the outcome code on a non-ok outcome", async () => {
-    const h = await makeHarness();
-    h.sendRoomRequest.mockResolvedValue({
-      result: "error",
-      code: "not_invited",
-    } satisfies ManageOutcome);
-    await expect(
-      h.lifecycle.requestDmAccess(h.ids.memberId),
-    ).rejects.toMatchObject({
-      message: `DM access request to ${h.ids.memberId} was refused (not_invited)`,
-      code: "JOIN_REFUSED",
-    });
-  });
-
-  it("throws MALFORMED_RESPONSE when the outcome fails the roomJoinOk schema", async () => {
-    const h = await makeHarness();
-    h.sendRoomRequest.mockResolvedValue({
-      result: "ok",
-      nonsense: true,
-    });
-    await expect(
-      h.lifecycle.requestDmAccess(h.ids.memberId),
-    ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
-  });
-
-  it("persists the granted token under the dm path on success", async () => {
-    const h = await makeHarness();
-    const dmPath = dmRoomPath(h.ids.ownerId, h.ids.memberId);
-    const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, dmPath);
-    h.sendRoomRequest.mockResolvedValue(roomJoinOkOutcome(token, []));
-    await h.lifecycle.requestDmAccess(h.ids.memberId);
-    const { slot } = h.deps.requireIdentity();
-    expect(loadRoomTokens(slot)[dmPath]).toBeDefined();
   });
 });

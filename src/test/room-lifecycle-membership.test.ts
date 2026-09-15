@@ -1,5 +1,5 @@
 /**
- * Direct, DI-based unit tests for RoomLifecycle's membership-grant half -- getRoom, leaveRoom/leaveRemoteRoom, inviteToRoom, declineInvite, revokeMemberGrant, kickFromRoom, and destroyRoom. Split from room-lifecycle.test.ts to stay under this repo's max-lines cap: that file covers createRoom/listRooms/joinRoom/refreshRoomMembers/requestDmAccess (getRoom and leaveRoom/leaveRemoteRoom moved here to rebalance line counts after a later gap-closing pass). Both files share an identical preamble (helpers, fakes, makeHarness) by necessity of the split -- see room-lifecycle.test.ts's own header for the full rationale (real identities/tokens, not opaque placeholders, since this class genuinely mints and revokes capability tokens).
+ * Direct, DI-based unit tests for RoomLifecycle's membership-grant half -- leaveRoom/leaveRemoteRoom, inviteToRoom, declineInvite, revokeMemberGrant, kickFromRoom, and destroyRoom. Split from room-lifecycle.test.ts (createRoom/listRooms/joinRoom) and room-lifecycle-remote.test.ts (refreshRoomMembers/requestDmAccess/getRoom) to stay under this repo's max-lines cap. All three files share an identical preamble (helpers, fakes, makeHarness) by necessity of the split -- see room-lifecycle.test.ts's own header for the full rationale (real identities/tokens, not opaque placeholders, since this class genuinely mints and revokes capability tokens).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
@@ -232,20 +232,7 @@ async function seedIssuedGrant(
   saveIssuedRoomGrant(slot, roomPath, memberId, tokenId);
 }
 
-describe("RoomLifecycle — getRoom", () => {
-  it("returns the stored room", async () => {
-    const h = await makeHarness();
-    const r = room({ id: "room-1" });
-    h.deps.rooms.set("room-1", r);
-    await expect(h.lifecycle.getRoom("room-1")).resolves.toBe(r);
-  });
-
-  it("returns undefined for an unknown id", async () => {
-    const h = await makeHarness();
-    await expect(h.lifecycle.getRoom("no-such-room")).resolves.toBeUndefined();
-  });
-});
-
+// Two mutants Stryker still raises here are left undocumented-but-untested, both genuinely unreachable with real crypto: inviteToRoom's own `this.deps.rooms.set(roomId, room)` call is a same-object-reference no-op (the identical pattern documented at the top of room-lifecycle.test.ts's joinRoom block), and its `if (!verdict.ok)` MINT_FAILED branch cannot fail against a validly-generated identity for the same reason mintOwnerRootGrant's own failure branch can't (documented at the top of room-lifecycle.test.ts's createRoom block).
 describe("RoomLifecycle — inviteToRoom", () => {
   it("throws ROOM_NOT_FOUND for an unknown room", async () => {
     const h = await makeHarness();
@@ -426,7 +413,10 @@ describe("RoomLifecycle — declineInvite", () => {
     const dmPath = dmRoomPath(h.ids.ownerId, h.ids.memberId);
     await expect(
       h.lifecycle.declineInvite(dmPath, h.ids.ownerId, "no thanks"),
-    ).rejects.toMatchObject({ code: "ROOM_NOT_FOUND" });
+    ).rejects.toMatchObject({
+      message: `Room ${dmPath} not found`,
+      code: "ROOM_NOT_FOUND",
+    });
   });
 
   it("delegates to a real room.leave request against the room's own owner, carrying the decline reason", async () => {
@@ -453,25 +443,7 @@ describe("RoomLifecycle — declineInvite", () => {
   });
 });
 
-describe("RoomLifecycle — revokeMemberGrant", () => {
-  it("does nothing when no issued-grant record exists for the member", async () => {
-    const h = await makeHarness();
-    await expect(
-      h.lifecycle.revokeMemberGrant("room-1", h.ids.memberId),
-    ).resolves.toBeUndefined();
-    expect(h.broadcastRevocation).not.toHaveBeenCalled();
-  });
-
-  it("mints and broadcasts a revocation entry, then forgets the issued-grant record", async () => {
-    const h = await makeHarness();
-    await seedIssuedGrant(h, "room-1", h.ids.memberId);
-    await h.lifecycle.revokeMemberGrant("room-1", h.ids.memberId);
-    expect(h.broadcastRevocation).toHaveBeenCalledTimes(1);
-    const { slot } = h.deps.requireIdentity();
-    expect(loadIssuedRoomGrant(slot, "room-1", h.ids.memberId)).toBeUndefined();
-  });
-});
-
+// kickFromRoom's own trailing `this.deps.rooms.set(roomId, room)` call is the same same-object-reference no-op documented at the top of room-lifecycle.test.ts's joinRoom block -- `room` is already the map's own stored reference by the time this runs.
 describe("RoomLifecycle — kickFromRoom", () => {
   it("throws ROOM_NOT_FOUND for an unknown room", async () => {
     const h = await makeHarness();
@@ -520,12 +492,13 @@ describe("RoomLifecycle — kickFromRoom", () => {
     expect(h.broadcastRevocation).toHaveBeenCalledTimes(1);
   });
 
-  it("removes the target from both the member and invited lists", async () => {
+  it("removes the target from both the member and invited lists, and bumps the room's version", async () => {
     const h = await makeHarness();
     h.deps.rooms.set(
       "room-1",
       room({
         id: "room-1",
+        version: 1,
         owner: h.ids.ownerId,
         members: [h.ids.memberId],
         memberJoins: { [h.ids.memberId]: 1 },
@@ -544,6 +517,9 @@ describe("RoomLifecycle — kickFromRoom", () => {
       "leave",
       h.ids.memberId,
     );
+    const updated = h.deps.rooms.get("room-1");
+    expect(updated?.version).toBe(2);
+    expect(updated?.members).not.toContain(h.ids.memberId);
   });
 
   it("broadcasts the updated room", async () => {
@@ -564,6 +540,7 @@ describe("RoomLifecycle — kickFromRoom", () => {
   });
 });
 
+// destroyRoom's per-member `this.deps.agents.set(memberId, member)` call is the same same-object-reference no-op documented at the top of room-lifecycle.test.ts's joinRoom block -- `member` is fetched via `this.deps.agents.get(memberId)` and mutated (its `subscribedRooms` property reassigned) in place before this call, so re-setting the map entry to the identical reference it already holds changes nothing observable.
 describe("RoomLifecycle — destroyRoom", () => {
   it("throws ROOM_NOT_FOUND for an unknown room", async () => {
     const h = await makeHarness();
@@ -664,7 +641,7 @@ describe("RoomLifecycle — leaveRoom / leaveRemoteRoom", () => {
     });
   });
 
-  it("goes remote when this store's own agent leaves a room it does not own", async () => {
+  it("goes remote when this store's own agent leaves a room it does not own, omitting reason entirely (not just as undefined)", async () => {
     const h = await makeHarness();
     const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
     h.deps.rooms.set(roomPath, room({ id: roomPath, owner: h.ids.memberId }));
@@ -677,6 +654,11 @@ describe("RoomLifecycle — leaveRoom / leaveRemoteRoom", () => {
     await h.lifecycle.leaveRoom(roomPath, h.ids.ownerId);
     expect(h.sendRoomRequest).toHaveBeenCalled();
     expect(h.deps.rooms.has(roomPath)).toBe(false);
+    const params = h.sendRoomRequest.mock.calls[0]?.[1]?.params as Record<
+      string,
+      unknown
+    >;
+    expect(params).not.toHaveProperty("reason");
   });
 
   it("takes the local path when this store's own agent leaves a room it owns", async () => {
@@ -723,12 +705,15 @@ describe("RoomLifecycle — leaveRoom / leaveRemoteRoom", () => {
     );
     h.deps.agents.set(
       h.ids.memberId,
-      agent({ id: h.ids.memberId, subscribedRooms: ["room-1"] }),
+      agent({
+        id: h.ids.memberId,
+        subscribedRooms: ["room-1", "other-room"],
+      }),
     );
     await h.lifecycle.leaveRoom("room-1", h.ids.memberId);
-    expect(h.deps.agents.get(h.ids.memberId)?.subscribedRooms).not.toContain(
-      "room-1",
-    );
+    expect(h.deps.agents.get(h.ids.memberId)?.subscribedRooms).toEqual([
+      "other-room",
+    ]);
     expect(h.broadcastPatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: "agent_upsert" }),
     );
@@ -752,19 +737,39 @@ describe("RoomLifecycle — leaveRoom / leaveRemoteRoom", () => {
   });
 
   it("notifies federated links only when the room is federated", async () => {
-    const h = await makeHarness();
-    h.deps.rooms.set(
+    const federated = await makeHarness();
+    federated.deps.rooms.set(
       "room-1",
       room({
         id: "room-1",
-        owner: h.ids.ownerId,
-        members: [h.ids.ownerId, h.ids.memberId],
-        memberJoins: { [h.ids.ownerId]: 1, [h.ids.memberId]: 1 },
+        owner: federated.ids.ownerId,
+        members: [federated.ids.ownerId, federated.ids.memberId],
+        memberJoins: {
+          [federated.ids.ownerId]: 1,
+          [federated.ids.memberId]: 1,
+        },
         federated: true,
       }),
     );
-    await h.lifecycle.leaveRoom("room-1", h.ids.memberId);
-    expect(h.broadcastRoomLeave).toHaveBeenCalledWith("room-1", h.ids.memberId);
+    await federated.lifecycle.leaveRoom("room-1", federated.ids.memberId);
+    expect(federated.broadcastRoomLeave).toHaveBeenCalledWith(
+      "room-1",
+      federated.ids.memberId,
+    );
+
+    const plain = await makeHarness();
+    plain.deps.rooms.set(
+      "room-1",
+      room({
+        id: "room-1",
+        owner: plain.ids.ownerId,
+        members: [plain.ids.ownerId, plain.ids.memberId],
+        memberJoins: { [plain.ids.ownerId]: 1, [plain.ids.memberId]: 1 },
+        federated: false,
+      }),
+    );
+    await plain.lifecycle.leaveRoom("room-1", plain.ids.memberId);
+    expect(plain.broadcastRoomLeave).not.toHaveBeenCalled();
   });
 
   it("destroys the room when the last remaining member is also its own owner", async () => {
