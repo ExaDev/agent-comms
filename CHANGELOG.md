@@ -1,3 +1,10 @@
+## [2.21.11](https://github.com/ExaDev/agent-comms/compare/v2.21.10...v2.21.11) (2026-09-15)
+
+### Tests
+
+* **core:** assert AgentRegistry's identity cache, registration, and lifecycle directly ([3382e82](https://github.com/ExaDev/agent-comms/commit/3382e8227a54e7a8c3e074c2c9902e5082e270a2))
+* **core:** document setAgentOffline's equivalent redundant-Map.set mutant ([e89130a](https://github.com/ExaDev/agent-comms/commit/e89130a461e4e719a38cc1422852e5f1cf9b2f62))
+
 ## [2.21.10](https://github.com/ExaDev/agent-comms/compare/v2.21.9...v2.21.10) (2026-09-15)
 
 ### Tests
