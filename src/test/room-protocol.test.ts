@@ -449,6 +449,60 @@ describe("RoomProtocol — handleRoomSend", () => {
     expect(dmHistory?.[0]?.from).toBe(h2.ids.memberId);
     expect(h2.deps.messages.has(dmPath)).toBe(false);
   });
+
+  it("includes streamingBehavior on a DM-path send only when a valid value is present", async () => {
+    const h2 = await makeHarness();
+    const dmPath = dmRoomPath(h2.ids.ownerId, h2.ids.memberId);
+    const token = await mintRoomToken(
+      h2.ids.ownerPort,
+      h2.ids.memberId,
+      dmPath,
+    );
+    const handler = h2.protocol.roomVerbHandlers["room.send"];
+    if (handler === undefined) throw new Error("expected room.send handler");
+
+    await handler(
+      manageRequest({
+        scope: { kind: "room", path: dmPath },
+        token,
+        params: {
+          verb: "room.send",
+          "message-id": SAMPLE_MESSAGE_ID,
+          "sent-at": Date.now(),
+          text: "dm steer",
+          "streaming-behavior": "steer",
+        },
+      }),
+      handle(h2.ids.memberId),
+    );
+    expect(h2.deps.dms.get(dmPath)?.[0]?.streamingBehavior).toBe("steer");
+
+    const h3 = await makeHarness();
+    const dmPath2 = dmRoomPath(h3.ids.ownerId, h3.ids.memberId);
+    const token2 = await mintRoomToken(
+      h3.ids.ownerPort,
+      h3.ids.memberId,
+      dmPath2,
+    );
+    const handler2 = h3.protocol.roomVerbHandlers["room.send"];
+    if (handler2 === undefined) throw new Error("expected room.send handler");
+    await handler2(
+      manageRequest({
+        scope: { kind: "room", path: dmPath2 },
+        token: token2,
+        params: {
+          verb: "room.send",
+          "message-id": SAMPLE_MESSAGE_ID,
+          "sent-at": Date.now(),
+          text: "dm no behavior",
+        },
+      }),
+      handle(h3.ids.memberId),
+    );
+    expect(h3.deps.dms.get(dmPath2)?.[0]).not.toHaveProperty(
+      "streamingBehavior",
+    );
+  });
 });
 
 describe("RoomProtocol — handleRoomRead", () => {
@@ -660,6 +714,25 @@ describe("RoomProtocol — handleRoomMembers", () => {
       throw new Error("expected room.members handler");
     const outcome = await handlerFn(
       manageRequest({ scope: { kind: "room", path: ownerNamedRoom } }),
+      handle(h.ids.memberId),
+    );
+    expect(outcome).toEqual({ result: "error", code: "unauthorized" });
+  });
+
+  it("returns unauthorized for a token that fails verification", async () => {
+    const wrongBearerToken = await mintRoomToken(
+      h.ids.ownerPort,
+      h.ids.ownerId,
+      ownerNamedRoom,
+    );
+    const handlerFn = h.protocol.roomVerbHandlers["room.members"];
+    if (handlerFn === undefined)
+      throw new Error("expected room.members handler");
+    const outcome = await handlerFn(
+      manageRequest({
+        scope: { kind: "room", path: ownerNamedRoom },
+        token: wrongBearerToken,
+      }),
       handle(h.ids.memberId),
     );
     expect(outcome).toEqual({ result: "error", code: "unauthorized" });
