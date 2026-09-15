@@ -370,7 +370,7 @@ describe("RoomLifecycle — listRooms", () => {
   });
 });
 
-// joinRoom's own `this.deps.rooms.set(roomId, room)` call has one provable equivalent mutant Stryker still raises: removing it. `room` here is the same object reference already fetched via `this.deps.rooms.get(roomId)`, and every mutation up to this point (bump/recordMemberOp/refreshMembership) already happened in place on that reference -- so re-setting the map entry to the identical reference it already holds changes nothing observable, the same Map.set-same-reference pattern documented throughout this repo's own mutation-testing work (agent-registry.ts's setAgentOffline, delivery-engine.ts's applyPatch(agent_offline)).
+// joinRoom's own `this.deps.rooms.set(roomId, room)` and `this.deps.agents.set(agentId, agent)` calls each have one provable equivalent mutant Stryker still raises: removing them. Both `room` and `agent` are the same object references already fetched via `.get()`, and every mutation up to each call (bump/recordMemberOp/refreshMembership for room; push/bump for agent) already happened in place on that reference -- so re-setting the map entry to the identical reference it already holds changes nothing observable, the same Map.set-same-reference pattern documented throughout this repo's own mutation-testing work (agent-registry.ts's setAgentOffline, delivery-engine.ts's applyPatch(agent_offline)).
 describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
   it("goes remote when this store's own agent has no local token, even if a local room record exists", async () => {
     const h = await makeHarness();

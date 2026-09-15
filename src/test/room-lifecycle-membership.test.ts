@@ -1,5 +1,5 @@
 /**
- * Direct, DI-based unit tests for RoomLifecycle's membership-grant half -- leaveRoom/leaveRemoteRoom, inviteToRoom, declineInvite, revokeMemberGrant, kickFromRoom, and destroyRoom. Split from room-lifecycle.test.ts (createRoom/listRooms/joinRoom) and room-lifecycle-remote.test.ts (refreshRoomMembers/requestDmAccess/getRoom) to stay under this repo's max-lines cap. All three files share an identical preamble (helpers, fakes, makeHarness) by necessity of the split -- see room-lifecycle.test.ts's own header for the full rationale (real identities/tokens, not opaque placeholders, since this class genuinely mints and revokes capability tokens).
+ * Direct, DI-based unit tests for RoomLifecycle's membership-grant half -- leaveRoom/leaveRemoteRoom, inviteToRoom, kickFromRoom, and destroyRoom. Split from room-lifecycle.test.ts (createRoom/listRooms/joinRoom) and room-lifecycle-remote.test.ts (refreshRoomMembers/requestDmAccess/getRoom/revokeMemberGrant/declineInvite) to stay under this repo's max-lines cap. All three files share an identical preamble (helpers, fakes, makeHarness) by necessity of the split -- see room-lifecycle.test.ts's own header for the full rationale (real identities/tokens, not opaque placeholders, since this class genuinely mints and revokes capability tokens).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
@@ -258,9 +258,12 @@ describe("RoomLifecycle — inviteToRoom", () => {
     });
   });
 
-  it("records an invited-join only for a target not already invited or a member", async () => {
+  it("records an invited-join only for a target not already invited or a member, and bumps the room's version", async () => {
     const h = await makeHarness();
-    h.deps.rooms.set("room-1", room({ id: "room-1", owner: h.ids.ownerId }));
+    h.deps.rooms.set(
+      "room-1",
+      room({ id: "room-1", owner: h.ids.ownerId, version: 1 }),
+    );
     h.sendRoomRequest.mockResolvedValue({
       result: "ok",
     } satisfies ManageOutcome);
@@ -271,6 +274,7 @@ describe("RoomLifecycle — inviteToRoom", () => {
       "join",
       h.ids.memberId,
     );
+    expect(h.deps.rooms.get("room-1")?.version).toBe(2);
   });
 
   it("does not re-record an invited-join for a target already invited", async () => {
@@ -385,7 +389,7 @@ describe("RoomLifecycle — inviteToRoom", () => {
     });
   });
 
-  it("resolves without throwing on a genuinely successful invite", async () => {
+  it("resolves without throwing on a genuinely successful invite, sent scoped to the room path", async () => {
     const h = await makeHarness();
     h.deps.rooms.set("room-1", room({ id: "room-1", owner: h.ids.ownerId }));
     h.sendRoomRequest.mockResolvedValue({
@@ -394,51 +398,10 @@ describe("RoomLifecycle — inviteToRoom", () => {
     await expect(
       h.lifecycle.inviteToRoom("room-1", h.ids.memberId, h.ids.ownerId),
     ).resolves.toBeUndefined();
-  });
-});
-
-describe("RoomLifecycle — declineInvite", () => {
-  it("throws NOT_SELF when declining on behalf of another agent", async () => {
-    const h = await makeHarness();
-    await expect(
-      h.lifecycle.declineInvite("room-1", h.ids.memberId, "no thanks"),
-    ).rejects.toMatchObject({
-      message: `Cannot decline an invite on behalf of ${h.ids.memberId}`,
-      code: "NOT_SELF",
-    });
-  });
-
-  it("throws ROOM_NOT_FOUND for a non-owner-named path (e.g. a DM path)", async () => {
-    const h = await makeHarness();
-    const dmPath = dmRoomPath(h.ids.ownerId, h.ids.memberId);
-    await expect(
-      h.lifecycle.declineInvite(dmPath, h.ids.ownerId, "no thanks"),
-    ).rejects.toMatchObject({
-      message: `Room ${dmPath} not found`,
-      code: "ROOM_NOT_FOUND",
-    });
-  });
-
-  it("delegates to a real room.leave request against the room's own owner, carrying the decline reason", async () => {
-    const h = await makeHarness();
-    const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
-    const { slot } = h.deps.requireIdentity();
-    const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
-    h.sendRoomRequest.mockResolvedValue({
-      result: "ok",
-    } satisfies ManageOutcome);
-    await h.lifecycle.declineInvite(roomPath, h.ids.ownerId, "no thanks");
     expect(h.sendRoomRequest).toHaveBeenCalledWith(
       h.ids.memberId,
-      expect.objectContaining({
-        params: expect.objectContaining({
-          verb: "room.leave",
-          reason: "no thanks",
-        }),
-      }),
-      { kind: "room", path: roomPath },
-      token,
+      expect.anything(),
+      { kind: "room", path: "room-1" },
     );
   });
 });
@@ -630,6 +593,7 @@ describe("RoomLifecycle — destroyRoom", () => {
     });
   });
 });
+// leaveRoom's own `this.deps.rooms.set(roomId, room)` and `this.deps.agents.set(agentId, agent)` calls are the same same-object-reference no-ops documented at the top of room-lifecycle.test.ts's joinRoom block.
 describe("RoomLifecycle — leaveRoom / leaveRemoteRoom", () => {
   it("throws ROOM_NOT_FOUND for an unknown room", async () => {
     const h = await makeHarness();
