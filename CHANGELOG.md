@@ -1,3 +1,12 @@
+## [2.21.16](https://github.com/ExaDev/agent-comms/compare/v2.21.15...v2.21.16) (2026-09-15)
+
+### Tests
+
+* **mesh-store:** assert MeshStore's own orchestration logic directly ([78a1f76](https://github.com/ExaDev/agent-comms/commit/78a1f76c501d3d8aeb7b97a13e196f2941154eb7))
+* **mesh-store:** close four more real gaps a fresh mutation run surfaced ([0ad906b](https://github.com/ExaDev/agent-comms/commit/0ad906bbe59df9a900e89fab9be2d04052d148bf))
+* **mesh-store:** close two more real gaps, init()'s onError message and isShutDown ([60e3e18](https://github.com/ExaDev/agent-comms/commit/60e3e18de17c3fa7fb61837c8f7ed644a53c9bac))
+* **mesh-store:** fix isShutDown test to actually reach the guarded branch ([13f94ab](https://github.com/ExaDev/agent-comms/commit/13f94ab86e79ac8e776c8f8f33a4c2d6a958c2da))
+
 ## [2.21.15](https://github.com/ExaDev/agent-comms/compare/v2.21.14...v2.21.15) (2026-09-15)
 
 ### Tests
