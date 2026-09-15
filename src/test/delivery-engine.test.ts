@@ -357,6 +357,8 @@ describe("DeliveryEngine — mergeRoom via applyPatch(room_upsert)", () => {
     expect(stored?.memberJoins[OTHER_ID]).toBe(2);
     expect(stored?.memberJoins[THIRD_ID]).toBe(1);
   });
+
+  // mergeMemberOps' own `stamp > (merged[id] ?? 0)` boundary check has one provably equivalent mutant Stryker still raises here: replacing `>` with `>=`. It's unobservable because the two operators only disagree when `stamp === merged[id]` -- and at that exact point, `merged[id] = stamp` assigns the map entry its own current value, which produces no difference any assertion could detect. The test above already proves the operator's real job (a strictly lower incoming stamp never overwrites a higher local one, and a strictly higher one does); the equal-stamp case has nothing further to distinguish.
 });
 
 describe("DeliveryEngine — refreshMembership", () => {
@@ -543,6 +545,7 @@ describe("DeliveryEngine — applyStateSync message/dm histories", () => {
   });
 });
 
+// One mutant Stryker still raises in this block is a provable equivalent, not a gap: the `(this.deps.deliveryQueues.get(agentId) ?? []).map((e) => JSON.stringify(e))` line building the dedup "seen" set has its own `?? []` fallback replaced with `?? ["Stryker was here"]`. That fallback only runs when the local queue for agentId is undefined, and mapping it into `JSON.stringify("Stryker was here")` produces a garbage string no real DeliveryEvent's own JSON serialisation will ever collide with -- so the seen set ends up functionally empty either way, and the dedup test below (which already proves a genuinely-repeated event is skipped and a genuinely-new one isn't) can't distinguish an empty seen set from one seeded with an unreachable placeholder string.
 describe("DeliveryEngine — applyStateSync deliveryQueues replay", () => {
   it("queues every incoming event, even ones with no replay-eligible type", () => {
     const h = makeHarness();
@@ -703,6 +706,7 @@ describe("DeliveryEngine — applyPatch(agent_upsert)", () => {
   });
 });
 
+// The `this.deps.agents.set(patch.agentId, agent)` call at the end of this branch has one provable equivalent mutant Stryker still raises: removing it entirely. `agent` here is fetched via `this.deps.agents.get(patch.agentId)`, the exact same object reference already stored in the Map, and `agent.status = "offline"` mutates that object in place -- so re-setting the map entry to the identical reference it already holds is a genuine no-op, the same Map.set-same-reference pattern already documented elsewhere in this codebase (agent-registry.ts's setAgentOffline, federation-bridge.ts's onAgentGone/onRoomLeave). The test below already proves the real, observable effect (status flips to "offline").
 describe("DeliveryEngine — applyPatch(agent_offline)", () => {
   it("marks an existing agent as offline", async () => {
     const h = makeHarness();
