@@ -244,6 +244,7 @@ describe("DeliveryEngine — queueDelivery", () => {
     expect(h.deps.deliveryQueues.get(OTHER_ID)).toHaveLength(2);
   });
 
+  // Two mutants Stryker raises against queueDelivery's own `arr.length > MAX_QUEUED_DELIVERIES_PER_AGENT` guard are provably equivalent, not gaps: one replaces the whole condition with `true`, the other replaces `>` with `>=`. Both are unobservable because of `splice`'s own semantics, not because of a weak test -- the splice call's own deleteCount is computed as `arr.length - MAX_QUEUED_DELIVERIES_PER_AGENT`, which is <= 0 in exactly the cases these mutants would newly enter the branch for (at or below the cap), and `Array.prototype.splice` with a non-positive deleteCount is a documented no-op. So whether the branch itself fires is invisible: the guard's only effect is gating a call that already does nothing when the guard would have been false. Matches the identical reasoning already applied to room-protocol.ts's own `>` vs `>=` retry-queue boundary.
   it("keeps exactly MAX_QUEUED_DELIVERIES_PER_AGENT entries with no eviction at the boundary", () => {
     const h = makeHarness();
     for (let i = 0; i < MAX_QUEUED_DELIVERIES_PER_AGENT; i++) {
@@ -699,6 +700,23 @@ describe("DeliveryEngine — applyPatch(agent_upsert)", () => {
     expect(merged?.subscribedRooms.sort()).toEqual(
       ["incoming-only", "local-only", "shared"].sort(),
     );
+  });
+});
+
+describe("DeliveryEngine — applyPatch(agent_offline)", () => {
+  it("marks an existing agent as offline", async () => {
+    const h = makeHarness();
+    h.deps.agents.set(OTHER_ID, agent({ status: "active" }));
+    await h.engine.applyPatch({ type: "agent_offline", agentId: OTHER_ID });
+    expect(h.deps.agents.get(OTHER_ID)?.status).toBe("offline");
+  });
+
+  it("does nothing when the agent has no local record", async () => {
+    const h = makeHarness();
+    await expect(
+      h.engine.applyPatch({ type: "agent_offline", agentId: OTHER_ID }),
+    ).resolves.toBeUndefined();
+    expect(h.deps.agents.has(OTHER_ID)).toBe(false);
   });
 });
 
