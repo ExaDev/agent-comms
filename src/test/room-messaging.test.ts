@@ -1,7 +1,7 @@
 /**
  * Direct, DI-based unit tests for RoomMessaging -- it was previously exercised only indirectly through end-to-end room-send integration tests, leaving many individual branches (optional-field spreads, error message text, since-filtering boundaries, self-DM vs cross-DM key derivation) unobserved. RoomMessagingDeps is a narrow, injectable surface built exactly for this. loadRoomTokens is a free function reading a real identity file, not part of the injectable deps -- mocked here since RoomMessaging only ever forwards its return value opaquely, never inspects or verifies it.
  *
- * One mutant Stryker raises against readRoomMessages is a practical equivalent, not a gap -- documented here rather than chased with a contrived test: replacing `since === ""` with `false` in `since === undefined || since === ""` only changes behaviour for a RoomMessage whose own `timestamp` is itself an empty string. Every RoomMessage in this codebase is constructed with `new Date().toISOString()`, never an empty string, so `m.timestamp > since` is true for every real message when `since` is `""` regardless of which branch runs -- the early-return and the filter produce identical output for any timestamp this codebase can actually produce. A test asserting otherwise would need to fabricate a RoomMessage violating that invariant, the exact kind of contrived test this repo's own convention (see stale-agent-checker.test.ts) says to document instead of force.
+ * Two mutants Stryker raises against readRoomMessages' `since === undefined || since === ""` check are practical equivalents, not gaps -- documented here rather than chased with a contrived test. Both replace the `since === ""` comparison (one with the literal `false`, one with `since === "Stryker was here!"`) and both share the identical root cause: whenever the real code's early-return branch would fire on `since === ""`, the mutant instead falls through to `arr.filter(m => m.timestamp > since)` with `since` still `""` -- and every RoomMessage in this codebase is constructed with `new Date().toISOString()`, never an empty string, so `m.timestamp > ""` is true for every real message regardless of which branch runs. The early-return and the filter produce identical output for any timestamp this codebase can actually produce; only a RoomMessage with an empty-string timestamp (violating that invariant) would distinguish them, and fabricating one would be exactly the kind of contrived test this repo's own convention (see stale-agent-checker.test.ts) says to document instead of force.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { dmRoomPath } from "../core/room-path.js";
@@ -347,10 +347,10 @@ describe("RoomMessaging — readRoomMessages", () => {
     expect(result).toEqual([]);
   });
 
-  it("filters against a non-empty since that isn't the empty-string shortcut, not just early-returns everything", async () => {
+  it("filters out every message for an arbitrary since lexically greater than any real timestamp", async () => {
     const h = makeHarness();
     seeded(h);
-    // Lexically greater than any real ISO timestamp (which starts with a digit) -- distinguishes the real `since === ""` check from a mutant comparing against a different literal, since a mutant taking the early-return branch here would incorrectly return the full unfiltered history.
+    // Lexically greater than any real ISO timestamp (which starts with a digit) -- proves filtering genuinely runs and genuinely excludes messages for a since value that isn't "" or undefined, distinct from the empty-string shortcut covered (and its equivalent mutants documented) above.
     const result = await h.messaging.readRoomMessages(
       "room-1",
       "not-a-real-timestamp",
