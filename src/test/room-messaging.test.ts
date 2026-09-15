@@ -1,5 +1,7 @@
 /**
  * Direct, DI-based unit tests for RoomMessaging -- it was previously exercised only indirectly through end-to-end room-send integration tests, leaving many individual branches (optional-field spreads, error message text, since-filtering boundaries, self-DM vs cross-DM key derivation) unobserved. RoomMessagingDeps is a narrow, injectable surface built exactly for this. loadRoomTokens is a free function reading a real identity file, not part of the injectable deps -- mocked here since RoomMessaging only ever forwards its return value opaquely, never inspects or verifies it.
+ *
+ * One mutant Stryker raises against readRoomMessages is a practical equivalent, not a gap -- documented here rather than chased with a contrived test: replacing `since === ""` with `false` in `since === undefined || since === ""` only changes behaviour for a RoomMessage whose own `timestamp` is itself an empty string. Every RoomMessage in this codebase is constructed with `new Date().toISOString()`, never an empty string, so `m.timestamp > since` is true for every real message when `since` is `""` regardless of which branch runs -- the early-return and the filter produce identical output for any timestamp this codebase can actually produce. A test asserting otherwise would need to fabricate a RoomMessage violating that invariant, the exact kind of contrived test this repo's own convention (see stale-agent-checker.test.ts) says to document instead of force.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { dmRoomPath } from "../core/room-path.js";
@@ -159,6 +161,27 @@ describe("RoomMessaging — sendRoomMessage", () => {
       "hi",
     );
     expect(withoutReply).not.toHaveProperty("replyTo");
+  });
+
+  it("includes streamingBehavior on the stored message only when given", async () => {
+    const h = makeHarness();
+    h.deps.rooms.set("room-1", room());
+
+    const withBehavior = await h.messaging.sendRoomMessage(
+      "room-1",
+      FROM_DEVICE_ID,
+      "hi",
+      undefined,
+      "steer",
+    );
+    expect(withBehavior.streamingBehavior).toBe("steer");
+
+    const withoutBehavior = await h.messaging.sendRoomMessage(
+      "room-1",
+      FROM_DEVICE_ID,
+      "hi",
+    );
+    expect(withoutBehavior).not.toHaveProperty("streamingBehavior");
   });
 
   it("forwards to federated links only when the room is federated", async () => {
@@ -323,6 +346,17 @@ describe("RoomMessaging — readRoomMessages", () => {
     const result = await h.messaging.readRoomMessages("no-such-room");
     expect(result).toEqual([]);
   });
+
+  it("filters against a non-empty since that isn't the empty-string shortcut, not just early-returns everything", async () => {
+    const h = makeHarness();
+    seeded(h);
+    // Lexically greater than any real ISO timestamp (which starts with a digit) -- distinguishes the real `since === ""` check from a mutant comparing against a different literal, since a mutant taking the early-return branch here would incorrectly return the full unfiltered history.
+    const result = await h.messaging.readRoomMessages(
+      "room-1",
+      "not-a-real-timestamp",
+    );
+    expect(result).toEqual([]);
+  });
 });
 
 describe("RoomMessaging — sendDm", () => {
@@ -447,5 +481,21 @@ describe("RoomMessaging — sendDm", () => {
       unknown
     >;
     expect(params["streaming-behavior"]).toBe("info");
+  });
+
+  it("omits streaming-behavior from the wire params when not given, for a cross-agent DM", async () => {
+    const h = makeHarness();
+    h.deps.agents.set(TO_DEVICE_ID, agent());
+    vi.mocked(loadRoomTokens).mockReturnValue({
+      [dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID)]: FAKE_TOKEN,
+    });
+
+    await h.messaging.sendDm(FROM_DEVICE_ID, TO_DEVICE_ID, "hi");
+
+    const params = h.sendRoomRequestToMember.mock.calls[0]?.[3] as Record<
+      string,
+      unknown
+    >;
+    expect(params).not.toHaveProperty("streaming-behavior");
   });
 });
