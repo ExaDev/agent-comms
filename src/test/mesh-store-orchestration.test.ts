@@ -308,6 +308,71 @@ describe("MeshStore — events getter dispatch table", () => {
   });
 });
 
+describe("MeshStore — constructor wiring", () => {
+  it("registers both the mdns and tailscale discovery backends", async () => {
+    const store = new MeshStore();
+    await expect(
+      store.discovery.advertise("not-a-real-backend", { name: "x", port: 1 }),
+    ).rejects.toThrow("Available: mdns, tailscale");
+  });
+
+  it("fires onPatch when a broadcasted patch reaches it, via the getOnPatch closure passed to DeliveryEngine", async () => {
+    const store = new MeshStore();
+    store.setTransport(fakeTransport());
+    const onPatch = vi.fn<(patch: unknown) => void>();
+    store.onPatch = onPatch;
+
+    await store.registerAgent({
+      name: "a",
+      harness: "pi",
+      cwd: "/tmp",
+      pid: 1,
+      visibility: "visible",
+      tags: [],
+    });
+
+    expect(onPatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "agent_upsert" }),
+    );
+  });
+
+  it("wires ConnectionApproval's queueDelivery closure to the real DeliveryEngine, observable via drainDelivery", async () => {
+    const store = new MeshStore();
+    store.setTransport(fakeTransport());
+
+    store.events.onConnectionRequest(
+      { id: "conn-1" },
+      { peerId: "remote", dataPort: 1, name: "n", fingerprint: "fp" },
+    );
+
+    const drained = await store.drainDelivery(store.peerId);
+    expect(drained).toContainEqual(
+      expect.objectContaining({
+        type: "connection_request",
+        connectionId: "conn-1",
+      }),
+    );
+  });
+
+  it("deliver() actually reaches the real DeliveryEngine, observable via drainDelivery", async () => {
+    const store = new MeshStore();
+    store.setTransport(fakeTransport());
+    const event = {
+      type: "connection_request" as const,
+      connectionId: "c",
+      peerId: "p",
+      dataPort: 1,
+      name: "n",
+      fingerprint: "fp",
+    };
+
+    await store.deliver(store.peerId, event);
+
+    const drained = await store.drainDelivery(store.peerId);
+    expect(drained).toContainEqual(event);
+  });
+});
+
 describe("MeshStore — identity delegation", () => {
   it("writeIdentity actually persists to the identity cache, readable back by readIdentity", async () => {
     const store = new MeshStore();
@@ -525,6 +590,26 @@ describe("MeshStore — shutdown()", () => {
       type: "agent_offline",
       agentId: agent.id,
     });
+  });
+
+  it("clears every pending markRead timer", async () => {
+    vi.spyOn(store.federation, "shutdown").mockResolvedValue(undefined);
+    const pending = collaborator(store, "pendingMarkReadTimers") as ReturnType<
+      typeof setTimeout
+    >[];
+    // Long enough to guarantee it's still pending (never fires) for the duration of this test.
+    const FAR_FUTURE_DELAY_MS = 1_000_000;
+    const timer = setTimeout(() => undefined, FAR_FUTURE_DELAY_MS);
+    pending.push(timer);
+    const clearTimeoutSpy = vi.spyOn(global, "clearTimeout");
+
+    try {
+      await store.shutdown();
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(timer);
+      expect(pending).toHaveLength(0);
+    } finally {
+      clearTimeoutSpy.mockRestore();
+    }
   });
 
   it("does not broadcast agent_offline when no self agent was ever registered", async () => {
