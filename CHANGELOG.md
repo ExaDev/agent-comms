@@ -1,3 +1,9 @@
+## [2.21.12](https://github.com/ExaDev/agent-comms/compare/v2.21.11...v2.21.12) (2026-09-15)
+
+### Tests
+
+* **core:** assert ConnectionApproval's admission and fallback behaviour directly ([76e04a4](https://github.com/ExaDev/agent-comms/commit/76e04a4b1e5c7f282cb7eaf6bc8d9dbf5841bb57))
+
 ## [2.21.11](https://github.com/ExaDev/agent-comms/compare/v2.21.10...v2.21.11) (2026-09-15)
 
 ### Tests
