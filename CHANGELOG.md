@@ -1,3 +1,9 @@
+## [2.21.10](https://github.com/ExaDev/agent-comms/compare/v2.21.9...v2.21.10) (2026-09-15)
+
+### Tests
+
+* **core:** assert wire-mesh-transport's shutdown/unref cleanup mechanisms directly ([629cc8c](https://github.com/ExaDev/agent-comms/commit/629cc8c13f1b9b24839e719508d5a49a38e60eb9))
+
 ## [2.21.9](https://github.com/ExaDev/agent-comms/compare/v2.21.8...v2.21.9) (2026-09-14)
 
 ### Tests
