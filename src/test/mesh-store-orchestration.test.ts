@@ -616,6 +616,8 @@ describe("MeshStore — shutdown()", () => {
   });
 
   it("actually sets isShutDown, observable via DeliveryEngine no longer scheduling markRead timers afterward", async () => {
+    // fireLocalDelivery returns before ever reaching the isShutDown-guarded push unless onDelivery is set -- without this, the test would pass for both real code and a mutant, since it never reaches the line under test.
+    store.onDelivery = vi.fn();
     vi.spyOn(store.federation, "shutdown").mockResolvedValue(undefined);
     await store.shutdown();
 
