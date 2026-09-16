@@ -21,6 +21,7 @@ import type {
   CapabilityScope,
   CapabilityToken,
   ManageCommand,
+  PeerAdvert,
   RevocationEntry,
 } from "wire-mesh-core/generated/protocol";
 import type {
@@ -160,6 +161,34 @@ export class WireMeshTransport implements MeshTransport {
 
   // -- Every live session this transport has ever created, accepted or dialled, for shutdown's own use only -- never used for addressing (peerSessions is), so it never loses track of one session to another sharing the same peer id.
   private readonly allSessions = new Set<AcceptedMeshSession>();
+
+  // -- Every device-id this side has ever heard gossip from, across every session's own directory, keyed by device-id hex -- the mesh-wide aggregation P3.8's own room-discovery design and the eventual agent register/update/offline retirement both need and don't otherwise have (agent-comms#48's own 2026-09-14 investigation confirmed no such aggregation existed anywhere in this file). Merged, never cleared on disconnect: a device's last-known advert (including its own presence/status, or any future gossiped extension) stays queryable even while its session is momentarily down, the same way the legacy agents Map keeps a record after setAgentOffline rather than deleting it outright.
+  private readonly knownDevices = new Map<string, PeerAdvert>();
+
+  /** Merges one session event's own directory into the mesh-wide knownDevices view, keeping the newer advert (by snapshot-seconds) whenever this device-id is already known from an earlier event or a different session. */
+  private mergeKnownDevices(directory: readonly DirectoryEntry[]): void {
+    for (const entry of directory) {
+      const deviceIdHex = deviceIdToHex(entry.device);
+      const existing = this.knownDevices.get(deviceIdHex);
+      if (
+        existing === undefined ||
+        entry.advert["snapshot-seconds"] >= existing["snapshot-seconds"]
+      ) {
+        this.knownDevices.set(deviceIdHex, entry.advert);
+      }
+    }
+  }
+
+  /** Every device this side has ever heard gossip from, mesh-wide -- not just its own directly-connected peers -- with each one's own latest full advert (addresses, snapshot-seconds, and every open-extension field such as presence/status). */
+  listKnownDevices(): readonly {
+    deviceId: string;
+    advert: Readonly<PeerAdvert>;
+  }[] {
+    return Array.from(this.knownDevices, ([deviceId, advert]) => ({
+      deviceId,
+      advert,
+    }));
+  }
 
   /** Registers a session in both peerSessions (addressing -- last one in for a given peer wins) and allSessions (shutdown -- every session, always). */
   private trackSession(key: string, session: AcceptedMeshSession): void {
@@ -405,6 +434,7 @@ export class WireMeshTransport implements MeshTransport {
   ): void {
     void (async () => {
       for await (const event of session.events) {
+        this.mergeKnownDevices(event.directory);
         this.reportPresenceAdvert(handle, deviceIdHex, event.directory);
         if (event.state.status === "closed") {
           const wasTracked = this.peerSessions.get(deviceIdHex) === session;
