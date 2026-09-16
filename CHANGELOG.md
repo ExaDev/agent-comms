@@ -1,3 +1,9 @@
+## [2.31.0](https://github.com/ExaDev/agent-comms/compare/v2.30.0...v2.31.0) (2026-09-16)
+
+### Features
+
+* **core:** retire the last two mesh-wide broadcast sites for directed room.notify ([ffd60b8](https://github.com/ExaDev/agent-comms/commit/ffd60b8de24cc70c3fd443c68f3c1f331711da0b))
+
 ## [2.30.0](https://github.com/ExaDev/agent-comms/compare/v2.29.0...v2.30.0) (2026-09-16)
 
 ### Features
