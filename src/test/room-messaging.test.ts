@@ -77,6 +77,7 @@ function makeHarness() {
       clock: { now: () => NOW_MS },
       identity: {} as never,
       revocation: {} as never,
+      dataStorage: {} as never,
     }),
     roomProtocol: { sendRoomRequestToMember },
     federation: { forwardRoomMessage },

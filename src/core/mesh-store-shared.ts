@@ -5,14 +5,16 @@
 import type { Clock } from "wire-mesh-core/ports/clock";
 import type { IdentityPort } from "wire-mesh-core/ports/identity";
 import type { RevocationView } from "wire-mesh-core/domain/revocation-view";
+import type { KeyValueStorage } from "wire-mesh-core/ports/storage";
 import type { IdentitySlot } from "./identity-store.js";
 
-/** The identity/clock/persistence collaborators MeshStore mints and persists room-membership grants against. Set via setIdentity(), mirroring the transport's own setTransport() contract. */
+/** The identity/clock/persistence collaborators MeshStore mints and persists room-membership grants against. Set via setIdentity(), mirroring the transport's own setTransport() contract. dataStorage backs this device's own room-notice oplog (P5, agent-comms#50) -- the same KeyValueStorage instance WireMeshTransport's own dataStorage constructor parameter is wired with, so a durable sendRoomMessage and the transport's own data-domain responder read and write the identical log. */
 export interface MeshStoreIdentity {
   identity: IdentityPort;
   clock: Clock;
   slot: IdentitySlot;
   revocation: RevocationView;
+  dataStorage: KeyValueStorage;
 }
 
 /**

@@ -155,6 +155,7 @@ function makeHarness() {
       clock: { now: () => NOW_MS },
       identity: {} as never,
       revocation: { record: revocationRecord } as never,
+      dataStorage: {} as never,
     }),
     requireTransport: () => transport,
     getOnDelivery: () => onDelivery,

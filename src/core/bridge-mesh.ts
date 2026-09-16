@@ -9,10 +9,11 @@
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
+import { createNodeFsStorage } from "wire-mesh-core/adapters/node-fs-storage";
 import { MeshStore } from "./mesh-store.js";
 import { CommsTool } from "./tool.js";
 import { WireMeshTransport } from "./wire-mesh-transport.js";
-import { loadOrCreateIdentity } from "./identity-store.js";
+import { loadOrCreateIdentity, oplogDirFor } from "./identity-store.js";
 import type { IdentitySlot } from "./identity-store.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
 
@@ -34,6 +35,8 @@ export function createBridgeMeshSync(
   const identity = loadOrCreateIdentity(slot);
   const store = new MeshStore(coordinatorPort);
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
+  // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- oplogDirFor(slot) needs only the slot, not the async identity below, so this can be constructed synchronously right here.
+  const dataStorage = createNodeFsStorage({ dir: oplogDirFor(slot) });
   store.setTransport(
     new WireMeshTransport(
       store.events,
@@ -43,6 +46,7 @@ export function createBridgeMeshSync(
       () => store.selfStatus,
       undefined,
       () => store.hostedRooms,
+      dataStorage,
     ),
   );
   const tool = new CommsTool(store, store.discovery);
@@ -56,6 +60,7 @@ export function createBridgeMeshSync(
         clock: createSystemClock(),
         slot,
         revocation,
+        dataStorage,
       });
     },
   };

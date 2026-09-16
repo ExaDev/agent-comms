@@ -7,6 +7,7 @@ import { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
+import { createMemoryStorage } from "wire-mesh-core/adapters/memory-storage";
 import { loadOrCreateIdentity } from "../core/identity-store.js";
 import type { IdentitySlot } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
@@ -31,6 +32,8 @@ export async function wireTestTransport(
   const identity = loadOrCreateIdentity(resolvedSlot);
   // Every real bridge sets peerId to deviceIdToHex(identity.deviceId) before wiring the transport (createBridgeMesh) -- WireMeshTransport's own session bookkeeping is keyed by device-id, so a peer's advertised ID and the identity the other side actually authenticates the connection against must be the same value, or introduction/state-sync never recognises the peer as itself.
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
+  // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- memory-backed, matching every other throwaway test identity here, rather than a real createNodeFsStorage a test would need to clean up afterwards.
+  const dataStorage = createMemoryStorage();
   store.setTransport(
     new WireMeshTransport(
       store.events,
@@ -39,6 +42,8 @@ export async function wireTestTransport(
       pendingConnectionTimeoutMs,
       () => store.selfStatus,
       presenceReadvertiseIntervalMs,
+      undefined,
+      dataStorage,
     ),
   );
   store.setIdentity({
@@ -46,6 +51,7 @@ export async function wireTestTransport(
     clock: createSystemClock(),
     slot: resolvedSlot,
     revocation: createRevocationView(),
+    dataStorage,
   });
   // Surface transport-level errors instead of leaving them silent — a genuine socket failure during a test run is signal worth seeing even when the test's own assertions still pass, since it can point at a real race the assertions don't happen to catch.
   store.onError = (e) => {

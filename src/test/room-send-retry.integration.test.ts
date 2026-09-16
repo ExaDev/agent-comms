@@ -9,6 +9,7 @@ import { test, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
+import { createMemoryStorage } from "wire-mesh-core/adapters/memory-storage";
 import { MeshStore } from "../core/mesh-store.js";
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import {
@@ -59,6 +60,7 @@ async function makePeer(
     clock: createSystemClock(),
     slot,
     revocation: createRevocationView(),
+    dataStorage: createMemoryStorage(),
   });
   const deliveries: DeliveryEvent[] = [];
   return { store, deliveries };
