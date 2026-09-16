@@ -1,3 +1,9 @@
+## [3.2.0](https://github.com/ExaDev/agent-comms/compare/v3.1.0...v3.2.0) (2026-09-16)
+
+### Features
+
+* **bridge:** add a cc-peer bridge for cross-machine Claude Code relay ([80ce989](https://github.com/ExaDev/agent-comms/commit/80ce989e02366b17415edd45f7e430d0b0c14aa8))
+
 ## [3.1.0](https://github.com/ExaDev/agent-comms/compare/v3.0.2...v3.1.0) (2026-09-16)
 
 ### Features
