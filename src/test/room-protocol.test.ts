@@ -161,6 +161,7 @@ async function makeHarness(): Promise<Harness> {
       clock: createSystemClock(),
       slot,
       revocation: createRevocationView(),
+      dataStorage: {} as never,
     }),
     requireTransport: () =>
       ({ sendRoomRequest }) as unknown as ReturnType<

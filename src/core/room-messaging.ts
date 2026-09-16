@@ -6,6 +6,7 @@ import { bytesFromHex, bytesToHex } from "wire-mesh-core/domain/device-id";
 import { dmRoomPath } from "./room-path.js";
 import { loadRoomTokens } from "./identity-store.js";
 import { randomId } from "./random-id.js";
+import { recordRoomSendNotice } from "./room-notice-log.js";
 import { CommsError } from "./store.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import type { RoomProtocol } from "./room-protocol.js";
@@ -34,6 +35,8 @@ export class RoomMessaging {
 
   /**
    * Sends a room message via a real, wire-authenticated room.send fan-out (P3.5): one directed request per member, each carrying this sender's own persisted room:member token, rather than the legacy broadcastPatch's full-state replication. A member unreachable right now is queued for retry (see sendRoomRequestToMember/flushPendingRoomRequests) instead of blocking or failing the whole send -- delivery to any one recipient is independent of every other.
+   *
+   * durable, when true, additionally records this same message as a room-notice in the sender's own oplog via recordRoomSendNotice (P5, agent-comms#50) -- deliberately opt-in per call, not automatic: matching this codebase's own design principle that delivery and durable catch-up are the same artifact only when a caller actually opts a message into it. A caller that wants an offline member to be able to catch up on this specific message later passes true; every other send stays exactly as before.
    */
   async sendRoomMessage(
     roomId: string,
@@ -41,6 +44,7 @@ export class RoomMessaging {
     content: string,
     replyTo?: string,
     streamingBehavior?: StreamingBehavior,
+    durable?: boolean,
   ): Promise<RoomMessage> {
     const room = this.deps.rooms.get(roomId);
     if (!room)
@@ -48,10 +52,22 @@ export class RoomMessaging {
     if (!room.members.includes(from))
       throw new CommsError(`Not a member of ${roomId}`, "NOT_MEMBER");
 
-    const { slot, clock } = this.deps.requireIdentity();
+    const { slot, clock, identity, dataStorage } = this.deps.requireIdentity();
     const token = loadRoomTokens(slot)[roomId];
     if (token === undefined) {
       throw new CommsError(`No room:member token for ${roomId}`, "NOT_MEMBER");
+    }
+
+    if (durable === true) {
+      await recordRoomSendNotice(
+        { identity, clock, storage: dataStorage },
+        {
+          room: roomId,
+          token,
+          contentType: "text/plain",
+          content: new TextEncoder().encode(content),
+        },
+      );
     }
 
     const messageId = randomId();
