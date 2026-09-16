@@ -9,6 +9,7 @@ import { spawn } from "node:child_process";
 import { test, expect } from "vitest";
 import {
   loadOrCreateIdentity,
+  oplogDirFor,
   releaseIdentityLock,
   type IdentitySlot,
 } from "../core/identity-store.js";
@@ -155,4 +156,15 @@ test("a corrupt identity file is regenerated", () => {
   const regenerated = loadOrCreateIdentity(slot);
   expect(regenerated.fingerprint).toMatch(/^[0-9A-F]{2}(:[0-9A-F]{2})+$/);
   releaseIdentityLock(slot);
+});
+
+test("oplogDirFor is a sibling directory of the identity file, distinct per (harness, cwd)", () => {
+  const { slot, dir } = tempSlot("pi");
+  const oplogDir = oplogDirFor(slot);
+  expect(path.dirname(oplogDir)).toBe(dir);
+  expect(oplogDir).not.toBe(dir);
+  expect(oplogDirFor({ ...slot, cwd: "/tmp/other-project" })).not.toBe(
+    oplogDir,
+  );
+  expect(oplogDirFor({ ...slot, harness: "claude-code" })).not.toBe(oplogDir);
 });

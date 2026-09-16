@@ -156,6 +156,13 @@ function slotPaths(slot: Readonly<IdentitySlot>): {
   };
 }
 
+/** Directory this slot's own room-notice oplog is stored under (createNodeFsStorage's own dir option), mirroring the identity file's per-(harness, cwd) naming convention -- a sibling directory rather than a sibling file, since an oplog needs its own directory tree (one entry per sequence number) rather than a single JSON blob. */
+export function oplogDirFor(slot: Readonly<IdentitySlot>): string {
+  const { dir } = slotPaths(slot);
+  const base = `oplog-${slot.harness}--${slugifyCwd(slot.cwd)}`;
+  return path.join(dir, base);
+}
+
 function isPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
