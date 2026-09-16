@@ -8,6 +8,7 @@
  */
 
 import type { MeshVisibility } from "./types.js";
+import { nanoid } from "./nanoid.js";
 
 // ---------------------------------------------------------------------------
 // Discovered mesh
@@ -58,12 +59,23 @@ export interface DiscoveryBackend {
 // Discovery manager
 // ---------------------------------------------------------------------------
 
+/** An advertisement DiscoveryManager currently considers live -- the caller-visible external id, which backend to it, the backend's own internal id (needed to address stopAdvertising/a future re-advertisement), and the original opts (needed to genuinely re-advertise on resume, not just forget the advertisement ever happened). */
+interface ActiveAdvertisement {
+  backendName: string;
+  backendId: string;
+  opts: AdvertiseOptions;
+}
+
 export class DiscoveryManager {
   private readonly backends = new Map<string, DiscoveryBackend>();
-  private readonly activeAdvertisements = new Map<string, string>();
+  /** Keyed by the stable, caller-visible external id DiscoveryManager itself mints -- deliberately never the backend's own returned id, since a backend is free to return a different id on every startAdvertising call (a real, un-mocked backend calling it deterministically is incidental, not a contract this class may rely on) and a caller must be able to keep using the same id it was given across a pause/resume cycle. */
+  private readonly activeAdvertisements = new Map<
+    string,
+    ActiveAdvertisement
+  >();
   private meshVisibility: MeshVisibility = "discoverable";
   private readonly perAdapterVisibility = new Map<string, MeshVisibility>();
-  /** Advertisements that were paused due to visibility changes. */
+  /** Advertisements paused due to a visibility change, keyed by the same external id -- carries the real original opts (not a placeholder) so resuming can genuinely call startAdvertising again. */
   private readonly pausedAdvertisements = new Map<
     string,
     { backendName: string; opts: AdvertiseOptions }
@@ -74,7 +86,7 @@ export class DiscoveryManager {
     this.backends.set(backend.name, backend);
   }
 
-  /** Start advertising on a specific backend. Returns an advertisement ID. */
+  /** Start advertising on a specific backend. Returns a stable external advertisement id, distinct from whatever id the backend itself returns internally. */
   async advertise(
     backendName: string,
     opts: Readonly<AdvertiseOptions>,
@@ -85,8 +97,9 @@ export class DiscoveryManager {
         `Unknown discovery backend: "${backendName}". Available: ${[...this.backends.keys()].join(", ")}`,
       );
     }
-    const id = await backend.startAdvertising(opts);
-    this.activeAdvertisements.set(id, backendName);
+    const backendId = await backend.startAdvertising(opts);
+    const id = nanoid();
+    this.activeAdvertisements.set(id, { backendName, backendId, opts });
     return id;
   }
 
@@ -154,16 +167,15 @@ export class DiscoveryManager {
   }
 
   private async pauseAllAdvertisements(): Promise<void> {
-    // Capture current ads before clearing
-    for (const [id, backendName] of this.activeAdvertisements) {
-      // We've lost the original opts — but we can just stop the ad
+    // Capture current ads' real opts before clearing, so resume can genuinely re-advertise rather than merely forgetting the pause happened.
+    for (const [id, active] of this.activeAdvertisements) {
       this.pausedAdvertisements.set(id, {
-        backendName,
-        opts: { name: "resumed", port: 0 },
+        backendName: active.backendName,
+        opts: active.opts,
       });
-      const backend = this.backends.get(backendName);
+      const backend = this.backends.get(active.backendName);
       if (backend) {
-        await backend.stopAdvertising(id).catch(() => {
+        await backend.stopAdvertising(active.backendId).catch(() => {
           /* intentionally empty — best-effort stop */
         });
       }
@@ -174,15 +186,15 @@ export class DiscoveryManager {
   private async pauseAdvertisementsForBackend(
     backendName: string,
   ): Promise<void> {
-    for (const [id, bn] of this.activeAdvertisements) {
-      if (bn === backendName) {
+    for (const [id, active] of this.activeAdvertisements) {
+      if (active.backendName === backendName) {
         this.pausedAdvertisements.set(id, {
           backendName,
-          opts: { name: "resumed", port: 0 },
+          opts: active.opts,
         });
         const backend = this.backends.get(backendName);
         if (backend) {
-          await backend.stopAdvertising(id).catch(() => {
+          await backend.stopAdvertising(active.backendId).catch(() => {
             /* intentionally empty — best-effort stop */
           });
         }
@@ -200,32 +212,44 @@ export class DiscoveryManager {
   }
 
   private async resumeAllAdvertisements(): Promise<void> {
-    // Restart backends first (they may have been stopped in "dark" mode) Note: backends reinitialise their sockets on next startAdvertising/discover call.
-    for (const [id] of this.pausedAdvertisements) {
+    // Backends reinitialise their own sockets/timers on the next startAdvertising call -- nothing extra needed here beyond actually calling it, which is the whole fix: resuming used to just forget the pause happened rather than genuinely re-advertising.
+    for (const [id, entry] of this.pausedAdvertisements) {
       this.pausedAdvertisements.delete(id);
-      // We can't fully resume without original opts — the caller must re-advertise. Mark as not paused so new advertise calls work.
+      const backend = this.backends.get(entry.backendName);
+      if (!backend) continue;
+      const backendId = await backend.startAdvertising(entry.opts);
+      this.activeAdvertisements.set(id, {
+        backendName: entry.backendName,
+        backendId,
+        opts: entry.opts,
+      });
     }
-    return Promise.resolve();
   }
 
   private async resumeAdvertisementsForBackend(
     backendName: string,
   ): Promise<void> {
     for (const [id, entry] of this.pausedAdvertisements) {
-      if (entry.backendName === backendName) {
-        this.pausedAdvertisements.delete(id);
-      }
+      if (entry.backendName !== backendName) continue;
+      this.pausedAdvertisements.delete(id);
+      const backend = this.backends.get(backendName);
+      if (!backend) continue;
+      const backendId = await backend.startAdvertising(entry.opts);
+      this.activeAdvertisements.set(id, {
+        backendName,
+        backendId,
+        opts: entry.opts,
+      });
     }
-    return Promise.resolve();
   }
 
-  /** Stop a previously started advertisement. */
+  /** Stop a previously started advertisement, addressed by its stable external id. */
   async stopAdvertising(id: string): Promise<void> {
-    const backendName = this.activeAdvertisements.get(id);
-    if (backendName === undefined) return;
-    const backend = this.backends.get(backendName);
+    const active = this.activeAdvertisements.get(id);
+    if (active === undefined) return;
+    const backend = this.backends.get(active.backendName);
     if (!backend) return;
-    await backend.stopAdvertising(id);
+    await backend.stopAdvertising(active.backendId);
     this.activeAdvertisements.delete(id);
   }
 
