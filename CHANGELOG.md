@@ -1,3 +1,9 @@
+## [2.31.1](https://github.com/ExaDev/agent-comms/compare/v2.31.0...v2.31.1) (2026-09-16)
+
+### Bug Fixes
+
+* **core:** actually re-advertise on discovery visibility resume ([76c00ac](https://github.com/ExaDev/agent-comms/commit/76c00acd3af713629782f277fbc2b0880bda1389))
+
 ## [2.31.0](https://github.com/ExaDev/agent-comms/compare/v2.30.0...v2.31.0) (2026-09-16)
 
 ### Features
