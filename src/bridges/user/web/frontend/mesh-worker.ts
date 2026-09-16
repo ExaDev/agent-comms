@@ -35,7 +35,7 @@ declare const self: SharedWorkerGlobalScope;
 // Wire protocol types (inlined — mirrors core/wire-protocol.ts)
 // ---------------------------------------------------------------------------
 
-interface AgentIdentity {
+export interface AgentIdentity {
   id: string;
   name: string;
   harness: string;
@@ -48,7 +48,7 @@ interface AgentIdentity {
   subscribedRooms: string[];
 }
 
-interface Room {
+export interface Room {
   id: string;
   name: string;
   type: "public" | "private" | "secret";
@@ -130,12 +130,12 @@ type WorkerOutbound =
 // Lightweight mesh state
 // ---------------------------------------------------------------------------
 
-const agents = new Map<string, AgentIdentity>();
-const rooms = new Map<string, Room>();
-const messages = new Map<string, RoomMessage[]>();
-const dms = new Map<string, DmMessage[]>();
+export const agents = new Map<string, AgentIdentity>();
+export const rooms = new Map<string, Room>();
+export const messages = new Map<string, RoomMessage[]>();
+export const dms = new Map<string, DmMessage[]>();
 
-function applyStateSync(state: SerialisedState): void {
+export function applyStateSync(state: SerialisedState): void {
   for (const [id, agent] of Object.entries(state.agents)) {
     agents.set(id, agent);
   }
@@ -150,23 +150,14 @@ function applyStateSync(state: SerialisedState): void {
   }
 }
 
-function applyPatch(patch: MeshStatePatch): void {
+/**
+ * Applies one server-sent patch to local state. Never merges with the existing local copy -- the worker holds a single WebSocket connection to exactly one server, and the server has already computed the fully-merged, authoritative record (delivery-engine.ts's own version-gated CRDT merge) before ever broadcasting it, so whatever a patch carries IS the correct state, full stop. Merging on top of a possibly-stale local copy (the previous behaviour) can only make things worse -- e.g. resurrecting a room or member the server already removed, since the worker has no version field to know its own copy might already be the older one.
+ */
+export function applyPatch(patch: MeshStatePatch): void {
   switch (patch.type) {
-    case "agent_upsert": {
-      const existing = agents.get(patch.agent.id);
-      if (existing) {
-        const merged = patch.agent;
-        for (const r of existing.subscribedRooms) {
-          if (!merged.subscribedRooms.includes(r)) {
-            merged.subscribedRooms.push(r);
-          }
-        }
-        agents.set(merged.id, merged);
-      } else {
-        agents.set(patch.agent.id, patch.agent);
-      }
+    case "agent_upsert":
+      agents.set(patch.agent.id, patch.agent);
       break;
-    }
     case "agent_offline": {
       const agent = agents.get(patch.agentId);
       if (agent) {
@@ -175,19 +166,9 @@ function applyPatch(patch: MeshStatePatch): void {
       }
       break;
     }
-    case "room_upsert": {
-      const existing = rooms.get(patch.room.id);
-      if (existing) {
-        const merged = patch.room;
-        for (const m of existing.members) {
-          if (!merged.members.includes(m)) merged.members.push(m);
-        }
-        rooms.set(merged.id, merged);
-      } else {
-        rooms.set(patch.room.id, patch.room);
-      }
+    case "room_upsert":
+      rooms.set(patch.room.id, patch.room);
       break;
-    }
     case "room_delete":
       rooms.delete(patch.roomId);
       break;
@@ -228,7 +209,7 @@ function applyPatch(patch: MeshStatePatch): void {
   }
 }
 
-function getStateSnapshot(): StateSnapshot {
+export function getStateSnapshot(): StateSnapshot {
   return {
     agents: [...agents.values()],
     rooms: [...rooms.values()],
@@ -390,30 +371,33 @@ function isWorkerInbound(value: unknown): value is WorkerInbound {
 // Entry point — listen for SharedWorker connections
 // ---------------------------------------------------------------------------
 
-self.addEventListener("connect", (event: MessageEvent) => {
-  const rawPort = event.ports[0];
-  if (rawPort === undefined) return;
-  // MessagePort satisfies MessagePortLike (has postMessage, close, onmessage)
-  ports.add(rawPort);
+/** Registers the real SharedWorker entry point. Guarded on `self` actually existing as a SharedWorkerGlobalScope: this module is imported directly (not just bundled) by unit tests exercising the pure reducer functions above, and a plain Node test environment has no global `self` at all. */
+if (typeof self !== "undefined") {
+  self.addEventListener("connect", (event: MessageEvent) => {
+    const rawPort = event.ports[0];
+    if (rawPort === undefined) return;
+    // MessagePort satisfies MessagePortLike (has postMessage, close, onmessage)
+    ports.add(rawPort);
 
-  // Send current state to the new port
-  try {
-    rawPort.postMessage(
-      JSON.stringify({
-        type: "state",
-        state: getStateSnapshot(),
-      } satisfies WorkerOutbound),
-    );
-  } catch {
-    // Port not ready yet — will get state on next update
-  }
-
-  rawPort.onmessage = (e: MessageEvent) => {
-    const parsed: unknown = JSON.parse(
-      typeof e.data === "string" ? e.data : String(e.data),
-    );
-    if (isWorkerInbound(parsed)) {
-      handlePortMessage(parsed);
+    // Send current state to the new port
+    try {
+      rawPort.postMessage(
+        JSON.stringify({
+          type: "state",
+          state: getStateSnapshot(),
+        } satisfies WorkerOutbound),
+      );
+    } catch {
+      // Port not ready yet — will get state on next update
     }
-  };
-});
+
+    rawPort.onmessage = (e: MessageEvent) => {
+      const parsed: unknown = JSON.parse(
+        typeof e.data === "string" ? e.data : String(e.data),
+      );
+      if (isWorkerInbound(parsed)) {
+        handlePortMessage(parsed);
+      }
+    };
+  });
+}
