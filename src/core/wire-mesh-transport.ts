@@ -72,6 +72,17 @@ const LISTENER_ID_LENGTH = 8;
 /** The domain-qualified gossip extension key this transport reads/writes presence under, per wire-mesh's own gossip-extension-namespacing convention (spec/CONVENTIONS.md): `<domain>/<field>`, never a bare name a second application's own extension could collide with. */
 const PRESENCE_GOSSIP_KEY = "presence/status";
 
+/** The domain-qualified gossip extension key this transport writes this side's own currently-hosted public/private rooms under -- the write half of P3.8's room-discovery replacement for createRoom's own broadcastPatch (agent-comms#48). Same namespacing convention as PRESENCE_GOSSIP_KEY. */
+const HOSTED_ROOMS_GOSSIP_KEY = "room/hosted";
+
+/** The lightweight, gossip-safe shape a room advertises itself under: enough for a peer to display "this device hosts a discoverable room here" without exposing anything membership- or grant-related. Deliberately excludes secret rooms (never worth advertising at all) and every CRDT membership field a real Room carries -- a gossip-discovered entry is a hint pointing at a room to join, not a substitute for the real Room object join/admission still produces. */
+export interface HostedRoomAdvert {
+  path: string;
+  name: string;
+  type: "public" | "private";
+  description: string;
+}
+
 /** This project's own namespaced domain (registrant "exadev.io", local name "agent-comms-v1"), matching namespaced-domain-id's "<registrant>/<local-name>" shape -- registry/core-domains.md's own recommended pattern for a third party. Exported for test use only: a security test simulating a hostile client that skips connect_request needs to construct a well-formed frame under the same domain/verb/scope this transport itself listens on, rather than duplicating these as separately-maintained magic strings that could silently drift from the real values. */
 export const DOMAIN = "exadev.io/agent-comms-v1";
 
@@ -207,10 +218,13 @@ export class WireMeshTransport implements MeshTransport {
 
   private readonly pendingConnectionTimeoutMs: number;
 
-  /** Reads this side's own current AgentStatus for the next presence re-advertisement tick -- a pull, not a push, so MeshStore never needs to reach into this transport's internals on every status change (see updateAgent/setAgentOffline, which patch MeshStore's own agents map and let the next tick pick it up). undefined when no presence source was wired in (every existing construction site that predates this feature), in which case the interval below is never even started. */
+  /** Reads this side's own current AgentStatus for the next gossip re-advertisement tick -- a pull, not a push, so MeshStore never needs to reach into this transport's internals on every status change (see updateAgent/setAgentOffline, which patch MeshStore's own agents map and let the next tick pick it up). undefined when no presence source was wired in (every existing construction site that predates this feature). */
   private readonly getCurrentPresence:
     (() => AgentStatus | undefined) | undefined;
-  private presenceInterval: ReturnType<typeof setInterval> | undefined;
+  /** Reads this side's own currently-hosted public/private rooms for the next gossip re-advertisement tick, the same pull-not-push shape getCurrentPresence already established -- createRoom/destroyRoom patch MeshStore's own rooms map and let the next tick pick it up, rather than pushing an update here on every mutation. undefined when no hosted-rooms source was wired in. */
+  private readonly getHostedRooms:
+    (() => readonly HostedRoomAdvert[]) | undefined;
+  private gossipInterval: ReturnType<typeof setInterval> | undefined;
 
   constructor(
     events: Readonly<TransportEvents>,
@@ -219,6 +233,7 @@ export class WireMeshTransport implements MeshTransport {
     pendingConnectionTimeoutMs: number = DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
     getCurrentPresence?: () => AgentStatus | undefined,
     presenceReadvertiseIntervalMs: number = PRESENCE_READVERTISE_INTERVAL_MS,
+    getHostedRooms?: () => readonly HostedRoomAdvert[],
   ) {
     this.events = events;
     this.wireTransport = createTlsTransport({
@@ -232,26 +247,30 @@ export class WireMeshTransport implements MeshTransport {
     });
     this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;
     this.getCurrentPresence = getCurrentPresence;
-    if (getCurrentPresence !== undefined) {
-      this.presenceInterval = setInterval(() => {
-        this.readvertisePresence();
+    this.getHostedRooms = getHostedRooms;
+    if (getCurrentPresence !== undefined || getHostedRooms !== undefined) {
+      this.gossipInterval = setInterval(() => {
+        this.readvertiseGossip();
       }, presenceReadvertiseIntervalMs);
-      this.presenceInterval.unref();
+      this.gossipInterval.unref();
     }
   }
 
-  /** Re-sends this side's own current presence status onto every live session's gossip self-advert. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. A no-op tick (nothing to advertise, because getCurrentPresence returned undefined, or no sessions exist yet) is expected and silent. */
-  private readvertisePresence(): void {
+  /** Re-sends this side's own current presence status and currently-hosted rooms, together, onto every live session's gossip self-advert -- one gossip frame per tick carrying whichever of the two sources is wired in, rather than a separate frame per fact. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. A no-op tick (neither source wired in, or no sessions exist yet) is expected and silent. */
+  private readvertiseGossip(): void {
+    const extensions: Record<string, unknown> = {};
     const status = this.getCurrentPresence?.();
-    if (status === undefined) return;
+    if (status !== undefined) extensions[PRESENCE_GOSSIP_KEY] = status;
+    const hostedRooms = this.getHostedRooms?.();
+    if (hostedRooms !== undefined)
+      extensions[HOSTED_ROOMS_GOSSIP_KEY] = hostedRooms;
+    if (Object.keys(extensions).length === 0) return;
     for (const session of this.allSessions) {
-      session
-        .sendGossipUpdate({ [PRESENCE_GOSSIP_KEY]: status })
-        .catch((error: unknown) => {
-          this.events.onError?.(
-            error instanceof Error ? error : new Error(String(error)),
-          );
-        });
+      session.sendGossipUpdate(extensions).catch((error: unknown) => {
+        this.events.onError?.(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      });
     }
   }
 
@@ -799,9 +818,9 @@ export class WireMeshTransport implements MeshTransport {
 
   async shutdown(): Promise<void> {
     this.shutDown = true;
-    if (this.presenceInterval !== undefined) {
-      clearInterval(this.presenceInterval);
-      this.presenceInterval = undefined;
+    if (this.gossipInterval !== undefined) {
+      clearInterval(this.gossipInterval);
+      this.gossipInterval = undefined;
     }
     this.dataDials.clear();
 
