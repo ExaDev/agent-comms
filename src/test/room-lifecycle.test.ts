@@ -369,6 +369,78 @@ describe("RoomLifecycle — listRooms", () => {
     const result = await h.lifecycle.listRooms(h.ids.memberId);
     expect(result.map((r) => r.id)).toEqual(["sec"]);
   });
+
+  it("merges in a gossip-discovered room not otherwise locally known, as a placeholder-shaped Room", async () => {
+    const h = await makeHarness();
+    h.deps.requireTransport = () =>
+      ({
+        listKnownDevices: () => [
+          {
+            deviceId: h.ids.ownerId,
+            advert: {
+              "room/hosted": [
+                {
+                  path: "discovered-room",
+                  name: "discovered",
+                  type: "public",
+                  description: "found via gossip",
+                },
+              ],
+            },
+          },
+        ],
+      }) as unknown as ReturnType<RoomLifecycleDeps["requireTransport"]>;
+
+    const result = await h.lifecycle.listRooms(h.ids.memberId);
+    const discovered = result.find((r) => r.id === "discovered-room");
+    expect(discovered).toMatchObject({
+      id: "discovered-room",
+      name: "discovered",
+      type: "public",
+      owner: h.ids.ownerId,
+      description: "found via gossip",
+      members: [],
+    });
+  });
+
+  it("never lets a gossip-discovered room shadow a room this store already knows locally", async () => {
+    const h = await makeHarness();
+    h.deps.rooms.set(
+      "already-known",
+      room({ id: "already-known", type: "public", description: "real" }),
+    );
+    h.deps.requireTransport = () =>
+      ({
+        listKnownDevices: () => [
+          {
+            deviceId: h.ids.ownerId,
+            advert: {
+              "room/hosted": [
+                {
+                  path: "already-known",
+                  name: "stale-gossip-copy",
+                  type: "public",
+                  description: "gossip",
+                },
+              ],
+            },
+          },
+        ],
+      }) as unknown as ReturnType<RoomLifecycleDeps["requireTransport"]>;
+
+    const result = await h.lifecycle.listRooms(h.ids.memberId);
+    expect(result.filter((r) => r.id === "already-known")).toHaveLength(1);
+    expect(result.find((r) => r.id === "already-known")?.description).toBe(
+      "real",
+    );
+  });
+
+  it("ignores a transport with no listKnownDevices capability, matching every construction site that predates this feature", async () => {
+    const h = await makeHarness();
+    h.deps.rooms.set("pub", room({ id: "pub", type: "public" }));
+    const result = await h.lifecycle.listRooms(h.ids.memberId);
+    expect(result.map((r) => r.id)).toEqual(["pub"]);
+  });
 });
 
 // joinRoom's own `this.deps.rooms.set(roomId, room)` and `this.deps.agents.set(agentId, agent)` calls each have one provable equivalent mutant Stryker still raises: removing them. Both `room` and `agent` are the same object references already fetched via `.get()`, and every mutation up to each call (bump/recordMemberOp/refreshMembership for room; push/bump for agent) already happened in place on that reference -- so re-setting the map entry to the identical reference it already holds changes nothing observable, the same Map.set-same-reference pattern documented throughout this repo's own mutation-testing work (agent-registry.ts's setAgentOffline, delivery-engine.ts's applyPatch(agent_offline)).
