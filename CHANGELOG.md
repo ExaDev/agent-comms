@@ -1,3 +1,13 @@
+## [3.0.0](https://github.com/ExaDev/agent-comms/compare/v2.31.1...v3.0.0) (2026-09-16)
+
+### ⚠ BREAKING CHANGES
+
+* **core:** retire federation.ts in favour of wire-mesh's own connectToRemote
+
+### Features
+
+* **core:** retire federation.ts in favour of wire-mesh's own connectToRemote ([4232b08](https://github.com/ExaDev/agent-comms/commit/4232b08041e4dad95b6e45d4247a00462d24cae2)), references [agent-comms#48](https://github.com/agent-comms/issues/48)
+
 ## [2.31.1](https://github.com/ExaDev/agent-comms/compare/v2.31.0...v2.31.1) (2026-09-16)
 
 ### Bug Fixes
