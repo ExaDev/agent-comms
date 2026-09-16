@@ -41,6 +41,7 @@ import {
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { FederationManager } from "./federation.js";
 import type { MeshTransport } from "./transport.js";
+import type { HostedRoomAdvert } from "./wire-mesh-transport.js";
 import type {
   AgentIdentity,
   AgentStatus,
@@ -48,6 +49,21 @@ import type {
   RoomMessage,
   RoomType,
 } from "./types.js";
+
+/** Narrows an untrusted gossiped value (WireMeshTransport.listKnownDevices' own advert["room/hosted"], self-asserted by whichever peer advertised it) into a HostedRoomAdvert -- a malformed or non-conforming entry is silently skipped rather than treated as an error, the same convention presence/status' own gossip consumption already established: this is a discovery hint over self-asserted data, not a security check. */
+function isHostedRoomAdvert(value: unknown): value is HostedRoomAdvert {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("path" in value) || typeof value.path !== "string") return false;
+  if (!("name" in value) || typeof value.name !== "string") return false;
+  if (
+    !("type" in value) ||
+    (value.type !== "public" && value.type !== "private")
+  )
+    return false;
+  if (!("description" in value) || typeof value.description !== "string")
+    return false;
+  return true;
+}
 
 /** The state and collaborators RoomLifecycle needs from MeshStore. rooms/messages/agents/dmRequestsInitiatedByMe are direct references into MeshStore's own fields (dmRequestsInitiatedByMe shared with RoomProtocol, which reads what requestDmAccess writes here); deliveryEngine and federation are the already-constructed instances, narrowed to what room CRUD ever needs. */
 export interface RoomLifecycleDeps {
@@ -159,6 +175,44 @@ export class RoomLifecycle {
       if (room.type === "secret" && !room.members.includes(requesterId))
         continue;
       result.push(room);
+    }
+    for (const discovered of this.listDiscoverableRooms()) {
+      if (this.deps.rooms.has(discovered.path)) continue;
+      result.push({
+        id: discovered.path,
+        version: 0,
+        name: discovered.name,
+        type: discovered.type,
+        owner: discovered.ownerDeviceId,
+        createdAt: "",
+        description: discovered.description,
+        members: [],
+        invited: [],
+        memberJoins: {},
+        memberLeaves: {},
+        invitedJoins: {},
+        invitedLeaves: {},
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Every public/private room this store has heard gossiped by another device but never joined or otherwise locally recorded -- the read half of P3.8's room-discovery replacement for createRoom's own broadcastPatch (agent-comms#48/#50). Never merged into this.deps.rooms: a gossip hint is not membership, and a room this store was never admitted to has nothing real to synthesize beyond what the advert itself carries. Secret rooms never need filtering here the way listRooms' own local-room check needs -- HostedRoomAdvert's own type field is restricted to "public" | "private" at the source (WireMeshTransport's getHostedRooms), so a secret room is never gossiped under this key at all.
+   */
+  private listDiscoverableRooms(): readonly (HostedRoomAdvert & {
+    ownerDeviceId: string;
+  })[] {
+    const transport = this.deps.requireTransport();
+    if (transport.listKnownDevices === undefined) return [];
+    const result: (HostedRoomAdvert & { ownerDeviceId: string })[] = [];
+    for (const { deviceId, advert } of transport.listKnownDevices()) {
+      const hosted = advert["room/hosted"];
+      if (!Array.isArray(hosted)) continue;
+      for (const candidate of hosted) {
+        if (!isHostedRoomAdvert(candidate)) continue;
+        result.push({ ...candidate, ownerDeviceId: deviceId });
+      }
     }
     return result;
   }

@@ -251,4 +251,12 @@ export interface MeshTransport {
    * Unref all root handles so the event loop can exit when the agent process shuts down. Sockets still function for I/O but don't keep the process alive.
    */
   unref: () => void;
+
+  /**
+   * Every device this side has ever heard gossip from, mesh-wide, with each one's own latest full advert (any open-extension field such as room/hosted). Optional: WireMeshTransport is the only implementation that offers it today (agent-comms#48/#50's own gossip-directory aggregation), so a caller (listRooms' own room-discovery merge) must treat its absence as "nothing to merge," never assume every MeshTransport has it.
+   */
+  listKnownDevices?: () => readonly {
+    deviceId: string;
+    advert: Readonly<Record<string, unknown>>;
+  }[];
 }
