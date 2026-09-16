@@ -405,6 +405,7 @@ export class WireMeshTransport implements MeshTransport {
     const identity = await this.identityReady;
     const session = await acceptMeshSession(connection, identity, [DOMAIN], {
       onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+      addresses: this.advertisedAddresses,
     });
     if (this.isShuttingDown()) {
       await session.close();
@@ -619,6 +620,7 @@ export class WireMeshTransport implements MeshTransport {
     const identity = await this.identityReady;
     const session = await acceptMeshSession(connection, identity, [DOMAIN], {
       onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+      addresses: this.advertisedAddresses,
     });
     this.coordinatorSession = session;
     const coordinatorDeviceId = connection.peerDeviceId;
@@ -717,6 +719,7 @@ export class WireMeshTransport implements MeshTransport {
     const identity = await this.identityReady;
     const session = await acceptMeshSession(connection, identity, [DOMAIN], {
       onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+      addresses: this.advertisedAddresses,
     });
     if (this.isShuttingDown()) {
       this.dataDials.delete(peer.id);
@@ -800,6 +803,7 @@ export class WireMeshTransport implements MeshTransport {
     const identity = await this.identityReady;
     const session = await acceptMeshSession(connection, identity, [DOMAIN], {
       onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+      addresses: this.advertisedAddresses,
     });
     const outcome = await session.sendManageRequest(
       buildCommand({
@@ -911,6 +915,15 @@ export class WireMeshTransport implements MeshTransport {
       policy: tracked.policy,
       isDefault: tracked.isDefault,
     }));
+  }
+
+  /**
+   * This side's own directly-reachable "host:port" candidates (wire-mesh#38), passed into every acceptMeshSession call's own self-advert. Deliberately excludes the default bootstrap coordinator listener -- it always binds COORDINATOR_HOST (127.0.0.1, hardcoded, never configurable), which is meaningless to advertise to a remote peer -- and includes only listeners an operator explicitly registered via addListener, which by construction represent a deliberate "make me reachable from elsewhere" declaration.
+   */
+  private get advertisedAddresses(): string[] {
+    return [...this.coordinatorListeners.values()]
+      .filter((tracked) => !tracked.isDefault)
+      .map((tracked) => `${tracked.host}:${String(tracked.port)}`);
   }
 
   // -----------------------------------------------------------------------
