@@ -6,6 +6,7 @@ import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type { RevocationEntry } from "wire-mesh-core/generated/protocol";
 import { bytesFromHex } from "wire-mesh-core/domain/device-id";
 import { loadRoomTokens } from "./identity-store.js";
+import { dmRoomPath } from "./room-path.js";
 import {
   MAX_QUEUED_DELIVERIES_PER_AGENT,
   mergeMessageHistories,
@@ -429,7 +430,29 @@ export class DeliveryEngine {
   }
 
   /**
-   * Delivers an informational event (member_status, member_joined, name_changed, and the like -- never room_message/dm, which already ride handleRoomSend's own directed path) to every current member of a room. Queues locally for every member (matching every other queueDelivery caller's own "hold it for whoever reads it next" contract), then either fires local delivery directly for this store's own agent or sends a real, wire-authenticated room.notify to everyone else -- replacing the legacy mesh-wide broadcastPatch this used to ride via deliverLocallyAndBroadcast, per P3.8's own directed-delivery retirement (agent-comms#48). Silently skips a member this store holds no current room:member token for, the same best-effort-by-design choice markRead's own directed room.read already makes for an unreachable read receipt.
+   * Delivers a single informational event to one specific agent over a given room-path: queues it locally (matching every other queueDelivery caller's own "hold it for whoever reads it next" contract), then either fires local delivery directly for this store's own agent or sends a real, wire-authenticated room.notify -- replacing the legacy mesh-wide broadcastPatch every one of this method's callers used to ride via deliverLocallyAndBroadcast, per P3.8's own directed-delivery retirement (agent-comms#48). Silently does nothing beyond the local queue when this store holds no current room:member token for roomPath, the same best-effort-by-design choice markRead's own directed room.read already makes for an unreachable read receipt.
+   */
+  private async deliverToMember(
+    memberId: string,
+    roomPath: string,
+    event: DeliveryEvent,
+  ): Promise<void> {
+    this.queueDelivery(memberId, event);
+    if (memberId === this.deps.getPeerId()) {
+      this.fireLocalDelivery(memberId, event);
+      return;
+    }
+    const { slot } = this.deps.requireIdentity();
+    const token = loadRoomTokens(slot)[roomPath];
+    if (token === undefined) return;
+    await this.deps.sendRoomRequestToMember(memberId, roomPath, token, {
+      verb: "room.notify",
+      event,
+    });
+  }
+
+  /**
+   * Delivers an informational event (member_status, member_joined, name_changed, and the like -- never room_message/dm, which already ride handleRoomSend's own directed path) to every current member of a room, via deliverToMember for each.
    */
   async deliverToRoom(
     roomId: string,
@@ -438,21 +461,9 @@ export class DeliveryEngine {
   ): Promise<void> {
     const room = this.deps.rooms.get(roomId);
     if (!room) return;
-    const peerId = this.deps.getPeerId();
     for (const memberId of room.members) {
       if (memberId === excludeAgent) continue;
-      this.queueDelivery(memberId, event);
-      if (memberId === peerId) {
-        this.fireLocalDelivery(memberId, event);
-        continue;
-      }
-      const { slot } = this.deps.requireIdentity();
-      const token = loadRoomTokens(slot)[roomId];
-      if (token === undefined) continue;
-      await this.deps.sendRoomRequestToMember(memberId, roomId, token, {
-        verb: "room.notify",
-        event,
-      });
+      await this.deliverToMember(memberId, roomId, event);
     }
   }
 
@@ -488,8 +499,14 @@ export class DeliveryEngine {
     for (const roomId of agent.subscribedRooms) {
       await this.deliverToRoom(roomId, event, agentId);
     }
-    // Also deliver to the agent itself so it sees confirmation
-    await this.deliverLocallyAndBroadcast(agentId, event);
+    // Also deliver to the agent itself so it sees confirmation -- addressed via the implicit DM path when the renamed agent is a remote peer (e.g. renamed through the web console's own directory, which places no local-only restriction on which agent it targets), since a name change has no room context of its own to ride.
+    const peerId = this.deps.getPeerId();
+    if (agentId === peerId) {
+      this.queueDelivery(agentId, event);
+      this.fireLocalDelivery(agentId, event);
+      return;
+    }
+    await this.deliverToMember(agentId, dmRoomPath(peerId, agentId), event);
   }
 
   private async emitDeliveryStatus(
@@ -498,39 +515,25 @@ export class DeliveryEngine {
     status: DeliveryStatus,
     room?: string,
   ): Promise<void> {
-    // Find the sender for this message
-    const senderId = this.findMessageSender(messageId, room);
-    if (senderId === undefined) return;
-    await this.deliverLocallyAndBroadcast(senderId, {
+    const location = this.findMessageLocation(messageId, room);
+    if (location === undefined) return;
+    const { roomPath, from: senderId } = location;
+    const event: DeliveryEvent = {
       type: "delivery_status",
       messageId,
       agent: agentId,
       status,
       room,
-    });
-  }
-
-  private findMessageSender(
-    messageId: string,
-    room?: string,
-  ): string | undefined {
-    if (room !== undefined) {
-      const msgs = this.deps.messages.get(room);
-      if (msgs) {
-        const msg = msgs.find((m) => m.id === messageId);
-        if (msg) return msg.from;
-      }
-    } else {
-      // DM — search all DM queues
-      for (const [, msgs] of this.deps.dms) {
-        const msg = msgs.find((m) => m.id === messageId);
-        if (msg) return msg.from;
-      }
+    };
+    if (senderId === this.deps.getPeerId()) {
+      this.queueDelivery(senderId, event);
+      this.fireLocalDelivery(senderId, event);
+      return;
     }
-    return undefined;
+    await this.deliverToMember(senderId, roomPath, event);
   }
 
-  /** Like findMessageSender, but also returns the room-path a room.read needs to address: room itself for a room message, or the specific DM key (this.dms is keyed by dmRoomPath/"self:...", not the bare pair) the message was actually found under. */
+  /** Returns the room-path a directed room.notify/room.read needs to address for a given message: room itself for a room message, or the specific DM key (this.dms is keyed by dmRoomPath/"self:...", not the bare pair) the message was actually found under. */
   private findMessageLocation(
     messageId: string,
     room?: string,
