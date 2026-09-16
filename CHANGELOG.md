@@ -1,3 +1,9 @@
+## [3.0.2](https://github.com/ExaDev/agent-comms/compare/v3.0.1...v3.0.2) (2026-09-16)
+
+### Bug Fixes
+
+* **core:** name the actual mismatch when the mesh coordinator port is unusable ([97fcae2](https://github.com/ExaDev/agent-comms/commit/97fcae2630cd0e5427a6778559acdc35541d8e07))
+
 ## [3.0.1](https://github.com/ExaDev/agent-comms/compare/v3.0.0...v3.0.1) (2026-09-16)
 
 ### Bug Fixes
