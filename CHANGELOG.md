@@ -1,3 +1,9 @@
+## [2.22.0](https://github.com/ExaDev/agent-comms/compare/v2.21.19...v2.22.0) (2026-09-16)
+
+### Features
+
+* **core:** aggregate a mesh-wide known-devices view from gossip ([a8c3749](https://github.com/ExaDev/agent-comms/commit/a8c37498419f2c6e13802e46c5a624e5f1a7d307))
+
 ## [2.21.19](https://github.com/ExaDev/agent-comms/compare/v2.21.18...v2.21.19) (2026-09-16)
 
 ### Tests
