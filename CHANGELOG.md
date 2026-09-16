@@ -1,3 +1,9 @@
+## [2.29.0](https://github.com/ExaDev/agent-comms/compare/v2.28.0...v2.29.0) (2026-09-16)
+
+### Features
+
+* **core:** retire deliverToRoom's mesh-wide broadcast for a real directed room.notify ([7c0a606](https://github.com/ExaDev/agent-comms/commit/7c0a60689d2c077cf1359e399e5675f50cd273be)), references [agent-comms#48](https://github.com/agent-comms/issues/48)
+
 ## [2.28.0](https://github.com/ExaDev/agent-comms/compare/v2.27.0...v2.28.0) (2026-09-16)
 
 ### Features
