@@ -603,7 +603,10 @@ export class CommsTool {
     const connectToRemote = this.store.connectToRemote.bind(this.store);
     return tryMeshAction("connect", async () => {
       await connectToRemote(action.host, action.port);
-      return `Connection request sent to ${action.host}:${String(action.port)}.`;
+      const target = /^wss?:\/\//.test(action.host)
+        ? action.host
+        : `${action.host}:${String(action.port)}`;
+      return `Connection request sent to ${target}.`;
     });
   }
 
