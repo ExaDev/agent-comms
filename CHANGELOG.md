@@ -1,3 +1,9 @@
+## [3.0.1](https://github.com/ExaDev/agent-comms/compare/v3.0.0...v3.0.1) (2026-09-16)
+
+### Bug Fixes
+
+* **bridge:** stop the mesh SharedWorker merging patches on top of stale local state ([92f352e](https://github.com/ExaDev/agent-comms/commit/92f352e44da35fdf0d1e42ab9f9efa24b25475df))
+
 ## [3.0.0](https://github.com/ExaDev/agent-comms/compare/v2.31.1...v3.0.0) (2026-09-16)
 
 ### ⚠ BREAKING CHANGES
