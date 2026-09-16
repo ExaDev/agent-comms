@@ -5,7 +5,7 @@
  *
  * Transport is set via setTransport() (e.g. WireMeshTransport for encrypted connections) before init() or any other transport-using method is called -- there is no default, since every real bridge builds its own transport from this store's own events getter, which needs the store to already exist.
  *
- * MeshStore itself is an orchestrator: it owns the shared state (the core agents/rooms/messages/dms/deliveryQueues Maps and a handful of smaller fields) and constructs the collaborators that implement almost every behaviour against direct references into that state -- DeliveryEngine, FederationBridge, RoomProtocol, RoomMessaging, RoomLifecycle, AgentRegistry, ConnectionApproval, StaleAgentChecker, and PeerLifecycle. Every public method below that isn't inherently a MeshStore-level concern (transport/identity wiring, init/shutdown lifecycle, the events getter, mesh visibility, listener management, federation-adapter passthroughs) is a thin delegating wrapper to whichever collaborator now owns the real implementation, kept here only because CommsStore/MeshOnlyFeatures and a handful of concrete-only call sites (tests, bridge-mesh.ts, the web server, etc.) reach these names directly on a MeshStore-typed value.
+ * MeshStore itself is an orchestrator: it owns the shared state (the core agents/rooms/messages/dms/deliveryQueues Maps and a handful of smaller fields) and constructs the collaborators that implement almost every behaviour against direct references into that state -- DeliveryEngine, RoomProtocol, RoomMessaging, RoomLifecycle, AgentRegistry, ConnectionApproval, StaleAgentChecker, and PeerLifecycle. Every public method below that isn't inherently a MeshStore-level concern (transport/identity wiring, init/shutdown lifecycle, the events getter, mesh visibility, listener management) is a thin delegating wrapper to whichever collaborator now owns the real implementation, kept here only because CommsStore/MeshOnlyFeatures and a handful of concrete-only call sites (tests, bridge-mesh.ts, the web server, etc.) reach these names directly on a MeshStore-typed value.
  */
 
 import * as os from "node:os";
@@ -14,13 +14,9 @@ import { CommsError } from "./store.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
 import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
-import { FederationManager } from "./federation.js";
-import type { FedLink } from "./federation.js";
-import { getCertificateFingerprint } from "./identity.js";
 import { COORDINATOR_HOST } from "./mesh-store-shared.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import { DeliveryEngine } from "./delivery-engine.js";
-import { FederationBridge } from "./federation-bridge.js";
 import { RoomProtocol } from "./room-protocol.js";
 import { RoomMessaging } from "./room-messaging.js";
 import { RoomLifecycle } from "./room-lifecycle.js";
@@ -94,10 +90,8 @@ export class MeshStore implements CommsStore {
   private initialised = false;
 
   discovery: DiscoveryManager;
-  federation: FederationManager;
 
   private readonly deliveryEngine: DeliveryEngine;
-  private readonly federationBridge: FederationBridge;
   private readonly roomProtocol: RoomProtocol;
   private readonly roomMessaging: RoomMessaging;
   private readonly roomLifecycle: RoomLifecycle;
@@ -197,7 +191,7 @@ export class MeshStore implements CommsStore {
       getOnDelivery: () => this.onDelivery,
       getOnPatch: () => this.onPatch,
       isShutDown: () => this.isShutDown,
-      // RoomProtocol doesn't exist yet at this point in the constructor -- this closure resolves `this.roomProtocol` lazily, only once markRead actually calls it at runtime, well after the constructor has finished. Mirrors the lazy-`this`-capture pattern FederationManager's own callbacks use below.
+      // RoomProtocol doesn't exist yet at this point in the constructor -- this closure resolves `this.roomProtocol` lazily, only once markRead actually calls it at runtime, well after the constructor has finished.
       sendRoomRequestToMember: async (memberId, roomPath, token, params) =>
         this.roomProtocol.sendRoomRequestToMember(
           memberId,
@@ -206,20 +200,6 @@ export class MeshStore implements CommsStore {
           params,
         ),
     });
-
-    this.federationBridge = new FederationBridge({
-      agents: this.agents,
-      rooms: this.rooms,
-      messages: this.messages,
-      deliveryEngine: this.deliveryEngine,
-    });
-
-    // Federation manager — coordinator-to-coordinator links
-    this.federation = new FederationManager(
-      this.peerId, // mesh ID is the coordinator's peer ID
-      `mesh-${this.peerId}`,
-      this.federationBridge,
-    );
 
     this.roomProtocol = new RoomProtocol({
       rooms: this.rooms,
@@ -243,7 +223,6 @@ export class MeshStore implements CommsStore {
       agents: this.agents,
       requireIdentity: () => this.requireIdentity(),
       roomProtocol: this.roomProtocol,
-      federation: this.federation,
     });
 
     this.roomLifecycle = new RoomLifecycle({
@@ -255,7 +234,6 @@ export class MeshStore implements CommsStore {
       requireIdentity: () => this.requireIdentity(),
       requireTransport: () => this.requireTransport(),
       deliveryEngine: this.deliveryEngine,
-      federation: this.federation,
     });
 
     this.agentRegistry = new AgentRegistry({
@@ -265,7 +243,6 @@ export class MeshStore implements CommsStore {
       getPeerId: () => this.peerId,
       requireTransport: () => this.requireTransport(),
       deliveryEngine: this.deliveryEngine,
-      federation: this.federation,
     });
 
     this.connectionApproval = new ConnectionApproval({
@@ -505,7 +482,6 @@ export class MeshStore implements CommsStore {
       type: RoomType;
       owner: string;
       description: string;
-      federated?: boolean;
     }>,
   ): Promise<Room> {
     return this.roomLifecycle.createRoom(opts);
@@ -749,48 +725,6 @@ export class MeshStore implements CommsStore {
   }
 
   // -----------------------------------------------------------------------
-  // Federation (coordinator-to-coordinator)
-  // -----------------------------------------------------------------------
-
-  async fedConnect(host: string, port: number, name?: string): Promise<string> {
-    return this.federation.connect(host, port, name);
-  }
-
-  async fedDisconnect(linkId: string): Promise<void> {
-    await this.federation.disconnect(linkId);
-  }
-
-  fedLinks(): FedLink[] {
-    return this.federation.listLinks();
-  }
-
-  getFederationFingerprint(): string {
-    return getCertificateFingerprint(this.federation.tlsIdentity.certificate);
-  }
-
-  async fedTrust(fingerprint: string): Promise<void> {
-    this.federation.addTrustedFingerprint(fingerprint);
-    return Promise.resolve();
-  }
-
-  async fedUntrust(fingerprint: string): Promise<void> {
-    this.federation.removeTrustedFingerprint(fingerprint);
-    return Promise.resolve();
-  }
-
-  fedTrustedFingerprints(): string[] {
-    return this.federation.listTrustedFingerprints();
-  }
-
-  async fedListen(host: string, port: number): Promise<void> {
-    return this.federation.listen(host, port);
-  }
-
-  async fedStopListening(): Promise<void> {
-    return this.federation.stopListening();
-  }
-
-  // -----------------------------------------------------------------------
   // Shutdown
   // -----------------------------------------------------------------------
 
@@ -812,7 +746,6 @@ export class MeshStore implements CommsStore {
     }
 
     this.staleAgentChecker.stop();
-    await this.federation.shutdown();
     await this.requireTransport().shutdown();
   }
 }

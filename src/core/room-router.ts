@@ -58,19 +58,10 @@ function routeLegacyMessage(
       // Only ever reaches here if a session was somehow promoted without going through WireMeshTransport's own consumeQuarantined handling of it -- can't happen given every requiresApproval accept path routes through consumeQuarantined first, kept here only so an unrecognised-in-context method fails closed rather than falling to the onMessage case below.
       return;
     }
-    // Every other wire method -- mesh-state gossip (state_sync/state_update/peer_left) and the coordinator-to-coordinator federation methods -- has no dedicated TransportEvents callback and falls to the generic onMessage handler, exactly as the old unconditional default case did.
+    // Every other wire method -- mesh-state gossip (state_sync/state_update/peer_left) -- has no dedicated TransportEvents callback and falls to the generic onMessage handler, exactly as the old unconditional default case did.
     case "state_sync":
     case "state_update":
-    case "peer_left":
-    case "fed_handshake":
-    case "fed_ack":
-    case "fed_agent_visible":
-    case "fed_agent_gone":
-    case "fed_room_message":
-    case "fed_room_join":
-    case "fed_room_leave":
-    case "fed_ping":
-    case "fed_pong": {
+    case "peer_left": {
       events.onMessage(handle, message);
       return;
     }

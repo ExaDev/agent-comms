@@ -114,8 +114,6 @@ interface Harness {
   broadcastPatch: ReturnType<typeof vi.fn>;
   deliverToRoom: ReturnType<typeof vi.fn>;
   deliverToMember: ReturnType<typeof vi.fn>;
-  broadcastRoomJoin: ReturnType<typeof vi.fn>;
-  broadcastRoomLeave: ReturnType<typeof vi.fn>;
   sendRoomRequest: ReturnType<typeof vi.fn>;
   broadcastRevocation: ReturnType<typeof vi.fn>;
 }
@@ -155,8 +153,6 @@ async function makeHarness(): Promise<Harness> {
   const broadcastPatch = vi.fn().mockResolvedValue(undefined);
   const deliverToRoom = vi.fn().mockResolvedValue(undefined);
   const deliverToMember = vi.fn().mockResolvedValue(undefined);
-  const broadcastRoomJoin = vi.fn().mockResolvedValue(undefined);
-  const broadcastRoomLeave = vi.fn().mockResolvedValue(undefined);
   const broadcastRevocation = vi.fn().mockResolvedValue(undefined);
   const sendRoomRequest = vi.fn().mockResolvedValue({
     result: "error",
@@ -188,7 +184,6 @@ async function makeHarness(): Promise<Harness> {
       deliverToRoom,
       deliverToMember,
     },
-    federation: { broadcastRoomJoin, broadcastRoomLeave },
   };
 
   return {
@@ -202,8 +197,6 @@ async function makeHarness(): Promise<Harness> {
     broadcastPatch,
     deliverToRoom,
     deliverToMember,
-    broadcastRoomJoin,
-    broadcastRoomLeave,
     sendRoomRequest,
     broadcastRevocation,
   };
@@ -699,42 +692,6 @@ describe("RoomLifecycle — leaveRoom / leaveRemoteRoom", () => {
     expect(h.broadcastPatch).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "agent_upsert" }),
     );
-  });
-
-  it("notifies federated links only when the room is federated", async () => {
-    const federated = await makeHarness();
-    federated.deps.rooms.set(
-      "room-1",
-      room({
-        id: "room-1",
-        owner: federated.ids.ownerId,
-        members: [federated.ids.ownerId, federated.ids.memberId],
-        memberJoins: {
-          [federated.ids.ownerId]: 1,
-          [federated.ids.memberId]: 1,
-        },
-        federated: true,
-      }),
-    );
-    await federated.lifecycle.leaveRoom("room-1", federated.ids.memberId);
-    expect(federated.broadcastRoomLeave).toHaveBeenCalledWith(
-      "room-1",
-      federated.ids.memberId,
-    );
-
-    const plain = await makeHarness();
-    plain.deps.rooms.set(
-      "room-1",
-      room({
-        id: "room-1",
-        owner: plain.ids.ownerId,
-        members: [plain.ids.ownerId, plain.ids.memberId],
-        memberJoins: { [plain.ids.ownerId]: 1, [plain.ids.memberId]: 1 },
-        federated: false,
-      }),
-    );
-    await plain.lifecycle.leaveRoom("room-1", plain.ids.memberId);
-    expect(plain.broadcastRoomLeave).not.toHaveBeenCalled();
   });
 
   it("destroys the room when the last remaining member is also its own owner", async () => {

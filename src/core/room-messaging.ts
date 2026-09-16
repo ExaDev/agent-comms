@@ -10,7 +10,6 @@ import { recordRoomSendNotice } from "./room-notice-log.js";
 import { CommsError } from "./store.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import type { RoomProtocol } from "./room-protocol.js";
-import type { FederationManager } from "./federation.js";
 import type {
   AgentIdentity,
   DmMessage,
@@ -19,7 +18,7 @@ import type {
   StreamingBehavior,
 } from "./types.js";
 
-/** The state and collaborators RoomMessaging needs from MeshStore. rooms/messages/dms/agents are direct references into MeshStore's own fields; roomProtocol and federation are the already-constructed instances (construction order: ... -\> roomProtocol -\> roomMessaging -\> ...), narrowed to what sending a message or DM ever needs. */
+/** The state and collaborators RoomMessaging needs from MeshStore. rooms/messages/dms/agents are direct references into MeshStore's own fields; roomProtocol is the already-constructed instance (construction order: ... -\> roomProtocol -\> roomMessaging -\> ...), narrowed to what sending a message or DM ever needs. */
 export interface RoomMessagingDeps {
   rooms: Map<string, Room>;
   messages: Map<string, RoomMessage[]>;
@@ -27,7 +26,6 @@ export interface RoomMessagingDeps {
   agents: Map<string, AgentIdentity>;
   requireIdentity: () => MeshStoreIdentity;
   roomProtocol: Pick<RoomProtocol, "sendRoomRequestToMember">;
-  federation: Pick<FederationManager, "forwardRoomMessage">;
 }
 
 export class RoomMessaging {
@@ -86,11 +84,6 @@ export class RoomMessaging {
     const arr = this.deps.messages.get(roomId) ?? [];
     arr.push(message);
     this.deps.messages.set(roomId, arr);
-
-    // Forward to federated links if the room is federated
-    if (room.federated === true) {
-      await this.deps.federation.forwardRoomMessage(roomId, message);
-    }
 
     const params: Record<string, unknown> = {
       verb: "room.send",

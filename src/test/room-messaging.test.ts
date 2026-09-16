@@ -66,7 +66,6 @@ function agent(overrides: Partial<AgentIdentity> = {}): AgentIdentity {
 
 function makeHarness() {
   const sendRoomRequestToMember = vi.fn().mockResolvedValue(undefined);
-  const forwardRoomMessage = vi.fn().mockResolvedValue(undefined);
   const deps: RoomMessagingDeps = {
     rooms: new Map<string, Room>(),
     messages: new Map(),
@@ -80,13 +79,11 @@ function makeHarness() {
       dataStorage: {} as never,
     }),
     roomProtocol: { sendRoomRequestToMember },
-    federation: { forwardRoomMessage },
   };
   return {
     deps,
     messaging: new RoomMessaging(deps),
     sendRoomRequestToMember,
-    forwardRoomMessage,
   };
 }
 
@@ -183,18 +180,6 @@ describe("RoomMessaging — sendRoomMessage", () => {
       "hi",
     );
     expect(withoutBehavior).not.toHaveProperty("streamingBehavior");
-  });
-
-  it("forwards to federated links only when the room is federated", async () => {
-    const federated = makeHarness();
-    federated.deps.rooms.set("room-1", room({ federated: true }));
-    await federated.messaging.sendRoomMessage("room-1", FROM_DEVICE_ID, "hi");
-    expect(federated.forwardRoomMessage).toHaveBeenCalledTimes(1);
-
-    const plain = makeHarness();
-    plain.deps.rooms.set("room-1", room({ federated: false }));
-    await plain.messaging.sendRoomMessage("room-1", FROM_DEVICE_ID, "hi");
-    expect(plain.forwardRoomMessage).not.toHaveBeenCalled();
   });
 
   it("sends a directed request to every other member, never to the sender itself", async () => {

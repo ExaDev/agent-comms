@@ -114,8 +114,6 @@ interface Harness {
   broadcastPatch: ReturnType<typeof vi.fn>;
   deliverToRoom: ReturnType<typeof vi.fn>;
   deliverToMember: ReturnType<typeof vi.fn>;
-  broadcastRoomJoin: ReturnType<typeof vi.fn>;
-  broadcastRoomLeave: ReturnType<typeof vi.fn>;
   sendRoomRequest: ReturnType<typeof vi.fn>;
   broadcastRevocation: ReturnType<typeof vi.fn>;
 }
@@ -153,8 +151,6 @@ async function makeHarness(): Promise<Harness> {
   const broadcastPatch = vi.fn().mockResolvedValue(undefined);
   const deliverToRoom = vi.fn().mockResolvedValue(undefined);
   const deliverToMember = vi.fn().mockResolvedValue(undefined);
-  const broadcastRoomJoin = vi.fn().mockResolvedValue(undefined);
-  const broadcastRoomLeave = vi.fn().mockResolvedValue(undefined);
   const broadcastRevocation = vi.fn().mockResolvedValue(undefined);
   const sendRoomRequest = vi.fn().mockResolvedValue({
     result: "error",
@@ -186,7 +182,6 @@ async function makeHarness(): Promise<Harness> {
       deliverToRoom,
       deliverToMember,
     },
-    federation: { broadcastRoomJoin, broadcastRoomLeave },
   };
 
   return {
@@ -200,8 +195,6 @@ async function makeHarness(): Promise<Harness> {
     broadcastPatch,
     deliverToRoom,
     deliverToMember,
-    broadcastRoomJoin,
-    broadcastRoomLeave,
     sendRoomRequest,
     broadcastRevocation,
   };
@@ -314,25 +307,20 @@ describe("RoomLifecycle — refreshRoomMembers", () => {
     const refreshed = await h.lifecycle.refreshRoomMembers(roomPath);
     expect(refreshed.version).toBe(1);
     expect(refreshed.description).toBe("");
-    expect(refreshed.federated).toBe(false);
     expect(refreshed.memberJoins).toEqual({ [h.ids.ownerId]: 1 });
     expect(refreshed.invited).toEqual([]);
   });
 
-  it("increments the version relative to the existing local copy, and preserves its federated flag", async () => {
+  it("increments the version relative to the existing local copy", async () => {
     const h = await makeHarness();
     const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
-    h.deps.rooms.set(
-      roomPath,
-      room({ id: roomPath, version: 1, federated: true }),
-    );
+    h.deps.rooms.set(roomPath, room({ id: roomPath, version: 1 }));
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
     saveRoomToken(slot, roomPath, token);
     h.sendRoomRequest.mockResolvedValue(roomMembersOkOutcome([h.ids.ownerId]));
     const refreshed = await h.lifecycle.refreshRoomMembers(roomPath);
     expect(refreshed.version).toBe(2);
-    expect(refreshed.federated).toBe(true);
   });
 
   it("prefers the room-state extension's own fields over the existing local copy's", async () => {

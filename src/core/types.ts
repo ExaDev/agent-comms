@@ -135,7 +135,6 @@ export const RoomSchema = defineSchema(
     memberLeaves: z.record(z.string(), z.number()),
     invitedJoins: z.record(z.string(), z.number()),
     invitedLeaves: z.record(z.string(), z.number()),
-    federated: z.boolean().optional(),
   }),
 );
 export type Room = z.infer<typeof RoomSchema>;
@@ -406,34 +405,6 @@ export const CommsActionSchema = defineSchema(
       adapter: z.string().optional(),
     }),
     z.object({ action: z.literal("mesh_get_visibility") }),
-    // Federation actions (coordinator-to-coordinator)
-    z.object({
-      action: z.literal("mesh_fed_connect"),
-      host: z.string(),
-      port: z.number(),
-      name: z.string().optional(),
-    }),
-    z.object({
-      action: z.literal("mesh_fed_disconnect"),
-      linkId: z.string(),
-    }),
-    z.object({ action: z.literal("mesh_fed_links") }),
-    z.object({ action: z.literal("mesh_fed_fingerprint") }),
-    z.object({
-      action: z.literal("mesh_fed_trust"),
-      fingerprint: z.string(),
-    }),
-    z.object({
-      action: z.literal("mesh_fed_untrust"),
-      fingerprint: z.string(),
-    }),
-    z.object({ action: z.literal("mesh_fed_trusted") }),
-    z.object({
-      action: z.literal("mesh_fed_listen"),
-      host: z.string(),
-      port: z.number(),
-    }),
-    z.object({ action: z.literal("mesh_fed_stop_listening") }),
   ]),
 );
 export type CommsAction = z.infer<typeof CommsActionSchema>;

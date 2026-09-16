@@ -4,13 +4,12 @@
 
 import { CommsError } from "./store.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
-import type { FederationManager } from "./federation.js";
 import type { MeshTransport } from "./transport.js";
 import type { AgentSelfAdvert } from "./wire-mesh-transport.js";
 import { AgentStatus } from "./types.js";
 import type { AgentIdentity, Visibility } from "./types.js";
 
-/** The state and collaborators AgentRegistry needs from MeshStore. agents/identityCache are direct references into MeshStore's own fields; startedAt is a readonly value copied once; deliveryEngine and federation are the already-constructed instances, narrowed to what agent-lifecycle bookkeeping ever needs. */
+/** The state and collaborators AgentRegistry needs from MeshStore. agents/identityCache are direct references into MeshStore's own fields; startedAt is a readonly value copied once; deliveryEngine is the already-constructed instance, narrowed to what agent-lifecycle bookkeeping ever needs. */
 export interface AgentRegistryDeps {
   agents: Map<string, AgentIdentity>;
   identityCache: Map<string, { id: string }>;
@@ -23,10 +22,6 @@ export interface AgentRegistryDeps {
     | "broadcastPatch"
     | "notifyRoomsOfStatus"
     | "notifyRoomsOfNameChange"
-  >;
-  federation: Pick<
-    FederationManager,
-    "broadcastAgentVisible" | "broadcastAgentGone"
   >;
 }
 
@@ -109,10 +104,6 @@ export class AgentRegistry {
       type: "agent_upsert",
       agent,
     });
-    // Broadcast presence to federated links
-    if (agent.visibility === "visible") {
-      await this.deps.federation.broadcastAgentVisible(agent);
-    }
     return agent;
   }
 
@@ -227,7 +218,6 @@ export class AgentRegistry {
         type: "agent_offline",
         agentId: id,
       });
-      await this.deps.federation.broadcastAgentGone(id);
     }
   }
 }

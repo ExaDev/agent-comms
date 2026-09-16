@@ -41,8 +41,6 @@ interface Harness {
   broadcastPatch: ReturnType<typeof vi.fn>;
   notifyRoomsOfStatus: ReturnType<typeof vi.fn>;
   notifyRoomsOfNameChange: ReturnType<typeof vi.fn>;
-  broadcastAgentVisible: ReturnType<typeof vi.fn>;
-  broadcastAgentGone: ReturnType<typeof vi.fn>;
 }
 
 function makeHarness(peerId = OWNER_ID): Harness {
@@ -50,8 +48,6 @@ function makeHarness(peerId = OWNER_ID): Harness {
   const broadcastPatch = vi.fn().mockResolvedValue(undefined);
   const notifyRoomsOfStatus = vi.fn().mockResolvedValue(undefined);
   const notifyRoomsOfNameChange = vi.fn().mockResolvedValue(undefined);
-  const broadcastAgentVisible = vi.fn().mockResolvedValue(undefined);
-  const broadcastAgentGone = vi.fn().mockResolvedValue(undefined);
   const deps: AgentRegistryDeps = {
     agents: new Map(),
     identityCache: new Map(),
@@ -67,7 +63,6 @@ function makeHarness(peerId = OWNER_ID): Harness {
       notifyRoomsOfStatus,
       notifyRoomsOfNameChange,
     },
-    federation: { broadcastAgentVisible, broadcastAgentGone },
   };
   return {
     deps,
@@ -76,8 +71,6 @@ function makeHarness(peerId = OWNER_ID): Harness {
     broadcastPatch,
     notifyRoomsOfStatus,
     notifyRoomsOfNameChange,
-    broadcastAgentVisible,
-    broadcastAgentGone,
   };
 }
 
@@ -161,41 +154,6 @@ describe("AgentRegistry — registerAgent", () => {
     expect(second.visibility).toBe("hidden");
     expect(second.pid).toBe(2);
     expect(second.tags).toEqual(["updated"]);
-  });
-
-  it("broadcasts presence to federated links only for a visible agent, not hidden or ghost", async () => {
-    const visible = makeHarness();
-    await visible.registry.registerAgent({
-      name: "v",
-      harness: "pi",
-      cwd: "/tmp/v",
-      pid: 1,
-      visibility: "visible",
-      tags: [],
-    });
-    expect(visible.broadcastAgentVisible).toHaveBeenCalledTimes(1);
-
-    const hidden = makeHarness();
-    await hidden.registry.registerAgent({
-      name: "h",
-      harness: "pi",
-      cwd: "/tmp/h",
-      pid: 1,
-      visibility: "hidden",
-      tags: [],
-    });
-    expect(hidden.broadcastAgentVisible).not.toHaveBeenCalled();
-
-    const ghost = makeHarness();
-    await ghost.registry.registerAgent({
-      name: "g",
-      harness: "pi",
-      cwd: "/tmp/g",
-      pid: 1,
-      visibility: "ghost",
-      tags: [],
-    });
-    expect(ghost.broadcastAgentVisible).not.toHaveBeenCalled();
   });
 });
 
@@ -404,7 +362,7 @@ describe("AgentRegistry — setAgentOffline", () => {
     expect(h.notifyRoomsOfStatus).not.toHaveBeenCalled();
   });
 
-  it("for the owning peer's own agent, sets status offline, bumps, persists, and broadcasts to rooms/mesh/federation", async () => {
+  it("for the owning peer's own agent, sets status offline, bumps, persists, and broadcasts to rooms/mesh", async () => {
     const h = makeHarness(OWNER_ID);
     h.deps.agents.set(OWNER_ID, agent({ status: "active" }));
 
@@ -417,7 +375,6 @@ describe("AgentRegistry — setAgentOffline", () => {
       type: "agent_offline",
       agentId: OWNER_ID,
     });
-    expect(h.broadcastAgentGone).toHaveBeenCalledWith(OWNER_ID);
   });
 
   it("for a non-owning peer's agent, updates local state but does not broadcast anything", async () => {
@@ -430,6 +387,5 @@ describe("AgentRegistry — setAgentOffline", () => {
     expect(h.bump).toHaveBeenCalledTimes(1);
     expect(h.notifyRoomsOfStatus).not.toHaveBeenCalled();
     expect(h.broadcastPatch).not.toHaveBeenCalled();
-    expect(h.broadcastAgentGone).not.toHaveBeenCalled();
   });
 });

@@ -41,5 +41,3 @@ export type {
   ListenerPolicy,
   ConnectionHandle,
 } from "./transport.js";
-export { FederationManager } from "./federation.js";
-export type { FedLink, FedCallbacks } from "./federation.js";

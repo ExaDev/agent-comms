@@ -112,8 +112,6 @@ interface Harness {
   broadcastPatch: ReturnType<typeof vi.fn>;
   deliverToRoom: ReturnType<typeof vi.fn>;
   deliverToMember: ReturnType<typeof vi.fn>;
-  broadcastRoomJoin: ReturnType<typeof vi.fn>;
-  broadcastRoomLeave: ReturnType<typeof vi.fn>;
   sendRoomRequest: ReturnType<typeof vi.fn>;
   broadcastRevocation: ReturnType<typeof vi.fn>;
 }
@@ -151,8 +149,6 @@ async function makeHarness(): Promise<Harness> {
   const broadcastPatch = vi.fn().mockResolvedValue(undefined);
   const deliverToRoom = vi.fn().mockResolvedValue(undefined);
   const deliverToMember = vi.fn().mockResolvedValue(undefined);
-  const broadcastRoomJoin = vi.fn().mockResolvedValue(undefined);
-  const broadcastRoomLeave = vi.fn().mockResolvedValue(undefined);
   const broadcastRevocation = vi.fn().mockResolvedValue(undefined);
   const sendRoomRequest = vi.fn().mockResolvedValue({
     result: "error",
@@ -184,7 +180,6 @@ async function makeHarness(): Promise<Harness> {
       deliverToRoom,
       deliverToMember,
     },
-    federation: { broadcastRoomJoin, broadcastRoomLeave },
   };
 
   return {
@@ -198,8 +193,6 @@ async function makeHarness(): Promise<Harness> {
     broadcastPatch,
     deliverToRoom,
     deliverToMember,
-    broadcastRoomJoin,
-    broadcastRoomLeave,
     sendRoomRequest,
     broadcastRevocation,
   };
@@ -285,29 +278,6 @@ describe("RoomLifecycle — createRoom", () => {
       message: `Room ${id} already exists`,
       code: "ROOM_EXISTS",
     });
-  });
-
-  it("defaults federated to false when omitted", async () => {
-    const h = await makeHarness();
-    const created = await h.lifecycle.createRoom({
-      name: "r",
-      type: "public",
-      owner: h.ids.ownerId,
-      description: "",
-    });
-    expect(created.federated).toBe(false);
-  });
-
-  it("honours an explicit federated: true", async () => {
-    const h = await makeHarness();
-    const created = await h.lifecycle.createRoom({
-      name: "r",
-      type: "public",
-      owner: h.ids.ownerId,
-      description: "",
-      federated: true,
-    });
-    expect(created.federated).toBe(true);
   });
 
   it("seeds an empty message history and broadcasts a room_upsert", async () => {
@@ -580,7 +550,6 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
       [h.ids.ownerId]: 1,
       [h.ids.memberId]: 1,
     });
-    expect(stored?.federated).toBe(false);
     const { slot } = h.deps.requireIdentity();
     expect(loadRoomTokens(slot)[roomPath]).toBeDefined();
   });
@@ -754,35 +723,5 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
       expect.objectContaining({ type: "member_joined", agent: h.ids.memberId }),
       h.ids.memberId,
     );
-  });
-
-  it("notifies federated links only when the room is federated", async () => {
-    const federated = await makeHarness();
-    federated.deps.rooms.set(
-      "room-1",
-      room({
-        id: "room-1",
-        type: "public",
-        owner: federated.ids.ownerId,
-        members: [],
-        federated: true,
-      }),
-    );
-    await federated.lifecycle.joinRoom("room-1", federated.ids.memberId);
-    expect(federated.broadcastRoomJoin).toHaveBeenCalledTimes(1);
-
-    const plain = await makeHarness();
-    plain.deps.rooms.set(
-      "room-1",
-      room({
-        id: "room-1",
-        type: "public",
-        owner: plain.ids.ownerId,
-        members: [],
-        federated: false,
-      }),
-    );
-    await plain.lifecycle.joinRoom("room-1", plain.ids.memberId);
-    expect(plain.broadcastRoomJoin).not.toHaveBeenCalled();
   });
 });
