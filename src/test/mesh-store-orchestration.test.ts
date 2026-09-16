@@ -1,5 +1,5 @@
 /**
- * Direct unit tests for MeshStore's own orchestration logic -- requireTransport/requireIdentity's guard errors, the connected getter, init()'s connect-vs-becomeCoordinator-vs-EADDRINUSE branching, the events getter's dispatch table, federation/listener/room-join-approval passthroughs, and shutdown() -- as opposed to the collaborator-owned behaviour wireTestTransport-based integration tests already cover end-to-end. MeshStore's constructor takes no injectable deps (unlike its collaborators), so these tests use a hand-built fake MeshTransport passed to the real setTransport(), and reach the private roomProtocol/connectionApproval/peerLifecycle/deliveryEngine/agentRegistry collaborators via a narrow, explicitly-justified cast -- TypeScript's `private` is compile-time only, and asserting a delegating wrapper actually calls through to the collaborator that owns the real implementation is exactly the kind of whitebox check no public-API-only test can express for a one-line pass-through.
+ * Direct unit tests for MeshStore's own orchestration logic -- requireTransport/requireIdentity's guard errors, the connected getter, init()'s connect-vs-becomeCoordinator-vs-EADDRINUSE branching, the events getter's dispatch table, listener/room-join-approval passthroughs, and shutdown() -- as opposed to the collaborator-owned behaviour wireTestTransport-based integration tests already cover end-to-end. MeshStore's constructor takes no injectable deps (unlike its collaborators), so these tests use a hand-built fake MeshTransport passed to the real setTransport(), and reach the private roomProtocol/connectionApproval/peerLifecycle/deliveryEngine/agentRegistry collaborators via a narrow, explicitly-justified cast -- TypeScript's `private` is compile-time only, and asserting a delegating wrapper actually calls through to the collaborator that owns the real implementation is exactly the kind of whitebox check no public-API-only test can express for a one-line pass-through.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
@@ -573,61 +573,6 @@ describe("MeshStore — room-join approval passthroughs", () => {
   });
 });
 
-describe("MeshStore — federation passthroughs", () => {
-  it("forwards fedConnect/fedDisconnect/fedLinks/fedTrust/fedUntrust/fedTrustedFingerprints/fedListen/fedStopListening to the real, public federation manager", async () => {
-    const store = new MeshStore();
-    store.setTransport(fakeTransport());
-
-    const connectSpy = vi
-      .spyOn(store.federation, "connect")
-      .mockResolvedValue("link-1");
-    await expect(store.fedConnect("host", 1, "name")).resolves.toBe("link-1");
-    expect(connectSpy).toHaveBeenCalledWith("host", 1, "name");
-
-    const disconnectSpy = vi
-      .spyOn(store.federation, "disconnect")
-      .mockResolvedValue(undefined);
-    await store.fedDisconnect("link-1");
-    expect(disconnectSpy).toHaveBeenCalledWith("link-1");
-
-    const linksSpy = vi
-      .spyOn(store.federation, "listLinks")
-      .mockReturnValue([]);
-    store.fedLinks();
-    expect(linksSpy).toHaveBeenCalledTimes(1);
-
-    const trustSpy = vi
-      .spyOn(store.federation, "addTrustedFingerprint")
-      .mockReturnValue(undefined);
-    await store.fedTrust("fingerprint-a");
-    expect(trustSpy).toHaveBeenCalledWith("fingerprint-a");
-
-    const untrustSpy = vi
-      .spyOn(store.federation, "removeTrustedFingerprint")
-      .mockReturnValue(undefined);
-    await store.fedUntrust("fingerprint-a");
-    expect(untrustSpy).toHaveBeenCalledWith("fingerprint-a");
-
-    const listTrustedSpy = vi
-      .spyOn(store.federation, "listTrustedFingerprints")
-      .mockReturnValue([]);
-    store.fedTrustedFingerprints();
-    expect(listTrustedSpy).toHaveBeenCalledTimes(1);
-
-    const listenSpy = vi
-      .spyOn(store.federation, "listen")
-      .mockResolvedValue(undefined);
-    await store.fedListen("host", 2);
-    expect(listenSpy).toHaveBeenCalledWith("host", 2);
-
-    const stopListeningSpy = vi
-      .spyOn(store.federation, "stopListening")
-      .mockResolvedValue(undefined);
-    await store.fedStopListening();
-    expect(stopListeningSpy).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe("MeshStore — shutdown()", () => {
   let store: MeshStore;
   let transport: ReturnType<typeof fakeTransport>;
@@ -638,24 +583,19 @@ describe("MeshStore — shutdown()", () => {
     store.setTransport(transport);
   });
 
-  it("stops the stale-agent checker, shuts down federation, and shuts down the transport", async () => {
+  it("stops the stale-agent checker and shuts down the transport", async () => {
     const staleAgentChecker = collaborator(store, "staleAgentChecker") as {
       stop: ReturnType<typeof vi.fn>;
     };
     const stopSpy = vi.spyOn(staleAgentChecker, "stop");
-    const federationShutdownSpy = vi
-      .spyOn(store.federation, "shutdown")
-      .mockResolvedValue(undefined);
 
     await store.shutdown();
 
     expect(stopSpy).toHaveBeenCalledTimes(1);
-    expect(federationShutdownSpy).toHaveBeenCalledTimes(1);
     expect(transport.shutdown).toHaveBeenCalledTimes(1);
   });
 
   it("broadcasts agent_offline for its own self agent when one is registered", async () => {
-    vi.spyOn(store.federation, "shutdown").mockResolvedValue(undefined);
     const agent = await store.registerAgent({
       name: "self",
       harness: "pi",
@@ -681,7 +621,6 @@ describe("MeshStore — shutdown()", () => {
   });
 
   it("clears every pending markRead timer", async () => {
-    vi.spyOn(store.federation, "shutdown").mockResolvedValue(undefined);
     const pending = collaborator(store, "pendingMarkReadTimers") as ReturnType<
       typeof setTimeout
     >[];
@@ -703,7 +642,6 @@ describe("MeshStore — shutdown()", () => {
   it("actually sets isShutDown, observable via DeliveryEngine no longer scheduling markRead timers afterward", async () => {
     // fireLocalDelivery returns before ever reaching the isShutDown-guarded push unless onDelivery is set -- without this, the test would pass for both real code and a mutant, since it never reaches the line under test.
     store.onDelivery = vi.fn();
-    vi.spyOn(store.federation, "shutdown").mockResolvedValue(undefined);
     await store.shutdown();
 
     const pending = collaborator(store, "pendingMarkReadTimers") as unknown[];
@@ -723,7 +661,6 @@ describe("MeshStore — shutdown()", () => {
   });
 
   it("does not broadcast agent_offline when no self agent was ever registered", async () => {
-    vi.spyOn(store.federation, "shutdown").mockResolvedValue(undefined);
     const deliveryEngine = collaborator(store, "deliveryEngine") as {
       broadcastPatch: ReturnType<typeof vi.fn>;
     };

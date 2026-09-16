@@ -19,7 +19,6 @@ import type {
 import type { ListenerInfo } from "./transport.js";
 import type { CommsStore } from "./comms-store.js";
 import type { DiscoveryManager } from "./discovery.js";
-import type { FedLink } from "./federation.js";
 import { CommsError } from "./store.js";
 
 /** Table column widths for the plain-text listing helpers below, chosen to line up with the existing aligned output. */
@@ -58,22 +57,13 @@ export interface CommsResult {
 }
 
 /**
- * Listener management, federation, and connection approval: transport concerns CommsStore deliberately excludes (see comms-store.ts's own header) since only MeshStore, never FileStore, can support them. Every method here is optional for exactly that reason -- a CommsTool backed by a FileStore simply doesn't have them, and each call site below reports that as an ordinary CommsResult error rather than assuming they exist.
+ * Listener management and connection approval: transport concerns CommsStore deliberately excludes (see comms-store.ts's own header) since only MeshStore, never FileStore, can support them. Every method here is optional for exactly that reason -- a CommsTool backed by a FileStore simply doesn't have them, and each call site below reports that as an ordinary CommsResult error rather than assuming they exist.
  */
 export interface MeshOnlyFeatures {
   addListener?: (host: string, port: number, policy: string) => Promise<string>;
   removeListener?: (id: string) => Promise<void>;
   listListeners?: () => ListenerInfo[];
   getNetworkInterfaces?: () => NetworkInterface[];
-  fedConnect?: (host: string, port: number, name?: string) => Promise<string>;
-  fedDisconnect?: (linkId: string) => Promise<void>;
-  fedLinks?: () => FedLink[];
-  getFederationFingerprint?: () => string;
-  fedTrust?: (fingerprint: string) => Promise<void>;
-  fedUntrust?: (fingerprint: string) => Promise<void>;
-  fedTrustedFingerprints?: () => string[];
-  fedListen?: (host: string, port: number) => Promise<void>;
-  fedStopListening?: () => Promise<void>;
   acceptConnection?: (connectionId: string) => Promise<void>;
   rejectConnection?: (connectionId: string, reason: string) => Promise<void>;
   listPendingConnections?: () => {
@@ -103,7 +93,7 @@ function notMeshBacked(action: string): CommsResult {
   };
 }
 
-/** Runs a mesh/federation store call that may throw, converting a thrown error into a CommsResult instead of repeating the same try/catch at every call site. `action` performs the call and returns the success message directly. */
+/** Runs a mesh store call that may throw, converting a thrown error into a CommsResult instead of repeating the same try/catch at every call site. `action` performs the call and returns the success message directly. */
 async function tryMeshAction(
   verb: string,
   action: () => Promise<string>,
@@ -204,24 +194,6 @@ export class CommsTool {
           return await this.meshSetVisibility(action);
         case "mesh_get_visibility":
           return this.meshGetVisibility(action);
-        case "mesh_fed_connect":
-          return await this.meshFedConnect(ctx, action);
-        case "mesh_fed_disconnect":
-          return await this.meshFedDisconnect(ctx, action);
-        case "mesh_fed_links":
-          return this.meshFedLinks(ctx);
-        case "mesh_fed_fingerprint":
-          return this.meshFedFingerprint(ctx);
-        case "mesh_fed_trust":
-          return await this.meshFedTrust(ctx, action);
-        case "mesh_fed_untrust":
-          return await this.meshFedUntrust(ctx, action);
-        case "mesh_fed_trusted":
-          return this.meshFedTrusted(ctx);
-        case "mesh_fed_listen":
-          return await this.meshFedListen(ctx, action);
-        case "mesh_fed_stop_listening":
-          return await this.meshFedStopListening(ctx);
         default:
           return {
             content: `Unknown action: ${JSON.stringify(action).slice(0, UNKNOWN_ACTION_PREVIEW_LENGTH)}`,
@@ -623,18 +595,6 @@ export class CommsTool {
     };
   }
 
-  private async meshFedConnect(
-    _ctx: Readonly<CommsContext>,
-    action: CommsAction & { action: "mesh_fed_connect" },
-  ): Promise<CommsResult> {
-    if (!this.store.fedConnect) return notMeshBacked("mesh_fed_connect");
-    const fedConnect = this.store.fedConnect.bind(this.store);
-    return tryMeshAction("establish federation link", async () => {
-      const linkId = await fedConnect(action.host, action.port, action.name);
-      return `Federation link established: ${linkId} to ${action.host}:${String(action.port)}`;
-    });
-  }
-
   private async meshConnect(
     _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_connect" },
@@ -647,18 +607,6 @@ export class CommsTool {
     });
   }
 
-  private async meshFedDisconnect(
-    _ctx: Readonly<CommsContext>,
-    action: CommsAction & { action: "mesh_fed_disconnect" },
-  ): Promise<CommsResult> {
-    if (!this.store.fedDisconnect) return notMeshBacked("mesh_fed_disconnect");
-    const fedDisconnect = this.store.fedDisconnect.bind(this.store);
-    return tryMeshAction("close federation link", async () => {
-      await fedDisconnect(action.linkId);
-      return `Federation link ${action.linkId} closed.`;
-    });
-  }
-
   private async meshAccept(
     _ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "mesh_accept" },
@@ -668,92 +616,6 @@ export class CommsTool {
     return tryMeshAction("accept", async () => {
       await acceptConnection(action.connectionId);
       return `Accepted connection ${action.connectionId}.`;
-    });
-  }
-
-  private meshFedLinks(_ctx: Readonly<CommsContext>): CommsResult {
-    if (!this.store.fedLinks) return notMeshBacked("mesh_fed_links");
-    const links = this.store.fedLinks();
-    if (links.length === 0)
-      return { content: "No federation links.", isError: false };
-
-    const lines = links.map((l) => {
-      const dir = l.direction === "outbound" ? "→" : "←";
-      return `${l.id}  ${dir} ${l.remoteName} (${l.remoteMeshId})`;
-    });
-    return {
-      content: `Federation links:\n${lines.map((l) => `  ${l}`).join("\n")}`,
-      isError: false,
-    };
-  }
-
-  private meshFedFingerprint(_ctx: Readonly<CommsContext>): CommsResult {
-    if (!this.store.getFederationFingerprint)
-      return notMeshBacked("mesh_fed_fingerprint");
-    const fingerprint = this.store.getFederationFingerprint();
-    return {
-      content: `This mesh's federation fingerprint: ${fingerprint}\nHand this to the operator on the other side so they can run mesh_fed_trust with it — and do the same in reverse before either side connects.`,
-      isError: false,
-    };
-  }
-
-  private async meshFedTrust(
-    _ctx: Readonly<CommsContext>,
-    action: CommsAction & { action: "mesh_fed_trust" },
-  ): Promise<CommsResult> {
-    if (!this.store.fedTrust) return notMeshBacked("mesh_fed_trust");
-    const fedTrust = this.store.fedTrust.bind(this.store);
-    return tryMeshAction("trust fingerprint", async () => {
-      await fedTrust(action.fingerprint);
-      return `Trusted federation fingerprint: ${action.fingerprint}`;
-    });
-  }
-
-  private async meshFedUntrust(
-    _ctx: Readonly<CommsContext>,
-    action: CommsAction & { action: "mesh_fed_untrust" },
-  ): Promise<CommsResult> {
-    if (!this.store.fedUntrust) return notMeshBacked("mesh_fed_untrust");
-    const fedUntrust = this.store.fedUntrust.bind(this.store);
-    return tryMeshAction("untrust fingerprint", async () => {
-      await fedUntrust(action.fingerprint);
-      return `Untrusted federation fingerprint: ${action.fingerprint}`;
-    });
-  }
-
-  private meshFedTrusted(_ctx: Readonly<CommsContext>): CommsResult {
-    if (!this.store.fedTrustedFingerprints)
-      return notMeshBacked("mesh_fed_trusted");
-    const fingerprints = this.store.fedTrustedFingerprints();
-    if (fingerprints.length === 0)
-      return { content: "No trusted federation fingerprints.", isError: false };
-    return {
-      content: `Trusted federation fingerprints:\n${fingerprints.map((f) => `  ${f}`).join("\n")}`,
-      isError: false,
-    };
-  }
-
-  private async meshFedListen(
-    _ctx: Readonly<CommsContext>,
-    action: CommsAction & { action: "mesh_fed_listen" },
-  ): Promise<CommsResult> {
-    if (!this.store.fedListen) return notMeshBacked("mesh_fed_listen");
-    const fedListen = this.store.fedListen.bind(this.store);
-    return tryMeshAction("start federation listener", async () => {
-      await fedListen(action.host, action.port);
-      return `Listening for inbound federation links on ${action.host}:${String(action.port)}. Only connections presenting a trusted fingerprint (mesh_fed_trust) will be accepted.`;
-    });
-  }
-
-  private async meshFedStopListening(
-    _ctx: Readonly<CommsContext>,
-  ): Promise<CommsResult> {
-    if (!this.store.fedStopListening)
-      return notMeshBacked("mesh_fed_stop_listening");
-    const fedStopListening = this.store.fedStopListening.bind(this.store);
-    return tryMeshAction("stop federation listener", async () => {
-      await fedStopListening();
-      return "Stopped accepting inbound federation connections.";
     });
   }
 

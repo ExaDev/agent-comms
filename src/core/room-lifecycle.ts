@@ -39,7 +39,6 @@ import {
   roomStateExtension,
 } from "./room-wire-extensions.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
-import type { FederationManager } from "./federation.js";
 import type { MeshTransport } from "./transport.js";
 import type { HostedRoomAdvert } from "./wire-mesh-transport.js";
 import type {
@@ -65,7 +64,7 @@ function isHostedRoomAdvert(value: unknown): value is HostedRoomAdvert {
   return true;
 }
 
-/** The state and collaborators RoomLifecycle needs from MeshStore. rooms/messages/agents/dmRequestsInitiatedByMe are direct references into MeshStore's own fields (dmRequestsInitiatedByMe shared with RoomProtocol, which reads what requestDmAccess writes here); deliveryEngine and federation are the already-constructed instances, narrowed to what room CRUD ever needs. */
+/** The state and collaborators RoomLifecycle needs from MeshStore. rooms/messages/agents/dmRequestsInitiatedByMe are direct references into MeshStore's own fields (dmRequestsInitiatedByMe shared with RoomProtocol, which reads what requestDmAccess writes here); deliveryEngine is the already-constructed instance, narrowed to what room CRUD ever needs. */
 export interface RoomLifecycleDeps {
   rooms: Map<string, Room>;
   messages: Map<string, RoomMessage[]>;
@@ -82,10 +81,6 @@ export interface RoomLifecycleDeps {
     | "broadcastPatch"
     | "deliverToRoom"
     | "deliverToMember"
-  >;
-  federation: Pick<
-    FederationManager,
-    "broadcastRoomJoin" | "broadcastRoomLeave"
   >;
 }
 
@@ -124,7 +119,6 @@ export class RoomLifecycle {
       type: RoomType;
       owner: string;
       description: string;
-      federated?: boolean;
     }>,
   ): Promise<Room> {
     // slugRoomName sanitises an arbitrary caller-supplied name (e.g. from a live create_room tool call, not just an internal cwd basename) into the room-path grammar's [A-Za-z0-9_-]+ charset -- createRoom is the one choke point every room creation goes through, so this is the right place to do it rather than trusting every caller to have pre-slugged, the way the old bare-name id never required at all.
@@ -151,7 +145,6 @@ export class RoomLifecycle {
       memberLeaves: {},
       invitedJoins: {},
       invitedLeaves: {},
-      federated: opts.federated ?? false,
     };
 
     this.deps.rooms.set(id, room);
@@ -275,7 +268,6 @@ export class RoomLifecycle {
       memberLeaves: {},
       invitedJoins: {},
       invitedLeaves: {},
-      federated: false,
     };
     this.deps.rooms.set(roomPath, room);
     this.deps.messages.set(roomPath, []);
@@ -340,7 +332,6 @@ export class RoomLifecycle {
       memberLeaves: {},
       invitedJoins: existing?.invitedJoins ?? {},
       invitedLeaves: existing?.invitedLeaves ?? {},
-      federated: existing?.federated ?? false,
     };
     this.deps.rooms.set(roomPath, room);
     return room;
@@ -456,12 +447,6 @@ export class RoomLifecycle {
       agentId,
     );
 
-    // Notify federated links if the room is federated
-    if (room.federated === true) {
-      const agentName = agent?.name ?? agentId;
-      await this.deps.federation.broadcastRoomJoin(roomId, agentId, agentName);
-    }
-
     return room;
   }
 
@@ -504,11 +489,6 @@ export class RoomLifecycle {
       room: roomId,
       agent: agentId,
     });
-
-    // Notify federated links if the room is federated
-    if (room.federated === true) {
-      await this.deps.federation.broadcastRoomLeave(roomId, agentId);
-    }
 
     if (room.members.length === 0 && room.owner === agentId) {
       await this.destroyRoom(roomId, agentId);

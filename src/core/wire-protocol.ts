@@ -68,22 +68,7 @@ export type MeshMessage =
   | { method: "peer_list"; peers: PeerInfo[] }
   | { method: "peer_joined"; peer: PeerInfo }
   | { method: "peer_left"; peerId: string }
-  | { method: "become_coordinator"; peerList: PeerInfo[] }
-  // Federation wire messages (coordinator-to-coordinator only)
-  | { method: "fed_handshake"; meshId: string; name: string; version: string }
-  | { method: "fed_ack"; meshId: string; name: string; version: string }
-  | { method: "fed_agent_visible"; agent: AgentIdentity }
-  | { method: "fed_agent_gone"; agentId: string }
-  | { method: "fed_room_message"; roomId: string; message: RoomMessage }
-  | {
-      method: "fed_room_join";
-      roomId: string;
-      agentId: string;
-      agentName: string;
-    }
-  | { method: "fed_room_leave"; roomId: string; agentId: string }
-  | { method: "fed_ping" }
-  | { method: "fed_pong" };
+  | { method: "become_coordinator"; peerList: PeerInfo[] };
 
 // ---------------------------------------------------------------------------
 // Framing — newline-delimited JSON

@@ -45,7 +45,7 @@ export interface DeliveryEngineDeps {
     ((patch: MeshStatePatch) => void | Promise<void>) | undefined;
   isShutDown: () => boolean;
   /**
-   * Sends one directed room-domain request to a single member, queuing it for retry when unreachable -- RoomProtocol's own method. Deferred: RoomProtocol doesn't exist yet when DeliveryEngine is constructed (construction order: discovery -\> deliveryEngine -\> ... -\> roomProtocol), so MeshStore wires this as `(...) => this.roomProtocol.sendRoomRequestToMember(...)`, a closure over `this` that only resolves `this.roomProtocol` when markRead actually calls it at runtime, well after the constructor has finished -- the same lazy-`this`-capture pattern the constructor already uses to wire FederationManager's own callbacks before `this.federation` exists.
+   * Sends one directed room-domain request to a single member, queuing it for retry when unreachable -- RoomProtocol's own method. Deferred: RoomProtocol doesn't exist yet when DeliveryEngine is constructed (construction order: discovery -\> deliveryEngine -\> ... -\> roomProtocol), so MeshStore wires this as `(...) => this.roomProtocol.sendRoomRequestToMember(...)`, a closure over `this` that only resolves `this.roomProtocol` when markRead actually calls it at runtime, well after the constructor has finished.
    */
   sendRoomRequestToMember: (
     memberId: string,
@@ -110,8 +110,6 @@ export class DeliveryEngine {
     existing.owner = incoming.owner;
     existing.createdAt = incoming.createdAt;
     existing.description = incoming.description;
-    if (incoming.federated !== undefined)
-      existing.federated = incoming.federated;
     existing.memberJoins = DeliveryEngine.mergeMemberOps(
       existing.memberJoins,
       incoming.memberJoins,
@@ -465,21 +463,6 @@ export class DeliveryEngine {
       if (memberId === excludeAgent) continue;
       await this.deliverToMember(memberId, roomId, event);
     }
-  }
-
-  /**
-   * Delivers a room message to one specific member -- the local-fanout half of a federated room message (federation-bridge.ts's own onRoomMessage), which has no handleRoomSend manage-response of its own to carry delivery, since the message arrives over a federation link rather than a live room.send. Emits the "delivered" receipt back to the message's own sender the same way deliverLocallyAndBroadcast used to, then delivers to the member via deliverToMember (locally for this store's own agent, or a directed room.notify otherwise).
-   */
-  async deliverRoomMessageToMember(
-    roomId: string,
-    memberId: string,
-    message: RoomMessage,
-  ): Promise<void> {
-    await this.emitDeliveryStatus(message.id, memberId, "delivered", roomId);
-    await this.deliverToMember(memberId, roomId, {
-      type: "room_message",
-      message,
-    });
   }
 
   async notifyRoomsOfStatus(

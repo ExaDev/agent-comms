@@ -325,25 +325,6 @@ describe("DeliveryEngine — mergeRoom via applyPatch(room_upsert)", () => {
     expect(h.deps.rooms.get("room-1")?.name).toBe("new-name");
   });
 
-  it("retains the existing federated flag when the incoming room leaves it undefined", async () => {
-    const h = makeHarness();
-    h.deps.rooms.set("room-1", room({ version: 1, federated: true }));
-    const incoming = room({ version: 2 });
-    delete incoming.federated;
-    await h.engine.applyPatch({ type: "room_upsert", room: incoming });
-    expect(h.deps.rooms.get("room-1")?.federated).toBe(true);
-  });
-
-  it("overwrites the federated flag when the incoming room states it explicitly, including false", async () => {
-    const h = makeHarness();
-    h.deps.rooms.set("room-1", room({ version: 1, federated: true }));
-    await h.engine.applyPatch({
-      type: "room_upsert",
-      room: room({ version: 2, federated: false }),
-    });
-    expect(h.deps.rooms.get("room-1")?.federated).toBe(false);
-  });
-
   it("merges concurrent memberJoins by keeping the higher revision per agent, never overwriting with a lower one", async () => {
     const h = makeHarness();
     h.deps.rooms.set(
@@ -707,7 +688,7 @@ describe("DeliveryEngine — applyPatch(agent_upsert)", () => {
   });
 });
 
-// The `this.deps.agents.set(patch.agentId, agent)` call at the end of this branch has one provable equivalent mutant Stryker still raises: removing it entirely. `agent` here is fetched via `this.deps.agents.get(patch.agentId)`, the exact same object reference already stored in the Map, and `agent.status = "offline"` mutates that object in place -- so re-setting the map entry to the identical reference it already holds is a genuine no-op, the same Map.set-same-reference pattern already documented elsewhere in this codebase (agent-registry.ts's setAgentOffline, federation-bridge.ts's onAgentGone/onRoomLeave). The test below already proves the real, observable effect (status flips to "offline").
+// The `this.deps.agents.set(patch.agentId, agent)` call at the end of this branch has one provable equivalent mutant Stryker still raises: removing it entirely. `agent` here is fetched via `this.deps.agents.get(patch.agentId)`, the exact same object reference already stored in the Map, and `agent.status = "offline"` mutates that object in place -- so re-setting the map entry to the identical reference it already holds is a genuine no-op, the same Map.set-same-reference pattern already documented elsewhere in this codebase (agent-registry.ts's setAgentOffline). The test below already proves the real, observable effect (status flips to "offline").
 describe("DeliveryEngine — applyPatch(agent_offline)", () => {
   it("marks an existing agent as offline", async () => {
     const h = makeHarness();

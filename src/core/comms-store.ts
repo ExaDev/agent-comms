@@ -5,7 +5,7 @@
  *
  * Bridges depend on this interface, not on a specific implementation.
  *
- * Deliberately excludes listener management, federation, and connection approval: those are transport concerns MeshStore alone can support -- FileStore has no network transport to manage listeners on, federate through, or approve inbound connections for. Widening this interface to cover them (as it once did, via always-throwing FileStore stubs) is what forced server.ts and the bridge controller to reach past CommsStore into the concrete MeshStore anyway; CommsTool, the one consumer that genuinely needs to expose these when a MeshStore backs it, takes them as an optional extension (see MeshOnlyFeatures in tool.ts) rather than the shared interface pretending every implementation supports them.
+ * Deliberately excludes listener management and connection approval: those are transport concerns MeshStore alone can support -- FileStore has no network transport to manage listeners on or approve inbound connections for. Widening this interface to cover them (as it once did, via always-throwing FileStore stubs) is what forced server.ts and the bridge controller to reach past CommsStore into the concrete MeshStore anyway; CommsTool, the one consumer that genuinely needs to expose these when a MeshStore backs it, takes them as an optional extension (see MeshOnlyFeatures in tool.ts) rather than the shared interface pretending every implementation supports them.
  */
 
 import type {

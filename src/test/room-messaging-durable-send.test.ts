@@ -88,7 +88,6 @@ async function makeHarness() {
       dataStorage,
     }),
     roomProtocol: { sendRoomRequestToMember: async () => undefined },
-    federation: { forwardRoomMessage: async () => undefined },
   };
 
   return {
