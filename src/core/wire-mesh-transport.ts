@@ -17,9 +17,17 @@ import {
   type ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
+import {
+  handleDataEntries,
+  handleDataHave,
+  handleDataRequest,
+} from "wire-mesh-core/domain/data-sync";
 import type {
   CapabilityScope,
   CapabilityToken,
+  DataHaveFrame,
+  DataRequestFrame,
+  Frame,
   ManageCommand,
   PeerAdvert,
   RevocationEntry,
@@ -29,6 +37,7 @@ import type {
   Listener,
   Transport,
 } from "wire-mesh-core/ports/transport";
+import type { KeyValueStorage } from "wire-mesh-core/ports/storage";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
 import type {
   ConnectionHandle,
@@ -82,6 +91,9 @@ export interface HostedRoomAdvert {
   type: "public" | "private";
   description: string;
 }
+
+/** Upper bound on the number of oplog entries handleDataRequest returns in a single data-entries response -- generous for the small, chat-sized messages this domain carries today, while still bounding one peer's worst-case memory/frame size when answering a request for a large catch-up gap. A requester short of this still gets everything up to its own current head; anything beyond it needs a follow-up data-request, exactly the same incremental-catch-up shape a data-have/data-request/data-entries cycle already has. */
+const DATA_ENTRIES_RESPONSE_LIMIT = 100;
 
 /** This project's own namespaced domain (registrant "exadev.io", local name "agent-comms-v1"), matching namespaced-domain-id's "<registrant>/<local-name>" shape -- registry/core-domains.md's own recommended pattern for a third party. Exported for test use only: a security test simulating a hostile client that skips connect_request needs to construct a well-formed frame under the same domain/verb/scope this transport itself listens on, rather than duplicating these as separately-maintained magic strings that could silently drift from the real values. */
 export const DOMAIN = "exadev.io/agent-comms-v1";
@@ -226,6 +238,12 @@ export class WireMeshTransport implements MeshTransport {
     (() => readonly HostedRoomAdvert[]) | undefined;
   private gossipInterval: ReturnType<typeof setInterval> | undefined;
 
+  /** Backs this side's own responder for an incoming data-have/data-request/data-entries frame (agent-comms#50's P5 integration) -- undefined for every existing construction site that predates this feature, in which case handleDataFrame is a no-op. Deciding when to proactively call sendDataFrame at all (the catch-up policy: which peers' logs to track, when to send an initial data-have) stays entirely the caller's own business; this field only ever backs the mechanical parts (answering a have/request, storing entries). */
+  private readonly dataStorage: KeyValueStorage | undefined;
+
+  /** Every peer this side has ever received a frame from, keyed by device-id hex, tracking the raw wire-mesh-core Connection each frame arrived on -- what sendDataFrame needs, since neither AcceptedMeshSession nor MeshSession exposes a generic "send an arbitrary frame" method the way the raw Connection itself does. Registered eagerly on the very first frame from a connection (including one still in quarantine, e.g. before connect_request approval) so a later sendDataFrame call can reach it -- handleDataFrame's own trust gate (peerSessions.has) is what actually decides whether to act on anything received this way, not this map. */
+  private readonly connectionsByPeer = new Map<string, Connection>();
+
   constructor(
     events: Readonly<TransportEvents>,
     identity: Readonly<PeerIdentity>,
@@ -234,6 +252,7 @@ export class WireMeshTransport implements MeshTransport {
     getCurrentPresence?: () => AgentStatus | undefined,
     presenceReadvertiseIntervalMs: number = PRESENCE_READVERTISE_INTERVAL_MS,
     getHostedRooms?: () => readonly HostedRoomAdvert[],
+    dataStorage?: KeyValueStorage,
   ) {
     this.events = events;
     this.wireTransport = createTlsTransport({
@@ -248,11 +267,58 @@ export class WireMeshTransport implements MeshTransport {
     this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;
     this.getCurrentPresence = getCurrentPresence;
     this.getHostedRooms = getHostedRooms;
+    this.dataStorage = dataStorage;
     if (getCurrentPresence !== undefined || getHostedRooms !== undefined) {
       this.gossipInterval = setInterval(() => {
         this.readvertiseGossip();
       }, presenceReadvertiseIntervalMs);
       this.gossipInterval.unref();
+    }
+  }
+
+  /** Sends one data-have or data-request frame directly to an already-connected peer -- the mechanical send primitive a future catch-up policy calls once it decides to (see the dataStorage field comment). Throws if this side has never received any frame from that peer yet (there is no connection to send on), matching sendManageRequest's own "no reachable session" failure mode for an unknown peer. */
+  async sendDataFrame(
+    peerDeviceHex: string,
+    frame: Readonly<DataHaveFrame> | Readonly<DataRequestFrame>,
+  ): Promise<void> {
+    const connection = this.connectionsByPeer.get(peerDeviceHex);
+    if (connection === undefined) {
+      throw new Error(
+        `WireMeshTransport: no live connection for peer ${peerDeviceHex}`,
+      );
+    }
+    await connection.send(frame);
+  }
+
+  /** Registers (or refreshes) the raw connection a frame arrived on, then answers a data-have/data-request/data-entries frame in place, sending any resulting response frame back over the same connection -- every other frame type is ignored here (applyFrame's own dispatch already owns those). Trust-gated on peerSessions already tracking this device: a connection still in quarantine (pre-approval) gets its own frames observed here too (registration is unconditional, since a later approved sendDataFrame call still needs to find it), but never acted on until trackSession has actually run for it. A response or storage failure is reported via onError and otherwise dropped -- the peer's own next data-have/retry is what recovers, the same as any other best-effort gossip-driven exchange in this file. */
+  private async handleDataFrame(
+    connection: Readonly<Connection>,
+    frame: Frame,
+  ): Promise<void> {
+    const peerDeviceId = connection.peerDeviceId;
+    if (peerDeviceId === undefined) return;
+    const deviceIdHex = deviceIdToHex(peerDeviceId);
+    this.connectionsByPeer.set(deviceIdHex, connection);
+    if (this.dataStorage === undefined) return;
+    if (!this.peerSessions.has(deviceIdHex)) return;
+    try {
+      if (frame.type === "data-have") {
+        const request = await handleDataHave(this.dataStorage, frame);
+        if (request !== null) await connection.send(request);
+      } else if (frame.type === "data-request") {
+        const entries = await handleDataRequest(
+          this.dataStorage,
+          frame,
+          DATA_ENTRIES_RESPONSE_LIMIT,
+        );
+        if (entries !== null) await connection.send(entries);
+      } else if (frame.type === "data-entries") {
+        await handleDataEntries(this.dataStorage, frame);
+      }
+    } catch (error: unknown) {
+      this.events.onError?.(
+        error instanceof Error ? error : new Error(String(error)),
+      );
     }
   }
 
@@ -310,7 +376,9 @@ export class WireMeshTransport implements MeshTransport {
     }
     const deviceIdHex = deviceIdToHex(peerDeviceId);
     const identity = await this.identityReady;
-    const session = await acceptMeshSession(connection, identity, [DOMAIN]);
+    const session = await acceptMeshSession(connection, identity, [DOMAIN], {
+      onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+    });
     if (this.isShuttingDown()) {
       await session.close();
       return;
@@ -522,7 +590,9 @@ export class WireMeshTransport implements MeshTransport {
       `${host}:${String(port)}`,
     );
     const identity = await this.identityReady;
-    const session = await acceptMeshSession(connection, identity, [DOMAIN]);
+    const session = await acceptMeshSession(connection, identity, [DOMAIN], {
+      onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+    });
     this.coordinatorSession = session;
     const coordinatorDeviceId = connection.peerDeviceId;
     if (coordinatorDeviceId !== undefined) {
@@ -618,7 +688,9 @@ export class WireMeshTransport implements MeshTransport {
       return;
     }
     const identity = await this.identityReady;
-    const session = await acceptMeshSession(connection, identity, [DOMAIN]);
+    const session = await acceptMeshSession(connection, identity, [DOMAIN], {
+      onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+    });
     if (this.isShuttingDown()) {
       this.dataDials.delete(peer.id);
       await session.close();
@@ -699,7 +771,9 @@ export class WireMeshTransport implements MeshTransport {
       `${host}:${String(port)}`,
     );
     const identity = await this.identityReady;
-    const session = await acceptMeshSession(connection, identity, [DOMAIN]);
+    const session = await acceptMeshSession(connection, identity, [DOMAIN], {
+      onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+    });
     const outcome = await session.sendManageRequest(
       buildCommand({
         method: "connect_request",
