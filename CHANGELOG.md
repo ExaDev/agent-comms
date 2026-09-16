@@ -1,3 +1,9 @@
+## [2.28.0](https://github.com/ExaDev/agent-comms/compare/v2.27.0...v2.28.0) (2026-09-16)
+
+### Features
+
+* **core:** gossip this side's own agent identity and merge discoveries into listAgents ([1fe110f](https://github.com/ExaDev/agent-comms/commit/1fe110ffa550f0b285a68895599e3b9c552841fe)), references [#138](https://github.com/ExaDev/agent-comms/issues/138)
+
 ## [2.27.0](https://github.com/ExaDev/agent-comms/compare/v2.26.0...v2.27.0) (2026-09-16)
 
 ### Features
