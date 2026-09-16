@@ -141,6 +141,18 @@ npx agent-comms                         # auto-detect and configure
 
 The CLI detects which harnesses are installed (pi, Claude Code, Codex, OpenCode) and writes the appropriate config files automatically.
 
+### cc-peer (cross-machine Claude Code relay)
+
+[`cc-peer`](https://github.com/ExaDev/cc-peer) speaks Claude Code's own local cross-session peer protocol directly — a per-session Unix socket, no cross-machine leg of its own. The `cc-peer` bridge relays one local Claude Code session into this mesh, so it becomes visible and messageable from any other agent-comms bridge, including one on a different machine, riding on the mesh's own transport:
+
+```bash
+npx agent-comms bridge cc-peer <local-session-name>
+# or address the local session by pid instead of its registered name:
+npx agent-comms bridge cc-peer --pid=12345
+```
+
+One bridge process relays for exactly one local Claude Code session, the same "one bridge process is one agent is one device" model every other bridge here follows. Inbound messages from that session are posted into this bridge's own project room; mesh deliveries addressed to this bridge's agent are relayed back to that same session via `cc-peer`'s own `send()`.
+
 ## Adding a new harness
 
 A bridge is two things:
