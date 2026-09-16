@@ -98,7 +98,7 @@ export class ConnectionApproval {
     }));
   }
 
-  /** Initiate an outbound connection to a remote coordinator requiring approval. Fires the connect_request and returns immediately. The connection completes asynchronously when the coordinator accepts or rejects. */
+  /** Initiate an outbound connection to a remote coordinator requiring approval. Fires the connect_request and returns immediately. The connection completes asynchronously when the coordinator accepts or rejects. `host` is either a hostname (TLS-dialled with `port`) or a ws:// / wss:// URL (WebSocket-dialled to a hub such as mesh.exadev.io; the port is ignored). */
   async connectToRemote(host: string, port: number): Promise<void> {
     const peerId = this.deps.getPeerId();
     const agent = this.deps.agents.get(peerId);

@@ -9,6 +9,7 @@
  */
 
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
+import { connectWsUrl } from "./ws-dial.js";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
@@ -797,9 +798,20 @@ export class WireMeshTransport implements MeshTransport {
     name: string,
     fingerprint: string,
   ): Promise<void> {
-    const connection = await this.wireTransport.connect(
-      `${host}:${String(port)}`,
-    );
+    // A ws:// or wss:// URL in the host position dials a WebSocket-served
+    // hub (e.g. the mesh.exadev.io cloudflare-hub) instead of raw TLS --
+    // the port is meaningless in URL form, so callers pass 0. Any other URL
+    // scheme is refused here rather than surfacing as an opaque DNS error
+    // from the TLS dial treating the whole URL as a hostname.
+    const isWsUrl = /^wss?:\/\//.test(host);
+    if (!isWsUrl && host.includes("://")) {
+      throw new Error(
+        `expected a hostname or a ws:// / wss:// URL, got "${host}"`,
+      );
+    }
+    const connection = isWsUrl
+      ? await connectWsUrl(host)
+      : await this.wireTransport.connect(`${host}:${String(port)}`);
     const identity = await this.identityReady;
     const session = await acceptMeshSession(connection, identity, [DOMAIN], {
       onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
