@@ -1,3 +1,9 @@
+## [2.23.0](https://github.com/ExaDev/agent-comms/compare/v2.22.0...v2.23.0) (2026-09-16)
+
+### Features
+
+* **core:** gossip this side's own currently-hosted public/private rooms ([76dbc44](https://github.com/ExaDev/agent-comms/commit/76dbc44faa9725e455acdd1bc3f40055661ba1de))
+
 ## [2.22.0](https://github.com/ExaDev/agent-comms/compare/v2.21.19...v2.22.0) (2026-09-16)
 
 ### Features
