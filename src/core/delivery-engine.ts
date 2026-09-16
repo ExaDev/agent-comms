@@ -430,9 +430,9 @@ export class DeliveryEngine {
   }
 
   /**
-   * Delivers a single informational event to one specific agent over a given room-path: queues it locally (matching every other queueDelivery caller's own "hold it for whoever reads it next" contract), then either fires local delivery directly for this store's own agent or sends a real, wire-authenticated room.notify -- replacing the legacy mesh-wide broadcastPatch every one of this method's callers used to ride via deliverLocallyAndBroadcast, per P3.8's own directed-delivery retirement (agent-comms#48). Silently does nothing beyond the local queue when this store holds no current room:member token for roomPath, the same best-effort-by-design choice markRead's own directed room.read already makes for an unreachable read receipt.
+   * Delivers a single informational event to one specific agent over a given room-path: queues it locally (matching every other queueDelivery caller's own "hold it for whoever reads it next" contract), then either fires local delivery directly for this store's own agent or sends a real, wire-authenticated room.notify -- replacing the legacy mesh-wide broadcastPatch every one of this method's callers used to ride via deliverLocallyAndBroadcast, per P3.8's own directed-delivery retirement (agent-comms#48). Silently does nothing beyond the local queue when this store holds no current room:member token for roomPath, the same best-effort-by-design choice markRead's own directed room.read already makes for an unreachable read receipt. Public: used both internally (deliverToRoom, notifyRoomsOfNameChange, emitDeliveryStatus) and by other collaborators (RoomLifecycle's own post-join member-list delivery) that already know the exact single member and room-path to address.
    */
-  private async deliverToMember(
+  async deliverToMember(
     memberId: string,
     roomPath: string,
     event: DeliveryEvent,
@@ -465,6 +465,21 @@ export class DeliveryEngine {
       if (memberId === excludeAgent) continue;
       await this.deliverToMember(memberId, roomId, event);
     }
+  }
+
+  /**
+   * Delivers a room message to one specific member -- the local-fanout half of a federated room message (federation-bridge.ts's own onRoomMessage), which has no handleRoomSend manage-response of its own to carry delivery, since the message arrives over a federation link rather than a live room.send. Emits the "delivered" receipt back to the message's own sender the same way deliverLocallyAndBroadcast used to, then delivers to the member via deliverToMember (locally for this store's own agent, or a directed room.notify otherwise).
+   */
+  async deliverRoomMessageToMember(
+    roomId: string,
+    memberId: string,
+    message: RoomMessage,
+  ): Promise<void> {
+    await this.emitDeliveryStatus(message.id, memberId, "delivered", roomId);
+    await this.deliverToMember(memberId, roomId, {
+      type: "room_message",
+      message,
+    });
   }
 
   async notifyRoomsOfStatus(
