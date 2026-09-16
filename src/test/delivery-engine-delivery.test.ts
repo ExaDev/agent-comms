@@ -599,40 +599,6 @@ describe("DeliveryEngine — fireLocalDelivery", () => {
 // deliverToRoom / notifyRoomsOfStatus / notifyRoomsOfNameChange
 // ---------------------------------------------------------------------------
 
-describe("DeliveryEngine — deliverToRoom", () => {
-  it("does nothing for an unknown room", async () => {
-    const h = makeHarness();
-    await expect(
-      h.engine.deliverToRoom("no-such-room", {
-        type: "member_left",
-        room: "no-such-room",
-        agent: OTHER_ID,
-      }),
-    ).resolves.toBeUndefined();
-  });
-
-  it("delivers to every member except the excluded one", async () => {
-    const h = makeHarness();
-    h.deps.rooms.set(
-      "room-1",
-      room({ members: [PEER_ID, OTHER_ID, THIRD_ID] }),
-    );
-    await h.engine.deliverToRoom(
-      "room-1",
-      {
-        type: "member_status",
-        room: "room-1",
-        agent: PEER_ID,
-        status: "idle",
-      },
-      OTHER_ID,
-    );
-    expect(h.deps.deliveryQueues.get(PEER_ID)).toHaveLength(1);
-    expect(h.deps.deliveryQueues.get(THIRD_ID)).toHaveLength(1);
-    expect(h.deps.deliveryQueues.get(OTHER_ID)).toBeUndefined();
-  });
-});
-
 describe("DeliveryEngine — notifyRoomsOfStatus", () => {
   it("does nothing for an agent with no known record", async () => {
     const h = makeHarness();

@@ -428,6 +428,9 @@ export class DeliveryEngine {
     if (!this.deps.isShutDown()) this.deps.pendingMarkReadTimers.push(timer);
   }
 
+  /**
+   * Delivers an informational event (member_status, member_joined, name_changed, and the like -- never room_message/dm, which already ride handleRoomSend's own directed path) to every current member of a room. Queues locally for every member (matching every other queueDelivery caller's own "hold it for whoever reads it next" contract), then either fires local delivery directly for this store's own agent or sends a real, wire-authenticated room.notify to everyone else -- replacing the legacy mesh-wide broadcastPatch this used to ride via deliverLocallyAndBroadcast, per P3.8's own directed-delivery retirement (agent-comms#48). Silently skips a member this store holds no current room:member token for, the same best-effort-by-design choice markRead's own directed room.read already makes for an unreachable read receipt.
+   */
   async deliverToRoom(
     roomId: string,
     event: DeliveryEvent,
@@ -435,9 +438,21 @@ export class DeliveryEngine {
   ): Promise<void> {
     const room = this.deps.rooms.get(roomId);
     if (!room) return;
+    const peerId = this.deps.getPeerId();
     for (const memberId of room.members) {
       if (memberId === excludeAgent) continue;
-      await this.deliverLocallyAndBroadcast(memberId, event);
+      this.queueDelivery(memberId, event);
+      if (memberId === peerId) {
+        this.fireLocalDelivery(memberId, event);
+        continue;
+      }
+      const { slot } = this.deps.requireIdentity();
+      const token = loadRoomTokens(slot)[roomId];
+      if (token === undefined) continue;
+      await this.deps.sendRoomRequestToMember(memberId, roomId, token, {
+        verb: "room.notify",
+        event,
+      });
     }
   }
 
