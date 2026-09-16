@@ -48,7 +48,7 @@ test("createRoom persists a self-signed room:member grant for the owner", async 
   const verdict = await verifyCapabilityToken(token, {
     identity: verifierIdentity,
     clock: createSystemClock(),
-    revocation: { isRevoked: async () => false },
+    revocation: { entriesFor: async () => [] },
     expectedBearer: deviceIdFromHex(owner.id),
   });
 

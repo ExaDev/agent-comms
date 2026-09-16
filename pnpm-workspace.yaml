@@ -22,4 +22,6 @@ overrides:
   ip-address: ">=10.2.0"
   protobufjs: "^7.6.1"
   qs: ">=6.15.2"
+  # trilean@1.6.1's published package.json still declares its sibling dependency as an unrewritten workspace:^ range, which breaks resolution for every external installer -- filed upstream as ExaDev/trilean#46, not yet fixed there. Pin to trilean-regex's own real published version until that lands.
+  trilean-regex: "1.0.2"
 saveExact: true
