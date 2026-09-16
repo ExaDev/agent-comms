@@ -229,12 +229,15 @@ describe("MeshStore — init()", () => {
     await expect(store.init()).resolves.toBeUndefined();
 
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(onError.mock.calls[0]?.[0]?.message).toContain(
-      "could not join or create mesh",
+    const message = onError.mock.calls[0]?.[0]?.message ?? "";
+    expect(message).toContain("could not join or create a mesh");
+    // The message must name the actual mismatch, not just say the mesh is unavailable: something already holds the port but never answered as a reachable coordinator (connectToCoordinator already failed first), which is a stale process or an incompatible agent-comms version -- not a generic catch-all.
+    expect(message).toContain(
+      "port 19876 is already in use by something that never answered as a reachable coordinator",
     );
-    expect(onError.mock.calls[0]?.[0]?.message).toContain(
-      "Running without mesh — agent-comms will be unavailable.",
-    );
+    expect(message).toContain("stale process");
+    expect(message).toContain("incompatible agent-comms version");
+    expect(message).toContain("listen EADDRINUSE: address already in use");
     expect(transport.unref).not.toHaveBeenCalled();
   });
 
