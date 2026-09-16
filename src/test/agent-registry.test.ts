@@ -57,6 +57,10 @@ function makeHarness(peerId = OWNER_ID): Harness {
     identityCache: new Map(),
     startedAt: STARTED_AT,
     getPeerId: () => peerId,
+    requireTransport: () =>
+      ({ listKnownDevices: undefined }) as unknown as ReturnType<
+        AgentRegistryDeps["requireTransport"]
+      >,
     deliveryEngine: {
       bump,
       broadcastPatch,
@@ -298,6 +302,88 @@ describe("AgentRegistry — listAgents", () => {
       agent({ id: "visible-agent", visibility: "visible" }),
     );
 
+    const result = await registry.listAgents("anyone-else");
+    expect(result.map((a) => a.id)).toEqual(["visible-agent"]);
+  });
+
+  it("merges in a gossip-discovered agent not otherwise locally known, as a placeholder-shaped AgentIdentity", async () => {
+    const { registry, deps } = makeHarness();
+    deps.requireTransport = () =>
+      ({
+        listKnownDevices: () => [
+          {
+            deviceId: "discovered-device",
+            advert: {
+              "agent/self": {
+                name: "discovered-agent",
+                harness: "codex",
+                cwd: "/tmp/discovered",
+                pid: 7,
+                startedAt: "2026-02-02T00:00:00.000Z",
+                tags: ["from-gossip"],
+                subscribedRooms: [],
+              },
+              "presence/status": "busy",
+            },
+          },
+        ],
+      }) as unknown as ReturnType<AgentRegistryDeps["requireTransport"]>;
+
+    const result = await registry.listAgents("some-requester");
+    const discovered = result.find((a) => a.id === "discovered-device");
+    expect(discovered).toMatchObject({
+      id: "discovered-device",
+      name: "discovered-agent",
+      harness: "codex",
+      cwd: "/tmp/discovered",
+      pid: 7,
+      startedAt: "2026-02-02T00:00:00.000Z",
+      visibility: "visible",
+      status: "busy",
+      tags: ["from-gossip"],
+      subscribedRooms: [],
+    });
+  });
+
+  it("never lets a gossip-discovered agent shadow an agent this store already knows locally", async () => {
+    const { registry, deps } = makeHarness();
+    deps.agents.set(
+      "already-known",
+      agent({ id: "already-known", name: "real-agent" }),
+    );
+    deps.requireTransport = () =>
+      ({
+        listKnownDevices: () => [
+          {
+            deviceId: "already-known",
+            advert: {
+              "agent/self": {
+                name: "stale-gossip-copy",
+                harness: "codex",
+                cwd: "/tmp",
+                pid: 1,
+                startedAt: "2026-01-01T00:00:00.000Z",
+                tags: [],
+                subscribedRooms: [],
+              },
+            },
+          },
+        ],
+      }) as unknown as ReturnType<AgentRegistryDeps["requireTransport"]>;
+
+    const result = await registry.listAgents("some-requester");
+    expect(result.filter((a) => a.id === "already-known")).toHaveLength(1);
+    expect(result.find((a) => a.id === "already-known")?.name).toBe(
+      "real-agent",
+    );
+  });
+
+  it("ignores a transport with no listKnownDevices capability, matching every construction site that predates this feature", async () => {
+    const { registry, deps } = makeHarness();
+    deps.agents.set(
+      "visible-agent",
+      agent({ id: "visible-agent", visibility: "visible" }),
+    );
     const result = await registry.listAgents("anyone-else");
     expect(result.map((a) => a.id)).toEqual(["visible-agent"]);
   });

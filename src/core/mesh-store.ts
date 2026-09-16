@@ -29,7 +29,10 @@ import { ConnectionApproval } from "./connection-approval.js";
 import { StaleAgentChecker } from "./stale-agent-checker.js";
 import { PeerLifecycle } from "./peer-lifecycle.js";
 import type { RoomVerbHandler } from "./room-router.js";
-import type { HostedRoomAdvert } from "./wire-mesh-transport.js";
+import type {
+  AgentSelfAdvert,
+  HostedRoomAdvert,
+} from "./wire-mesh-transport.js";
 import type {
   MeshStatePatch,
   PeerInfo,
@@ -122,6 +125,21 @@ export class MeshStore implements CommsStore {
       });
     }
     return result;
+  }
+
+  /** This store's own gossip-safe agent-identity advert, synchronously, in the shape WireMeshTransport's own gossip re-advertisement timer reads on every tick -- the write half of P3.8's eventual agent register/update/offline retirement (agent-comms#48). undefined before registerAgent has ever run (nothing to advertise yet), or when this agent's own visibility isn't "visible" -- gossip already reaches every connected peer regardless of mesh-approval status (see wire-mesh-transport.ts's own allSessions/quarantine comments), so advertising a hidden or ghost agent's identity this way would leak exactly what those visibility levels exist to withhold. */
+  get selfAgentAdvert(): AgentSelfAdvert | undefined {
+    const agent = this.agents.get(this.peerId);
+    if (agent?.visibility !== "visible") return undefined;
+    return {
+      name: agent.name,
+      harness: agent.harness,
+      cwd: agent.cwd,
+      pid: agent.pid,
+      startedAt: agent.startedAt,
+      tags: agent.tags,
+      subscribedRooms: agent.subscribedRooms,
+    };
   }
 
   /** Whether the mesh has a live coordinator connection. */
@@ -245,6 +263,7 @@ export class MeshStore implements CommsStore {
       identityCache: this.identityCache,
       startedAt: this.startedAt,
       getPeerId: () => this.peerId,
+      requireTransport: () => this.requireTransport(),
       deliveryEngine: this.deliveryEngine,
       federation: this.federation,
     });

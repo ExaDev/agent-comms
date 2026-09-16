@@ -47,6 +47,7 @@ export function createBridgeMeshSync(
       undefined,
       () => store.hostedRooms,
       dataStorage,
+      () => store.selfAgentAdvert,
     ),
   );
   const tool = new CommsTool(store, store.discovery);

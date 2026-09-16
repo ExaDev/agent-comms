@@ -92,6 +92,20 @@ export interface HostedRoomAdvert {
   description: string;
 }
 
+/** The domain-qualified gossip extension key this transport writes this side's own agent identity facts under -- the write half of P3.8's eventual agent register/update/offline retirement (agent-comms#48). Same namespacing convention as PRESENCE_GOSSIP_KEY/HOSTED_ROOMS_GOSSIP_KEY. */
+const AGENT_SELF_GOSSIP_KEY = "agent/self";
+
+/** The lightweight, gossip-safe shape an agent advertises itself under: enough for a peer with no prior local record of this device to construct a real AgentIdentity-shaped discovery entry. Deliberately excludes status (already carried separately under presence/status, no need to duplicate it here) and visibility (this field is only ever populated for a "visible" agent in the first place -- see MeshStore's own selfAgentAdvert getter -- so a discovered entry's visibility is always exactly "visible" by construction, never something this advert needs to assert itself). */
+export interface AgentSelfAdvert {
+  name: string;
+  harness: string;
+  cwd: string;
+  pid: number;
+  startedAt: string;
+  tags: string[];
+  subscribedRooms: string[];
+}
+
 /** Upper bound on the number of oplog entries handleDataRequest returns in a single data-entries response -- generous for the small, chat-sized messages this domain carries today, while still bounding one peer's worst-case memory/frame size when answering a request for a large catch-up gap. A requester short of this still gets everything up to its own current head; anything beyond it needs a follow-up data-request, exactly the same incremental-catch-up shape a data-have/data-request/data-entries cycle already has. */
 const DATA_ENTRIES_RESPONSE_LIMIT = 100;
 
@@ -241,6 +255,10 @@ export class WireMeshTransport implements MeshTransport {
   /** Backs this side's own responder for an incoming data-have/data-request/data-entries frame (agent-comms#50's P5 integration) -- undefined for every existing construction site that predates this feature, in which case handleDataFrame is a no-op. Deciding when to proactively call sendDataFrame at all (the catch-up policy: which peers' logs to track, when to send an initial data-have) stays entirely the caller's own business; this field only ever backs the mechanical parts (answering a have/request, storing entries). */
   private readonly dataStorage: KeyValueStorage | undefined;
 
+  /** Reads this side's own gossip-safe agent-identity advert for the next gossip re-advertisement tick, the same pull-not-push shape getCurrentPresence/getHostedRooms already established. undefined when no agent-identity source was wired in, or when MeshStore's own getter decides this agent shouldn't advertise itself this way right now (e.g. not "visible", or no self-agent record yet). */
+  private readonly getSelfAgentAdvert:
+    (() => AgentSelfAdvert | undefined) | undefined;
+
   /** Every peer this side has ever received a frame from, keyed by device-id hex, tracking the raw wire-mesh-core Connection each frame arrived on -- what sendDataFrame needs, since neither AcceptedMeshSession nor MeshSession exposes a generic "send an arbitrary frame" method the way the raw Connection itself does. Registered eagerly on the very first frame from a connection (including one still in quarantine, e.g. before connect_request approval) so a later sendDataFrame call can reach it -- handleDataFrame's own trust gate (peerSessions.has) is what actually decides whether to act on anything received this way, not this map. */
   private readonly connectionsByPeer = new Map<string, Connection>();
 
@@ -253,6 +271,7 @@ export class WireMeshTransport implements MeshTransport {
     presenceReadvertiseIntervalMs: number = PRESENCE_READVERTISE_INTERVAL_MS,
     getHostedRooms?: () => readonly HostedRoomAdvert[],
     dataStorage?: KeyValueStorage,
+    getSelfAgentAdvert?: () => AgentSelfAdvert | undefined,
   ) {
     this.events = events;
     this.wireTransport = createTlsTransport({
@@ -268,7 +287,12 @@ export class WireMeshTransport implements MeshTransport {
     this.getCurrentPresence = getCurrentPresence;
     this.getHostedRooms = getHostedRooms;
     this.dataStorage = dataStorage;
-    if (getCurrentPresence !== undefined || getHostedRooms !== undefined) {
+    this.getSelfAgentAdvert = getSelfAgentAdvert;
+    if (
+      getCurrentPresence !== undefined ||
+      getHostedRooms !== undefined ||
+      getSelfAgentAdvert !== undefined
+    ) {
       this.gossipInterval = setInterval(() => {
         this.readvertiseGossip();
       }, presenceReadvertiseIntervalMs);
@@ -330,6 +354,9 @@ export class WireMeshTransport implements MeshTransport {
     const hostedRooms = this.getHostedRooms?.();
     if (hostedRooms !== undefined)
       extensions[HOSTED_ROOMS_GOSSIP_KEY] = hostedRooms;
+    const selfAgentAdvert = this.getSelfAgentAdvert?.();
+    if (selfAgentAdvert !== undefined)
+      extensions[AGENT_SELF_GOSSIP_KEY] = selfAgentAdvert;
     if (Object.keys(extensions).length === 0) return;
     for (const session of this.allSessions) {
       session.sendGossipUpdate(extensions).catch((error: unknown) => {
