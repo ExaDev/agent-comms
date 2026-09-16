@@ -656,6 +656,8 @@ describe("DeliveryEngine — notifyRoomsOfNameChange", () => {
     expect(peerQueue.filter((e) => e.type === "name_changed")).toHaveLength(1);
     expect(selfQueue.filter((e) => e.type === "name_changed")).toHaveLength(1);
   });
+
+  // Remote-agent directed-notify cases for notifyRoomsOfNameChange's own trailing self/DM-path delivery live in delivery-engine-directed-notify.test.ts, alongside deliverToRoom's and emitDeliveryStatus's own directed cases, to stay under this file's own max-lines budget.
 });
 
 // ---------------------------------------------------------------------------
@@ -711,6 +713,8 @@ describe("DeliveryEngine — emitDeliveryStatus via deliverLocallyAndBroadcast",
       }),
     );
   });
+
+  // Remote-sender directed-notify cases for emitDeliveryStatus live in delivery-engine-directed-notify.test.ts, alongside deliverToRoom's and notifyRoomsOfNameChange's own directed cases, to stay under this file's own max-lines budget.
 });
 
 // ---------------------------------------------------------------------------
