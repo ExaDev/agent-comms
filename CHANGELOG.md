@@ -1,3 +1,9 @@
+## [2.24.0](https://github.com/ExaDev/agent-comms/compare/v2.23.0...v2.24.0) (2026-09-16)
+
+### Features
+
+* **core:** wire this store's own rooms into the hosted-rooms gossip ([d592f4a](https://github.com/ExaDev/agent-comms/commit/d592f4ae8aeebd0ae2ec59c3eddb6f36753b8725))
+
 ## [2.23.0](https://github.com/ExaDev/agent-comms/compare/v2.22.0...v2.23.0) (2026-09-16)
 
 ### Features
