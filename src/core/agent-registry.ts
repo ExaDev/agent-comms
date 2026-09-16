@@ -5,6 +5,9 @@
 import { CommsError } from "./store.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { FederationManager } from "./federation.js";
+import type { MeshTransport } from "./transport.js";
+import type { AgentSelfAdvert } from "./wire-mesh-transport.js";
+import { AgentStatus } from "./types.js";
 import type { AgentIdentity, Visibility } from "./types.js";
 
 /** The state and collaborators AgentRegistry needs from MeshStore. agents/identityCache are direct references into MeshStore's own fields; startedAt is a readonly value copied once; deliveryEngine and federation are the already-constructed instances, narrowed to what agent-lifecycle bookkeeping ever needs. */
@@ -13,6 +16,7 @@ export interface AgentRegistryDeps {
   identityCache: Map<string, { id: string }>;
   startedAt: string;
   getPeerId: () => string;
+  requireTransport: () => MeshTransport;
   deliveryEngine: Pick<
     DeliveryEngine,
     | "bump"
@@ -24,6 +28,21 @@ export interface AgentRegistryDeps {
     FederationManager,
     "broadcastAgentVisible" | "broadcastAgentGone"
   >;
+}
+
+/** Narrows an untrusted gossiped value (WireMeshTransport.listKnownDevices' own advert["agent/self"], self-asserted by whichever peer advertised it) into an AgentSelfAdvert -- a malformed or non-conforming entry is silently skipped rather than treated as an error, the same convention room-lifecycle.ts's own isHostedRoomAdvert already established for the identical class of gossip consumption. */
+function isAgentSelfAdvert(value: unknown): value is AgentSelfAdvert {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("name" in value) || typeof value.name !== "string") return false;
+  if (!("harness" in value) || typeof value.harness !== "string") return false;
+  if (!("cwd" in value) || typeof value.cwd !== "string") return false;
+  if (!("pid" in value) || typeof value.pid !== "number") return false;
+  if (!("startedAt" in value) || typeof value.startedAt !== "string")
+    return false;
+  if (!("tags" in value) || !Array.isArray(value.tags)) return false;
+  if (!("subscribedRooms" in value) || !Array.isArray(value.subscribedRooms))
+    return false;
+  return true;
 }
 
 export class AgentRegistry {
@@ -143,6 +162,50 @@ export class AgentRegistry {
     for (const agent of this.deps.agents.values()) {
       if (agent.visibility === "ghost" && agent.id !== requesterId) continue;
       result.push(agent);
+    }
+    for (const discovered of this.listDiscoverableAgents()) {
+      if (this.deps.agents.has(discovered.deviceId)) continue;
+      result.push({
+        id: discovered.deviceId,
+        version: 0,
+        name: discovered.advert.name,
+        harness: discovered.advert.harness,
+        cwd: discovered.advert.cwd,
+        pid: discovered.advert.pid,
+        startedAt: discovered.advert.startedAt,
+        visibility: "visible",
+        status: discovered.status ?? "active",
+        tags: discovered.advert.tags,
+        subscribedRooms: discovered.advert.subscribedRooms,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Every agent this store has heard gossiped by another device but never registered or otherwise locally recorded -- the read half of P3.8's eventual agent register/update/offline retirement (agent-comms#48), mirroring listRooms' own room-discovery merge (#138). Never merged into this.deps.agents: a gossip hint is not the same as a real registration, and this store has nothing else authoritative to report for it. Only ever an agent that gossiped itself as "visible" (MeshStore's own selfAgentAdvert getter never advertises a hidden or ghost agent this way), so no ghost-filtering is needed here the way listAgents' own local-agent check needs.
+   */
+  private listDiscoverableAgents(): readonly {
+    deviceId: string;
+    advert: AgentSelfAdvert;
+    status: AgentStatus | undefined;
+  }[] {
+    const transport = this.deps.requireTransport();
+    if (transport.listKnownDevices === undefined) return [];
+    const result: {
+      deviceId: string;
+      advert: AgentSelfAdvert;
+      status: AgentStatus | undefined;
+    }[] = [];
+    for (const { deviceId, advert } of transport.listKnownDevices()) {
+      const candidate = advert["agent/self"];
+      if (!isAgentSelfAdvert(candidate)) continue;
+      const status = advert["presence/status"];
+      result.push({
+        deviceId,
+        advert: candidate,
+        status: AgentStatus.is(status) ? status : undefined,
+      });
     }
     return result;
   }
