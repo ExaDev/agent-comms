@@ -1,3 +1,9 @@
+## [2.26.0](https://github.com/ExaDev/agent-comms/compare/v2.25.0...v2.26.0) (2026-09-16)
+
+### Features
+
+* **core:** wire sendRoomMessage's opt-in durable-recording flag ([a93ecff](https://github.com/ExaDev/agent-comms/commit/a93ecff33a22050960f122642585024a5b49c582)), references [#135](https://github.com/ExaDev/agent-comms/issues/135) [#136](https://github.com/ExaDev/agent-comms/issues/136)
+
 ## [2.25.0](https://github.com/ExaDev/agent-comms/compare/v2.24.2...v2.25.0) (2026-09-16)
 
 ### Features
