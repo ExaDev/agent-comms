@@ -1,3 +1,10 @@
+## [2.25.0](https://github.com/ExaDev/agent-comms/compare/v2.24.2...v2.25.0) (2026-09-16)
+
+### Features
+
+* **core:** record a room.send as a durable room-notice in the sender's own oplog ([090af14](https://github.com/ExaDev/agent-comms/commit/090af14a80d5cfa0c5bfd92b6aa7f01e88ff7d66))
+* **core:** wire core/data's sync protocol into WireMeshTransport's frame handling ([5b29146](https://github.com/ExaDev/agent-comms/commit/5b29146d865d813779257ed7e1f2eca24cccdd8f)), references [wire-mesh#102](https://github.com/wire-mesh/issues/102)
+
 ## [2.24.2](https://github.com/ExaDev/agent-comms/compare/v2.24.1...v2.24.2) (2026-09-16)
 
 ### Chores
