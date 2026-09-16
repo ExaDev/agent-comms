@@ -341,6 +341,7 @@ export class MeshStore implements CommsStore {
       );
       connected = true;
     } catch {
+      let eaddrinuseMessage: string | undefined;
       try {
         await this.requireTransport().becomeCoordinator(
           COORDINATOR_HOST,
@@ -354,18 +355,21 @@ export class MeshStore implements CommsStore {
         if (!msg.includes("EADDRINUSE")) {
           throw coordErr;
         }
-        // EADDRINUSE — port held by an unresponsive process. Degrade.
+        // EADDRINUSE — connectToCoordinator already failed above, so whatever holds this port never answered as a reachable coordinator either. Degrade, naming the actual mismatch rather than a generic "unavailable".
+        eaddrinuseMessage = msg;
       }
-    }
 
-    if (!connected) {
-      this.events.onError?.(
-        new Error(
-          `MeshStore: could not join or create mesh on port ${String(this.coordinatorPort)}. ` +
-            "Running without mesh — agent-comms will be unavailable.",
-        ),
-      );
-      return;
+      if (!connected) {
+        this.events.onError?.(
+          new Error(
+            `MeshStore: could not join or create a mesh on port ${String(this.coordinatorPort)}. ` +
+              `port ${String(this.coordinatorPort)} is already in use by something that never answered as a reachable coordinator -- a stale process from a previous run, or an incompatible agent-comms version. ` +
+              "agent-comms will run without mesh connectivity until this is resolved. " +
+              `(${eaddrinuseMessage ?? "unknown reason"})`,
+          ),
+        );
+        return;
+      }
     }
 
     this.requireTransport().unref();
