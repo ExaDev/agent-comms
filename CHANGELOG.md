@@ -1,3 +1,9 @@
+## [3.1.0](https://github.com/ExaDev/agent-comms/compare/v3.0.2...v3.1.0) (2026-09-16)
+
+### Features
+
+* **core:** gossip operator-registered listener addresses (wire-mesh[#38](https://github.com/ExaDev/agent-comms/issues/38)) ([6a5c887](https://github.com/ExaDev/agent-comms/commit/6a5c887dd350ca23fbd33500d981efea64b9899a)), references [#92](https://github.com/ExaDev/agent-comms/issues/92)
+
 ## [3.0.2](https://github.com/ExaDev/agent-comms/compare/v3.0.1...v3.0.2) (2026-09-16)
 
 ### Bug Fixes
