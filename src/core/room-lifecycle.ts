@@ -81,7 +81,7 @@ export interface RoomLifecycleDeps {
     | "refreshMembership"
     | "broadcastPatch"
     | "deliverToRoom"
-    | "deliverLocallyAndBroadcast"
+    | "deliverToMember"
   >;
   federation: Pick<
     FederationManager,
@@ -439,7 +439,7 @@ export class RoomLifecycle {
         });
       }
     }
-    await this.deps.deliveryEngine.deliverLocallyAndBroadcast(agentId, {
+    await this.deps.deliveryEngine.deliverToMember(agentId, roomId, {
       type: "room_members",
       room: roomId,
       members,

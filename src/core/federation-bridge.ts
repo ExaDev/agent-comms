@@ -18,7 +18,7 @@ export interface FederationBridgeDeps {
     | "refreshMembership"
     | "broadcastPatch"
     | "deliverToRoom"
-    | "deliverLocallyAndBroadcast"
+    | "deliverRoomMessageToMember"
   >;
 }
 
@@ -56,7 +56,7 @@ export class FederationBridge implements FedCallbacks {
     }
   }
 
-  /** Called when a message arrives for a federated room -- stores it locally and delivers to all local room members. */
+  /** Called when a message arrives for a federated room -- stores it locally and delivers to every local room member. A `fed:`-prefixed member is a shadow record for a remote participant with no addressable mesh device of its own; federation.ts's own link forwarding, not this local fan-out, is what reaches them. */
   async onRoomMessage(roomId: string, message: RoomMessage): Promise<void> {
     const room = this.deps.rooms.get(roomId);
     if (room?.federated !== true) return;
@@ -66,10 +66,12 @@ export class FederationBridge implements FedCallbacks {
     this.deps.messages.set(roomId, arr);
 
     for (const memberId of room.members) {
-      await this.deps.deliveryEngine.deliverLocallyAndBroadcast(memberId, {
-        type: "room_message",
+      if (memberId.startsWith("fed:")) continue;
+      await this.deps.deliveryEngine.deliverRoomMessageToMember(
+        roomId,
+        memberId,
         message,
-      });
+      );
     }
   }
 

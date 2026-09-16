@@ -111,7 +111,7 @@ interface Harness {
   refreshMembership: ReturnType<typeof vi.fn>;
   broadcastPatch: ReturnType<typeof vi.fn>;
   deliverToRoom: ReturnType<typeof vi.fn>;
-  deliverLocallyAndBroadcast: ReturnType<typeof vi.fn>;
+  deliverToMember: ReturnType<typeof vi.fn>;
   broadcastRoomJoin: ReturnType<typeof vi.fn>;
   broadcastRoomLeave: ReturnType<typeof vi.fn>;
   sendRoomRequest: ReturnType<typeof vi.fn>;
@@ -150,7 +150,7 @@ async function makeHarness(): Promise<Harness> {
   });
   const broadcastPatch = vi.fn().mockResolvedValue(undefined);
   const deliverToRoom = vi.fn().mockResolvedValue(undefined);
-  const deliverLocallyAndBroadcast = vi.fn().mockResolvedValue(undefined);
+  const deliverToMember = vi.fn().mockResolvedValue(undefined);
   const broadcastRoomJoin = vi.fn().mockResolvedValue(undefined);
   const broadcastRoomLeave = vi.fn().mockResolvedValue(undefined);
   const broadcastRevocation = vi.fn().mockResolvedValue(undefined);
@@ -182,7 +182,7 @@ async function makeHarness(): Promise<Harness> {
       refreshMembership,
       broadcastPatch,
       deliverToRoom,
-      deliverLocallyAndBroadcast,
+      deliverToMember,
     },
     federation: { broadcastRoomJoin, broadcastRoomLeave },
   };
@@ -197,7 +197,7 @@ async function makeHarness(): Promise<Harness> {
     refreshMembership,
     broadcastPatch,
     deliverToRoom,
-    deliverLocallyAndBroadcast,
+    deliverToMember,
     broadcastRoomJoin,
     broadcastRoomLeave,
     sendRoomRequest,
@@ -732,8 +732,9 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
       agent({ id: h.ids.ownerId, name: "owner" }),
     );
     await h.lifecycle.joinRoom("room-1", h.ids.memberId);
-    expect(h.deliverLocallyAndBroadcast).toHaveBeenCalledWith(
+    expect(h.deliverToMember).toHaveBeenCalledWith(
       h.ids.memberId,
+      "room-1",
       expect.objectContaining({
         type: "room_members",
         members: [expect.objectContaining({ id: h.ids.ownerId })],

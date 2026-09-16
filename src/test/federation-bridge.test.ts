@@ -66,7 +66,7 @@ interface Harness {
   refreshMembership: ReturnType<typeof vi.fn>;
   broadcastPatch: ReturnType<typeof vi.fn>;
   deliverToRoom: ReturnType<typeof vi.fn>;
-  deliverLocallyAndBroadcast: ReturnType<typeof vi.fn>;
+  deliverRoomMessageToMember: ReturnType<typeof vi.fn>;
 }
 
 function makeHarness(): Harness {
@@ -77,7 +77,7 @@ function makeHarness(): Harness {
     vi.fn<FederationBridgeDeps["deliveryEngine"]["refreshMembership"]>();
   const broadcastPatch = vi.fn().mockResolvedValue(undefined);
   const deliverToRoom = vi.fn().mockResolvedValue(undefined);
-  const deliverLocallyAndBroadcast = vi.fn().mockResolvedValue(undefined);
+  const deliverRoomMessageToMember = vi.fn().mockResolvedValue(undefined);
   const deps: FederationBridgeDeps = {
     agents: new Map(),
     rooms: new Map(),
@@ -88,7 +88,7 @@ function makeHarness(): Harness {
       refreshMembership,
       broadcastPatch,
       deliverToRoom,
-      deliverLocallyAndBroadcast,
+      deliverRoomMessageToMember,
     },
   };
   return {
@@ -99,7 +99,7 @@ function makeHarness(): Harness {
     refreshMembership,
     broadcastPatch,
     deliverToRoom,
-    deliverLocallyAndBroadcast,
+    deliverRoomMessageToMember,
   };
 }
 
@@ -171,14 +171,42 @@ describe("FederationBridge — onRoomMessage", () => {
     await h.bridge.onRoomMessage("room-1", msg);
 
     expect(h.deps.messages.get("room-1")).toEqual([msg]);
-    expect(h.deliverLocallyAndBroadcast).toHaveBeenCalledWith("a", {
-      type: "room_message",
-      message: msg,
-    });
-    expect(h.deliverLocallyAndBroadcast).toHaveBeenCalledWith("b", {
-      type: "room_message",
-      message: msg,
-    });
+    expect(h.deliverRoomMessageToMember).toHaveBeenCalledWith(
+      "room-1",
+      "a",
+      msg,
+    );
+    expect(h.deliverRoomMessageToMember).toHaveBeenCalledWith(
+      "room-1",
+      "b",
+      msg,
+    );
+  });
+
+  it("skips fed:-prefixed shadow members -- they have no addressable mesh device of their own, federation.ts's own link forwarding is what reaches the real remote participant", async () => {
+    const h = makeHarness();
+    h.deps.rooms.set(
+      "room-1",
+      room({
+        id: "room-1",
+        federated: true,
+        members: ["a", "fed:remote-agent"],
+      }),
+    );
+    const msg = message();
+
+    await h.bridge.onRoomMessage("room-1", msg);
+
+    expect(h.deliverRoomMessageToMember).toHaveBeenCalledWith(
+      "room-1",
+      "a",
+      msg,
+    );
+    expect(h.deliverRoomMessageToMember).not.toHaveBeenCalledWith(
+      "room-1",
+      "fed:remote-agent",
+      msg,
+    );
   });
 
   it("does nothing for a room that isn't federated", async () => {
@@ -188,7 +216,7 @@ describe("FederationBridge — onRoomMessage", () => {
     await h.bridge.onRoomMessage("room-1", message());
 
     expect(h.deps.messages.get("room-1")).toBeUndefined();
-    expect(h.deliverLocallyAndBroadcast).not.toHaveBeenCalled();
+    expect(h.deliverRoomMessageToMember).not.toHaveBeenCalled();
   });
 });
 

@@ -13,6 +13,13 @@ const DEVICE_ID_HEX_LENGTH = 64;
 const MEMBER_ID = "b".repeat(DEVICE_ID_HEX_LENGTH);
 const QUEUE_CAP = 100;
 
+/** Extracts a room.send request's own text field from a recorded attempt's params -- distinguishes an actual room.send retry from any other room-domain request (e.g. a room.notify) that might also be queued and replayed against the same member. */
+function textOf(params: unknown): string | undefined {
+  if (typeof params !== "object" || params === null) return undefined;
+  if (!("text" in params)) return undefined;
+  return typeof params.text === "string" ? params.text : undefined;
+}
+
 /** A MeshTransport whose sendRoomRequest always fails until told otherwise -- flippable mid-test to simulate the member becoming reachable, and recording every attempt made against it (including retries) so a test can assert exactly which sends were retried. */
 function fakeTransport(): {
   transport: MeshTransport;
@@ -88,8 +95,9 @@ test("a room.send to an unreachable member is queued and retried once it reconne
     { id: MEMBER_ID, port: 0, startedAt: new Date().toISOString() },
   );
 
+  // joinRoom's own room_members notification to MEMBER_ID is itself a real, wire-authenticated directed send (P3.8, agent-comms#48) -- unreachable at join time, it queues and replays here too, alongside the "hello" retry this test is actually about. Assert on the "hello" message's own retry count rather than a bare total, so this test doesn't couple to how many other room-domain requests happen to be pending for the same member.
   await waitFor(
-    () => attempts.length === 2,
+    () => attempts.filter((a) => textOf(a) === "hello").length === 2,
     "the queued send to retry once the member reconnects",
   );
 });
@@ -134,11 +142,6 @@ test("the retry queue is bounded oldest-first per member", async () => {
     "exactly the cap's worth of retries to fire",
   );
 
-  function textOf(params: unknown): string | undefined {
-    if (typeof params !== "object" || params === null) return undefined;
-    if (!("text" in params)) return undefined;
-    return typeof params.text === "string" ? params.text : undefined;
-  }
   expect(textOf(attempts[0])).toBe(`msg-${String(overflow)}`);
   expect(textOf(attempts[attempts.length - 1])).toBe(
     `msg-${String(QUEUE_CAP + overflow - 1)}`,
