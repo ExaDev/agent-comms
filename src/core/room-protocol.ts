@@ -46,7 +46,8 @@ import {
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { RoomVerbHandler } from "./room-router.js";
 import type { ConnectionHandle, MeshTransport } from "./transport.js";
-import { StreamingBehavior } from "./types.js";
+import { z } from "zod";
+import { DeliveryEventSchema, StreamingBehavior } from "./types.js";
 import type {
   AgentIdentity,
   DeliveryEvent,
@@ -54,6 +55,9 @@ import type {
   Room,
   RoomMessage,
 } from "./types.js";
+
+/** room.notify's own params shape: the already-validated DeliveryEvent to deliver, and nothing else -- room.notify carries no content of its own beyond the event, unlike room.send's own message/dm fields. Not a wire-mesh-generated schema (room.notify is agent-comms' own verb, riding manage-command-params' open socket the same way the legacy opaque frame carriage always did, never a real wire-mesh CDDL type other clients need to interoperate with). */
+const RoomNotifyParamsSchema = z.object({ event: DeliveryEventSchema });
 
 /** The state and collaborators RoomProtocol needs from MeshStore. rooms/messages/dms/agents/dmRequestsInitiatedByMe are direct references into MeshStore's own fields; deliveryEngine is the already-constructed instance, narrowed to what a room-verb handler ever needs; revokeMemberGrant is deferred (RoomLifecycle, which owns it, doesn't exist yet when RoomProtocol is constructed -- construction order: ... -\> roomProtocol -\> roomMessaging -\> roomLifecycle -\> ...), wired the same lazy-`this`-capture way DeliveryEngine's own sendRoomRequestToMember closure is. */
 export interface RoomProtocolDeps {
@@ -112,6 +116,8 @@ export class RoomProtocol {
       "room.invite": async (request) => this.handleRoomInvite(request),
       "room.leave": async (request, handle) =>
         this.handleRoomLeave(request, handle),
+      "room.notify": async (request, handle) =>
+        this.handleRoomNotify(request, handle),
     };
   }
 
@@ -203,6 +209,50 @@ export class RoomProtocol {
       event = { type: "room_message", message };
     }
 
+    this.deps.deliveryEngine.queueDelivery(peerId, event);
+    this.deps.deliveryEngine.fireLocalDelivery(peerId, event);
+
+    return { result: "ok" };
+  }
+
+  /**
+   * Receiving side of a directed room.notify (P3.8): the same token verification handleRoomSend does, then queues and fires the already-validated DeliveryEvent locally exactly as if it had arrived any other way -- room.notify carries no content of its own beyond the event, so there is nothing to construct or persist here, unlike room.send's own message/dm branches. Replaces the legacy mesh-wide broadcastPatch deliverToRoom used to ride for informational events (member_status, member_joined, name_changed, and the like) with a real directed request to each room member, matching room.send/room.read's own established shape. A malformed event, or one whose own room field doesn't match the token's verified scope, is refused rather than silently accepted -- unlike a gossiped advert's own self-asserted facts, this is an authenticated peer actively claiming something happened, so it gets the same strict validation room.send's params already get.
+   */
+  private async handleRoomNotify(
+    request: IncomingManageRequest,
+    handle: Readonly<ConnectionHandle>,
+  ): Promise<ManageOutcome> {
+    const roomPath = request.scope.path;
+    if (roomPath === undefined) {
+      return { result: "error", code: "missing_scope_path" };
+    }
+    if (request.token === undefined) {
+      return { result: "error", code: "unauthorized" };
+    }
+    const { identity, clock, revocation } = this.deps.requireIdentity();
+    const verdict = await verifyRoomToken(request.token, {
+      identity,
+      clock,
+      revocation,
+      expectedBearer: deviceIdFromHex(handle.id),
+      roomPath,
+    });
+    if (!verdict.ok) {
+      return { result: "error", code: "unauthorized" };
+    }
+
+    const parsedParams = RoomNotifyParamsSchema.safeParse(
+      request.command.params,
+    );
+    if (!parsedParams.success) {
+      return { result: "error", code: "malformed_params" };
+    }
+    const event = parsedParams.data.event;
+    if ("room" in event && event.room !== roomPath) {
+      return { result: "error", code: "malformed_params" };
+    }
+
+    const peerId = this.deps.getPeerId();
     this.deps.deliveryEngine.queueDelivery(peerId, event);
     this.deps.deliveryEngine.fireLocalDelivery(peerId, event);
 
