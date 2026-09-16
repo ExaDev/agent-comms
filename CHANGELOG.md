@@ -1,3 +1,11 @@
+## [2.21.19](https://github.com/ExaDev/agent-comms/compare/v2.21.18...v2.21.19) (2026-09-16)
+
+### Tests
+
+* **core:** assert RoomLifecycle's CRUD, join/leave, and grant logic directly ([246b56c](https://github.com/ExaDev/agent-comms/commit/246b56cdeecc8b16a57132a09a7f9b495cbec6cf))
+* **core:** close four more real gaps found in a fresh RoomLifecycle run ([878a5c7](https://github.com/ExaDev/agent-comms/commit/878a5c7641a6ad93aef689e1133902a90d6de805))
+* **core:** close sixteen real gaps in RoomLifecycle mutation coverage ([6542bd6](https://github.com/ExaDev/agent-comms/commit/6542bd6ee76dc535fb932712e128fda0928ab4c4))
+
 ## [2.21.18](https://github.com/ExaDev/agent-comms/compare/v2.21.17...v2.21.18) (2026-09-15)
 
 ### Tests
