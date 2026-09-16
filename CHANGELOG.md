@@ -1,3 +1,9 @@
+## [2.27.0](https://github.com/ExaDev/agent-comms/compare/v2.26.0...v2.27.0) (2026-09-16)
+
+### Features
+
+* **core:** merge gossip-discovered rooms into listRooms ([a753487](https://github.com/ExaDev/agent-comms/commit/a753487ec24e50207169c0432ba7db8a913ebea9)), references [131/#132](https://github.com/ExaDev/agent-comms/issues/132)
+
 ## [2.26.0](https://github.com/ExaDev/agent-comms/compare/v2.25.0...v2.26.0) (2026-09-16)
 
 ### Features
