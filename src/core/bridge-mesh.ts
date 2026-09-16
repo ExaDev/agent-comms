@@ -41,6 +41,8 @@ export function createBridgeMeshSync(
       store.roomVerbHandlers,
       undefined,
       () => store.selfStatus,
+      undefined,
+      () => store.hostedRooms,
     ),
   );
   const tool = new CommsTool(store, store.discovery);

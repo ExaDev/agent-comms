@@ -6,6 +6,7 @@ import { MeshStore } from "../core/mesh-store.js";
 import type { ConnectionHandle, MeshTransport } from "../core/transport.js";
 import type { ManageOutcome } from "wire-mesh-core/domain/mesh-session";
 import type { PeerInfo } from "../core/wire-protocol.js";
+import type { Room } from "../core/types.js";
 
 /** A device-id is a 64-character lowercase hex SHA-256 digest; room-path.ts's assertDeviceIdHex rejects anything shorter. */
 const DEVICE_ID_HEX_LENGTH = 64;
@@ -92,6 +93,90 @@ describe("MeshStore — connected getter", () => {
     const store = new MeshStore();
     store.setTransport(fakeTransport());
     expect(store.connected).toBe(false);
+  });
+});
+
+describe("MeshStore — hostedRooms getter", () => {
+  function room(overrides: Partial<Room> = {}): Room {
+    return {
+      id: "owner-device/general",
+      version: 1,
+      name: "general",
+      type: "public",
+      owner: "owner-device",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      description: "chat",
+      members: ["owner-device"],
+      invited: [],
+      memberJoins: { "owner-device": 1 },
+      memberLeaves: {},
+      invitedJoins: {},
+      invitedLeaves: {},
+      ...overrides,
+    };
+  }
+
+  it("includes only this store's own public/private rooms, mapped to the gossip-safe shape", () => {
+    const store = new MeshStore();
+    store.peerId = "owner-device";
+    const rooms = collaborator(store, "rooms") as Map<string, Room>;
+    rooms.set(
+      "owner-device/general",
+      room({ id: "owner-device/general", name: "general", type: "public" }),
+    );
+    rooms.set(
+      "owner-device/team",
+      room({
+        id: "owner-device/team",
+        name: "team",
+        type: "private",
+        description: "private chat",
+      }),
+    );
+
+    expect(store.hostedRooms).toEqual([
+      {
+        path: "owner-device/general",
+        name: "general",
+        type: "public",
+        description: "chat",
+      },
+      {
+        path: "owner-device/team",
+        name: "team",
+        type: "private",
+        description: "private chat",
+      },
+    ]);
+  });
+
+  it("excludes secret rooms, even when owned by this store", () => {
+    const store = new MeshStore();
+    store.peerId = "owner-device";
+    const rooms = collaborator(store, "rooms") as Map<string, Room>;
+    rooms.set(
+      "owner-device/_hidden",
+      room({ id: "owner-device/_hidden", name: "_hidden", type: "secret" }),
+    );
+
+    expect(store.hostedRooms).toEqual([]);
+  });
+
+  it("excludes rooms owned by a different device, even public/private ones this store has replicated", () => {
+    const store = new MeshStore();
+    store.peerId = "owner-device";
+    const rooms = collaborator(store, "rooms") as Map<string, Room>;
+    rooms.set(
+      "other-device/general",
+      room({
+        id: "other-device/general",
+        owner: "other-device",
+        name: "general",
+        type: "public",
+      }),
+    );
+
+    expect(store.hostedRooms).toEqual([]);
   });
 });
 
