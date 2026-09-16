@@ -1,3 +1,9 @@
+## [2.24.2](https://github.com/ExaDev/agent-comms/compare/v2.24.1...v2.24.2) (2026-09-16)
+
+### Chores
+
+* **deps:** bump wire-mesh-core from 1.30.0 to 1.30.1 ([01321f4](https://github.com/ExaDev/agent-comms/commit/01321f4f704e66b1d79c1da299e34ed47ad887d6))
+
 ## [2.24.1](https://github.com/ExaDev/agent-comms/compare/v2.24.0...v2.24.1) (2026-09-16)
 
 ### Chores
