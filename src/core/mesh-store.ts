@@ -29,6 +29,7 @@ import { ConnectionApproval } from "./connection-approval.js";
 import { StaleAgentChecker } from "./stale-agent-checker.js";
 import { PeerLifecycle } from "./peer-lifecycle.js";
 import type { RoomVerbHandler } from "./room-router.js";
+import type { HostedRoomAdvert } from "./wire-mesh-transport.js";
 import type {
   MeshStatePatch,
   PeerInfo,
@@ -105,6 +106,22 @@ export class MeshStore implements CommsStore {
   /** This store's own current AgentStatus, synchronously -- the value WireMeshTransport's presence re-advertisement timer reads on every tick. undefined before registerAgent has ever run (no self agent record exists yet), in which case there is nothing yet to advertise. */
   get selfStatus(): AgentStatus | undefined {
     return this.agents.get(this.peerId)?.status;
+  }
+
+  /** This store's own currently-hosted public/private rooms, synchronously, in the lightweight gossip-safe shape WireMeshTransport's own hosted-rooms re-advertisement timer reads on every tick -- the write half of P3.8's room-discovery replacement for createRoom's own broadcastPatch (agent-comms#48). Secret rooms are never included (never worth advertising at all), and a room this store has merely replicated via the legacy room_upsert broadcast, rather than owns, is excluded too -- "hosted" means "this device is the one a joiner should actually reach", which only its own owner is. */
+  get hostedRooms(): readonly HostedRoomAdvert[] {
+    const result: HostedRoomAdvert[] = [];
+    for (const room of this.rooms.values()) {
+      if (room.owner !== this.peerId) continue;
+      if (room.type !== "public" && room.type !== "private") continue;
+      result.push({
+        path: room.id,
+        name: room.name,
+        type: room.type,
+        description: room.description,
+      });
+    }
+    return result;
   }
 
   /** Whether the mesh has a live coordinator connection. */
