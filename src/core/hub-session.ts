@@ -54,6 +54,8 @@ export interface HubSessionDeps {
     request: IncomingManageRequest,
     handle: Readonly<ConnectionHandle>,
   ) => Promise<void>;
+  /** The gateway trust boundary (agent-comms#156): whether the given device-id (hex) is currently trusted. Checked against every gossiped directory entry's own device and every relayed request's own fromDevice before this side merges or dispatches it -- see consume()/connect()'s own doc comments for exactly where and why. */
+  isTrusted: (deviceHex: string) => boolean;
 }
 
 export class HubSession {
@@ -108,13 +110,15 @@ export class HubSession {
     this.session = session;
     this.connection = connection;
     this.deps.trackForShutdown(session);
-    // Merge the hub's directory (its catch-up arrives as the first session events) and keep refreshing it on every subsequent one. Every remote entry is also surfaced via onDirectory, so the transport can merge it into its own mesh-wide knownDevices (agent-comms#155's remote-directory-merge leg).
+    // Merge the hub's directory (its catch-up arrives as the first session events) and keep refreshing it on every subsequent one. Every trusted remote entry is also surfaced via onDirectory, so the transport can merge it into its own mesh-wide knownDevices (agent-comms#155's remote-directory-merge leg). Filtered to isTrusted (agent-comms#156) before either hubPeersKnown tracking or onDirectory sees it: an untrusted device's gossiped presence is not merely withheld from listAgents, it is never even recorded as "known" here, so nothing downstream can act on it via any path this class exposes.
     void (async () => {
       const ownHex = deviceIdToHex(identity.deviceId);
       for await (const event of session.events) {
         if (this.deps.isShuttingDown()) break;
         const remoteEntries = event.directory.filter(
-          (entry) => deviceIdToHex(entry.device) !== ownHex,
+          (entry) =>
+            deviceIdToHex(entry.device) !== ownHex &&
+            this.deps.isTrusted(deviceIdToHex(entry.device)),
         );
         for (const entry of remoteEntries) {
           this.hubPeersKnown.add(deviceIdToHex(entry.device));
@@ -129,7 +133,7 @@ export class HubSession {
     })();
   }
 
-  /** Dispatches inbound relayed manage-requests: each is handled with a handle keyed by the SENDING device (request.fromDevice names it on relay-routed requests), so every downstream consumer sees the true origin, never the hub -- the same discipline extends to a real room-domain verb (agent-comms#155's "remote to local" leg) as it already applied to the legacy opaque-frame path. A legacy FRAME_VERB carrying state_sync/state_update is dropped before ever reaching onMessage/applyPatch -- see isStateMutatingMessage's own doc for why: the hub has no per-peer admission control yet (that lands in agent-comms#156), so accepting one from an arbitrary hub peer would let it directly patch this side's mesh state (a security review finding on agent-comms#169). A real room-domain verb (room.send, room.join, room.notify, ...) carries no equivalent risk -- it is independently gated by its own room:member capability token, verified regardless of which transport path it arrived over -- so it is dispatched to the same roomVerbHandlers a local peer session's own drainSession uses, via handleRoomRequest, against THIS side's own local mesh state. Known limitation, inherited from wire-mesh-core's own session layer rather than something agent-comms can fix here: a session tracks at most one active relay pairing per remote device (mesh-session.ts's own single relayPeerDevice slot), so a request relayed here is dispatched as "addressed to this gateway's own agent" unconditionally -- there is no target-device disambiguation available to route it on to a DIFFERENT local peer this gateway also advertises. Forwarding this gateway's own agent's traffic is therefore correct; a remote request genuinely meant for another local peer behind this same gateway is not yet distinguishable from one meant for this gateway's own agent. */
+  /** Dispatches inbound relayed manage-requests: each is handled with a handle keyed by the SENDING device (request.fromDevice names it on relay-routed requests), so every downstream consumer sees the true origin, never the hub -- the same discipline extends to a real room-domain verb (agent-comms#155's "remote to local" leg) as it already applied to the legacy opaque-frame path. Every request is first checked against the gateway trust boundary (agent-comms#156, deps.isTrusted): a request with no fromDevice at all (senderHex falls back to the literal string "hub-peer", never a real trusted device-id) or an unrecognised fromDevice is never dispatched to either path below -- a legacy FRAME_VERB message is silently dropped (matching isStateMutatingMessage's own swallow-and-ack style, so an untrusted sender learns nothing about why), and a room-domain request gets an explicit `unauthorized` error rather than being dispatched, so its caller fails fast instead of waiting out HUB_ROOM_REQUEST_TIMEOUT_MS's local-session-side counterpart. A legacy FRAME_VERB carrying state_sync/state_update is dropped before ever reaching onMessage/applyPatch even from an otherwise-trusted sender -- see isStateMutatingMessage's own doc for why: gateway trust says "this device's traffic is worth acting on," not "this device may directly overwrite this side's mesh state," which is a strictly stronger claim the trust boundary here was never meant to grant (a security review finding on agent-comms#169). A real room-domain verb (room.send, room.join, room.notify, ...) carries no equivalent risk -- it is independently gated by its own room:member capability token, verified regardless of which transport path it arrived over -- so a trusted sender's request is dispatched to the same roomVerbHandlers a local peer session's own drainSession uses, via handleRoomRequest, against THIS side's own local mesh state. Known limitation, inherited from wire-mesh-core's own session layer rather than something agent-comms can fix here: a session tracks at most one active relay pairing per remote device (mesh-session.ts's own single relayPeerDevice slot), so a request relayed here is dispatched as "addressed to this gateway's own agent" unconditionally -- there is no target-device disambiguation available to route it on to a DIFFERENT local peer this gateway also advertises. Forwarding this gateway's own agent's traffic is therefore correct; a remote request genuinely meant for another local peer behind this same gateway is not yet distinguishable from one meant for this gateway's own agent. */
   private consume(session: AcceptedMeshSession): void {
     void (async () => {
       for await (const request of session.incomingManageRequests) {
@@ -138,8 +142,18 @@ export class HubSession {
           request.fromDevice !== undefined
             ? deviceIdToHex(request.fromDevice)
             : "hub-peer";
-        this.hubPeersKnown.add(senderHex);
         const handle: Readonly<ConnectionHandle> = { id: senderHex };
+        if (!this.deps.isTrusted(senderHex)) {
+          if (request.command.verb === FRAME_VERB) {
+            await request.respond({ result: "ok" }).catch(() => undefined);
+            continue;
+          }
+          await request
+            .respond({ result: "error", code: "unauthorized" })
+            .catch(() => undefined);
+          continue;
+        }
+        this.hubPeersKnown.add(senderHex);
         if (request.command.verb === FRAME_VERB) {
           const message = extractMessage(request.command);
           if (message !== undefined && !isStateMutatingMessage(message)) {
@@ -217,7 +231,7 @@ function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-/** A state_sync or state_update carries authority to directly overwrite or patch this side's own mesh state (agents, rooms, messages, deliveries) -- on an ordinary peer session that authority is meaningful because the peer already passed connect_request/introduce approval or the coordinator's own trusted mesh membership. A hub-relayed sender has passed neither: today's hub accepts any self-generated identity and gates nothing per-peer (agent-comms#156's own future deliverable), so treating its state_sync/state_update as equally authoritative would let an arbitrary hub peer inject an outcome indistinguishable from a genuine mesh event, e.g. a spoofed inbound delivery. Every other legacy message method this session might relay is already inert on receipt (PeerLifecycle's own handleDataMessage only reacts to these two), so filtering exactly these two is a complete fix for this specific path, not a partial one. */
+/** A state_sync or state_update carries authority to directly overwrite or patch this side's own mesh state (agents, rooms, messages, deliveries) -- on an ordinary peer session that authority is meaningful because the peer already passed connect_request/introduce approval or the coordinator's own trusted mesh membership. A hub-relayed sender has passed neither, and gateway trust (agent-comms#156, consume()'s own isTrusted gate) doesn't grant it either: being on the allowlist means "this device's traffic is worth acting on," not "this device may directly overwrite this side's mesh state" -- a strictly stronger claim no hub-relayed sender has ever been asked to prove, since the hub itself still accepts any self-generated identity with no admission control of its own (gating the hub is deliberately out of scope for agent-comms#156). Treating a trusted sender's state_sync/state_update as equally authoritative would let it inject an outcome indistinguishable from a genuine mesh event, e.g. a spoofed inbound delivery -- so this filter stays unconditional, applied even to a sender consume() has already let past the trust gate. Every other legacy message method this session might relay is already inert on receipt (PeerLifecycle's own handleDataMessage only reacts to these two), so filtering exactly these two is a complete fix for this specific path, not a partial one. */
 function isStateMutatingMessage(message: MeshMessage): boolean {
   return message.method === "state_sync" || message.method === "state_update";
 }
