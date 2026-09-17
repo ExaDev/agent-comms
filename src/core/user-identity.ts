@@ -54,7 +54,10 @@ function isStoredUserIdentity(value: unknown): value is StoredUserIdentity {
     typeof value.expiresAt !== "string"
   )
     return false;
-  if ("issuedDeviceGrants" in value && !isStringRecord(value.issuedDeviceGrants))
+  if (
+    "issuedDeviceGrants" in value &&
+    !isStringRecord(value.issuedDeviceGrants)
+  )
     return false;
   if ("issuedDmGrants" in value && !isStringRecord(value.issuedDmGrants))
     return false;
