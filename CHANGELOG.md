@@ -1,3 +1,15 @@
+## [3.11.0](https://github.com/ExaDev/agent-comms/compare/v3.10.0...v3.11.0) (2026-09-17)
+
+### Features
+
+* **core:** add CapabilityAskAdmission for the ask tier's held-open capability requests ([cfb1a6b](https://github.com/ExaDev/agent-comms/commit/cfb1a6b6d5b690d0942fdc355912cd72b7885df5))
+* **core:** surface capability_request events and the accept/reject/pending actions ([84b5d7c](https://github.com/ExaDev/agent-comms/commit/84b5d7c7cc19bcfcbd1361d1af1bea6bb99f1d2b))
+* **release:** retry connection-level and expired-JWT MCP publish failures ([9629703](https://github.com/ExaDev/agent-comms/commit/9629703d7d7cc8d95bf51385057d9578ae9b3cc0))
+
+### Bug Fixes
+
+* **release:** re-login before each MCP registry publish retry ([9f77176](https://github.com/ExaDev/agent-comms/commit/9f7717619a54fe9aad65b106a31f6ded3bad1776))
+
 ## [3.10.0](https://github.com/ExaDev/agent-comms/compare/v3.9.0...v3.10.0) (2026-09-17)
 
 ### Features
