@@ -31,9 +31,10 @@ export interface BridgeMeshSync extends BridgeMesh {
 export function createBridgeMeshSync(
   slot: Readonly<IdentitySlot>,
   coordinatorPort?: number,
+  hubUrl?: string,
 ): BridgeMeshSync {
   const identity = loadOrCreateIdentity(slot);
-  const store = new MeshStore(coordinatorPort);
+  const store = new MeshStore(coordinatorPort, hubUrl);
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- oplogDirFor(slot) needs only the slot, not the async identity below, so this can be constructed synchronously right here.
   const dataStorage = createNodeFsStorage({ dir: oplogDirFor(slot) });
@@ -70,10 +71,12 @@ export function createBridgeMeshSync(
 export async function createBridgeMesh(
   slot: Readonly<IdentitySlot>,
   coordinatorPort?: number,
+  hubUrl?: string,
 ): Promise<BridgeMesh> {
   const { store, tool, attachIdentity } = createBridgeMeshSync(
     slot,
     coordinatorPort,
+    hubUrl,
   );
   await attachIdentity();
   return { store, tool };
