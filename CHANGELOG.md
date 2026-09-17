@@ -1,3 +1,13 @@
+## [3.7.0](https://github.com/ExaDev/agent-comms/compare/v3.6.0...v3.7.0) (2026-09-17)
+
+### Features
+
+* **core:** route a capability-request up its issuer chain ([6f96357](https://github.com/ExaDev/agent-comms/commit/6f963570712e134cbfcbfae06b1c0d4be97efe08)), references [agent-comms#164](https://github.com/agent-comms/issues/164)
+
+### Tests
+
+* **core:** add failing specs for issuer-chain bubble-up routing ([525d9b6](https://github.com/ExaDev/agent-comms/commit/525d9b6705f59e7d24ace36546173191db67af07))
+
 ## [3.6.0](https://github.com/ExaDev/agent-comms/compare/v3.5.0...v3.6.0) (2026-09-17)
 
 ### Features
