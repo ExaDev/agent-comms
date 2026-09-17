@@ -47,7 +47,7 @@ export function pushHubCatchUp(
   forwardAdvertsToHub(hub, catchUp, onError, hasAnyTrustedGateway);
 }
 
-/** Routes a room-domain request through the hub's relay-connect/relay-data pairing when memberId isn't a local peer session -- WireMeshTransport.sendRoomRequest's own fallback, since the member may be a remote agent reachable only via this machine's gateway connection (agent-comms#155's local-to-remote leg). Resolves the same not_connected outcome sendRoomRequest already returned before the hub existed at all when this side isn't currently the gateway. */
+/** Routes a room-domain request through the hub's relay-connect/relay-data pairing when memberId isn't a local peer session -- WireMeshTransport.sendRoomRequest's own fallback, since the member may be a remote agent reachable only via this machine's gateway connection (agent-comms#155's local-to-remote leg). WireMeshTransport.sendRoomRequest itself gates memberId against the gateway trust boundary (agent-comms#156) before ever calling this, so by the time this runs memberId is already known-trusted -- this function stays focused on the hub-connectivity outcome alone. Resolves the same not_connected outcome sendRoomRequest already returned before the hub existed at all when this side isn't currently the gateway. */
 export async function routeRoomRequestViaHub(
   hub: Readonly<Pick<HubSession, "isConnected" | "sendRoomRequest">>,
   memberId: string,
@@ -57,4 +57,18 @@ export async function routeRoomRequestViaHub(
 ): Promise<ManageOutcome> {
   if (!hub.isConnected) return { result: "error", code: "not_connected" };
   return hub.sendRoomRequest(memberId, command, scope, token);
+}
+
+/** Dials the hub and immediately pushes a catch-up of every already-known local device onto it (agent-comms#154's own hub-connection-establishment sequence, kept together here rather than split across two call-site statements in WireMeshTransport.connectHub) -- without the trailing catch-up, a device whose own last gossip arrived before this coordinator took over the gateway role would stay invisible on the hub until its own next periodic gossip tick. */
+export async function connectHubGateway(
+  hub: Readonly<
+    Pick<HubSession, "isConnected" | "advertiseDevices" | "connect">
+  >,
+  url: string,
+  knownDevices: ReadonlyMap<string, Readonly<PeerAdvert>>,
+  onError: ((error: Error) => void) | undefined,
+  hasAnyTrustedGateway: () => boolean,
+): Promise<void> {
+  await hub.connect(url);
+  pushHubCatchUp(hub, knownDevices, onError, hasAnyTrustedGateway);
 }

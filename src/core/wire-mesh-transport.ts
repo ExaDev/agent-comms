@@ -12,10 +12,20 @@ import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
 import * as bindRetry from "./bind-retry.js";
 import { connectWsUrl } from "./ws-dial.js";
 import { HubSession } from "./hub-session.js";
+import { GatewayTrust, type GatewayTrustReader } from "./gateway-trust.js";
+import {
+  advertisedListenerAddresses,
+  LISTENER_ID_LENGTH,
+  listenerPort,
+  listTrackedListeners,
+  registerListener,
+  unregisterListener,
+  type TrackedListener,
+} from "./listener-registry.js";
 import { findPresenceAdvert, mergeKnownDevices } from "./gossip-directory.js";
 import {
+  connectHubGateway,
   forwardAdvertsToHub,
-  pushHubCatchUp,
   routeRoomRequestViaHub,
 } from "./hub-forwarding.js";
 import {
@@ -83,9 +93,6 @@ const PRESENCE_READVERTISE_INTERVAL_SECONDS = 20;
 const PRESENCE_READVERTISE_INTERVAL_MS =
   PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND;
 
-/** Length of the random id minted for a tracked listener (the coordinator's own bootstrap listener, or one registered via addListener). */
-const LISTENER_ID_LENGTH = 8;
-
 /** The domain-qualified gossip extension key this transport reads/writes presence under, per wire-mesh's own gossip-extension-namespacing convention (spec/CONVENTIONS.md): `<domain>/<field>`, never a bare name a second application's own extension could collide with. */
 export const PRESENCE_GOSSIP_KEY = "presence/status";
 
@@ -136,12 +143,6 @@ export function buildCommand(message: MeshMessage): ManageCommand {
   return { verb: FRAME_VERB, params: { message } };
 }
 
-/** Reads the port a listener actually bound, from its own reported address -- never the port it was asked to bind, which is 0 whenever the caller wanted the OS to assign a free one. Bookkeeping that stores the requested port instead silently reports 0 for every OS-assigned listener. */
-function listenerPort(listener: Readonly<Listener>): number {
-  const port = listener.address.split(":").pop();
-  return port === undefined ? 0 : Number(port);
-}
-
 // ---------------------------------------------------------------------------
 // Internal session bookkeeping
 // ---------------------------------------------------------------------------
@@ -161,14 +162,6 @@ interface PendingConnection {
   resolve: (decision: ConnectionDecision) => void;
   /** Auto-rejects this request after the configured pending-connection timeout if no human decision arrives first. Cleared by acceptConnection/rejectConnection/watchForDisconnect's own disconnect path, whichever settles the request first -- an entry is only ever removed from pendingConnections once, so this timer firing after another path already resolved it is structurally impossible, not merely guarded against. */
   timeoutHandle: ReturnType<typeof setTimeout>;
-}
-
-interface TrackedListener {
-  listener: Listener;
-  policy: ListenerPolicy;
-  host: string;
-  port: number;
-  isDefault: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -259,6 +252,12 @@ export class WireMeshTransport implements MeshTransport {
   /** Every peer this side has ever received a frame from, keyed by device-id hex, tracking the raw wire-mesh-core Connection each frame arrived on -- what sendDataFrame needs, since neither AcceptedMeshSession nor MeshSession exposes a generic "send an arbitrary frame" method the way the raw Connection itself does. Registered eagerly on the very first frame from a connection (including one still in quarantine, e.g. before connect_request approval) so a later sendDataFrame call can reach it -- handleDataFrame's own trust gate (peerSessions.has) is what actually decides whether to act on anything received this way, not this map. */
   private readonly connectionsByPeer = new Map<string, Connection>();
 
+  /** The cross-machine trust boundary (agent-comms#156): gates outbound gossip advertisement (hasAny), inbound directory merge/request dispatch, and outbound targeted hub requests (both isTrusted) -- see GatewayTrust's own class doc. Defaults to a fresh, empty (deny-all) instance when no caller wires one in, matching every existing construction site that predates this feature. */
+  private readonly gatewayTrust: GatewayTrustReader;
+  /** Bound once here so both hub-forwarding call sites (watchForDisconnect, connectHub) can pass a plain reference rather than repeating an inline arrow. */
+  private readonly hasAnyTrustedGateway = (): boolean =>
+    this.gatewayTrust.hasAny();
+
   constructor(
     events: Readonly<TransportEvents>,
     identity: Readonly<PeerIdentity>,
@@ -269,6 +268,7 @@ export class WireMeshTransport implements MeshTransport {
     getHostedRooms?: () => readonly HostedRoomAdvert[],
     dataStorage?: KeyValueStorage,
     getSelfAgentAdvert?: () => AgentSelfAdvert | undefined,
+    gatewayTrust: Readonly<GatewayTrustReader> = new GatewayTrust(),
   ) {
     this.events = events;
     this.wireTransport = createTlsTransport({
@@ -276,6 +276,7 @@ export class WireMeshTransport implements MeshTransport {
       privateKeyPem: identity.privateKey,
     });
     this.identityReady = toIdentityPort(identity);
+    this.gatewayTrust = gatewayTrust;
     // Built before this.hub below (roomRouter has no dependency on it) so the hub can be wired with a direct this.roomRouter.handleRequest reference rather than a lazy closure.
     this.roomRouter = createRoomRouter({
       events,
@@ -294,6 +295,7 @@ export class WireMeshTransport implements MeshTransport {
         mergeKnownDevices(this.knownDevices, entries);
       },
       handleRoomRequest: this.roomRouter.handleRequest,
+      isTrusted: (deviceHex) => this.gatewayTrust.isTrusted(deviceHex),
     });
     this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;
     this.getCurrentPresence = getCurrentPresence;
@@ -549,7 +551,12 @@ export class WireMeshTransport implements MeshTransport {
     void (async () => {
       for await (const event of session.events) {
         mergeKnownDevices(this.knownDevices, event.directory);
-        forwardAdvertsToHub(this.hub, event.directory, this.events.onError);
+        forwardAdvertsToHub(
+          this.hub,
+          event.directory,
+          this.events.onError,
+          this.hasAnyTrustedGateway,
+        );
         const presence = findPresenceAdvert(deviceIdHex, event.directory);
         if (presence !== undefined) {
           this.events.onPresenceAdvert(handle, presence);
@@ -791,6 +798,9 @@ export class WireMeshTransport implements MeshTransport {
     if (session !== undefined) {
       return session.sendManageRequest(command, scope, undefined, token);
     }
+    if (!this.gatewayTrust.isTrusted(memberId)) {
+      return { result: "error", code: "unauthorized" };
+    }
     return routeRoomRequestViaHub(this.hub, memberId, command, scope, token);
   }
 
@@ -902,50 +912,33 @@ export class WireMeshTransport implements MeshTransport {
     port: number,
     policy: ListenerPolicy,
   ): Promise<string> {
-    const id = nanoid(LISTENER_ID_LENGTH);
-    const listener = await this.wireTransport.listen(
-      `${host}:${String(port)}`,
+    return registerListener(
+      this.wireTransport,
+      this.coordinatorListeners,
+      host,
+      port,
+      policy,
       (connection) => {
         void this.handleAcceptedConnection(connection, policy, false, true);
       },
     );
-    this.coordinatorListeners.set(id, {
-      listener,
-      policy,
-      host,
-      port: listenerPort(listener),
-      isDefault: false,
-    });
-    return id;
   }
 
   async removeListener(id: string): Promise<void> {
-    if (id === this.defaultListenerId) {
-      throw new Error("Cannot remove the default listener");
-    }
-    const tracked = this.coordinatorListeners.get(id);
-    if (tracked === undefined) return;
-    this.coordinatorListeners.delete(id);
-    await tracked.listener.close();
+    await unregisterListener(
+      this.coordinatorListeners,
+      this.defaultListenerId,
+      id,
+    );
   }
 
   listListeners(): ListenerInfo[] {
-    return [...this.coordinatorListeners.entries()].map(([id, tracked]) => ({
-      id,
-      host: tracked.host,
-      port: tracked.port,
-      policy: tracked.policy,
-      isDefault: tracked.isDefault,
-    }));
+    return listTrackedListeners(this.coordinatorListeners);
   }
 
-  /**
-   * This side's own directly-reachable "host:port" candidates (wire-mesh#38), passed into every acceptMeshSession call's own self-advert. Deliberately excludes the default bootstrap coordinator listener -- it always binds COORDINATOR_HOST (127.0.0.1, hardcoded, never configurable), which is meaningless to advertise to a remote peer -- and includes only listeners an operator explicitly registered via addListener, which by construction represent a deliberate "make me reachable from elsewhere" declaration.
-   */
+  /** This side's own directly-reachable "host:port" candidates (wire-mesh#38), passed into every acceptMeshSession call's own self-advert -- see advertisedListenerAddresses' own doc for what's included/excluded and why. */
   private get advertisedAddresses(): string[] {
-    return [...this.coordinatorListeners.values()]
-      .filter((tracked) => !tracked.isDefault)
-      .map((tracked) => `${tracked.host}:${String(tracked.port)}`);
+    return advertisedListenerAddresses(this.coordinatorListeners);
   }
 
   // -----------------------------------------------------------------------
@@ -953,8 +946,13 @@ export class WireMeshTransport implements MeshTransport {
   // -----------------------------------------------------------------------
 
   async connectHub(url: string): Promise<void> {
-    await this.hub.connect(url);
-    pushHubCatchUp(this.hub, this.knownDevices, this.events.onError);
+    await connectHubGateway(
+      this.hub,
+      url,
+      this.knownDevices,
+      this.events.onError,
+      this.hasAnyTrustedGateway,
+    );
   }
 
   async disconnectHub(): Promise<void> {

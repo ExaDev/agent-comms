@@ -17,6 +17,7 @@ import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
 import { COORDINATOR_HOST, DEFAULT_HUB_URL } from "./mesh-store-shared.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import { CoordinatorGateway } from "./coordinator-gateway.js";
+import { GatewayTrust } from "./gateway-trust.js";
 import { DeliveryEngine } from "./delivery-engine.js";
 import { RoomProtocol } from "./room-protocol.js";
 import { RoomMessaging } from "./room-messaging.js";
@@ -96,6 +97,9 @@ export class MeshStore implements CommsStore {
   private initialised = false;
 
   discovery: DiscoveryManager;
+
+  /** The cross-machine trust boundary (agent-comms#156) -- constructed once here (mirroring discovery above) and shared with WireMeshTransport by every construction site (bridge-mesh.ts, test-transport.ts) that passes it into WireMeshTransport's own constructor, so store.addTrustedGateway() and the transport's own hub-forwarding/hub-session gates read the exact same in-memory set. Public so those construction sites can reach it; addTrustedGateway/removeTrustedGateway/listTrustedGateways below are the methods CommsTool actually calls through MeshOnlyFeatures. */
+  readonly gatewayTrust = new GatewayTrust();
 
   private readonly deliveryEngine: DeliveryEngine;
   private readonly roomProtocol: RoomProtocol;
@@ -799,6 +803,25 @@ export class MeshStore implements CommsStore {
   /** Get current mesh discovery visibility. */
   getVisibility(adapter?: string): MeshVisibility {
     return this.discovery.getVisibility(adapter);
+  }
+
+  // -----------------------------------------------------------------------
+  // Gateway trust (agent-comms#156) -- the cross-machine trust boundary
+  // -----------------------------------------------------------------------
+
+  /** Trusts a remote device-id (hex): this store's own gateway (once it becomes the coordinator) will advertise onto the hub, merge this device's gossiped directory entries, dispatch its relayed requests, and route outbound hub requests to it. See GatewayTrust's own class doc for why trust is keyed per device-id rather than per remote machine, and why it doesn't survive a restart. */
+  addTrustedGateway(deviceHex: string): void {
+    this.gatewayTrust.add(deviceHex);
+  }
+
+  /** Withdraws trust from a remote device-id (hex). A no-op if it was never trusted. */
+  removeTrustedGateway(deviceHex: string): void {
+    this.gatewayTrust.remove(deviceHex);
+  }
+
+  /** Every currently trusted remote device-id (hex). */
+  listTrustedGateways(): string[] {
+    return this.gatewayTrust.list();
   }
 
   // -----------------------------------------------------------------------
