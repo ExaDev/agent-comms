@@ -138,11 +138,12 @@ export class PeerLifecycle {
     );
     if (remainingPeers.length === 0) return;
 
-    const bySuccession = [...remainingPeers].sort(
+    // filter() above already returned a fresh array, so sorting it in place is safe.
+    remainingPeers.sort(
       (a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt),
     );
-    const [successor, ...handoffList] = bySuccession;
-    // remainingPeers.length > 0 (checked above) guarantees bySuccession has at least one entry -- this narrows the type for TypeScript rather than handling a real runtime case.
+    const [successor, ...handoffList] = remainingPeers;
+    // remainingPeers.length > 0 (checked above) guarantees at least one entry here -- this narrows the type for TypeScript rather than handling a real runtime case.
     if (successor === undefined) return;
 
     await transport.send(
