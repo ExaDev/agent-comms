@@ -56,6 +56,13 @@ export interface HubSessionDeps {
   ) => Promise<void>;
   /** The gateway trust boundary (agent-comms#156): whether the given device-id (hex) is currently trusted. Checked against every gossiped directory entry's own device and every relayed request's own fromDevice before this side merges or dispatches it -- see consume()/connect()'s own doc comments for exactly where and why. */
   isTrusted: (deviceHex: string) => boolean;
+  /** Forwards a room-domain manage-request on to a specific LOCAL peer session (one this gateway is directly connected to over the ordinary local mesh, keyed by device-id hex) rather than dispatching it against this gateway's own local state -- consume()'s own toDevice disambiguation (agent-comms#184, wire-mesh-core 1.48.1's IncomingManageRequest.toDevice). Returns undefined when no local session exists for that device-id, in which case consume() falls back to handleRoomRequest exactly as it always has. */
+  forwardToLocalPeer: (
+    deviceHex: string,
+    command: ManageCommand,
+    scope: Readonly<CapabilityScope>,
+    token?: CapabilityToken,
+  ) => Promise<ManageOutcome> | undefined;
 }
 
 export class HubSession {
@@ -132,14 +139,14 @@ export class HubSession {
         if (event.state.status === "closed") break;
       }
     })();
-    this.consume(session);
+    this.consume(session, deviceIdToHex(identity.deviceId));
     void (async () => {
       await this.watchDisconnect(session);
     })();
   }
 
-  /** Dispatches inbound relayed manage-requests: each is handled with a handle keyed by the SENDING device (request.fromDevice names it on relay-routed requests), so every downstream consumer sees the true origin, never the hub -- the same discipline extends to a real room-domain verb (agent-comms#155's "remote to local" leg) as it already applied to the legacy opaque-frame path. Every request is first checked against the gateway trust boundary (agent-comms#156, deps.isTrusted): a request with no fromDevice at all (senderHex falls back to the literal string "hub-peer", never a real trusted device-id) or an unrecognised fromDevice is never dispatched to either path below -- a legacy FRAME_VERB message is silently dropped (matching isStateMutatingMessage's own swallow-and-ack style, so an untrusted sender learns nothing about why), and a room-domain request gets an explicit `unauthorized` error rather than being dispatched, so its caller fails fast instead of waiting out HUB_ROOM_REQUEST_TIMEOUT_MS's local-session-side counterpart. A legacy FRAME_VERB carrying state_sync/state_update is dropped before ever reaching onMessage/applyPatch even from an otherwise-trusted sender -- see isStateMutatingMessage's own doc for why: gateway trust says "this device's traffic is worth acting on," not "this device may directly overwrite this side's mesh state," which is a strictly stronger claim the trust boundary here was never meant to grant (a security review finding on agent-comms#169). A real room-domain verb (room.send, room.join, room.notify, ...) carries no equivalent risk -- it is independently gated by its own room:member capability token, verified regardless of which transport path it arrived over -- so a trusted sender's request is dispatched to the same roomVerbHandlers a local peer session's own drainSession uses, via handleRoomRequest, against THIS side's own local mesh state. Known limitation, inherited from wire-mesh-core's own session layer rather than something agent-comms can fix here: a session tracks at most one active relay pairing per remote device (mesh-session.ts's own single relayPeerDevice slot), so a request relayed here is dispatched as "addressed to this gateway's own agent" unconditionally -- there is no target-device disambiguation available to route it on to a DIFFERENT local peer this gateway also advertises. Forwarding this gateway's own agent's traffic is therefore correct; a remote request genuinely meant for another local peer behind this same gateway is not yet distinguishable from one meant for this gateway's own agent. */
-  private consume(session: AcceptedMeshSession): void {
+  /** Dispatches inbound relayed manage-requests: each is handled with a handle keyed by the SENDING device (request.fromDevice names it on relay-routed requests), so every downstream consumer sees the true origin, never the hub -- the same discipline extends to a real room-domain verb (agent-comms#155's "remote to local" leg) as it already applied to the legacy opaque-frame path. Every request is first checked against the gateway trust boundary (agent-comms#156, deps.isTrusted): a request with no fromDevice at all (senderHex falls back to the literal string "hub-peer", never a real trusted device-id) or an unrecognised fromDevice is never dispatched to either path below -- a legacy FRAME_VERB message is silently dropped (matching isStateMutatingMessage's own swallow-and-ack style, so an untrusted sender learns nothing about why), and a room-domain request gets an explicit `unauthorized` error rather than being dispatched, so its caller fails fast instead of waiting out HUB_ROOM_REQUEST_TIMEOUT_MS's local-session-side counterpart. A legacy FRAME_VERB carrying state_sync/state_update is dropped before ever reaching onMessage/applyPatch even from an otherwise-trusted sender -- see isStateMutatingMessage's own doc for why: gateway trust says "this device's traffic is worth acting on," not "this device may directly overwrite this side's mesh state," which is a strictly stronger claim the trust boundary here was never meant to grant (a security review finding on agent-comms#169). A real room-domain verb (room.send, room.join, room.notify, ...) carries no equivalent risk -- it is independently gated by its own room:member capability token, verified regardless of which transport path it arrived over. Multi-device gateway routing (agent-comms#184, wire-mesh-core 1.48.1's own IncomingManageRequest.toDevice, read directly from each relay-data frame's own to-device field rather than guessed from pairing state): when the request carries a toDevice that names a different device than ownDeviceHex, the command is first re-stamped with an "on-behalf-of" params field naming senderHex (already verified trusted above) before deps.forwardToLocalPeer forwards it on to that device's own local mesh session (one this gateway is directly connected to, never merely gossiped-about) -- room-router.ts's own resolveHandle reads that field back out on the receiving end, so the forwarded request is attributed to the true remote sender there, not to this gateway, matching this same method's own "every downstream consumer sees the true origin, never the hub" discipline for the local hop too. Its outcome is relayed straight back. Only when forwardToLocalPeer finds no such local session (toDevice is absent, matches ownDeviceHex, or names a device this gateway doesn't actually front) does the request fall through to handleRoomRequest, dispatched to the same roomVerbHandlers a local peer session's own drainSession uses, against THIS side's own local mesh state -- correct for traffic genuinely addressed to this gateway's own agent, and the same fallback a sender still on a pre-#184 wire-mesh-core (never stamping toDevice at all) already relied on. */
+  private consume(session: AcceptedMeshSession, ownDeviceHex: string): void {
     void (async () => {
       for await (const request of session.incomingManageRequests) {
         if (this.deps.isShuttingDown()) break;
@@ -166,6 +173,31 @@ export class HubSession {
           }
           await request.respond({ result: "ok" }).catch(() => undefined);
           continue;
+        }
+        const toDeviceHex =
+          request.toDevice !== undefined
+            ? deviceIdToHex(request.toDevice)
+            : undefined;
+        if (toDeviceHex !== undefined && toDeviceHex !== ownDeviceHex) {
+          // Stamps the already-verified true sender (senderHex -- trusted above, never the "hub-peer" fallback, since an untrusted or fromDevice-less request already continued away) onto the forwarded command's own params, so the local peer's own resolveHandle (room-router.ts) can attribute the request to senderHex instead of this side's own device once it arrives over that peer's ordinary local-mesh session -- otherwise every downstream consumer at the local peer would see this gateway as the requester, never the real remote origin, defeating consume()'s own "true origin, never the hub" discipline for this forwarded leg specifically.
+          const forwardedCommand = {
+            ...request.command,
+            params: {
+              ...request.command.params,
+              "on-behalf-of": senderHex,
+            },
+          };
+          const forwarded = this.deps.forwardToLocalPeer(
+            toDeviceHex,
+            forwardedCommand,
+            request.scope,
+            request.token,
+          );
+          if (forwarded !== undefined) {
+            const outcome = await forwarded;
+            await request.respond(outcome).catch(() => undefined);
+            continue;
+          }
         }
         await this.deps.handleRoomRequest(request, handle);
       }

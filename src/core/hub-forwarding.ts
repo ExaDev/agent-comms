@@ -9,6 +9,7 @@ import type {
   PeerAdvert,
 } from "wire-mesh-core/generated/protocol";
 import type {
+  AcceptedMeshSession,
   DirectoryEntry,
   ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
@@ -45,6 +46,19 @@ export function pushHubCatchUp(
     advert,
   }));
   forwardAdvertsToHub(hub, catchUp, onError, hasAnyTrustedGateway);
+}
+
+/** Sends a room-domain manage-request to a LOCAL peer session only (peerSessions), never falling back to hub routing -- HubSession's own toDevice-forwarding leg (agent-comms#184: a hub-relayed request explicitly addressed to a non-gateway local peer this gateway also fronts), wired in as WireMeshTransport's forwardToLocalPeer dependency. Returns undefined when no local session exists for that device-id, in which case HubSession falls back to dispatching the request against this gateway's own local state instead. */
+export function sendToLocalPeer(
+  peerSessions: ReadonlyMap<string, AcceptedMeshSession>,
+  memberId: string,
+  command: ManageCommand,
+  scope: Readonly<CapabilityScope>,
+  token?: CapabilityToken,
+): Promise<ManageOutcome> | undefined {
+  const session = peerSessions.get(memberId);
+  if (session === undefined) return undefined;
+  return session.sendManageRequest(command, scope, undefined, token);
 }
 
 /** Routes a room-domain request through the hub's relay-connect/relay-data pairing when memberId isn't a local peer session -- WireMeshTransport.sendRoomRequest's own fallback, since the member may be a remote agent reachable only via this machine's gateway connection (agent-comms#155's local-to-remote leg). WireMeshTransport.sendRoomRequest itself gates memberId against the gateway trust boundary (agent-comms#156) before ever calling this, so by the time this runs memberId is already known-trusted -- this function stays focused on the hub-connectivity outcome alone. Resolves the same not_connected outcome sendRoomRequest already returned before the hub existed at all when this side isn't currently the gateway. */
