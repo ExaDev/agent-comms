@@ -5,16 +5,32 @@
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
+  type DirectoryEntry,
+  type IncomingManageRequest,
+  type ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
-import type { Frame } from "wire-mesh-core/generated/protocol";
+import type {
+  CapabilityScope,
+  CapabilityToken,
+  Frame,
+  ManageCommand,
+} from "wire-mesh-core/generated/protocol";
 import type { IdentityPort } from "wire-mesh-core/ports/identity";
 import type { Connection } from "wire-mesh-core/ports/transport";
-import type { TransportEvents } from "./transport.js";
+import type { ConnectionHandle, TransportEvents } from "./transport.js";
 import type { MeshMessage } from "./wire-protocol.js";
 import { extractMessage } from "./room-router.js";
 import { connectWsUrl } from "./ws-dial.js";
-import { buildCommand, DOMAIN, FRAME_SCOPE } from "./wire-mesh-transport.js";
+import {
+  buildCommand,
+  DOMAIN,
+  FRAME_SCOPE,
+  FRAME_VERB,
+} from "./wire-mesh-transport.js";
+
+/** How long a room-domain request routed through the hub's relay-connect/relay-data pairing waits for a response before giving up. Unlike an ordinary local peer session, a relay-connect naming an unknown target-device is silently dropped by the hub (spec/relay-hub's own documented behaviour -- no error frame exists for "no such device"), so a request to a device that turns out not to be reachable via any gateway would otherwise hang forever rather than surfacing as a normal "not reachable" outcome. */
+const HUB_ROOM_REQUEST_TIMEOUT_MS = 15_000;
 
 export interface HubSessionDeps {
   /** Resolves this node's own identity port once ready. */
@@ -31,10 +47,19 @@ export interface HubSessionDeps {
   ) => void | Promise<void>;
   /** Tracks the session for shutdown -- every session the transport ever creates, always. */
   trackForShutdown: (session: AcceptedMeshSession) => void;
+  /** Fires with every remote (non-self) directory entry the hub's own gossip/catch-up surfaces, every time the session's directory changes (agent-comms#155's own remote-directory-merge leg) -- the transport merges these into its own mesh-wide knownDevices the same way it already merges a local peer session's directory, so a hub-learned agent surfaces in listAgents/getAgent with no separate lookup path. */
+  onDirectory: (entries: readonly DirectoryEntry[]) => void;
+  /** Dispatches an already-received, non-legacy-frame request (a real core/room verb: room.send, room.notify, room.join, ...) to WireMeshTransport's own roomRouter, the identical dispatch a local peer session's own drainSession already uses -- the outbound half of agent-comms#155's "remote to local" routing leg. Deferred the same lazy-`this`-capture way DeliveryEngine's own sendRoomRequestToMember closure is, since roomRouter is constructed after this class's own instance in WireMeshTransport's constructor. */
+  handleRoomRequest: (
+    request: IncomingManageRequest,
+    handle: Readonly<ConnectionHandle>,
+  ) => Promise<void>;
 }
 
 export class HubSession {
   private session: AcceptedMeshSession | undefined;
+  /** The raw connection underlying `session` -- MeshSession's own sendGossipUpdate only ever advertises this side's own single device, so advertising OTHER (local mesh) devices onto the hub (agent-comms#155's outbound leg) needs a raw gossip frame sent directly, bypassing that per-session single-self-advert limit. */
+  private connection: Connection | undefined;
   private readonly hubPeersKnown = new Set<string>();
 
   constructor(private readonly deps: Readonly<HubSessionDeps>) {}
@@ -55,6 +80,7 @@ export class HubSession {
     const session = this.session;
     if (session === undefined) return;
     this.session = undefined;
+    this.connection = undefined;
     await session.close();
   }
 
@@ -80,17 +106,20 @@ export class HubSession {
       return;
     }
     this.session = session;
+    this.connection = connection;
     this.deps.trackForShutdown(session);
-    // Merge the hub's directory (its catch-up arrives as the first session events) and keep refreshing it on every subsequent one.
+    // Merge the hub's directory (its catch-up arrives as the first session events) and keep refreshing it on every subsequent one. Every remote entry is also surfaced via onDirectory, so the transport can merge it into its own mesh-wide knownDevices (agent-comms#155's remote-directory-merge leg).
     void (async () => {
+      const ownHex = deviceIdToHex(identity.deviceId);
       for await (const event of session.events) {
         if (this.deps.isShuttingDown()) break;
-        for (const entry of event.directory) {
-          const hex = deviceIdToHex(entry.device);
-          if (hex !== deviceIdToHex(identity.deviceId)) {
-            this.hubPeersKnown.add(hex);
-          }
+        const remoteEntries = event.directory.filter(
+          (entry) => deviceIdToHex(entry.device) !== ownHex,
+        );
+        for (const entry of remoteEntries) {
+          this.hubPeersKnown.add(deviceIdToHex(entry.device));
         }
+        if (remoteEntries.length > 0) this.deps.onDirectory(remoteEntries);
         if (event.state.status === "closed") break;
       }
     })();
@@ -100,7 +129,7 @@ export class HubSession {
     })();
   }
 
-  /** Dispatches inbound relayed manage-requests: each is handled with a handle keyed by the SENDING device (request.fromDevice names it on relay-routed requests), so onMessage and every downstream consumer see the true origin, never the hub. Replies ride respond()'s own relay routing back. A state_sync/state_update is dropped before ever reaching onMessage/applyPatch -- see isStateMutatingMessage's own doc for why: the hub has no per-peer admission control yet (that lands in agent-comms#156), so accepting one from an arbitrary hub peer would let it directly patch this side's mesh state (a security review finding on agent-comms#169, which is what first wired a hub connection into production's default coordinator path at all). */
+  /** Dispatches inbound relayed manage-requests: each is handled with a handle keyed by the SENDING device (request.fromDevice names it on relay-routed requests), so every downstream consumer sees the true origin, never the hub -- the same discipline extends to a real room-domain verb (agent-comms#155's "remote to local" leg) as it already applied to the legacy opaque-frame path. A legacy FRAME_VERB carrying state_sync/state_update is dropped before ever reaching onMessage/applyPatch -- see isStateMutatingMessage's own doc for why: the hub has no per-peer admission control yet (that lands in agent-comms#156), so accepting one from an arbitrary hub peer would let it directly patch this side's mesh state (a security review finding on agent-comms#169). A real room-domain verb (room.send, room.join, room.notify, ...) carries no equivalent risk -- it is independently gated by its own room:member capability token, verified regardless of which transport path it arrived over -- so it is dispatched to the same roomVerbHandlers a local peer session's own drainSession uses, via handleRoomRequest. */
   private consume(session: AcceptedMeshSession): void {
     void (async () => {
       for await (const request of session.incomingManageRequests) {
@@ -110,11 +139,16 @@ export class HubSession {
             ? deviceIdToHex(request.fromDevice)
             : "hub-peer";
         this.hubPeersKnown.add(senderHex);
-        const message = extractMessage(request.command);
-        if (message !== undefined && !isStateMutatingMessage(message)) {
-          this.deps.events.onMessage({ id: senderHex }, message);
+        const handle: Readonly<ConnectionHandle> = { id: senderHex };
+        if (request.command.verb === FRAME_VERB) {
+          const message = extractMessage(request.command);
+          if (message !== undefined && !isStateMutatingMessage(message)) {
+            this.deps.events.onMessage(handle, message);
+          }
+          await request.respond({ result: "ok" }).catch(() => undefined);
+          continue;
         }
-        await request.respond({ result: "ok" }).catch(() => undefined);
+        await this.deps.handleRoomRequest(request, handle);
       }
     })();
   }
@@ -125,6 +159,7 @@ export class HubSession {
     }
     if (this.session === session) {
       this.session = undefined;
+      this.connection = undefined;
     }
   }
 
@@ -138,6 +173,38 @@ export class HubSession {
       buildCommand(message),
       FRAME_SCOPE,
       hexToBytes(peerDeviceHex),
+    );
+  }
+
+  /** Gossips a raw `gossip` frame carrying every given entry's own advert onto the hub, over the raw connection rather than sendGossipUpdate (which can only ever advertise this side's own single device) -- the outbound leg of agent-comms#155's gateway forwarding. relay-hub.ts registers each advert's own `device` field against the CONNECTION it arrives on, so every entry passed here becomes reachable, cross-machine, as "via this gateway" -- callers are responsible for only ever passing entries that are actually meant to be advertised (WireMeshTransport filters to local, visible-agent-bearing entries before calling this). Throws if this side isn't currently connected to a hub, matching sendToPeer's own contract -- callers gate on isConnected first. */
+  async advertiseDevices(entries: readonly DirectoryEntry[]): Promise<void> {
+    const connection = this.connection;
+    if (connection === undefined) {
+      throw new Error("not connected to a hub");
+    }
+    await connection.send({
+      type: "gossip",
+      peers: entries.map((entry) => entry.advert),
+    });
+  }
+
+  /** Sends a real core/room manage-request to a specific hub-reachable peer, through the hub's relay-connect/relay-data pairing -- the local-to-remote leg of agent-comms#155's routing, mirroring MeshTransport.sendRoomRequest's own not_connected/outcome contract so WireMeshTransport can fall back to this uniformly when memberId isn't a local peer session. Bounded by HUB_ROOM_REQUEST_TIMEOUT_MS (see its own doc) since an unreachable target-device is silently dropped by the hub with no error frame, unlike a local session's own connection-level failure. */
+  async sendRoomRequest(
+    peerDeviceHex: string,
+    command: ManageCommand,
+    scope: Readonly<CapabilityScope>,
+    token?: CapabilityToken,
+  ): Promise<ManageOutcome> {
+    const session = this.session;
+    if (session === undefined) {
+      return { result: "error", code: "not_connected" };
+    }
+    return session.sendManageRequest(
+      command,
+      scope,
+      hexToBytes(peerDeviceHex),
+      token,
+      HUB_ROOM_REQUEST_TIMEOUT_MS,
     );
   }
 }

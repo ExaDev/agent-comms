@@ -11,11 +11,15 @@
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
 import { connectWsUrl } from "./ws-dial.js";
 import { HubSession } from "./hub-session.js";
-import { mergeKnownDevices } from "./gossip-directory.js";
+import { findPresenceAdvert, mergeKnownDevices } from "./gossip-directory.js";
+import {
+  forwardAdvertsToHub,
+  pushHubCatchUp,
+  routeRoomRequestViaHub,
+} from "./hub-forwarding.js";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
-  type DirectoryEntry,
   type IncomingManageRequest,
   type ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
@@ -52,7 +56,7 @@ import type {
 import type { PeerIdentity } from "./identity.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
 import { nanoid } from "./nanoid.js";
-import { AgentStatus } from "./types.js";
+import type { AgentStatus } from "./types.js";
 import {
   createRoomRouter,
   extractMessage,
@@ -82,7 +86,7 @@ const PRESENCE_READVERTISE_INTERVAL_MS =
 const LISTENER_ID_LENGTH = 8;
 
 /** The domain-qualified gossip extension key this transport reads/writes presence under, per wire-mesh's own gossip-extension-namespacing convention (spec/CONVENTIONS.md): `<domain>/<field>`, never a bare name a second application's own extension could collide with. */
-const PRESENCE_GOSSIP_KEY = "presence/status";
+export const PRESENCE_GOSSIP_KEY = "presence/status";
 
 /** The domain-qualified gossip extension key this transport writes this side's own currently-hosted public/private rooms under -- the write half of P3.8's room-discovery replacement for createRoom's own broadcastPatch (agent-comms#48). Same namespacing convention as PRESENCE_GOSSIP_KEY. */
 const HOSTED_ROOMS_GOSSIP_KEY = "room/hosted";
@@ -96,7 +100,7 @@ export interface HostedRoomAdvert {
 }
 
 /** The domain-qualified gossip extension key this transport writes this side's own agent identity facts under -- the write half of P3.8's eventual agent register/update/offline retirement (agent-comms#48). Same namespacing convention as PRESENCE_GOSSIP_KEY/HOSTED_ROOMS_GOSSIP_KEY. */
-const AGENT_SELF_GOSSIP_KEY = "agent/self";
+export const AGENT_SELF_GOSSIP_KEY = "agent/self";
 
 /** The lightweight, gossip-safe shape an agent advertises itself under: enough for a peer with no prior local record of this device to construct a real AgentIdentity-shaped discovery entry. Deliberately excludes status (already carried separately under presence/status, no need to duplicate it here) and visibility (this field is only ever populated for a "visible" agent in the first place -- see MeshStore's own selfAgentAdvert getter -- so a discovered entry's visibility is always exactly "visible" by construction, never something this advert needs to assert itself). */
 export interface AgentSelfAdvert {
@@ -271,6 +275,11 @@ export class WireMeshTransport implements MeshTransport {
       privateKeyPem: identity.privateKey,
     });
     this.identityReady = toIdentityPort(identity);
+    // Built before this.hub below (roomRouter has no dependency on it) so the hub can be wired with a direct this.roomRouter.handleRequest reference rather than a lazy closure.
+    this.roomRouter = createRoomRouter({
+      events,
+      ...(roomVerbHandlers !== undefined ? { handlers: roomVerbHandlers } : {}),
+    });
     this.hub = new HubSession({
       identityReady: this.identityReady,
       events: this.events,
@@ -280,10 +289,10 @@ export class WireMeshTransport implements MeshTransport {
       trackForShutdown: (session) => {
         this.allSessions.add(session);
       },
-    });
-    this.roomRouter = createRoomRouter({
-      events,
-      ...(roomVerbHandlers !== undefined ? { handlers: roomVerbHandlers } : {}),
+      onDirectory: (entries) => {
+        mergeKnownDevices(this.knownDevices, entries);
+      },
+      handleRoomRequest: this.roomRouter.handleRequest,
     });
     this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;
     this.getCurrentPresence = getCurrentPresence;
@@ -531,21 +540,6 @@ export class WireMeshTransport implements MeshTransport {
     })();
   }
 
-  /** Surfaces a presence extension from the remote peer's own gossiped self-advert, if this event's directory carries a fresh one for exactly this session's peer -- never for any other device-id a multi-hop directory might mention, since only the session's own authenticated peer's advert is this session's business to report. A missing presence/status key, or a value that isn't a recognised AgentStatus, is silently ignored: an advert simply not participating in this convention, not an error (the same verifier obligation peer-advert's own open extension tail is documented under). */
-  private reportPresenceAdvert(
-    handle: Readonly<ConnectionHandle>,
-    deviceIdHex: string,
-    directory: readonly DirectoryEntry[],
-  ): void {
-    const entry = directory.find(
-      (candidate) => deviceIdToHex(candidate.device) === deviceIdHex,
-    );
-    if (entry === undefined) return;
-    const status: unknown = entry.advert[PRESENCE_GOSSIP_KEY];
-    if (!AgentStatus.is(status)) return;
-    this.events.onPresenceAdvert(handle, status);
-  }
-
   private watchForDisconnect(
     session: AcceptedMeshSession,
     handle: Readonly<ConnectionHandle>,
@@ -554,7 +548,11 @@ export class WireMeshTransport implements MeshTransport {
     void (async () => {
       for await (const event of session.events) {
         mergeKnownDevices(this.knownDevices, event.directory);
-        this.reportPresenceAdvert(handle, deviceIdHex, event.directory);
+        forwardAdvertsToHub(this.hub, event.directory, this.events.onError);
+        const presence = findPresenceAdvert(deviceIdHex, event.directory);
+        if (presence !== undefined) {
+          this.events.onPresenceAdvert(handle, presence);
+        }
         if (event.state.status === "closed") {
           const wasTracked = this.peerSessions.get(deviceIdHex) === session;
           if (wasTracked) this.peerSessions.delete(deviceIdHex);
@@ -787,10 +785,10 @@ export class WireMeshTransport implements MeshTransport {
     token?: CapabilityToken,
   ): Promise<ManageOutcome> {
     const session = this.peerSessions.get(memberId);
-    if (session === undefined) {
-      return { result: "error", code: "not_connected" };
+    if (session !== undefined) {
+      return session.sendManageRequest(command, scope, undefined, token);
     }
-    return session.sendManageRequest(command, scope, undefined, token);
+    return routeRoomRequestViaHub(this.hub, memberId, command, scope, token);
   }
 
   // -----------------------------------------------------------------------
@@ -953,6 +951,7 @@ export class WireMeshTransport implements MeshTransport {
 
   async connectHub(url: string): Promise<void> {
     await this.hub.connect(url);
+    pushHubCatchUp(this.hub, this.knownDevices, this.events.onError);
   }
 
   async disconnectHub(): Promise<void> {
