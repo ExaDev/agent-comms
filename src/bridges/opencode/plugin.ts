@@ -14,6 +14,7 @@ import {
   formatDeliveryEvent,
 } from "../../core/index.js";
 import type { IdentitySlot } from "../../core/identity-store.js";
+import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
 import { tryStartWebServer } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
@@ -60,6 +61,7 @@ export const AgentCommsPlugin = async (opts: {
   const client = opts.client;
 
   const { store } = await createBridgeMesh(identitySlot);
+  store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
   await store.init();
   await tryStartWebServer();
 

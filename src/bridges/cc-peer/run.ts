@@ -15,6 +15,7 @@ import {
 import type { IdentitySlot } from "../../core/identity-store.js";
 import { releaseIdentityLock } from "../../core/identity-store.js";
 import { wireCcPeerBridge, type CcPeerRef } from "./bridge.js";
+import { wireDefaultCcPeerFront } from "./default-front.js";
 
 const PID_FLAG_PREFIX = "--pid=";
 /** argv layout for `node cli.js bridge cc-peer <target-arg>`: index 0/1 are the node binary and script path, 2 is "bridge", 3 is the bridge id ("cc-peer") itself -- this bridge's own args start one past that. */
@@ -44,6 +45,7 @@ export async function run(): Promise<void> {
 
   const identitySlot: IdentitySlot = { harness: "cc-peer", cwd: process.cwd() };
   const { store, tool } = await createBridgeMesh(identitySlot);
+  store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
 
   const reg = await ensureRegistered({
     store,

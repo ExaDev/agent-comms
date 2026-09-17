@@ -17,6 +17,7 @@ import {
   releaseIdentityLock,
   type IdentitySlot,
 } from "../../core/identity-store.js";
+import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
 import type { CommsContext, CommsResult } from "../../core/tool.js";
 import type {
   AgentIdentity,
@@ -85,6 +86,9 @@ export class ChatController extends EventEmitter {
     );
     this.store = store;
     this.tool = tool;
+    this.store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(this.store, {
+      coordinatorPort: this.coordinatorPort,
+    });
 
     // Push delivery events to UIs
     this.store.onDelivery = (_agentId: string, event: DeliveryEvent) => {

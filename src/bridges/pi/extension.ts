@@ -31,6 +31,7 @@ import {
   releaseIdentityLock,
   type IdentitySlot,
 } from "../../core/identity-store.js";
+import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
 import { tryStartWebServer, type WebServerHandle } from "../user/web/server.js";
 import { ChatController } from "../user/controller.js";
 import { nanoid } from "../../core/nanoid.js";
@@ -45,6 +46,7 @@ export default function (pi: ExtensionAPI) {
   // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us
   const identitySlot: IdentitySlot = { harness: "pi", cwd: process.cwd() };
   const { store, tool, attachIdentity } = createBridgeMeshSync(identitySlot);
+  store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
 
   let agentId: string | undefined;
   let webHandle: WebServerHandle | undefined;
