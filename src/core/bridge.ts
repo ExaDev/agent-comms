@@ -55,6 +55,9 @@ export const MCP_TOOL_PARAMS = z.object({
     "room_accept",
     "room_reject",
     "room_pending",
+    "capability_accept",
+    "capability_reject",
+    "capability_pending",
     "mesh_discover",
     "mesh_advertise",
     "mesh_unadvertise",
@@ -88,6 +91,10 @@ export const MCP_TOOL_PARAMS = z.object({
   connectionId: z.string().optional(),
   requesterId: z.string().optional(),
   streamingBehavior: z.enum(["steer", "followUp", "info"]).optional(),
+  requestId: z.string().optional(),
+  capability: z.string().optional(),
+  expires: z.number().optional(),
+  delegationsRemaining: z.number().optional(),
 });
 
 export type ToolParams = z.infer<typeof MCP_TOOL_PARAMS>;
@@ -287,6 +294,32 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
     }
     case "room_pending":
       return { action: "room_pending" };
+    case "capability_accept": {
+      if (p.requestId === undefined)
+        throw new BuildActionError("capability_accept", "requestId");
+      if (p.expires === undefined)
+        throw new BuildActionError("capability_accept", "expires");
+      return {
+        action: "capability_accept",
+        requestId: p.requestId,
+        expires: p.expires,
+        ...(p.delegationsRemaining !== undefined && {
+          delegationsRemaining: p.delegationsRemaining,
+        }),
+        ...(p.capability !== undefined && { capability: p.capability }),
+      };
+    }
+    case "capability_reject": {
+      if (p.requestId === undefined)
+        throw new BuildActionError("capability_reject", "requestId");
+      return {
+        action: "capability_reject",
+        requestId: p.requestId,
+        ...(p.reason !== undefined && { reason: p.reason }),
+      };
+    }
+    case "capability_pending":
+      return { action: "capability_pending" };
     case "mesh_discover": {
       const discover: CommsAction & { action: "mesh_discover" } = {
         action: "mesh_discover",
@@ -401,6 +434,8 @@ export function formatDeliveryEvent(event: DeliveryEvent): string {
       return `${event.oldName} is now known as ${event.newName}`;
     case "connection_request":
       return `Connection request from ${event.peerId} (${event.name}) fingerprint ${event.fingerprint}`;
+    case "capability_request":
+      return `${event.requesterDevice} is asking for "${event.capability}" (${event.requestId})`;
     default:
       return event satisfies never;
   }
@@ -432,6 +467,7 @@ export function isActionableEvent(event: DeliveryEvent): boolean {
     case "invite_declined":
     case "name_changed":
     case "connection_request":
+    case "capability_request":
       return false;
     default:
       return event satisfies never;
