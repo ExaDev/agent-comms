@@ -23,6 +23,18 @@ export interface FrontedSessionRecord {
   readonly handleInbound: (
     message: Readonly<{ from?: string; fromName?: string; body: string }>,
   ) => void;
+  /** Routes a reply arriving on one of this session's own reply aliases into a mesh DM addressed to the correspondent that alias stands for, sent as this session's own device-id (agent-comms#158) -- the session-to-mesh direction for lazy per-correspondent aliases. Only called once handleAliasMessage has already resolved the alias to a known correspondent; a stale alias goes to notifyStaleAlias instead. */
+  readonly handleAliasReply: (
+    correspondentId: string,
+    message: Readonly<{ from?: string; fromName?: string; body: string }>,
+  ) => void;
+  /** Delivers a clear error back into this session when a reply arrives on an alias the directory no longer maps to any correspondent -- e.g. after a front restart, since reply aliases are ephemeral by design -- rather than silently dropping the reply. */
+  readonly notifyStaleAlias: (aliasName: string) => void;
+}
+
+/** The narrow slice of ReplyAliasDirectory (reply-aliases.ts) CcPeerFront needs to resolve an inbound alias message's own correspondent -- narrowed rather than importing the class directly so front-controller.ts stays free of any construction concern, matching probeSlotOwner's own injected-function convention. */
+export interface CcPeerFrontAliasDirectory {
+  correspondentFor: (aliasName: string) => string | undefined;
 }
 
 export interface CcPeerFrontDeps<TRecord extends FrontedSessionRecord> {
@@ -34,6 +46,8 @@ export interface CcPeerFrontDeps<TRecord extends FrontedSessionRecord> {
   attach: (entry: Readonly<CcPeerRosterEntryLike>) => Promise<TRecord>;
   /** Tears a fronted-session record down (marks its agent offline, shuts its mesh store down). Rejects propagate to onError. */
   detach: (record: TRecord) => Promise<void>;
+  /** Resolves an inbound alias message's own alias name back to the correspondent it stands for -- reply-aliases.ts's ReplyAliasDirectory in production. */
+  aliasDirectory: CcPeerFrontAliasDirectory;
   pollIntervalMs?: number | undefined;
   onError?: ((error: Error) => void) | undefined;
 }
@@ -75,6 +89,22 @@ export class CcPeerFront<TRecord extends FrontedSessionRecord> {
   ): void {
     const record = matchInboundMessageSession(this.fronted.values(), message);
     record?.handleInbound(message);
+  }
+
+  /** Routes a reply arriving on a shared reply alias to whichever fronted session actually sent it -- matched the same way as handleInboundMessage, by the envelope's own socket-path convention. A message matching no fronted session is silently dropped, same as handleInboundMessage: there is nowhere for it to go, and we cannot safely address an error back to a session we do not control. Once the sending session is identified, the alias directory resolves which correspondent this reply is for; an alias the directory no longer knows about is reported back into the session as a stale-alias error rather than silently dropped, per agent-comms#158. */
+  handleAliasMessage(
+    message: Readonly<{ alias: string; from?: string; body: string }>,
+  ): void {
+    const record = matchInboundMessageSession(this.fronted.values(), message);
+    if (!record) return;
+    const correspondentId = this.deps.aliasDirectory.correspondentFor(
+      message.alias,
+    );
+    if (correspondentId === undefined) {
+      record.notifyStaleAlias(message.alias);
+      return;
+    }
+    record.handleAliasReply(correspondentId, message);
   }
 
   private async tick(): Promise<void> {
