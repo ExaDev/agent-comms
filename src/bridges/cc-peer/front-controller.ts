@@ -34,8 +34,8 @@ export interface CcPeerFrontDeps<TRecord extends FrontedSessionRecord> {
   attach: (entry: Readonly<CcPeerRosterEntryLike>) => Promise<TRecord>;
   /** Tears a fronted-session record down (marks its agent offline, shuts its mesh store down). Rejects propagate to onError. */
   detach: (record: TRecord) => Promise<void>;
-  pollIntervalMs?: number;
-  onError?: (error: Error) => void;
+  pollIntervalMs?: number | undefined;
+  onError?: ((error: Error) => void) | undefined;
 }
 
 function toError(value: unknown): Error {
