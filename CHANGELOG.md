@@ -1,3 +1,13 @@
+## [3.14.0](https://github.com/ExaDev/agent-comms/compare/v3.13.0...v3.14.0) (2026-09-17)
+
+### Features
+
+* **core:** route hub-relayed requests to the correct local peer via toDevice ([4d64d05](https://github.com/ExaDev/agent-comms/commit/4d64d05433e739b4c3a65fbcfaa54a11fc0859f9))
+
+### Chores
+
+* **deps:** bump wire-mesh-core to 1.48.2 ([0d23e12](https://github.com/ExaDev/agent-comms/commit/0d23e12e05d9f2a1f3448517e1bee92e988d3a11)), references [wire-mesh#175](https://github.com/wire-mesh/issues/175)
+
 ## [3.13.0](https://github.com/ExaDev/agent-comms/compare/v3.12.0...v3.13.0) (2026-09-17)
 
 ### Features
