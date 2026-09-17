@@ -2,6 +2,8 @@
  * Integration tests for the gateway actually forwarding between the local mesh and the hub (agent-comms#155), the core leg of the cross-machine mesh epic (#153) on top of #154's own connection-lifecycle-only gateway. Two independent local meshes ("machine A" and "machine B"), each its own coordinator dialling a shared real relay hub (createRelayHub, the same domain logic the production mesh.exadev.io Durable Object runs, served over local WebSockets via hub-helpers.ts) -- neither mesh is ever directly connected to the other, so anything either side learns about the other can only have arrived via the hub.
  *
  * Machine A's coordinator (a1) additionally has a second, ordinary local peer (a2) -- proving outbound advertisement and the remote-directory merge work for a local peer that is NOT itself the gateway, not just for the gateway's own agent (which #154 already exercised end-to-end before this issue).
+ *
+ * Every gateway here explicitly trusts the specific remote device-ids it needs to (agent-comms#156's own gateway allowlist, added after these tests first landed): the allowlist is deny-all by default, so every test below establishes trust before expecting forwarding/merge/routing to happen -- see gateway-trust.integration.test.ts for the deny-by-default behaviour itself (untrusted forwarding/merge/routing all failing) rather than re-proving it per test here.
  */
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -73,6 +75,10 @@ describe("gateway forwarding", () => {
     await wireTestTransport(b1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
     await b1.init();
     cleanups.push(async () => b1.shutdown());
+
+    // Deny-all by default (agent-comms#156): a1 needs at least one trusted device to forward anything at all onto the hub, and b1 needs a2's own device-id specifically trusted to merge a2's directory entry (trust is keyed per device, not per remote machine -- see GatewayTrust's own class doc).
+    a1.addTrustedGateway(b1.peerId);
+    b1.addTrustedGateway(a2.peerId);
 
     await waitFor(
       "b1 (a separate machine's gateway) to learn of a2 (a non-gateway local peer on machine A) via the hub",
@@ -163,6 +169,10 @@ describe("gateway forwarding", () => {
     await b1.init();
     cleanups.push(async () => b1.shutdown());
 
+    // Deny-all by default (agent-comms#156) -- a1 needs at least one trusted device to forward at all, and b1 needs the visible control peer's own device-id trusted so its arrival can prove gossip had time to propagate. Trusting only aVisible (never aHidden/aGhost) doesn't weaken this test: hidden/ghost are already filtered out at the source (forwardAdvertsToHub's own AGENT_SELF_GOSSIP_KEY eligibility check, upstream of the trust gate), so this proves the trust gate isn't the reason they never arrive.
+    a1.addTrustedGateway(b1.peerId);
+    b1.addTrustedGateway(aVisible.peerId);
+
     await waitFor(
       "b1 to see the visible control peer, proving gossip had time to propagate",
       async () => {
@@ -205,6 +215,10 @@ describe("gateway forwarding", () => {
       visibility: "visible",
       tags: [],
     });
+
+    // Deny-all by default (agent-comms#156) -- mutual trust: a1 must trust b1 to accept b1's incoming DM request (consume()'s own isTrusted gate on fromDevice), and b1 must trust a1 for sendRoomRequest's own outbound isTrusted gate to route the request (and the later DM) to a1 at all.
+    a1.addTrustedGateway(b1.peerId);
+    b1.addTrustedGateway(a1.peerId);
 
     // Two-round DM consent (section 6), exactly like the local-mesh-only dm-admission.integration.test.ts -- b1's own outbound request is what's actually exercised via the new hub-relay fallback, since a1 is not a local peer of b1's own mesh.
     const dmPath = dmRoomPath(b1.peerId, a1.peerId);
