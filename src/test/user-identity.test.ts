@@ -12,8 +12,12 @@ import {
   loadIssuedDeviceGrant,
   loadOrCreateUserIdentity,
   saveIssuedDeviceGrant,
+  loadIssuedDmGrant,
+  saveIssuedDmGrant,
+  deleteIssuedDmGrant,
 } from "../core/user-identity.js";
 import { CERTIFICATE_VALIDITY_MS } from "../core/identity.js";
+import { randomId } from "../core/random-id.js";
 
 // node:fs's writeFileSync is wrapped (not replaced) so every test gets the real filesystem by default; only the one race test below overrides it, via mockImplementationOnce, to simulate a concurrent writer winning the exclusive create -- vi.spyOn cannot target an ESM named export directly ("Module namespace is not configurable"), so the wrap has to happen at vi.mock time instead.
 vi.mock("node:fs", async (importOriginal) => {
@@ -205,4 +209,86 @@ test("a renewed identity keeps its issuedDeviceGrants record", () => {
   expect(loadIssuedDeviceGrant({ dir }, "device-a")).toEqual(
     Uint8Array.from([1, 2, 1]),
   );
+});
+
+test("loadIssuedDmGrant returns undefined when no grant has been recorded for a bearer", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+
+  expect(loadIssuedDmGrant({ dir }, "aa")).toBeUndefined();
+});
+
+test("saveIssuedDmGrant persists a token-id that loadIssuedDmGrant then returns", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  const tokenId = randomId();
+
+  saveIssuedDmGrant({ dir }, "aa", tokenId);
+
+  expect(loadIssuedDmGrant({ dir }, "aa")).toEqual(tokenId);
+});
+
+test("saveIssuedDmGrant for a second bearer leaves the first bearer's own record untouched", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  const firstTokenId = randomId();
+  const secondTokenId = randomId();
+
+  saveIssuedDmGrant({ dir }, "aa", firstTokenId);
+  saveIssuedDmGrant({ dir }, "bb", secondTokenId);
+
+  expect(loadIssuedDmGrant({ dir }, "aa")).toEqual(firstTokenId);
+  expect(loadIssuedDmGrant({ dir }, "bb")).toEqual(secondTokenId);
+});
+
+test("saveIssuedDmGrant overwrites an earlier record for the same bearer", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  const originalTokenId = randomId();
+  const freshTokenId = randomId();
+
+  saveIssuedDmGrant({ dir }, "aa", originalTokenId);
+  saveIssuedDmGrant({ dir }, "aa", freshTokenId);
+
+  expect(loadIssuedDmGrant({ dir }, "aa")).toEqual(freshTokenId);
+});
+
+test("deleteIssuedDmGrant removes a recorded grant, leaving other bearers' records untouched", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  saveIssuedDmGrant({ dir }, "aa", randomId());
+  const keptTokenId = randomId();
+  saveIssuedDmGrant({ dir }, "bb", keptTokenId);
+
+  deleteIssuedDmGrant({ dir }, "aa");
+
+  expect(loadIssuedDmGrant({ dir }, "aa")).toBeUndefined();
+  expect(loadIssuedDmGrant({ dir }, "bb")).toEqual(keptTokenId);
+});
+
+test("deleteIssuedDmGrant is a no-op when nothing was recorded for that bearer", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+
+  expect(() => {
+    deleteIssuedDmGrant({ dir }, "aa");
+  }).not.toThrow();
+});
+
+test("a renewed identity keeps its issuedDmGrants record", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  const tokenId = randomId();
+  saveIssuedDmGrant({ dir }, "aa", tokenId);
+
+  const file = identityFile(dir);
+  const stored = JSON.parse(fs.readFileSync(file, "utf-8")) as {
+    expiresAt: string;
+  };
+  stored.expiresAt = new Date(Date.now() + NEAR_EXPIRY_OFFSET_MS).toISOString();
+  fs.writeFileSync(file, JSON.stringify(stored));
+
+  loadOrCreateUserIdentity({ dir });
+
+  expect(loadIssuedDmGrant({ dir }, "aa")).toEqual(tokenId);
 });
