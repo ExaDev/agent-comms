@@ -29,6 +29,8 @@ interface StoredUserIdentity {
   privateKey: string;
   certificate: string;
   expiresAt: string;
+  /** The token-id (base64) of each group:member grant this principal has itself issued to a device it admitted (agent-comms#161), keyed by the device's own device-id in hex -- the bookkeeping the principal needs to revoke a specific device's own membership later (removeDevice), mirroring identity-store.ts's own issuedGrants field for room membership. */
+  issuedDeviceGrants?: Record<string, string>;
 }
 
 function isStoredUserIdentity(value: unknown): value is StoredUserIdentity {
@@ -39,11 +41,20 @@ function isStoredUserIdentity(value: unknown): value is StoredUserIdentity {
     !("expiresAt" in value)
   )
     return false;
-  return (
-    typeof value.privateKey === "string" &&
-    typeof value.certificate === "string" &&
-    typeof value.expiresAt === "string"
-  );
+  if (
+    typeof value.privateKey !== "string" ||
+    typeof value.certificate !== "string" ||
+    typeof value.expiresAt !== "string"
+  )
+    return false;
+  if ("issuedDeviceGrants" in value) {
+    const { issuedDeviceGrants } = value;
+    if (typeof issuedDeviceGrants !== "object" || issuedDeviceGrants === null)
+      return false;
+    if (!Object.values(issuedDeviceGrants).every((v) => typeof v === "string"))
+      return false;
+  }
+  return true;
 }
 
 /** Narrows a caught value to Node's own errno-carrying Error subtype, so a specific error code (e.g. ENOENT, EEXIST) can be checked without an `as` assertion. */
@@ -77,6 +88,22 @@ function serializeRecord(stored: Readonly<StoredUserIdentity>): string {
   return `${JSON.stringify(stored, null, 2)}\n`;
 }
 
+function writeStoredUserIdentity(
+  file: string,
+  stored: Readonly<StoredUserIdentity>,
+): void {
+  fs.writeFileSync(file, serializeRecord(stored), {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
+}
+
+/** Reads this principal's raw stored record, or undefined if the file is missing or unparseable. Used by the issued-device-grant functions below to read-modify-write only the issuedDeviceGrants field, leaving the persisted key material exactly as it is. */
+function readStoredUserIdentity(file: string): StoredUserIdentity | undefined {
+  const raw = readRawFile(file);
+  return raw === undefined ? undefined : parseStoredUserIdentity(raw);
+}
+
 /** Reads the file's raw contents, or undefined if it does not exist yet. Any other filesystem error (permissions, a directory in its place) is surfaced rather than silently treated as "absent", per this codebase's fail-loudly convention. */
 function readRawFile(file: string): string | undefined {
   try {
@@ -98,7 +125,7 @@ function parseStoredUserIdentity(raw: string): StoredUserIdentity | undefined {
 }
 
 /**
- * Renews a stored identity nearing certificate expiry by re-certifying its existing key pair (preserving device-id) rather than replacing it -- see identity.ts's own certifyKeyPair doc comment for why generating a fresh key pair here would be wrong. Returns the existing identity unchanged when it is not yet near expiry.
+ * Renews a stored identity nearing certificate expiry by re-certifying its existing key pair (preserving device-id) rather than replacing it -- see identity.ts's own certifyKeyPair doc comment for why generating a fresh key pair here would be wrong. Returns the existing identity unchanged when it is not yet near expiry. A plain persistedRecord() write here would silently drop this principal's own issuedDeviceGrants (it always builds a bare privateKey/certificate/expiresAt record with nothing else) -- spreading `stored` first preserves every other field on renewal, the same fix identity-store.ts's own loadStoredIdentity/writeStoredIdentity pairing already applies for roomTokens/issuedGrants.
  */
 function renewIfNeeded(
   file: string,
@@ -110,10 +137,7 @@ function renewIfNeeded(
   if (!needsRenewal) return toPeerIdentity(stored);
 
   const renewed = certifyKeyPair(stored.privateKey);
-  fs.writeFileSync(file, serializeRecord(persistedRecord(renewed)), {
-    encoding: "utf-8",
-    mode: 0o600,
-  });
+  writeStoredUserIdentity(file, { ...stored, ...persistedRecord(renewed) });
   return renewed;
 }
 
@@ -158,4 +182,55 @@ export function loadOrCreateUserIdentity(
   if (stored === undefined) return createUserIdentity(file, false);
 
   return renewIfNeeded(file, stored);
+}
+
+/**
+ * The token-id this principal itself minted for the given device's own group:member grant (agent-comms#161), or undefined if none is on record (this principal has never admitted this device, or the record predates this bookkeeping). The principal consults this to revoke a specific device's own membership later -- a token-id, unlike the token itself, is never presented on the wire and so is never obtainable except from this principal's own memory of having minted it. Mirrors identity-store.ts's own loadIssuedRoomGrant.
+ */
+export function loadIssuedDeviceGrant(
+  options: Readonly<UserIdentityOptions> | undefined,
+  deviceHex: string,
+): Uint8Array<ArrayBuffer> | undefined {
+  const file = userIdentityFile(options);
+  const stored = readStoredUserIdentity(file);
+  const encoded = stored?.issuedDeviceGrants?.[deviceHex];
+  return encoded === undefined
+    ? undefined
+    : Uint8Array.from(Buffer.from(encoded, "base64"));
+}
+
+/**
+ * Records the token-id of a group:member grant this principal has just minted for deviceHex, surviving a restart the same way the principal's own key material does. Overwrites any earlier record for the same device -- a fresh admission always supersedes the grant it replaces, so only the current token-id is ever worth revoking. Mirrors identity-store.ts's own saveIssuedRoomGrant.
+ */
+export function saveIssuedDeviceGrant(
+  options: Readonly<UserIdentityOptions> | undefined,
+  deviceHex: string,
+  tokenId: Uint8Array,
+): void {
+  const file = userIdentityFile(options);
+  const stored = readStoredUserIdentity(file);
+  if (stored === undefined) {
+    throw new Error(
+      `no user identity persisted yet -- call loadOrCreateUserIdentity first (${file})`,
+    );
+  }
+  const issuedDeviceGrants = {
+    ...stored.issuedDeviceGrants,
+    [deviceHex]: Buffer.from(tokenId).toString("base64"),
+  };
+  writeStoredUserIdentity(file, { ...stored, issuedDeviceGrants });
+}
+
+/** Removes the recorded token-id for one device's own grant, if any -- called once a removal has revoked it, so a later re-admission mints and records a genuinely fresh one rather than leaving a stale entry alongside it. A no-op if none was recorded. Mirrors identity-store.ts's own deleteIssuedRoomGrant. */
+export function deleteIssuedDeviceGrant(
+  options: Readonly<UserIdentityOptions> | undefined,
+  deviceHex: string,
+): void {
+  const file = userIdentityFile(options);
+  const stored = readStoredUserIdentity(file);
+  if (stored?.issuedDeviceGrants === undefined) return;
+  const issuedDeviceGrants = Object.fromEntries(
+    Object.entries(stored.issuedDeviceGrants).filter(([k]) => k !== deviceHex),
+  );
+  writeStoredUserIdentity(file, { ...stored, issuedDeviceGrants });
 }

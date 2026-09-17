@@ -7,7 +7,12 @@ import type * as FsModule from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect, vi, afterEach } from "vitest";
-import { loadOrCreateUserIdentity } from "../core/user-identity.js";
+import {
+  deleteIssuedDeviceGrant,
+  loadIssuedDeviceGrant,
+  loadOrCreateUserIdentity,
+  saveIssuedDeviceGrant,
+} from "../core/user-identity.js";
 import { CERTIFICATE_VALIDITY_MS } from "../core/identity.js";
 
 // node:fs's writeFileSync is wrapped (not replaced) so every test gets the real filesystem by default; only the one race test below overrides it, via mockImplementationOnce, to simulate a concurrent writer winning the exclusive create -- vi.spyOn cannot target an ESM named export directly ("Module namespace is not configurable"), so the wrap has to happen at vi.mock time instead.
@@ -124,4 +129,80 @@ test("losing the creation race re-reads the winner's identity instead of overwri
   expect(writeSpy).toHaveBeenCalled();
   expect(loser.fingerprint).toBe(winner.fingerprint);
   expect(loser.deviceId).toEqual(winner.deviceId);
+});
+
+test("loadIssuedDeviceGrant is undefined for a device this principal has never admitted", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  expect(loadIssuedDeviceGrant({ dir }, "device-hex-1")).toBeUndefined();
+});
+
+test("saveIssuedDeviceGrant persists a token-id, loadIssuedDeviceGrant reloads it keyed by device hex", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  const tokenId = Uint8Array.from([1, 2, 2, 1]);
+
+  saveIssuedDeviceGrant({ dir }, "device-hex-1", tokenId);
+
+  expect(loadIssuedDeviceGrant({ dir }, "device-hex-1")).toEqual(tokenId);
+});
+
+test("saveIssuedDeviceGrant overwrites only the given device's own record, leaving others and the identity's own key material untouched", () => {
+  const dir = tempDir();
+  const identity = loadOrCreateUserIdentity({ dir });
+  const tokenIdA = Uint8Array.from([1]);
+  const tokenIdB = Uint8Array.from([2]);
+  saveIssuedDeviceGrant({ dir }, "device-a", tokenIdA);
+  saveIssuedDeviceGrant({ dir }, "device-b", tokenIdB);
+
+  const tokenIdAReplacement = Uint8Array.from([2, 1]);
+  saveIssuedDeviceGrant({ dir }, "device-a", tokenIdAReplacement);
+
+  expect(loadIssuedDeviceGrant({ dir }, "device-a")).toEqual(
+    tokenIdAReplacement,
+  );
+  expect(loadIssuedDeviceGrant({ dir }, "device-b")).toEqual(tokenIdB);
+  const reloaded = loadOrCreateUserIdentity({ dir });
+  expect(reloaded.privateKey).toBe(identity.privateKey);
+});
+
+test("deleteIssuedDeviceGrant removes one device's own record, leaving others in place", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  saveIssuedDeviceGrant({ dir }, "device-a", Uint8Array.from([1]));
+  saveIssuedDeviceGrant({ dir }, "device-b", Uint8Array.from([2]));
+
+  deleteIssuedDeviceGrant({ dir }, "device-a");
+
+  expect(loadIssuedDeviceGrant({ dir }, "device-a")).toBeUndefined();
+  expect(loadIssuedDeviceGrant({ dir }, "device-b")).toEqual(
+    Uint8Array.from([2]),
+  );
+});
+
+test("deleteIssuedDeviceGrant is a no-op when nothing was recorded for that device", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  expect(() => {
+    deleteIssuedDeviceGrant({ dir }, "never-admitted");
+  }).not.toThrow();
+});
+
+test("a renewed identity keeps its issuedDeviceGrants record", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  saveIssuedDeviceGrant({ dir }, "device-a", Uint8Array.from([1, 2, 1]));
+
+  const file = identityFile(dir);
+  const stored = JSON.parse(fs.readFileSync(file, "utf-8")) as {
+    expiresAt: string;
+  };
+  stored.expiresAt = new Date(Date.now() + NEAR_EXPIRY_OFFSET_MS).toISOString();
+  fs.writeFileSync(file, JSON.stringify(stored));
+
+  loadOrCreateUserIdentity({ dir });
+
+  expect(loadIssuedDeviceGrant({ dir }, "device-a")).toEqual(
+    Uint8Array.from([1, 2, 1]),
+  );
 });
