@@ -9,8 +9,19 @@ export type { CommsStore } from "./comms-store.js";
 export { FileStore, CommsError } from "./store.js";
 export { MeshStore } from "./mesh-store.js";
 export { CommsTool } from "./tool.js";
-export { createBridgeMesh, createBridgeMeshSync } from "./bridge-mesh.js";
+export {
+  createBridgeMesh,
+  createBridgeMeshSync,
+  createBridgeMeshFromIdentity,
+  createBridgeMeshSyncFromIdentity,
+} from "./bridge-mesh.js";
 export type { BridgeMesh, BridgeMeshSync } from "./bridge-mesh.js";
+export {
+  loadIdentityForFront,
+  probeSlotOwner,
+  releaseIdentityLock,
+} from "./identity-store.js";
+export type { IdentitySlot } from "./identity-store.js";
 export type { CommsContext, CommsResult } from "./tool.js";
 export {
   buildAction,

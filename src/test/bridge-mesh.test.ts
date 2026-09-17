@@ -7,9 +7,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
-import { createBridgeMesh } from "../core/bridge-mesh.js";
+import {
+  createBridgeMesh,
+  createBridgeMeshFromIdentity,
+} from "../core/bridge-mesh.js";
 import {
   loadOrCreateIdentity,
+  loadIdentityForFront,
+  probeSlotOwner,
   type IdentitySlot,
 } from "../core/identity-store.js";
 import { waitFor } from "./test-transport.js";
@@ -81,6 +86,23 @@ test("createBridgeMesh passes an explicit coordinatorPort through to MeshStore, 
   } finally {
     await b.store.shutdown();
     await a.store.shutdown();
+  }
+});
+
+test("createBridgeMeshFromIdentity wires the given identity's own device-id as peerId, without taking the slot's lock", async () => {
+  const slot = tempSlot("cc-peer-front");
+  const identity = loadIdentityForFront(slot);
+  expect(probeSlotOwner(slot)).toBeUndefined();
+
+  const { store } = await createBridgeMeshFromIdentity(identity, slot);
+  try {
+    expect(store.peerId).toBe(
+      deviceIdToHex(Uint8Array.from(identity.deviceId)),
+    );
+    // Constructing a mesh from a lock-free identity must not itself take the lock -- the whole point is leaving it free for the slot's real owner to acquire normally later (agent-comms#157).
+    expect(probeSlotOwner(slot)).toBeUndefined();
+  } finally {
+    await store.shutdown();
   }
 });
 
