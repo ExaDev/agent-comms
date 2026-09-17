@@ -29,6 +29,8 @@ export interface PeerLifecycleDeps {
   staleAgentChecker: Pick<StaleAgentChecker, "start">;
   /** Dials the hub the moment this side takes over as coordinator (agent-comms#154) -- see CoordinatorGateway's own class doc. Narrowed to the one method handleBecomeCoordinator ever calls; onLostCoordinator is MeshStore.shutdown()'s own concern, not this class's. */
   coordinatorGateway: Pick<CoordinatorGateway, "onBecameCoordinator">;
+  /** Fires alongside coordinatorGateway.onBecameCoordinator, right after this side takes over as coordinator -- MeshStore's own hook for starting a coordinator-only capability that doesn't belong in the transport-agnostic core itself (e.g. the cc-peer front, agent-comms#157). Optional and left unset by most callers, mirroring MeshStore's own onDelivery/onPatch/onError callback fields. */
+  onCoordinatorRoleChanged?: (() => void | Promise<void>) | undefined;
 }
 
 export class PeerLifecycle {
@@ -118,6 +120,7 @@ export class PeerLifecycle {
     }
     this.deps.staleAgentChecker.start();
     await this.deps.coordinatorGateway.onBecameCoordinator();
+    await this.deps.onCoordinatorRoleChanged?.();
   }
 
   handlePeerDisconnected(handle: Readonly<ConnectionHandle>): void {
