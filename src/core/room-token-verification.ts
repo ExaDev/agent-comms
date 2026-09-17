@@ -14,9 +14,15 @@ import type {
   TokenClaims,
 } from "wire-mesh-core/generated/protocol";
 import { parseRoomPath } from "./room-path.js";
+import type { DelegationPolicy } from "./delegation-policy.js";
 
 /** The one capability that authorises every ordinary room-membership verb (room.send/read/leave/members) -- "one resource, not several", the same pattern exec:pty already uses for its own four inner verbs. room.join/room.invite are deliberately ungated and never reach this check at all. This same string is also the outer manage-command's own verb for every room-domain command (gated or ungated): core/room's own convention puts the specific action in params.verb, with command.verb fixed to this capability name -- exported so wire-level command construction (see wire-mesh-transport.ts/mesh-store.ts) shares this one constant rather than a second, independently-typed copy of the same literal. */
 export const ROOM_MEMBER_CAPABILITY = "room:member";
+
+/** room:member's own issuer-side delegation policy (agent-comms#163): a member's grant must never itself become the parent of a further delegation, so room:member is unconditionally non-delegable, with no per-agent override -- there is no legitimate case for one bearer's own room membership to be redelegable when every other bearer's isn't, unlike a general-purpose capability a future issuer (device-to-user membership, DM send) might reasonably narrow per bearer. Shared by every room:member mint call site (the owner's own root grant, an invite, and a real admission) via resolveDelegationsRemaining, replacing what was previously each site's own repeated `delegationsRemaining: 0` literal. */
+export const ROOM_MEMBER_DELEGATION_POLICY: DelegationPolicy = {
+  nonDelegable: new Set([ROOM_MEMBER_CAPABILITY]),
+};
 
 export type RoomTokenVerdictReason =
   | TokenVerdictReason
