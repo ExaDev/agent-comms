@@ -47,6 +47,8 @@ interface StoredIdentity {
   roomTokens?: Record<string, SerializedCapabilityToken>;
   /** The token-id (base64) of each room:member grant this identity has itself issued to another device, keyed by "roomPath::memberDeviceHex" -- the bookkeeping a room owner needs to revoke a specific member's own grant later (kickFromRoom), distinct from roomTokens above (which holds tokens this identity BEARS, not ones it issued). */
   issuedGrants?: Record<string, string>;
+  /** This device's own held group:member token(s) (agent-comms#161), keyed by group path (the admitting user principal's own device-id in hex, core/user-identity.ts's own userGroupPath) -- the device-membership counterpart of roomTokens above, holding a token this identity BEARS proving the user principal admitted it, never one it issued itself (a device is never the issuer of its own membership). */
+  groupTokens?: Record<string, SerializedCapabilityToken>;
 }
 
 /** A COSE_Sign1 tuple always has exactly 4 elements: protected header, unprotected header, payload, signature. */
@@ -92,6 +94,12 @@ function isStoredIdentity(value: unknown): value is StoredIdentity {
     const { issuedGrants } = value;
     if (typeof issuedGrants !== "object" || issuedGrants === null) return false;
     if (!Object.values(issuedGrants).every((v) => typeof v === "string"))
+      return false;
+  }
+  if ("groupTokens" in value) {
+    const { groupTokens } = value;
+    if (typeof groupTokens !== "object" || groupTokens === null) return false;
+    if (!Object.values(groupTokens).every(isSerializedCapabilityToken))
       return false;
   }
   return true;
@@ -354,6 +362,60 @@ export function deleteRoomToken(
     ),
   );
   writeStoredIdentity(identityFile, { ...stored, roomTokens });
+}
+
+/**
+ * Every group-membership capability token this device's own identity holds (agent-comms#161), keyed by group path. Empty if this slot has never saved one (or the identity file doesn't exist yet -- call loadOrCreateIdentity first). The device-membership counterpart of loadRoomTokens.
+ */
+export function loadGroupTokens(
+  slot: Readonly<IdentitySlot>,
+): Record<string, CapabilityToken> {
+  const { identityFile } = slotPaths(slot);
+  const stored = readStoredIdentity(identityFile);
+  const serialized = stored?.groupTokens ?? {};
+  const tokens: Record<string, CapabilityToken> = {};
+  for (const [groupPath, token] of Object.entries(serialized)) {
+    tokens[groupPath] = deserializeToken(token);
+  }
+  return tokens;
+}
+
+/**
+ * Persists this device's own group:member token for the given group path, surviving a restart the same way the identity it was minted against does. Overwrites any token already saved for that group path; leaves every other group's token and the identity's own key material untouched. The device-membership counterpart of saveRoomToken.
+ */
+export function saveGroupToken(
+  slot: Readonly<IdentitySlot>,
+  groupPath: string,
+  token: CapabilityToken,
+): void {
+  const { identityFile } = slotPaths(slot);
+  const stored = readStoredIdentity(identityFile);
+  if (stored === undefined) {
+    throw new Error(
+      `no identity persisted for this slot yet -- call loadOrCreateIdentity first (${identityFile})`,
+    );
+  }
+  const groupTokens = {
+    ...stored.groupTokens,
+    [groupPath]: serializeToken(token),
+  };
+  writeStoredIdentity(identityFile, { ...stored, groupTokens });
+}
+
+/** Removes the persisted token for one group path, if any. A no-op if none was saved for that path. The device-membership counterpart of deleteRoomToken. */
+export function deleteGroupToken(
+  slot: Readonly<IdentitySlot>,
+  groupPath: string,
+): void {
+  const { identityFile } = slotPaths(slot);
+  const stored = readStoredIdentity(identityFile);
+  if (stored?.groupTokens === undefined) return;
+  const groupTokens = Object.fromEntries(
+    Object.entries(stored.groupTokens).filter(
+      ([storedGroupPath]) => storedGroupPath !== groupPath,
+    ),
+  );
+  writeStoredIdentity(identityFile, { ...stored, groupTokens });
 }
 
 function issuedGrantKey(roomPath: string, memberDeviceHex: string): string {

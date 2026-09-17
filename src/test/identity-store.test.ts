@@ -7,12 +7,42 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { test, expect } from "vitest";
+import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
+import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
+import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
+import { generateIdentity } from "../core/identity.js";
+import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import {
+  deleteGroupToken,
+  loadGroupTokens,
   loadOrCreateIdentity,
   oplogDirFor,
   releaseIdentityLock,
+  saveGroupToken,
   type IdentitySlot,
 } from "../core/identity-store.js";
+
+const TOKEN_TTL_MS = 60_000;
+
+/** A real, minted group:member token -- not an opaque placeholder -- so these tests exercise the actual (de)serialization round trip a real CapabilityToken tuple needs. groupPath is purely a storage key from this test's own point of view, distinct from the bearer device the fixture token happens to name. */
+async function mintGroupToken(groupPath: string): Promise<CapabilityToken> {
+  const issuer = await toIdentityPort(generateIdentity());
+  const bearer = await toIdentityPort(generateIdentity());
+  const clock = createSystemClock();
+  const verdict = await mintCapabilityToken({
+    identity: issuer,
+    clock,
+    tokenId: Uint8Array.from([1]),
+    bearer: bearer.deviceId,
+    capability: "group:member",
+    scope: { kind: "group", path: groupPath },
+    expires: clock.now() + TOKEN_TTL_MS,
+    delegationsRemaining: 0,
+  });
+  if (!verdict.ok)
+    throw new Error("expected the fixture token to mint successfully");
+  return verdict.token;
+}
 
 function tempSlot(harness: string): { slot: IdentitySlot; dir: string } {
   const dir = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-identity-test-"));
@@ -167,4 +197,66 @@ test("oplogDirFor is a sibling directory of the identity file, distinct per (har
     oplogDir,
   );
   expect(oplogDirFor({ ...slot, harness: "claude-code" })).not.toBe(oplogDir);
+});
+
+test("loadGroupTokens is empty for a slot that has never saved one", () => {
+  const { slot } = tempSlot("pi");
+  loadOrCreateIdentity(slot);
+  expect(loadGroupTokens(slot)).toEqual({});
+  releaseIdentityLock(slot);
+});
+
+test("saveGroupToken persists a token, loadGroupTokens reloads it keyed by group path", async () => {
+  const { slot } = tempSlot("pi");
+  loadOrCreateIdentity(slot);
+  const token = await mintGroupToken("group-path-1");
+
+  saveGroupToken(slot, "group-path-1", token);
+
+  expect(loadGroupTokens(slot)).toEqual({ "group-path-1": token });
+  releaseIdentityLock(slot);
+});
+
+test("saveGroupToken overwrites only the given group path, leaving others and the identity's own key material untouched", async () => {
+  const { slot } = tempSlot("pi");
+  const identity = loadOrCreateIdentity(slot);
+  const tokenA = await mintGroupToken("group-a");
+  const tokenB = await mintGroupToken("group-b");
+  saveGroupToken(slot, "group-a", tokenA);
+  saveGroupToken(slot, "group-b", tokenB);
+
+  const tokenAReplacement = await mintGroupToken("group-a");
+  saveGroupToken(slot, "group-a", tokenAReplacement);
+
+  expect(loadGroupTokens(slot)).toEqual({
+    "group-a": tokenAReplacement,
+    "group-b": tokenB,
+  });
+  const reloaded = loadOrCreateIdentity(slot);
+  expect(reloaded.privateKey).toBe(identity.privateKey);
+  releaseIdentityLock(slot);
+});
+
+test("deleteGroupToken removes one group path's token, leaving others in place", async () => {
+  const { slot } = tempSlot("pi");
+  loadOrCreateIdentity(slot);
+  const tokenA = await mintGroupToken("group-a");
+  const tokenB = await mintGroupToken("group-b");
+  saveGroupToken(slot, "group-a", tokenA);
+  saveGroupToken(slot, "group-b", tokenB);
+
+  deleteGroupToken(slot, "group-a");
+
+  expect(loadGroupTokens(slot)).toEqual({ "group-b": tokenB });
+  releaseIdentityLock(slot);
+});
+
+test("deleteGroupToken is a no-op when nothing was saved for that group path", () => {
+  const { slot } = tempSlot("pi");
+  loadOrCreateIdentity(slot);
+  expect(() => {
+    deleteGroupToken(slot, "never-saved");
+  }).not.toThrow();
+  expect(loadGroupTokens(slot)).toEqual({});
+  releaseIdentityLock(slot);
 });
