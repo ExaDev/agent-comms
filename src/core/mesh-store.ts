@@ -159,6 +159,12 @@ export class MeshStore implements CommsStore {
    */
   onError: ((error: Error) => void) | undefined;
 
+  /**
+   * Fires whenever this store's own coordinator role changes: true right after becoming coordinator (a fresh bind in init(), or a takeover via PeerLifecycle.handleBecomeCoordinator), false right before shutdown() drops it. There is no live "lost the role to someone else while still running" case today -- CoordinatorGateway.onLostCoordinator is only ever called from shutdown(), so this callback mirrors that same lifecycle. Left undefined by default (matching onDelivery/onPatch/onError): a caller that wants to react to owning the coordinator role -- e.g. bridge-mesh.ts starting/stopping the cc-peer front (agent-comms#157), a Node/filesystem-specific capability that has no place in this transport-agnostic core -- sets it, exactly like those three.
+   */
+  onCoordinatorRoleChanged:
+    ((isCoordinator: boolean) => void | Promise<void>) | undefined;
+
   /** Serialise the full mesh state for state_sync messages. */
   serialise(): SerialisedState {
     return {
@@ -299,6 +305,9 @@ export class MeshStore implements CommsStore {
       deliveryEngine: this.deliveryEngine,
       staleAgentChecker: this.staleAgentChecker,
       coordinatorGateway: this.coordinatorGateway,
+      onCoordinatorRoleChanged: async () => {
+        await this.onCoordinatorRoleChanged?.(true);
+      },
     });
   }
 
@@ -370,6 +379,7 @@ export class MeshStore implements CommsStore {
         );
         this.staleAgentChecker.start();
         await this.coordinatorGateway.onBecameCoordinator();
+        await this.onCoordinatorRoleChanged?.(true);
         connected = true;
       } catch (coordErr) {
         const msg =
@@ -773,6 +783,7 @@ export class MeshStore implements CommsStore {
 
     this.staleAgentChecker.stop();
     await this.coordinatorGateway.onLostCoordinator();
+    await this.onCoordinatorRoleChanged?.(false);
     await this.requireTransport().shutdown();
   }
 }

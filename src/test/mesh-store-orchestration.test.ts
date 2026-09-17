@@ -215,6 +215,34 @@ describe("MeshStore — init()", () => {
     expect(transport.unref).toHaveBeenCalledTimes(1);
   });
 
+  it("fires onCoordinatorRoleChanged(true) once this store becomes coordinator on a fresh bind", async () => {
+    const store = new MeshStore();
+    const transport = fakeTransport();
+    vi.mocked(transport.connectToCoordinator).mockRejectedValue(
+      new Error("ECONNREFUSED"),
+    );
+    store.setTransport(transport);
+    const onCoordinatorRoleChanged = vi.fn<(isCoordinator: boolean) => void>();
+    store.onCoordinatorRoleChanged = onCoordinatorRoleChanged;
+
+    await store.init();
+
+    expect(onCoordinatorRoleChanged).toHaveBeenCalledTimes(1);
+    expect(onCoordinatorRoleChanged).toHaveBeenCalledWith(true);
+  });
+
+  it("never fires onCoordinatorRoleChanged when joining an existing coordinator rather than becoming one", async () => {
+    const store = new MeshStore();
+    const transport = fakeTransport();
+    store.setTransport(transport);
+    const onCoordinatorRoleChanged = vi.fn<(isCoordinator: boolean) => void>();
+    store.onCoordinatorRoleChanged = onCoordinatorRoleChanged;
+
+    await store.init();
+
+    expect(onCoordinatorRoleChanged).not.toHaveBeenCalled();
+  });
+
   it("degrades gracefully (no throw, onError fires) when becomeCoordinator fails with EADDRINUSE", async () => {
     const store = new MeshStore();
     const transport = fakeTransport();
@@ -659,6 +687,16 @@ describe("MeshStore — shutdown()", () => {
 
     expect(stopSpy).toHaveBeenCalledTimes(1);
     expect(transport.shutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires onCoordinatorRoleChanged(false) on shutdown, when one is set", async () => {
+    const onCoordinatorRoleChanged = vi.fn<(isCoordinator: boolean) => void>();
+    store.onCoordinatorRoleChanged = onCoordinatorRoleChanged;
+
+    await store.shutdown();
+
+    expect(onCoordinatorRoleChanged).toHaveBeenCalledTimes(1);
+    expect(onCoordinatorRoleChanged).toHaveBeenCalledWith(false);
   });
 
   it("broadcasts agent_offline for its own self agent when one is registered", async () => {

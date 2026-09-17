@@ -34,6 +34,7 @@ interface Harness {
   applyPatch: ReturnType<typeof vi.fn>;
   staleAgentCheckerStart: ReturnType<typeof vi.fn>;
   coordinatorGatewayOnBecameCoordinator: ReturnType<typeof vi.fn>;
+  onCoordinatorRoleChanged: ReturnType<typeof vi.fn>;
 }
 
 function makeHarness(): Harness {
@@ -52,6 +53,9 @@ function makeHarness(): Harness {
   const coordinatorGatewayOnBecameCoordinator = vi
     .fn<PeerLifecycleDeps["coordinatorGateway"]["onBecameCoordinator"]>()
     .mockResolvedValue(undefined);
+  const onCoordinatorRoleChanged = vi
+    .fn<NonNullable<PeerLifecycleDeps["onCoordinatorRoleChanged"]>>()
+    .mockResolvedValue(undefined);
   const deps: PeerLifecycleDeps = {
     peerInfo: new Map(),
     agents: new Map(),
@@ -65,6 +69,7 @@ function makeHarness(): Harness {
     coordinatorGateway: {
       onBecameCoordinator: coordinatorGatewayOnBecameCoordinator,
     },
+    onCoordinatorRoleChanged,
   };
   return {
     deps,
@@ -75,6 +80,7 @@ function makeHarness(): Harness {
     applyPatch,
     staleAgentCheckerStart,
     coordinatorGatewayOnBecameCoordinator,
+    onCoordinatorRoleChanged,
   };
 }
 
@@ -211,6 +217,17 @@ describe("PeerLifecycle — handleBecomeCoordinator", () => {
     );
     expect(h.staleAgentCheckerStart).toHaveBeenCalledTimes(1);
     expect(h.coordinatorGatewayOnBecameCoordinator).toHaveBeenCalledTimes(1);
+    expect(h.onCoordinatorRoleChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("still becomes coordinator when onCoordinatorRoleChanged is left unset", async () => {
+    const h = makeHarness();
+    h.deps.onCoordinatorRoleChanged = undefined;
+
+    await expect(
+      h.lifecycle.handleBecomeCoordinator([peerInfo("a")]),
+    ).resolves.toBeUndefined();
+    expect(h.transport.becomeCoordinator).toHaveBeenCalledTimes(1);
   });
 });
 
