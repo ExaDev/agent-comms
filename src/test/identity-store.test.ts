@@ -224,9 +224,9 @@ test("loadIdentityForFront creates and persists an identity without taking the s
   const { slot, dir } = tempSlot("claude-code");
   const identity = loadIdentityForFront(slot);
   expect(fs.existsSync(slotFile(dir, ".json"))).toBe(true);
-  expect(fs.existsSync(path.join(dir, "identity-claude-code--_tmp_project.lock"))).toBe(
-    false,
-  );
+  expect(
+    fs.existsSync(path.join(dir, "identity-claude-code--_tmp_project.lock")),
+  ).toBe(false);
   expect(probeSlotOwner(slot)).toBeUndefined();
 
   const reloaded = loadIdentityForFront(slot);
