@@ -28,6 +28,7 @@ import {
 } from "../core/identity-store.js";
 import type { IdentitySlot } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
+import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import type { ConnectionHandle, MeshTransport } from "../core/transport.js";
 import { wireTestTransport } from "./test-transport.js";
 
@@ -181,12 +182,21 @@ describe("joinRoom (requester side, remote path)", () => {
     const identity = loadOrCreateIdentity(slot);
     store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
     const identityPort = await toIdentityPort(identity);
+    const userIdentityOptions = {
+      dir: fs.mkdtempSync(
+        path.join(tmpdir(), "agent-comms-test-user-identity-"),
+      ),
+    };
     store.setIdentity({
       identity: identityPort,
       clock: createSystemClock(),
       slot,
       revocation: createRevocationView(),
       dataStorage: createMemoryStorage(),
+      userIdentity: await toIdentityPort(
+        loadOrCreateUserIdentity(userIdentityOptions),
+      ),
+      userIdentityOptions,
     });
 
     const ownerId = "f".repeat(DEVICE_ID_HEX_LENGTH);

@@ -77,6 +77,8 @@ function makeHarness() {
       identity: {} as never,
       revocation: {} as never,
       dataStorage: {} as never,
+      userIdentity: {} as never,
+      userIdentityOptions: {},
     }),
     roomProtocol: { sendRoomRequestToMember },
   };

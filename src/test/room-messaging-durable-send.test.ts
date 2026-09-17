@@ -86,6 +86,8 @@ async function makeHarness() {
       identity: ownerIdentity,
       revocation: createRevocationView(),
       dataStorage,
+      userIdentity: ownerIdentity,
+      userIdentityOptions: {},
     }),
     roomProtocol: { sendRoomRequestToMember: async () => undefined },
   };
