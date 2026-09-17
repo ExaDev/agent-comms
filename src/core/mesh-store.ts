@@ -233,9 +233,10 @@ export class MeshStore implements CommsStore {
       rooms: this.rooms,
       messages: this.messages,
       dms: this.dms,
-      agents: this.agents,
       requireIdentity: () => this.requireIdentity(),
       roomProtocol: this.roomProtocol,
+      // AgentRegistry doesn't exist yet at this point in the constructor -- deferred the same lazy-`this`-capture way DeliveryEngine's own sendRoomRequestToMember closure above is.
+      resolveAgent: async (id) => this.agentRegistry.getAgent(id),
     });
 
     this.roomLifecycle = new RoomLifecycle({

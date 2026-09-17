@@ -23,7 +23,7 @@ import {
   RoomMessaging,
   type RoomMessagingDeps,
 } from "../core/room-messaging.js";
-import type { AgentIdentity, Room } from "../core/types.js";
+import type { Room } from "../core/types.js";
 
 const NO_DELEGATIONS_REMAINING = 0;
 const MINUTES_PER_HOUR = 60;
@@ -79,7 +79,6 @@ async function makeHarness() {
     rooms: new Map([[roomPath, room]]),
     messages: new Map(),
     dms: new Map(),
-    agents: new Map<string, AgentIdentity>(),
     requireIdentity: () => ({
       slot,
       clock,
@@ -88,6 +87,7 @@ async function makeHarness() {
       dataStorage,
     }),
     roomProtocol: { sendRoomRequestToMember: async () => undefined },
+    resolveAgent: async () => undefined,
   };
 
   return {
