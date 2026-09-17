@@ -1,3 +1,20 @@
+## [3.12.0](https://github.com/ExaDev/agent-comms/compare/v3.11.0...v3.12.0) (2026-09-17)
+
+### Features
+
+* **bridge:** add reply-alias name derivation and directory ([832e5c0](https://github.com/ExaDev/agent-comms/commit/832e5c05080c8d5b44be5e137e836f0b6d6459fa))
+* **bridge:** construct the shared AliasPool for the default front ([ca208f5](https://github.com/ExaDev/agent-comms/commit/ca208f5758b8524297ab1ca6c33d0b8a96232997))
+* **bridge:** route alias replies through the front controller ([cb4c956](https://github.com/ExaDev/agent-comms/commit/cb4c9565bf9484e429b9811b1e124c80c2b2c2a4))
+* **bridge:** wire reply aliases into the fronted-session relay ([bee76d5](https://github.com/ExaDev/agent-comms/commit/bee76d5798676d96abab7d97311d119cb51d2fff))
+
+### Documentation
+
+* document the reply half of the default cc-peer front ([55e5add](https://github.com/ExaDev/agent-comms/commit/55e5adde54a9fff725514ca209f193c38e2e4451))
+
+### Chores
+
+* **deps:** bump cc-peer to 1.4.1 for the alias-pool subpath ([738e7d5](https://github.com/ExaDev/agent-comms/commit/738e7d58856e78c9e1d4c2cc4ead1aa3b8be223a)), references [agent-comms#158](https://github.com/agent-comms/issues/158) [agent-comms#40](https://github.com/agent-comms/issues/40)
+
 ## [3.11.0](https://github.com/ExaDev/agent-comms/compare/v3.10.0...v3.11.0) (2026-09-17)
 
 ### Features
