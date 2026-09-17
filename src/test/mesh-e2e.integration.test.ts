@@ -5,6 +5,7 @@
  * room creation, messaging, and delivery push.
  */
 
+import { randomInt } from "node:crypto";
 import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
@@ -12,7 +13,12 @@ import { buildAction } from "../core/bridge.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 
-const E2E_PORT = 19878;
+/** Start of this file's own reserved port band -- kept clear of the fixed literals every sibling integration test file hardcodes (19878-19897) so a random pick here can never collide with one of those. */
+const E2E_PORT_RANGE_START = 20_100;
+/** Width of the reserved band -- wide enough that two concurrent runs of this exact file on the same machine picking the same port by chance is negligible. */
+const E2E_PORT_RANGE_WIDTH = 900;
+/** Randomised per process rather than a fixed literal: a hardcoded port here deterministically collides (EADDRINUSE) with any other concurrent vitest run of this same file on the same machine -- confirmed repeatedly under real concurrent load, not hypothetical. */
+const E2E_PORT = E2E_PORT_RANGE_START + randomInt(E2E_PORT_RANGE_WIDTH);
 
 // ---------------------------------------------------------------------------
 // Timing constants — settle windows for asynchronous mesh propagation. There is no "operation complete" signal for these steps, so the test waits a fixed budget rather than polling.
