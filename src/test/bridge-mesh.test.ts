@@ -13,6 +13,7 @@ import {
   type IdentitySlot,
 } from "../core/identity-store.js";
 import { waitFor } from "./test-transport.js";
+import { realHubOverWs, waitForCondition } from "./hub-helpers.js";
 
 // Base of the ephemeral coordinator-port range used to avoid colliding with the mesh's real well-known port.
 const TEST_COORDINATOR_PORT_BASE = 20_900;
@@ -80,5 +81,25 @@ test("createBridgeMesh passes an explicit coordinatorPort through to MeshStore, 
   } finally {
     await b.store.shutdown();
     await a.store.shutdown();
+  }
+});
+
+test("createBridgeMesh passes an explicit hubUrl through to MeshStore, dialled once the store becomes coordinator and dropped on shutdown", async () => {
+  const hub = await realHubOverWs();
+  const slot = tempSlot("test-harness-hub");
+  const port =
+    TEST_COORDINATOR_PORT_BASE +
+    Math.floor(Math.random() * TEST_COORDINATOR_PORT_RANGE);
+  const { store } = await createBridgeMesh(slot, port, hub.url);
+  try {
+    await store.init();
+    expect(store.connected).toBeTruthy();
+    await waitForCondition(() => hub.connectionCount() === 1);
+
+    await store.shutdown();
+
+    await waitForCondition(() => hub.connectionCount() === 0);
+  } finally {
+    await hub.close();
   }
 });
