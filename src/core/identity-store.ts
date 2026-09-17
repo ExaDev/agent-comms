@@ -282,7 +282,9 @@ function createIdentity(identityFile: string): PeerIdentity {
 /**
  * Probes a slot's current lock holder without taking it -- the cc-peer front (agent-comms#157) uses this read-only check to decide whether a local Claude Code session already fronts itself (a live agent-comms bridge already holds the slot) before attaching, and to notice a session's own bridge taking the slot over later so the front can yield. Returns the live PID currently holding the slot's lock, or undefined when the slot is unlocked or its recorded holder is no longer alive.
  */
-export function probeSlotOwner(slot: Readonly<IdentitySlot>): number | undefined {
+export function probeSlotOwner(
+  slot: Readonly<IdentitySlot>,
+): number | undefined {
   const { lockFile } = slotPaths(slot);
   const heldBy = readLockPid(lockFile);
   if (heldBy === undefined) return undefined;
