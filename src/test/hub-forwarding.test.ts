@@ -2,10 +2,7 @@
  * Direct unit tests for forwardAdvertsToHub/pushHubCatchUp's own gateway-trust gate (agent-comms#156) -- previously only exercised indirectly through gateway-forwarding.integration.test.ts's real-hub harness. Uses a fake hub object (isConnected/advertiseDevices) rather than a real HubSession, mirroring gossip-directory.test.ts's own standalone-fixture approach for the sibling gossip-merge function.
  */
 import { describe, expect, it, vi } from "vitest";
-import {
-  forwardAdvertsToHub,
-  pushHubCatchUp,
-} from "../core/hub-forwarding.js";
+import { forwardAdvertsToHub, pushHubCatchUp } from "../core/hub-forwarding.js";
 import type { DirectoryEntry } from "wire-mesh-core/domain/mesh-session";
 import type { PeerAdvert } from "wire-mesh-core/generated/protocol";
 
@@ -27,7 +24,7 @@ function advert(): PeerAdvert {
 function entry(hex: string): DirectoryEntry {
   return {
     device: deviceIdBytes(hex),
-    advert: { ...advert(), "agent/self": {} } as unknown as PeerAdvert,
+    advert: { ...advert(), "agent/self": {} },
   };
 }
 
