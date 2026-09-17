@@ -254,9 +254,6 @@ export class WireMeshTransport implements MeshTransport {
 
   /** The cross-machine trust boundary (agent-comms#156): gates outbound gossip advertisement (hasAny), inbound directory merge/request dispatch, and outbound targeted hub requests (both isTrusted) -- see GatewayTrust's own class doc. Defaults to a fresh, empty (deny-all) instance when no caller wires one in, matching every existing construction site that predates this feature. */
   private readonly gatewayTrust: GatewayTrustReader;
-  /** Bound once here so both hub-forwarding call sites (watchForDisconnect, connectHub) can pass a plain reference rather than repeating an inline arrow. */
-  private readonly hasAnyTrustedGateway = (): boolean =>
-    this.gatewayTrust.hasAny();
 
   constructor(
     events: Readonly<TransportEvents>,
@@ -360,7 +357,7 @@ export class WireMeshTransport implements MeshTransport {
     }
   }
 
-  /** Re-sends this side's own current presence status and currently-hosted rooms, together, onto every live session's gossip self-advert -- one gossip frame per tick carrying whichever of the two sources is wired in, rather than a separate frame per fact. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. A no-op tick (neither source wired in, or no sessions exist yet) is expected and silent. */
+  /** Re-sends this side's own current presence status and currently-hosted rooms, together, onto every live session's gossip self-advert -- one gossip frame per tick carrying whichever of the two sources is wired in, rather than a separate frame per fact. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. A no-op tick (neither source wired in, or no sessions exist yet) is expected and silent. The hub's own session (agent-comms#156) is gated separately from every ordinary local-peer session in allSessions: local mesh trust is a different layer (connect_request/introduce approval already gated it before it ever joined allSessions), but the hub session is a broadcast to every connected hub peer, trusted or not, and would otherwise leak this side's own presence/hosted-rooms/self-agent advert onto the hub regardless of GatewayTrust -- forwardAdvertsToHub/pushHubCatchUp's own hasAny gate exists to prevent exactly this for OTHER local peers' adverts, and this side's own self-advert deserves the identical gate, not a bypass. */
   private readvertiseGossip(): void {
     const extensions: Record<string, unknown> = {};
     const status = this.getCurrentPresence?.();
@@ -373,6 +370,8 @@ export class WireMeshTransport implements MeshTransport {
       extensions[AGENT_SELF_GOSSIP_KEY] = selfAgentAdvert;
     if (Object.keys(extensions).length === 0) return;
     for (const session of this.allSessions) {
+      if (this.hub.ownsSession(session) && !this.gatewayTrust.hasAny())
+        continue;
       session.sendGossipUpdate(extensions).catch((error: unknown) => {
         this.events.onError?.(
           error instanceof Error ? error : new Error(String(error)),
@@ -555,7 +554,7 @@ export class WireMeshTransport implements MeshTransport {
           this.hub,
           event.directory,
           this.events.onError,
-          this.hasAnyTrustedGateway,
+          () => this.gatewayTrust.hasAny(),
         );
         const presence = findPresenceAdvert(deviceIdHex, event.directory);
         if (presence !== undefined) {
@@ -951,7 +950,7 @@ export class WireMeshTransport implements MeshTransport {
       url,
       this.knownDevices,
       this.events.onError,
-      this.hasAnyTrustedGateway,
+      () => this.gatewayTrust.hasAny(),
     );
   }
 

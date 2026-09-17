@@ -77,6 +77,11 @@ export class HubSession {
     return this.session !== undefined;
   }
 
+  /** Whether the given session object is this side's own currently-held hub session -- lets WireMeshTransport distinguish the hub's session from an ordinary local-peer session within its own allSessions bookkeeping (agent-comms#156's own readvertiseGossip gate needs this) without this class ever exposing the raw session object itself. */
+  ownsSession(session: AcceptedMeshSession): boolean {
+    return this.session === session;
+  }
+
   /** Drops the held hub connection. A no-op if none is live (connect() was never called, disconnect() already ran, or the hub itself already closed the session). */
   async disconnect(): Promise<void> {
     const session = this.session;
