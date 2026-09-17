@@ -22,11 +22,16 @@ function sleepSync(ms: number): void {
   spawnSync("sleep", [String(ms / MS_PER_SECOND)]);
 }
 
-function runPublishWithRetry(command: string, args: readonly string[]): void {
+// Re-runs the login step before every retry, not just the failure classes that need it, because it's the only way to make a retry of an expired-JWT 401 (see isExpiredJwt in src/core/mcp-registry-retry.ts) actually stand a chance: retrying with the same token that just 401'd would just 401 again. A fresh login before a propagation-lag/5xx/connection-error retry is harmless, so there's no need to special-case which failure triggered the retry.
+function runPublishWithRetry(
+  publisherPath: string,
+  loginArgs: readonly string[],
+  publishArgs: readonly string[],
+): void {
   const deadline = Date.now() + MAX_TOTAL_RETRY_MS;
   let delayMs = INITIAL_RETRY_DELAY_MS;
   for (let attempt = 1; ; attempt++) {
-    const result = spawnSync(command, args, { encoding: "utf8" });
+    const result = spawnSync(publisherPath, publishArgs, { encoding: "utf8" });
     if (result.status === 0) {
       process.stdout.write(result.stdout);
       return;
@@ -39,11 +44,14 @@ function runPublishWithRetry(command: string, args: readonly string[]): void {
         `mcp-publisher publish hit a retryable failure (attempt ${String(attempt)}), retrying in ${String(delayMs / MS_PER_SECOND)}s`,
       );
       sleepSync(delayMs);
+      run(publisherPath, loginArgs);
       delayMs = nextRetryDelayMs(delayMs);
       continue;
     }
     process.stdout.write(output);
-    throw new Error(`Command failed: ${command} ${args.join(" ")}`);
+    throw new Error(
+      `Command failed: ${publisherPath} ${publishArgs.join(" ")}`,
+    );
   }
 }
 
@@ -62,8 +70,10 @@ function main(): void {
       "-lc",
       `curl -fsSL "${archiveUrl}" | tar -xzf - -C "${tempDir}" mcp-publisher`,
     ]);
-    run(path.join(tempDir, "mcp-publisher"), ["login", "github-oidc"]);
-    runPublishWithRetry(path.join(tempDir, "mcp-publisher"), ["publish"]);
+    const publisherPath = path.join(tempDir, "mcp-publisher");
+    const loginArgs = ["login", "github-oidc"];
+    run(publisherPath, loginArgs);
+    runPublishWithRetry(publisherPath, loginArgs, ["publish"]);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
