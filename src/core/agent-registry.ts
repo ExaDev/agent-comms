@@ -107,9 +107,17 @@ export class AgentRegistry {
     return agent;
   }
 
+  /** Resolves an agent by id, falling back to a gossip-discovered device (see listDiscoverableAgents' own doc) not otherwise locally known -- the same merge listAgents already applies to its returned array, but for a single lookup rather than the whole list. This is what lets a caller resolve a remote, hub-learned agent (agent-comms#155) that will never appear in deps.agents at all, since nothing replicates full agent records cross-machine the way a local peer's agent_upsert broadcast does. */
   async getAgent(id: string): Promise<AgentIdentity | undefined> {
     await Promise.resolve();
-    return this.deps.agents.get(id);
+    const known = this.deps.agents.get(id);
+    if (known !== undefined) return known;
+    const discovered = this.listDiscoverableAgents().find(
+      (candidate) => candidate.deviceId === id,
+    );
+    return discovered === undefined
+      ? undefined
+      : AgentRegistry.synthesiseDiscoveredAgent(discovered);
   }
 
   async updateAgent(
@@ -156,21 +164,30 @@ export class AgentRegistry {
     }
     for (const discovered of this.listDiscoverableAgents()) {
       if (this.deps.agents.has(discovered.deviceId)) continue;
-      result.push({
-        id: discovered.deviceId,
-        version: 0,
-        name: discovered.advert.name,
-        harness: discovered.advert.harness,
-        cwd: discovered.advert.cwd,
-        pid: discovered.advert.pid,
-        startedAt: discovered.advert.startedAt,
-        visibility: "visible",
-        status: discovered.status ?? "active",
-        tags: discovered.advert.tags,
-        subscribedRooms: discovered.advert.subscribedRooms,
-      });
+      result.push(AgentRegistry.synthesiseDiscoveredAgent(discovered));
     }
     return result;
+  }
+
+  /** Builds the placeholder-shaped AgentIdentity a gossip-discovered device (never locally registered) is represented as -- shared by listAgents' own array merge and getAgent's single-lookup fallback, so both resolve an identical shape for the identical discovered device. */
+  private static synthesiseDiscoveredAgent(discovered: {
+    deviceId: string;
+    advert: AgentSelfAdvert;
+    status: AgentStatus | undefined;
+  }): AgentIdentity {
+    return {
+      id: discovered.deviceId,
+      version: 0,
+      name: discovered.advert.name,
+      harness: discovered.advert.harness,
+      cwd: discovered.advert.cwd,
+      pid: discovered.advert.pid,
+      startedAt: discovered.advert.startedAt,
+      visibility: "visible",
+      status: discovered.status ?? "active",
+      tags: discovered.advert.tags,
+      subscribedRooms: discovered.advert.subscribedRooms,
+    };
   }
 
   /**

@@ -66,11 +66,15 @@ function agent(overrides: Partial<AgentIdentity> = {}): AgentIdentity {
 
 function makeHarness() {
   const sendRoomRequestToMember = vi.fn().mockResolvedValue(undefined);
+  // Backs the default resolveAgent mock below -- a plain lookup Map standing in for AgentRegistry.getAgent's own real "known, else gossip-discovered" resolution, which RoomMessaging itself never sees; it only calls resolveAgent opaquely.
+  const agents = new Map<string, AgentIdentity>();
+  const resolveAgent = vi
+    .fn()
+    .mockImplementation(async (id: string) => agents.get(id));
   const deps: RoomMessagingDeps = {
     rooms: new Map<string, Room>(),
     messages: new Map(),
     dms: new Map(),
-    agents: new Map<string, AgentIdentity>(),
     requireIdentity: () => ({
       slot: { harness: "pi", cwd: "/tmp" },
       clock: { now: () => NOW_MS },
@@ -81,8 +85,11 @@ function makeHarness() {
       userIdentityOptions: {},
     }),
     roomProtocol: { sendRoomRequestToMember },
+    resolveAgent,
   };
   return {
+    agents,
+    resolveAgent,
     deps,
     messaging: new RoomMessaging(deps),
     sendRoomRequestToMember,
@@ -360,13 +367,28 @@ describe("RoomMessaging — sendDm", () => {
 
   it("throws AGENT_NOT_FOUND naming the exact recipient id when the recipient has ghost visibility", async () => {
     const h = makeHarness();
-    h.deps.agents.set(TO_DEVICE_ID, agent({ visibility: "ghost" }));
+    h.agents.set(TO_DEVICE_ID, agent({ visibility: "ghost" }));
     await expect(
       h.messaging.sendDm(FROM_DEVICE_ID, TO_DEVICE_ID, "hi"),
     ).rejects.toMatchObject({
       message: `Cannot DM agent ${TO_DEVICE_ID}`,
       code: "AGENT_NOT_FOUND",
     });
+  });
+
+  it("resolves the recipient via resolveAgent, not a direct agents-map lookup -- so a remote, gossip-discovered recipient (agent-comms#155) is a valid DM target", async () => {
+    const h = makeHarness();
+    h.resolveAgent.mockResolvedValue(agent({ visibility: "visible" }));
+    vi.mocked(loadRoomTokens).mockReturnValue({
+      [dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID)]: FAKE_TOKEN,
+    });
+    const message = await h.messaging.sendDm(
+      FROM_DEVICE_ID,
+      TO_DEVICE_ID,
+      "hi",
+    );
+    expect(h.resolveAgent).toHaveBeenCalledWith(TO_DEVICE_ID);
+    expect(message.content).toBe("hi");
   });
 
   it("skips recipient validation entirely for a self-DM", async () => {
@@ -392,7 +414,7 @@ describe("RoomMessaging — sendDm", () => {
 
   it("stores a cross-agent DM under the sorted dmRoomPath key and dials the recipient", async () => {
     const h = makeHarness();
-    h.deps.agents.set(TO_DEVICE_ID, agent());
+    h.agents.set(TO_DEVICE_ID, agent());
     vi.mocked(loadRoomTokens).mockReturnValue({
       [dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID)]: FAKE_TOKEN,
     });
@@ -443,7 +465,7 @@ describe("RoomMessaging — sendDm", () => {
 
   it("throws NOT_MEMBER naming the exact dm key when no room:member token is persisted for a cross-agent DM", async () => {
     const h = makeHarness();
-    h.deps.agents.set(TO_DEVICE_ID, agent());
+    h.agents.set(TO_DEVICE_ID, agent());
     vi.mocked(loadRoomTokens).mockReturnValue({});
 
     const key = dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID);
@@ -457,7 +479,7 @@ describe("RoomMessaging — sendDm", () => {
 
   it("includes streaming-behavior in the wire params only when given, for a cross-agent DM", async () => {
     const h = makeHarness();
-    h.deps.agents.set(TO_DEVICE_ID, agent());
+    h.agents.set(TO_DEVICE_ID, agent());
     vi.mocked(loadRoomTokens).mockReturnValue({
       [dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID)]: FAKE_TOKEN,
     });
@@ -473,7 +495,7 @@ describe("RoomMessaging — sendDm", () => {
 
   it("omits streaming-behavior from the wire params when not given, for a cross-agent DM", async () => {
     const h = makeHarness();
-    h.deps.agents.set(TO_DEVICE_ID, agent());
+    h.agents.set(TO_DEVICE_ID, agent());
     vi.mocked(loadRoomTokens).mockReturnValue({
       [dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID)]: FAKE_TOKEN,
     });

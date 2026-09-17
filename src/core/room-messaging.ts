@@ -18,14 +18,14 @@ import type {
   StreamingBehavior,
 } from "./types.js";
 
-/** The state and collaborators RoomMessaging needs from MeshStore. rooms/messages/dms/agents are direct references into MeshStore's own fields; roomProtocol is the already-constructed instance (construction order: ... -\> roomProtocol -\> roomMessaging -\> ...), narrowed to what sending a message or DM ever needs. */
+/** The state and collaborators RoomMessaging needs from MeshStore. rooms/messages/dms are direct references into MeshStore's own fields; roomProtocol is the already-constructed instance (construction order: ... -\> roomProtocol -\> roomMessaging -\> ...), narrowed to what sending a message or DM ever needs; resolveAgent is AgentRegistry's own getAgent (deferred the same lazy-closure way DeliveryEngine's sendRoomRequestToMember closure is, since AgentRegistry doesn't exist yet at RoomMessaging's own construction point) rather than a bare `agents.get` lookup, so sendDm's own existence check also resolves a gossip-discovered agent (a remote, hub-learned one included, agent-comms#155) that will never appear in the agents map directly. */
 export interface RoomMessagingDeps {
   rooms: Map<string, Room>;
   messages: Map<string, RoomMessage[]>;
   dms: Map<string, DmMessage[]>;
-  agents: Map<string, AgentIdentity>;
   requireIdentity: () => MeshStoreIdentity;
   roomProtocol: Pick<RoomProtocol, "sendRoomRequestToMember">;
+  resolveAgent: (id: string) => Promise<AgentIdentity | undefined>;
 }
 
 export class RoomMessaging {
@@ -132,7 +132,7 @@ export class RoomMessaging {
     streamingBehavior?: StreamingBehavior,
   ): Promise<DmMessage> {
     if (to !== from) {
-      const recipient = this.deps.agents.get(to);
+      const recipient = await this.deps.resolveAgent(to);
       if (!recipient)
         throw new CommsError(`Agent ${to} not found`, "AGENT_NOT_FOUND");
       if (recipient.visibility === "ghost")

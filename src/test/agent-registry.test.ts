@@ -165,6 +165,68 @@ describe("AgentRegistry — getAgent", () => {
     await expect(registry.getAgent(a.id)).resolves.toEqual(a);
     await expect(registry.getAgent("nobody")).resolves.toBeUndefined();
   });
+
+  it("falls back to a gossip-discovered device not locally registered, as the same placeholder shape listAgents synthesises (agent-comms#155: a remote, hub-learned agent never lands in deps.agents at all)", async () => {
+    const { registry, deps } = makeHarness();
+    deps.requireTransport = () =>
+      ({
+        listKnownDevices: () => [
+          {
+            deviceId: "remote-device",
+            advert: {
+              "agent/self": {
+                name: "remote-agent",
+                harness: "codex",
+                cwd: "/tmp/remote",
+                pid: 42,
+                startedAt: "2026-03-03T00:00:00.000Z",
+                tags: ["from-hub"],
+                subscribedRooms: [],
+              },
+              "presence/status": "idle",
+            },
+          },
+        ],
+      }) as unknown as ReturnType<AgentRegistryDeps["requireTransport"]>;
+
+    await expect(registry.getAgent("remote-device")).resolves.toMatchObject({
+      id: "remote-device",
+      name: "remote-agent",
+      harness: "codex",
+      cwd: "/tmp/remote",
+      pid: 42,
+      visibility: "visible",
+      status: "idle",
+      tags: ["from-hub"],
+    });
+  });
+
+  it("prefers a locally-known agent over a same-id gossip-discovered placeholder", async () => {
+    const { registry, deps } = makeHarness();
+    const local = agent({ id: "dual-known", name: "local-copy" });
+    deps.agents.set(local.id, local);
+    deps.requireTransport = () =>
+      ({
+        listKnownDevices: () => [
+          {
+            deviceId: "dual-known",
+            advert: {
+              "agent/self": {
+                name: "stale-gossip-copy",
+                harness: "codex",
+                cwd: "/tmp",
+                pid: 1,
+                startedAt: "2026-01-01T00:00:00.000Z",
+                tags: [],
+                subscribedRooms: [],
+              },
+            },
+          },
+        ],
+      }) as unknown as ReturnType<AgentRegistryDeps["requireTransport"]>;
+
+    await expect(registry.getAgent("dual-known")).resolves.toEqual(local);
+  });
 });
 
 describe("AgentRegistry — updateAgent", () => {
