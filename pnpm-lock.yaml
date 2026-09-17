@@ -189,8 +189,8 @@ importers:
         specifier: 2.3.0
         version: 2.3.0
       cc-peer:
-        specifier: 1.3.4
-        version: 1.3.4
+        specifier: 1.4.1
+        version: 1.4.1
       preact:
         specifier: 10.29.7
         version: 10.29.7
@@ -1993,8 +1993,8 @@ packages:
     resolution: {integrity: sha512-76WB3hq8BoaGkMkBVJ27fW5LJU+qqDLEpgRNCG/SYKhODWXpVPOTD4UcUto3IEzYLA52nsvbhb0wabhHDn3qXg==}
     engines: {node: '>=20'}
 
-  cc-peer@1.3.4:
-    resolution: {integrity: sha512-0+XHghOvUBYqwrXgA7y041ebKvk2Ml7Gucr6SfyMHnGGytMojEGOHrpWHVxuWz2yuUCnvXXzIccFawr8S395Bg==}
+  cc-peer@1.4.1:
+    resolution: {integrity: sha512-TETcA2MOexkQ+xlBXAV/ftOfK9t2k6C73JJY3CHCkKue7ddh7vZyRU+TWK3lJ1gVbCTDcas8q7ousdvc8sad1w==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -6442,7 +6442,7 @@ snapshots:
     dependencies:
       '@cto.af/wtf8': 0.0.5
 
-  cc-peer@1.3.4:
+  cc-peer@1.4.1:
     dependencies:
       zod: 4.5.4
 
