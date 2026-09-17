@@ -10,7 +10,7 @@ import type { IdentitySlot } from "../../core/identity-store.js";
 export interface CcPeerRosterEntryLike {
   pid: number;
   cwd: string;
-  name?: string;
+  name?: string | undefined;
   /** cc-peer's own registry entries for library-backed peers (this front itself, the one-shot `bridge cc-peer` command, an alias-pool worker) always carry the literal string "cc-peer" here -- see buildRegistryEntry in cc-peer's own source. A real interactive Claude Code session, which registers itself natively rather than through the cc-peer library, reports its own Claude Code version instead. */
   version: string;
   messagingSocketPath: string;
