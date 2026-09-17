@@ -9,6 +9,8 @@ export interface CoordinatorGatewayDeps {
   connectHub: (url: string) => Promise<void>;
   /** Drops the held hub connection, if any. Backed by the transport's own optional disconnectHub. */
   disconnectHub: () => Promise<void>;
+  /** Reports a hub-dial failure. Never invoked for anything else -- onBecameCoordinator's own guarantee (see its doc comment) is that a hub problem is always reported this way, never thrown, so this is the only signal a caller gets that the gateway role didn't actually connect. */
+  onError?: (error: Error) => void;
 }
 
 export class CoordinatorGateway {
@@ -21,11 +23,17 @@ export class CoordinatorGateway {
     return this.connected;
   }
 
-  /** Dials the hub for this machine's gateway role. Idempotent: a call while already connected is a no-op, since nothing in this codebase's own coordinator-election machinery re-fires "became coordinator" without an intervening onLostCoordinator -- this guard is defensive, not a known double-fire path. */
+  /** Dials the hub for this machine's gateway role. Idempotent: a call while already connected is a no-op, since nothing in this codebase's own coordinator-election machinery re-fires "became coordinator" without an intervening onLostCoordinator -- this guard is defensive, not a known double-fire path. Never throws: local coordinator election (the whole reason this side is calling this at all) must not depend on the hub being reachable, so a dial failure is reported via deps.onError and swallowed here, leaving isConnected false so a later onBecameCoordinator call retries rather than being blocked by the earlier failure's own idempotency guard. */
   async onBecameCoordinator(): Promise<void> {
     if (this.connected) return;
-    this.connected = true;
-    await this.deps.connectHub(this.deps.hubUrl);
+    try {
+      await this.deps.connectHub(this.deps.hubUrl);
+      this.connected = true;
+    } catch (error) {
+      this.deps.onError?.(
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    }
   }
 
   /** Drops this machine's held hub connection. A no-op if this side never became the gateway, or already lost the role -- MeshStore.shutdown() calls this unconditionally regardless of coordinator status, so this guard is what makes that safe rather than a redundant extra close. */

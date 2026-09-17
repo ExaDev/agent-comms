@@ -13,15 +13,23 @@ function makeHarness(): {
   gateway: CoordinatorGateway;
   connectHub: ReturnType<typeof vi.fn>;
   disconnectHub: ReturnType<typeof vi.fn>;
+  onError: ReturnType<typeof vi.fn>;
 } {
   const connectHub = vi.fn().mockResolvedValue(undefined);
   const disconnectHub = vi.fn().mockResolvedValue(undefined);
+  const onError = vi.fn<(error: Error) => void>();
   const deps: CoordinatorGatewayDeps = {
     hubUrl: HUB_URL,
     connectHub,
     disconnectHub,
+    onError,
   };
-  return { gateway: new CoordinatorGateway(deps), connectHub, disconnectHub };
+  return {
+    gateway: new CoordinatorGateway(deps),
+    connectHub,
+    disconnectHub,
+    onError,
+  };
 }
 
 describe("CoordinatorGateway — onBecameCoordinator", () => {
@@ -50,6 +58,28 @@ describe("CoordinatorGateway — onBecameCoordinator", () => {
     await gateway.onBecameCoordinator();
 
     expect(connectHub).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a dial failure via onError rather than throwing -- local coordinator election must not depend on hub reachability", async () => {
+    const { gateway, connectHub, onError } = makeHarness();
+    const dialError = new Error("ECONNREFUSED");
+    connectHub.mockRejectedValueOnce(dialError);
+
+    await expect(gateway.onBecameCoordinator()).resolves.toBeUndefined();
+
+    expect(onError).toHaveBeenCalledWith(dialError);
+  });
+
+  it("does not mark itself connected after a failed dial, so a later call can retry", async () => {
+    const { gateway, connectHub } = makeHarness();
+    connectHub.mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    await gateway.onBecameCoordinator();
+    expect(gateway.isConnected).toBe(false);
+
+    await gateway.onBecameCoordinator();
+
+    expect(gateway.isConnected).toBe(true);
+    expect(connectHub).toHaveBeenCalledTimes(2);
   });
 });
 

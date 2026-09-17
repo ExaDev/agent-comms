@@ -307,6 +307,27 @@ describe("MeshStore — init()", () => {
     expect(transport.connectToCoordinator).toHaveBeenCalledTimes(1);
     expect(transport.connectHub).not.toHaveBeenCalled();
   });
+
+  it("still succeeds locally (becomes coordinator) when the hub dial fails -- local coordinator election must not depend on hub reachability", async () => {
+    const store = new MeshStore();
+    const transport = fakeTransport();
+    vi.mocked(transport.connectToCoordinator).mockRejectedValue(
+      new Error("ECONNREFUSED"),
+    );
+    const { connectHub } = transport;
+    if (connectHub === undefined) throw new Error("expected connectHub");
+    const hubError = new Error("hub unreachable");
+    vi.mocked(connectHub).mockRejectedValue(hubError);
+    store.setTransport(transport);
+    const onError = vi.fn<(error: Error) => void>();
+    store.onError = onError;
+
+    await expect(store.init()).resolves.toBeUndefined();
+
+    expect(transport.becomeCoordinator).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(hubError);
+    expect(transport.unref).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("MeshStore — events getter dispatch table", () => {
