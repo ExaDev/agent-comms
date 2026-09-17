@@ -35,7 +35,27 @@ function isRetryableServerError(output: string): boolean {
   return SERVER_ERROR_STATUS_PATTERN.test(output);
 }
 
-/** Recognises a publish failure worth retrying (npm propagation lag, or a transient 5xx from the registry's own infrastructure) as opposed to any other failure -- a genuinely invalid publish request, for instance, which retrying can never fix. */
+// Confirmed as a third retryable failure mode (ExaDev/agent-comms, 2026-09-17, issue #180, run 35249771867, v3.9.0): the registry request never got as far as an HTTP response at all, a raw connection-level failure from mcp-publisher's own Go HTTP client (a DNS/dial/timeout/reset at the TCP layer), which matches neither the propagation-lag text nor the 5xx status pattern above since there is no status line to match against. This is transient infrastructure the same way a 5xx is: the request itself may well have been valid, retrying it can plausibly succeed.
+const CONNECTION_ERROR_PATTERN =
+  /\b(?:dial tcp|i\/o timeout|connection refused|connection reset|no such host)\b/;
+
+function isConnectionError(output: string): boolean {
+  return CONNECTION_ERROR_PATTERN.test(output);
+}
+
+// Confirmed as a fourth retryable failure mode (ExaDev/agent-comms, 2026-09-17, issue #180, run 35239013253, v3.9.0): mcp-publisher logs in with `login github-oidc` once before the retry loop starts, and a retry attempt late enough in the MAX_TOTAL_RETRY_MS budget can present a JWT that expired in the meantime, producing a 401 that no amount of retrying the same token will ever fix. It's retryable only because the caller re-runs the login step before every retry attempt (see scripts/publish-mcp-registry.ts), which mints a fresh token, so this classifier deliberately matches only the specific "expired" 401 body, not a 401 in general, since a genuine authorisation failure (wrong scope, revoked credential) would 401 again regardless of how fresh the token is.
+const EXPIRED_JWT_STATUS_PATTERN = /server returned status 401\b/;
+
+function isExpiredJwt(output: string): boolean {
+  return EXPIRED_JWT_STATUS_PATTERN.test(output) && output.includes("expired");
+}
+
+/** Recognises a publish failure worth retrying (npm propagation lag, a transient 5xx from the registry's own infrastructure, a connection-level failure that never reached the registry, or a login JWT that expired mid-retry-window) as opposed to any other failure -- a genuinely invalid publish request or authorisation failure, for instance, which retrying can never fix. */
 export function isRetryablePublishFailure(output: string): boolean {
-  return isNpmPropagationLag(output) || isRetryableServerError(output);
+  return (
+    isNpmPropagationLag(output) ||
+    isRetryableServerError(output) ||
+    isConnectionError(output) ||
+    isExpiredJwt(output)
+  );
 }

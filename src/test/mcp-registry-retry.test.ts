@@ -68,4 +68,28 @@ describe("isRetryablePublishFailure", () => {
   it("does not misclassify an unrelated failure as retryable", () => {
     expect(isRetryablePublishFailure("permission denied")).toBe(false);
   });
+
+  it("recognises a raw connection-level failure with no HTTP status, confirmed in production (ExaDev/agent-comms, run 35249771867, v3.9.0): a dial-tcp i/o timeout reaching the registry, which matches neither the propagation-lag text nor the 5xx status pattern above since no HTTP response was ever received", () => {
+    const output =
+      'Error: publish failed: error sending request: Post "https://registry.modelcontextprotocol.io/v0/publish": dial tcp 34.61.200.254:443: i/o timeout';
+    expect(isRetryablePublishFailure(output)).toBe(true);
+  });
+
+  it("recognises a connection-refused failure as the same class of connection-level error", () => {
+    const output =
+      'Error: publish failed: error sending request: Post "https://registry.modelcontextprotocol.io/v0/publish": dial tcp 34.61.200.254:443: connect: connection refused';
+    expect(isRetryablePublishFailure(output)).toBe(true);
+  });
+
+  it("recognises a 401 caused by the login JWT expiring mid-retry-window, confirmed in production (ExaDev/agent-comms, run 35239013253, v3.9.0): mcp-publisher logs in once before the retry loop starts, and a retry attempt late in the 15-minute budget can present a token that has since expired", () => {
+    const output =
+      'Error: publish failed: server returned status 401: {"title":"Unauthorized","status":401,"detail":"Invalid or expired Registry JWT token","instance":"/v0/publish"}';
+    expect(isRetryablePublishFailure(output)).toBe(true);
+  });
+
+  it("does not retry a 401 that is a genuine authorisation failure rather than an expired token, since retrying an unrecognised or wrongly-scoped credential can never fix it", () => {
+    const output =
+      'Error: publish failed: server returned status 401: {"title":"Unauthorized","status":401,"detail":"Registry JWT token does not grant publish access to this namespace","instance":"/v0/publish"}';
+    expect(isRetryablePublishFailure(output)).toBe(false);
+  });
 });
