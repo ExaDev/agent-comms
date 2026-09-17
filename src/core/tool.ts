@@ -103,6 +103,9 @@ export interface MeshOnlyFeatures {
   connectToRemote?: (host: string, port: number) => Promise<void>;
   setVisibility?: (level: MeshVisibility, adapter?: string) => Promise<void>;
   getVisibility?: (adapter?: string) => MeshVisibility;
+  addTrustedGateway?: (deviceHex: string) => void;
+  removeTrustedGateway?: (deviceHex: string) => void;
+  listTrustedGateways?: () => string[];
 }
 
 /** Uniform "this bridge isn't backed by a mesh transport" result for a MeshOnlyFeatures method that isn't present on the current store. */
@@ -229,6 +232,12 @@ export class CommsTool {
           return await this.meshSetVisibility(action);
         case "mesh_get_visibility":
           return this.meshGetVisibility(action);
+        case "gateway_trust":
+          return this.gatewayTrust(action);
+        case "gateway_untrust":
+          return this.gatewayUntrust(action);
+        case "gateway_list_trusted":
+          return this.gatewayListTrusted();
         default:
           return {
             content: `Unknown action: ${JSON.stringify(action).slice(0, UNKNOWN_ACTION_PREVIEW_LENGTH)}`,
@@ -635,6 +644,58 @@ export class CommsTool {
     const visibility = this.store.getVisibility();
     return {
       content: `Mesh visibility: ${visibility}`,
+      isError: false,
+    };
+  }
+
+  private gatewayTrust(
+    action: CommsAction & { action: "gateway_trust" },
+  ): CommsResult {
+    if (!this.store.addTrustedGateway) {
+      return {
+        content: "Gateway trust is not available on this store.",
+        isError: true,
+      };
+    }
+    this.store.addTrustedGateway(action.device);
+    return {
+      content: `Trusted remote gateway device ${action.device}.`,
+      isError: false,
+    };
+  }
+
+  private gatewayUntrust(
+    action: CommsAction & { action: "gateway_untrust" },
+  ): CommsResult {
+    if (!this.store.removeTrustedGateway) {
+      return {
+        content: "Gateway trust is not available on this store.",
+        isError: true,
+      };
+    }
+    this.store.removeTrustedGateway(action.device);
+    return {
+      content: `Untrusted remote gateway device ${action.device}.`,
+      isError: false,
+    };
+  }
+
+  private gatewayListTrusted(): CommsResult {
+    if (!this.store.listTrustedGateways) {
+      return {
+        content: "Gateway trust is not available on this store.",
+        isError: true,
+      };
+    }
+    const trusted = this.store.listTrustedGateways();
+    if (trusted.length === 0) {
+      return {
+        content: "No remote gateway devices are trusted.",
+        isError: false,
+      };
+    }
+    return {
+      content: `Trusted remote gateway devices:\n${trusted.map((device) => `  ${device}`).join("\n")}`,
       isError: false,
     };
   }
