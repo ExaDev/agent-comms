@@ -256,6 +256,14 @@ export const DeliveryEventSchema = defineSchema(
       name: z.string(),
       fingerprint: z.string(),
     }),
+    z.object({
+      type: z.literal("capability_request"),
+      requestId: z.string(),
+      capability: z.string(),
+      scopeKind: z.string(),
+      scopePath: z.string().optional(),
+      requesterDevice: z.string(),
+    }),
   ]),
 );
 export type DeliveryEvent = z.infer<typeof DeliveryEventSchema>;
@@ -372,6 +380,19 @@ export const CommsActionSchema = defineSchema(
       reason: z.string().optional(),
     }),
     z.object({ action: z.literal("room_pending") }),
+    z.object({
+      action: z.literal("capability_accept"),
+      requestId: z.string(),
+      expires: z.number(),
+      delegationsRemaining: z.number().optional(),
+      capability: z.string().optional(),
+    }),
+    z.object({
+      action: z.literal("capability_reject"),
+      requestId: z.string(),
+      reason: z.string().optional(),
+    }),
+    z.object({ action: z.literal("capability_pending") }),
     z.object({
       action: z.literal("mesh_discover"),
       method: z.string().optional(),

@@ -23,6 +23,9 @@ import { RoomMessaging } from "./room-messaging.js";
 import { RoomLifecycle } from "./room-lifecycle.js";
 import { AgentRegistry } from "./agent-registry.js";
 import { ConnectionApproval } from "./connection-approval.js";
+import { CapabilityAskAdmission } from "./capability-ask.js";
+import type { IncomingManageRequest } from "wire-mesh-core/domain/mesh-session";
+import type { DeviceId } from "wire-mesh-core/generated/protocol";
 import { StaleAgentChecker } from "./stale-agent-checker.js";
 import { PeerLifecycle } from "./peer-lifecycle.js";
 import type { RoomVerbHandler } from "./room-router.js";
@@ -100,6 +103,7 @@ export class MeshStore implements CommsStore {
   private readonly roomLifecycle: RoomLifecycle;
   private readonly agentRegistry: AgentRegistry;
   private readonly connectionApproval: ConnectionApproval;
+  private readonly capabilityAskAdmission: CapabilityAskAdmission;
   private readonly staleAgentChecker: StaleAgentChecker;
   private readonly coordinatorGateway: CoordinatorGateway;
   private readonly peerLifecycle: PeerLifecycle;
@@ -266,6 +270,14 @@ export class MeshStore implements CommsStore {
       startedAt: this.startedAt,
       getPeerId: () => this.peerId,
       requireTransport: () => this.requireTransport(),
+      getOnDelivery: () => this.onDelivery,
+      queueDelivery: (agentId, event) => {
+        this.deliveryEngine.queueDelivery(agentId, event);
+      },
+    });
+
+    this.capabilityAskAdmission = new CapabilityAskAdmission({
+      getPeerId: () => this.peerId,
       getOnDelivery: () => this.onDelivery,
       queueDelivery: (agentId, event) => {
         this.deliveryEngine.queueDelivery(agentId, event);
@@ -714,6 +726,65 @@ export class MeshStore implements CommsStore {
   /** Denies a pending room.join request, optionally with a reason. */
   rejectRoomJoin(roomPath: string, requesterId: string, reason?: string): void {
     this.roomProtocol.rejectRoomJoin(roomPath, requesterId, reason);
+  }
+
+  // -----------------------------------------------------------------------
+  // Capability-request ask tier (mesh-only, agent-comms#165)
+  // -----------------------------------------------------------------------
+
+  /** Builds a manage-request handler surfacing one capability's incoming capability-requests as held-open asks (agent-comms#165's own tool-layer surface for the ask tier) -- the registration point a capability-gated verb (e.g. agent-comms#162's dm:send) wires into its own session dispatch, backed by this store's identity/clock and this admission's live pending state. */
+  createCapabilityAskHandler(
+    options: Readonly<{
+      capability: string;
+      bearerDevice: DeviceId;
+      timeoutMs: number;
+    }>,
+  ): (incoming: Readonly<IncomingManageRequest>) => Promise<void> {
+    const { identity, clock } = this.requireIdentity();
+    return this.capabilityAskAdmission.createAskHandler({
+      capability: options.capability,
+      identity,
+      clock,
+      bearerDevice: options.bearerDevice,
+      timeoutMs: options.timeoutMs,
+    });
+  }
+
+  /** Every capability-request currently held open awaiting this store's own accept/reject decision. */
+  listPendingCapabilityRequests(): {
+    requestId: string;
+    capability: string;
+    scopeKind: string;
+    scopePath?: string;
+    requesterDevice: string;
+  }[] {
+    return this.capabilityAskAdmission.listPendingCapabilityRequests();
+  }
+
+  /** Approves a pending capability request, minting and returning the granted token. */
+  async acceptCapabilityRequest(
+    requestId: string,
+    options: Readonly<{
+      expires: number;
+      delegationsRemaining?: number;
+      capability?: string;
+    }>,
+  ): Promise<void> {
+    await this.capabilityAskAdmission.acceptCapabilityRequest(
+      requestId,
+      options,
+    );
+  }
+
+  /** Denies a pending capability request, optionally with a reason. */
+  async rejectCapabilityRequest(
+    requestId: string,
+    reason?: string,
+  ): Promise<void> {
+    await this.capabilityAskAdmission.rejectCapabilityRequest(
+      requestId,
+      reason,
+    );
   }
 
   // -----------------------------------------------------------------------

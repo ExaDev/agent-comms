@@ -81,6 +81,25 @@ export interface MeshOnlyFeatures {
     reason?: string,
   ) => void;
   listPendingRoomJoins?: () => { roomPath: string; requesterId: string }[];
+  acceptCapabilityRequest?: (
+    requestId: string,
+    options: Readonly<{
+      expires: number;
+      delegationsRemaining?: number;
+      capability?: string;
+    }>,
+  ) => Promise<void>;
+  rejectCapabilityRequest?: (
+    requestId: string,
+    reason?: string,
+  ) => Promise<void>;
+  listPendingCapabilityRequests?: () => {
+    requestId: string;
+    capability: string;
+    scopeKind: string;
+    scopePath?: string;
+    requesterDevice: string;
+  }[];
   connectToRemote?: (host: string, port: number) => Promise<void>;
   setVisibility?: (level: MeshVisibility, adapter?: string) => Promise<void>;
   getVisibility?: (adapter?: string) => MeshVisibility;
@@ -186,6 +205,12 @@ export class CommsTool {
           return this.roomReject(ctx, action);
         case "room_pending":
           return this.roomPending(ctx);
+        case "capability_accept":
+          return await this.capabilityAccept(ctx, action);
+        case "capability_reject":
+          return await this.capabilityReject(ctx, action);
+        case "capability_pending":
+          return this.capabilityPending(ctx);
         case "mesh_discover":
           return await this.meshDiscover(action);
         case "mesh_advertise":
@@ -703,6 +728,61 @@ export class CommsTool {
     const lines = pending.map((p) => `${p.roomPath}  ${p.requesterId}`);
     return {
       content: `Pending room join requests:\n${lines.join("\n")}`,
+      isError: false,
+    };
+  }
+
+  private async capabilityAccept(
+    _ctx: Readonly<CommsContext>,
+    action: CommsAction & { action: "capability_accept" },
+  ): Promise<CommsResult> {
+    if (!this.store.acceptCapabilityRequest)
+      return notMeshBacked("capability_accept");
+    const acceptCapabilityRequest = this.store.acceptCapabilityRequest.bind(
+      this.store,
+    );
+    return tryMeshAction("accept", async () => {
+      await acceptCapabilityRequest(action.requestId, {
+        expires: action.expires,
+        ...(action.delegationsRemaining !== undefined
+          ? { delegationsRemaining: action.delegationsRemaining }
+          : {}),
+        ...(action.capability !== undefined
+          ? { capability: action.capability }
+          : {}),
+      });
+      return `Accepted capability request ${action.requestId}.`;
+    });
+  }
+
+  private async capabilityReject(
+    _ctx: Readonly<CommsContext>,
+    action: CommsAction & { action: "capability_reject" },
+  ): Promise<CommsResult> {
+    if (!this.store.rejectCapabilityRequest)
+      return notMeshBacked("capability_reject");
+    const rejectCapabilityRequest = this.store.rejectCapabilityRequest.bind(
+      this.store,
+    );
+    return tryMeshAction("reject", async () => {
+      await rejectCapabilityRequest(action.requestId, action.reason);
+      return `Rejected capability request ${action.requestId}.`;
+    });
+  }
+
+  private capabilityPending(_ctx: Readonly<CommsContext>): CommsResult {
+    if (!this.store.listPendingCapabilityRequests)
+      return notMeshBacked("capability_pending");
+    const pending = this.store.listPendingCapabilityRequests();
+    if (pending.length === 0)
+      return { content: "No pending capability requests.", isError: false };
+
+    const lines = pending.map(
+      (p) =>
+        `${p.requestId}  ${p.capability}  ${p.scopeKind}${p.scopePath !== undefined ? `:${p.scopePath}` : ""}  from ${p.requesterDevice}`,
+    );
+    return {
+      content: `Pending capability requests:\n${lines.join("\n")}`,
       isError: false,
     };
   }

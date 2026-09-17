@@ -286,6 +286,8 @@ function formatForTerminal(event: DeliveryEvent): string {
       return `${CYAN}✎ ${event.oldName} is now ${event.newName}${RESET}`;
     case "connection_request":
       return `${CYAN}🔗 Connection request from ${event.peerId} (${event.name})${RESET}`;
+    case "capability_request":
+      return `${CYAN}🔑 ${event.requesterDevice} is asking for "${event.capability}" (${event.requestId})${RESET}`;
     default:
       return event satisfies never;
   }
