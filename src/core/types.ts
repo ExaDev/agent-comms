@@ -426,6 +426,15 @@ export const CommsActionSchema = defineSchema(
       adapter: z.string().optional(),
     }),
     z.object({ action: z.literal("mesh_get_visibility") }),
+    z.object({
+      action: z.literal("gateway_trust"),
+      device: z.string(),
+    }),
+    z.object({
+      action: z.literal("gateway_untrust"),
+      device: z.string(),
+    }),
+    z.object({ action: z.literal("gateway_list_trusted") }),
   ]),
 );
 export type CommsAction = z.infer<typeof CommsActionSchema>;

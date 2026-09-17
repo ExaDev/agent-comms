@@ -67,6 +67,9 @@ export const MCP_TOOL_PARAMS = z.object({
     "mesh_listeners",
     "mesh_set_visibility",
     "mesh_get_visibility",
+    "gateway_trust",
+    "gateway_untrust",
+    "gateway_list_trusted",
   ]),
   name: z.string().optional(),
   visibility: VisibilityEnum.optional(),
@@ -95,6 +98,8 @@ export const MCP_TOOL_PARAMS = z.object({
   capability: z.string().optional(),
   expires: z.number().optional(),
   delegationsRemaining: z.number().optional(),
+  /** A remote gateway's own device-id (hex), for gateway_trust/gateway_untrust. */
+  device: z.string().optional(),
 });
 
 export type ToolParams = z.infer<typeof MCP_TOOL_PARAMS>;
@@ -376,6 +381,16 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       };
       return result;
     }
+    case "gateway_trust":
+      if (p.device === undefined)
+        throw new BuildActionError("gateway_trust", "device");
+      return { action: "gateway_trust", device: p.device };
+    case "gateway_untrust":
+      if (p.device === undefined)
+        throw new BuildActionError("gateway_untrust", "device");
+      return { action: "gateway_untrust", device: p.device };
+    case "gateway_list_trusted":
+      return { action: "gateway_list_trusted" };
     default:
       return p.action satisfies never;
   }
