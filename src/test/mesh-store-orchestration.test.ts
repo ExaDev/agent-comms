@@ -14,10 +14,12 @@ const VALID_DEVICE_ID = "a".repeat(DEVICE_ID_HEX_LENGTH);
 /** Arbitrary, distinctive remote port for a connectToRemote test fixture -- no significance beyond "a real-looking port number". */
 const REMOTE_PORT = 4242;
 
-function fakeTransport(): MeshTransport {
+function fakeTransport(
+  overrides: Partial<Pick<MeshTransport, "isCoordinator">> = {},
+): MeshTransport {
   return {
     dataPort: 4000,
-    isCoordinator: false,
+    isCoordinator: overrides.isCoordinator ?? false,
     hasCoordinatorConnection: false,
     startDataServer: vi.fn().mockResolvedValue(undefined),
     connectToCoordinator: vi.fn().mockResolvedValue(undefined),
@@ -697,6 +699,64 @@ describe("MeshStore — shutdown()", () => {
 
     expect(onCoordinatorRoleChanged).toHaveBeenCalledTimes(1);
     expect(onCoordinatorRoleChanged).toHaveBeenCalledWith(false);
+  });
+
+  it("hands the coordinator role to the longest-running remaining peer before shutting down the transport (agent-comms#170)", async () => {
+    const coordinatorStore = new MeshStore();
+    const coordinatorTransport = fakeTransport({ isCoordinator: true });
+    coordinatorStore.setTransport(coordinatorTransport);
+    const peerInfo = collaborator(coordinatorStore, "peerInfo") as Map<
+      string,
+      PeerInfo
+    >;
+    peerInfo.set(coordinatorStore.peerId, {
+      id: coordinatorStore.peerId,
+      port: 1,
+      startedAt: "2026-01-03T00:00:00.000Z",
+    });
+    const oldest: PeerInfo = {
+      id: "oldest-peer",
+      port: 2,
+      startedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const newest: PeerInfo = {
+      id: "newest-peer",
+      port: 3,
+      startedAt: "2026-01-02T00:00:00.000Z",
+    };
+    peerInfo.set(oldest.id, oldest);
+    peerInfo.set(newest.id, newest);
+
+    await coordinatorStore.shutdown();
+
+    expect(coordinatorTransport.send).toHaveBeenCalledWith(
+      { id: oldest.id },
+      { method: "become_coordinator", peerList: [newest] },
+    );
+    const sendOrder = (coordinatorTransport.send as ReturnType<typeof vi.fn>)
+      .mock.invocationCallOrder[0];
+    const shutdownOrder = (
+      coordinatorTransport.shutdown as ReturnType<typeof vi.fn>
+    ).mock.invocationCallOrder[0];
+    expect(sendOrder).toBeLessThan(shutdownOrder as number);
+  });
+
+  it("sends no coordinator handoff when this side isn't the coordinator", async () => {
+    const peerInfo = collaborator(store, "peerInfo") as Map<string, PeerInfo>;
+    peerInfo.set(store.peerId, {
+      id: store.peerId,
+      port: 1,
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+    peerInfo.set("other-peer", {
+      id: "other-peer",
+      port: 2,
+      startedAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    await store.shutdown();
+
+    expect(transport.send).not.toHaveBeenCalled();
   });
 
   it("broadcasts agent_offline for its own self agent when one is registered", async () => {

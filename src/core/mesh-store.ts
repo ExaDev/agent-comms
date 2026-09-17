@@ -783,6 +783,8 @@ export class MeshStore implements CommsStore {
 
     this.staleAgentChecker.stop();
     await this.coordinatorGateway.onLostCoordinator();
+    // Graceful coordinator handover (agent-comms#170) -- a no-op unless this side currently holds the coordinator role, so this runs unconditionally rather than being gated behind an isCoordinator check duplicated here. Must run before the transport shuts down: the handoff message rides the very peer sessions shutdown() is about to close.
+    await this.peerLifecycle.sendCoordinatorHandover();
     await this.onCoordinatorRoleChanged?.(false);
     await this.requireTransport().shutdown();
   }
