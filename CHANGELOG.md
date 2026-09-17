@@ -1,3 +1,9 @@
+## [3.5.0](https://github.com/ExaDev/agent-comms/compare/v3.4.2...v3.5.0) (2026-09-17)
+
+### Features
+
+* **core:** add a persisted user-principal identity ([9f175eb](https://github.com/ExaDev/agent-comms/commit/9f175eb01c0f7caee222043558fc48e8de0ad0b6))
+
 ## [3.4.2](https://github.com/ExaDev/agent-comms/compare/v3.4.1...v3.4.2) (2026-09-17)
 
 ### Chores
