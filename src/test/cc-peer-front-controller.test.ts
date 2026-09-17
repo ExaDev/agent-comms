@@ -49,6 +49,8 @@ function stubRecord(entry: Readonly<CcPeerRosterEntryLike>): StubRecord {
     cwd: entry.cwd,
     messagingSocketPath: entry.messagingSocketPath,
     handleInbound: vi.fn<FrontedSessionRecord["handleInbound"]>(),
+    handleAliasReply: vi.fn<FrontedSessionRecord["handleAliasReply"]>(),
+    notifyStaleAlias: vi.fn<FrontedSessionRecord["notifyStaleAlias"]>(),
     detached: false,
   };
 }
@@ -64,6 +66,11 @@ interface Harness {
   >;
   onError: ReturnType<
     typeof vi.fn<NonNullable<CcPeerFrontDeps<StubRecord>["onError"]>>
+  >;
+  correspondentFor: ReturnType<
+    typeof vi.fn<
+      CcPeerFrontDeps<StubRecord>["aliasDirectory"]["correspondentFor"]
+    >
   >;
 }
 
@@ -82,11 +89,15 @@ function harness(initialRoster: readonly CcPeerRosterEntryLike[]): Harness {
     () => undefined,
   );
   const onError = vi.fn<NonNullable<CcPeerFrontDeps<StubRecord>["onError"]>>();
+  const correspondentFor = vi.fn<
+    CcPeerFrontDeps<StubRecord>["aliasDirectory"]["correspondentFor"]
+  >(() => undefined);
   const deps: CcPeerFrontDeps<StubRecord> = {
     listRoster: async () => Promise.resolve([...roster]),
     probeSlotOwner,
     attach,
     detach,
+    aliasDirectory: { correspondentFor },
     pollIntervalMs: POLL_INTERVAL_MS,
     onError,
   };
@@ -98,6 +109,7 @@ function harness(initialRoster: readonly CcPeerRosterEntryLike[]): Harness {
     detach,
     probeSlotOwner,
     onError,
+    correspondentFor,
   };
 }
 
@@ -271,5 +283,72 @@ describe("CcPeerFront — attach/detach diffing across ticks", () => {
     expect(h.onError).toHaveBeenCalledWith(failure);
     expect(h.attach).toHaveBeenCalledTimes(2);
     await h.front.stop();
+  });
+});
+
+describe("CcPeerFront — handleAliasMessage", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("routes an alias reply to the fronted session it came from, resolving the correspondent via the alias directory", async () => {
+    const h = harness([
+      rosterEntry({ pid: 1, messagingSocketPath: "/tmp/sock-1" }),
+    ]);
+    h.correspondentFor.mockReturnValue("correspondent-1");
+    h.front.start();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    const record = await attachResult(h.attach);
+
+    h.front.handleAliasMessage({
+      alias: "mesh-correspond",
+      from: "uds:/tmp/sock-1",
+      body: "reply body",
+    });
+
+    expect(h.correspondentFor).toHaveBeenCalledWith("mesh-correspond");
+    expect(record.handleAliasReply).toHaveBeenCalledWith("correspondent-1", {
+      alias: "mesh-correspond",
+      from: "uds:/tmp/sock-1",
+      body: "reply body",
+    });
+    expect(record.notifyStaleAlias).not.toHaveBeenCalled();
+    await h.front.stop();
+  });
+
+  it("notifies the fronted session of a stale alias when the directory no longer knows the correspondent", async () => {
+    const h = harness([
+      rosterEntry({ pid: 1, messagingSocketPath: "/tmp/sock-1" }),
+    ]);
+    h.correspondentFor.mockReturnValue(undefined);
+    h.front.start();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    const record = await attachResult(h.attach);
+
+    h.front.handleAliasMessage({
+      alias: "mesh-stale",
+      from: "uds:/tmp/sock-1",
+      body: "reply body",
+    });
+
+    expect(record.notifyStaleAlias).toHaveBeenCalledWith("mesh-stale");
+    expect(record.handleAliasReply).not.toHaveBeenCalled();
+    await h.front.stop();
+  });
+
+  it("silently ignores an alias message matching no fronted session", async () => {
+    const h = harness([]);
+    expect(() =>
+      h.front.handleAliasMessage({
+        alias: "mesh-unknown",
+        from: "uds:/tmp/unknown",
+        body: "hi",
+      }),
+    ).not.toThrow();
+    expect(h.correspondentFor).not.toHaveBeenCalled();
   });
 });
