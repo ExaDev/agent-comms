@@ -45,6 +45,19 @@ export class HubSession {
     return deviceIdToHex(identity.deviceId);
   }
 
+  /** Whether a hub session is currently live (connect() has resolved and disconnect() hasn't run since, and the far end hasn't closed it -- watchDisconnect clears this.session when the hub's own event stream reports closed). */
+  get isConnected(): boolean {
+    return this.session !== undefined;
+  }
+
+  /** Drops the held hub connection. A no-op if none is live (connect() was never called, disconnect() already ran, or the hub itself already closed the session). */
+  async disconnect(): Promise<void> {
+    const session = this.session;
+    if (session === undefined) return;
+    this.session = undefined;
+    await session.close();
+  }
+
   /** The device ids (hex) of peers discovered through the hub's gossiped directory. */
   peers(): readonly string[] {
     return [...this.hubPeersKnown];

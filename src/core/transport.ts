@@ -259,4 +259,14 @@ export interface MeshTransport {
     deviceId: string;
     advert: Readonly<Record<string, unknown>>;
   }[];
+
+  /**
+   * Dials the relay hub at the given URL and holds the connection (agent-comms#154's own gateway role, riding this side's HubSession -- see hub-session.ts's class doc for the connection model). Optional: WireMeshTransport is the only implementation that offers it today, matching listKnownDevices' own precedent, so a caller (CoordinatorGateway) must treat its absence as "this transport has no gateway capability," never assume every MeshTransport supports it.
+   */
+  connectHub?: (url: string) => Promise<void>;
+
+  /**
+   * Drops this side's own held hub connection, if any. A no-op when none is live. Same optionality caveat as connectHub.
+   */
+  disconnectHub?: () => Promise<void>;
 }
