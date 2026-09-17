@@ -14,7 +14,21 @@ export interface DelegationPolicy {
 
 /**
  * Resolves the delegationsRemaining value to actually mint for bearer's grant of capability under policy, given whatever delegationsRemaining the caller would otherwise request. Returns 0 when capability is on the bearer's own effective nonDelegable set (its per-agent override when policy defines one for that bearer, otherwise policy's own default set) -- overriding requested outright, the same "issuer refuses to mint an invalid delegation rather than let the far end discover it later" posture mintCapabilityToken's own parent narrowing already applies. Returns requested unchanged for every other capability.
+ *
+ * Overloaded on requested's own definiteness rather than always returning `number | undefined`: a caller minting a root-level grant always passes a definite `number` (mintCapabilityToken's own `delegationsRemaining?: number` field is entirely absent, never present-as-undefined, under this codebase's exactOptionalPropertyTypes), so the result at those call sites is provably a `number` too -- proper return-type narrowing in place of a defensive `?? 0` the caller would otherwise need purely to satisfy the type checker.
  */
+export function resolveDelegationsRemaining(
+  policy: Readonly<DelegationPolicy>,
+  capability: string,
+  bearer: string,
+  requested: number,
+): number;
+export function resolveDelegationsRemaining(
+  policy: Readonly<DelegationPolicy>,
+  capability: string,
+  bearer: string,
+  requested: undefined,
+): undefined;
 export function resolveDelegationsRemaining(
   policy: Readonly<DelegationPolicy>,
   capability: string,
