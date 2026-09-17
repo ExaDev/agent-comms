@@ -6,6 +6,8 @@
 
 import { CcPeer } from "cc-peer";
 import type { InboundMessage as CcPeerInboundMessage } from "cc-peer";
+import { AliasPool } from "cc-peer/alias-pool";
+import type { AliasMessage } from "cc-peer/alias-pool";
 import {
   createBridgeMeshFromIdentity,
   ensureRegistered,
@@ -23,6 +25,7 @@ import {
   detachFrontedSession,
   type FrontedRelayRecord,
 } from "./front-relay.js";
+import { ReplyAliasDirectory } from "./reply-aliases.js";
 
 /** cc-peer's own registered display name for the front's shared peer -- distinct from any individual fronted session's own agent-comms display name (front-relay.ts's ensureRegistered call uses the session's own cc-peer name/pid for that). */
 const FRONT_PEER_NAME = "agent-comms-front";
@@ -46,6 +49,8 @@ export function createDefaultCcPeerFront(
   options: Readonly<CreateDefaultCcPeerFrontOptions> = {},
 ): Pick<CcPeerFront<FrontedRelayRecord>, "start" | "stop"> {
   let sharedPeerPromise: Promise<CcPeer> | undefined;
+  let aliasPool: AliasPool | undefined;
+  const aliasDirectory = new ReplyAliasDirectory();
 
   const front = new CcPeerFront<FrontedRelayRecord>({
     listRoster: async () => {
@@ -55,6 +60,7 @@ export function createDefaultCcPeerFront(
     probeSlotOwner,
     attach: async (entry) => attachSession(entry, await ensureSharedPeer()),
     detach: detachFrontedSession,
+    aliasDirectory,
     pollIntervalMs: options.pollIntervalMs,
     onError: options.onError,
   });
@@ -68,6 +74,8 @@ export function createDefaultCcPeerFront(
       const peer = await sharedPeerPromise?.catch(() => undefined);
       sharedPeerPromise = undefined;
       await peer?.stop();
+      await aliasPool?.stopAll();
+      aliasPool = undefined;
     },
   };
 
@@ -81,6 +89,17 @@ export function createDefaultCcPeerFront(
       },
     );
     return sharedPeerPromise;
+  }
+
+  /** Materialises the front's own shared AliasPool on first use (mirroring ensureSharedPeer's own lazy-construction convention) and wires its "message" event -- every reply arriving on any fronted session's own correspondent aliases -- straight into the controller's handleAliasMessage, which resolves the sending session and the alias's own correspondent before routing it on. */
+  function ensureAliasPool(): AliasPool {
+    if (aliasPool) return aliasPool;
+    const pool = AliasPool.create();
+    pool.on("message", (message: Readonly<AliasMessage>) => {
+      front.handleAliasMessage(message);
+    });
+    aliasPool = pool;
+    return pool;
   }
 
   async function attachSession(
@@ -112,6 +131,8 @@ export function createDefaultCcPeerFront(
       store,
       tool,
       peer,
+      aliasPool: ensureAliasPool(),
+      aliasDirectory,
     });
   }
 }
