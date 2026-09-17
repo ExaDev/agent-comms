@@ -7,10 +7,11 @@ import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
 import { verifyCapabilityToken } from "wire-mesh-core/domain/tokens";
 import type { IdentityPort } from "wire-mesh-core/ports/identity";
 import type { Clock } from "wire-mesh-core/ports/clock";
+import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type {
-  CapabilityToken,
+  IncomingManageRequest,
   ManageOutcome,
-} from "wire-mesh-core/generated/protocol";
+} from "wire-mesh-core/domain/mesh-session";
 import {
   resolveBubbleUpRoute,
   createBubbleUpCapabilityRequestHandler,
@@ -58,11 +59,13 @@ async function mint(
     expires?: number;
     delegationsRemaining?: number;
     parent?: CapabilityToken;
+    /** The clock reading at mint time -- distinct from `expires`, so a test can mint a token that was valid when issued but has since lapsed relative to a later verification clock. Defaults to NOW_MS, matching every other caller that mints a currently-valid token. */
+    mintedAt?: number;
   } = {},
 ): Promise<CapabilityToken> {
   const verdict = await mintCapabilityToken({
     identity: issuer,
-    clock: fixedClock(NOW_MS),
+    clock: fixedClock(options.mintedAt ?? NOW_MS),
     tokenId: nextTokenId(),
     bearer: bearer.deviceId,
     capability: options.capability ?? CAPABILITY,
@@ -167,6 +170,7 @@ describe("resolveBubbleUpRoute", () => {
     const root = await generateEs256Identity();
     const holder = await generateEs256Identity();
     const heldToken = await mint(root, holder, {
+      mintedAt: NOW_MS - HOUR_MS,
       expires: NOW_MS - 1,
       delegationsRemaining: 2,
     });
@@ -204,14 +208,15 @@ describe("resolveBubbleUpRoute", () => {
   });
 });
 
-interface FakeIncoming {
-  command: { verb: string; params: Record<string, unknown> };
-  scope: { kind: string; path?: string };
+type FakeIncoming = IncomingManageRequest & {
   respond: ReturnType<typeof vi.fn>;
-}
+};
 
+let nextRequestId = 0;
 function fakeIncoming(params: Record<string, unknown>): FakeIncoming {
+  nextRequestId += 1;
   return {
+    requestId: nextRequestId,
     command: { verb: CAPABILITY, params },
     scope: SCOPE,
     respond: vi.fn(async () => undefined),
@@ -351,13 +356,13 @@ describe("createBubbleUpCapabilityRequestHandler", () => {
     });
     await handler(incoming);
 
-    expect(sendManageRequest).toHaveBeenCalledTimes(1);
-    const [, , target] = sendManageRequest.mock.calls[0] as [
-      unknown,
-      unknown,
-      Uint8Array,
-    ];
-    expect(deviceIdToHex(target)).toBe(deviceIdToHex(root.deviceId));
+    expect(sendManageRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ verb: CAPABILITY }),
+      SCOPE,
+      root.deviceId,
+      undefined,
+      undefined,
+    );
 
     const outcome = incoming.respond.mock.calls[0]?.[0] as {
       result: string;
