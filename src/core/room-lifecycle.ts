@@ -24,6 +24,7 @@ import {
   ROOM_MEMBER_CAPABILITY,
   ROOM_MEMBER_DELEGATION_POLICY,
 } from "./room-token-verification.js";
+import { DM_SEND_CAPABILITY } from "./dm-token-verification.js";
 import { resolveDelegationsRemaining } from "./delegation-policy.js";
 import {
   deleteIssuedRoomGrant,
@@ -33,9 +34,17 @@ import {
   saveIssuedRoomGrant,
   saveRoomToken,
 } from "./identity-store.js";
+import {
+  deleteIssuedDmGrant,
+  loadIssuedDmGrant,
+  saveIssuedDmGrant,
+} from "./user-identity.js";
 import { randomId } from "./random-id.js";
 import { CommsError } from "./store.js";
-import { ROOM_TOKEN_LIFETIME_MS } from "./mesh-store-shared.js";
+import {
+  DM_SEND_GRANT_LIFETIME_MS,
+  ROOM_TOKEN_LIFETIME_MS,
+} from "./mesh-store-shared.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import {
   inviterAgentExtension,
@@ -45,6 +54,7 @@ import {
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { MeshTransport } from "./transport.js";
 import type { HostedRoomAdvert } from "./wire-mesh-transport.js";
+import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type {
   AgentIdentity,
   AgentStatus,
@@ -348,8 +358,13 @@ export class RoomLifecycle {
 
   /**
    * The requester's own half of section 6's two-round DM consent flow: sends an ungated room.join scoped to dmRoomPath(this, counterpart) directly to the counterpart, records having initiated it so the counterpart's own reciprocal room.join back auto-approves rather than surfacing as a fresh, unsolicited request, and persists whatever grant comes back. Deliberately outside the CommsStore interface, like connection approval, since it is a wire-mesh-specific concern FileStore has no equivalent for. Safe to call again for the same counterpart later (e.g. after an earlier request expired or was rejected) -- it always sends a fresh request rather than checking for an existing token first.
+   *
+   * dmSendGrant, when given, is a dm:send capability the counterpart's own user principal minted for this device (agent-comms#162, admitAgentForDm) -- attaching it here lets the counterpart's own handleRoomJoin verify durable, pre-existing admission and auto-admit immediately, without holding this request open for a fresh human decision the way an ungated request otherwise would.
    */
-  async requestDmAccess(counterpart: string): Promise<void> {
+  async requestDmAccess(
+    counterpart: string,
+    dmSendGrant?: CapabilityToken,
+  ): Promise<void> {
     const dmPath = dmRoomPath(this.deps.getPeerId(), counterpart);
     this.deps.dmRequestsInitiatedByMe.add(dmPath);
     const outcome = await this.deps
@@ -358,6 +373,7 @@ export class RoomLifecycle {
         counterpart,
         { verb: ROOM_MEMBER_CAPABILITY, params: { verb: "room.join" } },
         { kind: "room", path: dmPath },
+        dmSendGrant,
       );
     if (outcome.result !== "ok") {
       throw new CommsError(
@@ -714,5 +730,51 @@ export class RoomLifecycle {
       type: "room_delete",
       roomId,
     });
+  }
+
+  /**
+   * Admits bearerId into this user's own DM-communication scope (agent-comms#162): mints a fresh dm:send grant, self-signed by this store's own user principal (userIdentity, distinct from the per-bridge-slot device identity every other room:member grant above is minted against), with no parent -- a root-level admission, exactly like mintOwnerRootGrant's own room-owner self-grant. Records the token-id the same way admitRoomJoin/inviteToRoom record theirs (saveIssuedDmGrant), so revokeAgentDmAccess can later name which one to revoke. Returns the minted token for the caller to get to bearerId out of band (there is no wire-level push here, deliberately: this issue adds the receiver-side check and the admission primitive it checks against, not a new delivery mechanism for the grant itself).
+   */
+  async admitAgentForDm(bearerId: string): Promise<CapabilityToken> {
+    const { userIdentity, userIdentityOptions, clock } =
+      this.deps.requireIdentity();
+    const tokenId = randomId();
+    const verdict = await mintCapabilityToken({
+      identity: userIdentity,
+      clock,
+      tokenId,
+      bearer: deviceIdFromHex(bearerId),
+      capability: DM_SEND_CAPABILITY,
+      scope: { kind: "user", path: deviceIdToHex(userIdentity.deviceId) },
+      expires: clock.now() + DM_SEND_GRANT_LIFETIME_MS,
+      // dm:send is a root-level, self-signed admission (issuer = userIdentity, no parent) that this API never exposes a caller-chosen delegation depth for -- unlike room:member/group:member, there is no per-agent-override mechanism here to route through resolveDelegationsRemaining, so this stays the direct literal every non-delegable root grant already used before delegation-policy.ts existed.
+      delegationsRemaining: 0,
+    });
+    if (!verdict.ok) {
+      throw new CommsError(
+        `Failed to mint a dm:send grant for ${bearerId}: ${verdict.reason}`,
+        "MINT_FAILED",
+      );
+    }
+    saveIssuedDmGrant(userIdentityOptions, bearerId, tokenId);
+    return verdict.token;
+  }
+
+  /**
+   * Revokes bearerId's own dm:send grant for real, if this user principal ever recorded issuing one: mints a revocation-entry for its token-id, records it in this store's own RevocationView immediately, announces it to every connected peer, and forgets the issued-grant record (a later re-admission mints and records a genuinely fresh one rather than leaving a stale entry alongside it) -- the same revocation shape revokeMemberGrant already gives room:member grants, applied to the user principal's own dm:send grants instead of a bridge-slot device identity's room grants. Silently does nothing when no issued-grant record exists (bearerId was never admitted, or the record predates this bookkeeping).
+   */
+  async revokeAgentDmAccess(bearerId: string): Promise<void> {
+    const { userIdentity, userIdentityOptions, clock, revocation } =
+      this.deps.requireIdentity();
+    const tokenId = loadIssuedDmGrant(userIdentityOptions, bearerId);
+    if (tokenId === undefined) return;
+    const entry = await mintRevocationEntry({
+      identity: userIdentity,
+      tokenId,
+      revokedAt: clock.now(),
+    });
+    await revocation.record(entry, { identity: userIdentity });
+    await this.deps.requireTransport().broadcastRevocation([entry]);
+    deleteIssuedDmGrant(userIdentityOptions, bearerId);
   }
 }
