@@ -17,7 +17,7 @@ import type { MeshStore } from "../core/mesh-store.js";
 /** Short enough to keep generated test identity slots readable, long enough that two concurrent test runs won't collide on the same throwaway cwd. */
 const TEST_IDENTITY_CWD_ID_LENGTH = 8;
 
-/** Wires store onto a fresh WireMeshTransport and a persisted identity slot, returning the slot so a test can inspect (or reuse) the persisted room tokens directly via loadRoomTokens(). Defaults to a throwaway temp-dir slot per call -- pass an explicit slot when a test needs the same identity to survive across more than one wireTestTransport call (e.g. simulating a restart). pendingConnectionTimeoutMs overrides WireMeshTransport's own default 5-minute connect_request expiry -- a test proving that expiry behaviour needs it far shorter than any real approval window. presenceReadvertiseIntervalMs likewise overrides the default 20s presence re-advertisement cadence -- a test proving that behaviour needs it far shorter too, or a test that doesn't care about presence at all wants it long enough to never fire spuriously mid-test. */
+/** Wires store onto a fresh WireMeshTransport and a persisted identity slot, returning the slot so a test can inspect (or reuse) the persisted room tokens directly via loadRoomTokens(). Defaults to a throwaway temp-dir slot per call -- pass an explicit slot when a test needs the same identity to survive across more than one wireTestTransport call (e.g. simulating a restart). pendingConnectionTimeoutMs overrides WireMeshTransport's own default 5-minute connect_request expiry -- a test proving that expiry behaviour needs it far shorter than any real approval window. presenceReadvertiseIntervalMs likewise overrides the default 20s presence re-advertisement cadence -- a test proving that behaviour needs it far shorter too, or a test that doesn't care about presence at all wants it long enough to never fire spuriously mid-test. Wires getSelfAgentAdvert (`() => store.selfAgentAdvert`) the same way createBridgeMesh does -- a test relying on gossip carrying the registered agent/self extension (e.g. remote-directory-merge coverage, agent-comms#155) needs this wired exactly like production does. */
 export async function wireTestTransport(
   store: MeshStore,
   slot?: Readonly<IdentitySlot>,
@@ -44,6 +44,7 @@ export async function wireTestTransport(
       presenceReadvertiseIntervalMs,
       undefined,
       dataStorage,
+      () => store.selfAgentAdvert,
     ),
   );
   store.setIdentity({
