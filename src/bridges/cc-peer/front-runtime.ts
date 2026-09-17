@@ -28,10 +28,10 @@ import {
 const FRONT_PEER_NAME = "agent-comms-front";
 
 export interface CreateDefaultCcPeerFrontOptions {
-  coordinatorPort?: number;
-  hubUrl?: string;
-  pollIntervalMs?: number;
-  onError?: (error: Error) => void;
+  coordinatorPort?: number | undefined;
+  hubUrl?: string | undefined;
+  pollIntervalMs?: number | undefined;
+  onError?: ((error: Error) => void) | undefined;
 }
 
 /** Falls back to "claude-code-<pid>" when a session has never picked its own cc-peer display name -- ensureRegistered requires a defaultName, and an unnamed session is still worth fronting under something stable and identifiable. */
