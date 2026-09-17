@@ -1,3 +1,9 @@
+## [3.4.1](https://github.com/ExaDev/agent-comms/compare/v3.4.0...v3.4.1) (2026-09-17)
+
+### Documentation
+
+* **build:** add the production hub smoke check ([d3afe07](https://github.com/ExaDev/agent-comms/commit/d3afe07db31eea334a287eca9655592f029af222))
+
 ## [3.4.0](https://github.com/ExaDev/agent-comms/compare/v3.3.0...v3.4.0) (2026-09-17)
 
 ### Features
