@@ -6,6 +6,8 @@
  * Split into a synchronous half (wireBridgeMesh) and an async half (attachMintingIdentity, wrapping toIdentityPort's WebCrypto import) because deriving the IdentityPort MeshStore mints room-membership grants against is unavoidably async, but not every bridge entry point can await one inline -- a plugin loader that calls its extension's default export synchronously (e.g. pi's own) cannot. createBridgeMeshSync exposes both halves for that case, deferring attachIdentity() to wherever the bridge's own lifecycle first has an async context (its own session-start hook), which is always well before the bridge does anything identity-dependent like createRoom. createBridgeMesh remains the convenient all-in-one for every bridge whose own entry point is already async.
  *
  * Also starts this bridge's own VersionDriftChecker (agent-comms#166) and wires its result into the CommsTool it builds, so every real bridge gets npm release-drift reporting on whoami/update for free from this one construction point, with no per-bridge wiring. fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup); a test that would otherwise trigger real network I/O on every createBridgeMesh call injects a fake resolver instead.
+ *
+ * createBridgeMeshSync/createBridgeMesh own loadOrCreateIdentity's slot lock on the caller's behalf; createBridgeMeshSyncFromIdentity/createBridgeMeshFromIdentity take an already-loaded identity instead and never touch the lock at all -- the cc-peer front (agent-comms#157) uses these directly, via loadIdentityForFront's lock-free load, to build a mesh identity for a not-yet-live session's slot while leaving that slot's own lock free for its real bridge to acquire normally later.
  */
 
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
@@ -18,6 +20,7 @@ import { WireMeshTransport } from "./wire-mesh-transport.js";
 import { loadOrCreateIdentity, oplogDirFor } from "./identity-store.js";
 import type { IdentitySlot } from "./identity-store.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
+import type { PeerIdentity } from "./identity.js";
 import { VersionDriftChecker } from "./version-check.js";
 import { getOwnPackageVersion } from "./package-version.js";
 
@@ -38,7 +41,25 @@ export function createBridgeMeshSync(
   hubUrl?: string,
   fetchLatestVersion?: () => Promise<string | undefined>,
 ): BridgeMeshSync {
-  const identity = loadOrCreateIdentity(slot);
+  return createBridgeMeshSyncFromIdentity(
+    loadOrCreateIdentity(slot),
+    slot,
+    coordinatorPort,
+    hubUrl,
+    fetchLatestVersion,
+  );
+}
+
+/**
+ * The same synchronous construction as createBridgeMeshSync, but taking an already-loaded identity rather than calling loadOrCreateIdentity itself -- see this file's own header comment for who this is for. Every other caller should go through createBridgeMeshSync/createBridgeMesh above, which own the lock on the caller's behalf.
+ */
+export function createBridgeMeshSyncFromIdentity(
+  identity: PeerIdentity,
+  slot: Readonly<IdentitySlot>,
+  coordinatorPort?: number,
+  hubUrl?: string,
+  fetchLatestVersion?: () => Promise<string | undefined>,
+): BridgeMeshSync {
   const store = new MeshStore(coordinatorPort, hubUrl);
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- oplogDirFor(slot) needs only the slot, not the async identity below, so this can be constructed synchronously right here.
@@ -87,6 +108,25 @@ export async function createBridgeMesh(
   fetchLatestVersion?: () => Promise<string | undefined>,
 ): Promise<BridgeMesh> {
   const { store, tool, attachIdentity } = createBridgeMeshSync(
+    slot,
+    coordinatorPort,
+    hubUrl,
+    fetchLatestVersion,
+  );
+  await attachIdentity();
+  return { store, tool };
+}
+
+/** The async, already-loaded-identity counterpart to createBridgeMesh, mirroring createBridgeMeshSyncFromIdentity's relationship to createBridgeMeshSync. */
+export async function createBridgeMeshFromIdentity(
+  identity: PeerIdentity,
+  slot: Readonly<IdentitySlot>,
+  coordinatorPort?: number,
+  hubUrl?: string,
+  fetchLatestVersion?: () => Promise<string | undefined>,
+): Promise<BridgeMesh> {
+  const { store, tool, attachIdentity } = createBridgeMeshSyncFromIdentity(
+    identity,
     slot,
     coordinatorPort,
     hubUrl,
