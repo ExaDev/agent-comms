@@ -33,6 +33,7 @@ import {
   releaseIdentityLock,
   type IdentitySlot,
 } from "../../core/identity-store.js";
+import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
 import { tryStartWebServer } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
@@ -164,6 +165,7 @@ export async function run(): Promise<void> {
     cwd: process.cwd(),
   };
   const { store, tool } = await createBridgeMesh(identitySlot);
+  store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
   let agentId: string | undefined;
 
   const claudeCodePid = findClaudeCodePid();
