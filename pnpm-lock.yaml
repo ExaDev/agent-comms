@@ -198,8 +198,8 @@ importers:
         specifier: 1.3.6
         version: 1.3.6
       wire-mesh-core:
-        specifier: 1.30.1
-        version: 1.30.1
+        specifier: 1.48.2
+        version: 1.48.2
       ws:
         specifier: 8.21.1
         version: 8.21.1
@@ -4471,8 +4471,8 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
-  wire-mesh-core@1.30.1:
-    resolution: {integrity: sha512-MmTtt5MQXffDPOOndQ10UI3pz0EZ81xWtbpDCnAUwVcY4Nala16glE/li3c1VLiuErmWHzTjAljg7ULpX/8dZg==}
+  wire-mesh-core@1.48.2:
+    resolution: {integrity: sha512-s5oCOGG6LRs7PVZfPBvEaPL7aIGaFWC/NTg0tuSdm5txeSk949xPjlXmp4Wr/+Jnz5VTogaNv2f9Yfsyyt4CMw==}
 
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
@@ -9014,7 +9014,7 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  wire-mesh-core@1.30.1:
+  wire-mesh-core@1.48.2:
     dependencies:
       cbor2: 2.3.0
       cddl.js: 1.0.1
