@@ -15,13 +15,15 @@ import type {
 import type { HubSession } from "./hub-session.js";
 import { AGENT_SELF_GOSSIP_KEY } from "./wire-mesh-transport.js";
 
-/** Forwards every directory entry carrying an agent/self extension onto hub, if hub currently holds a live connection -- a no-op otherwise, which is every local peer except whichever one is currently the gateway. Called both from WireMeshTransport's own watchForDisconnect (as each local peer session's directory changes) and from connectHub's own initial catch-up push, so this side's already-known local devices reach the hub immediately on taking over the gateway role rather than waiting for their own next periodic gossip tick. Forwards unconditionally on every call (no caching or dedup against a previous call), mirroring relay-hub.ts's own "forward every gossip frame, as received" philosophy: an advert's own snapshot-seconds/addresses are meant to keep propagating as a liveness heartbeat, so suppressing a "duplicate" would silently stop legitimate freshness updates from reaching remote gateways. A forward that fails is reported via onError and swallowed, matching every other best-effort gossip send in this codebase. */
+/** Forwards every directory entry carrying an agent/self extension onto hub, if hub currently holds a live connection AND at least one remote gateway is currently trusted -- a no-op otherwise. The trust gate (agent-comms#156, GatewayTrust.hasAny's own doc) is coarse by necessity: wire-mesh-core's relay-hub broadcasts a gossip frame to every connected peer with no per-recipient targeting, so "advertise only to allowlisted remote gateways" can only be approximated as "advertise nothing at all until the operator has trusted someone" -- it is not a per-recipient filter. Called both from WireMeshTransport's own watchForDisconnect (as each local peer session's directory changes) and from connectHub's own initial catch-up push, so this side's already-known local devices reach the hub immediately on taking over the gateway role rather than waiting for their own next periodic gossip tick. Forwards unconditionally on every call once past the gates above (no caching or dedup against a previous call), mirroring relay-hub.ts's own "forward every gossip frame, as received" philosophy: an advert's own snapshot-seconds/addresses are meant to keep propagating as a liveness heartbeat, so suppressing a "duplicate" would silently stop legitimate freshness updates from reaching remote gateways. A forward that fails is reported via onError and swallowed, matching every other best-effort gossip send in this codebase. */
 export function forwardAdvertsToHub(
   hub: Readonly<Pick<HubSession, "isConnected" | "advertiseDevices">>,
   directory: readonly DirectoryEntry[],
   onError: ((error: Error) => void) | undefined,
+  hasAnyTrustedGateway: () => boolean,
 ): void {
   if (!hub.isConnected) return;
+  if (!hasAnyTrustedGateway()) return;
   const eligible = directory.filter(
     (entry) => entry.advert[AGENT_SELF_GOSSIP_KEY] !== undefined,
   );
@@ -31,17 +33,18 @@ export function forwardAdvertsToHub(
   });
 }
 
-/** Catches the hub up with every local device already known at the moment this side becomes the gateway (connectHub's own trailing call, right after hub.connect resolves) -- without this, a device whose own last gossip arrived before this coordinator took over the gateway role would never be (re-)advertised until its own next periodic gossip tick (hub-side state is rebuilt from scratch on every takeover, per coordinator-gateway.ts's own class doc). Reuses forwardAdvertsToHub's own eligibility filter, so only ever a visible, agent/self-bearing device is pushed, exactly as an ordinary directory-change forward would. */
+/** Catches the hub up with every local device already known at the moment this side becomes the gateway (connectHub's own trailing call, right after hub.connect resolves) -- without this, a device whose own last gossip arrived before this coordinator took over the gateway role would never be (re-)advertised until its own next periodic gossip tick (hub-side state is rebuilt from scratch on every takeover, per coordinator-gateway.ts's own class doc). Reuses forwardAdvertsToHub's own eligibility filter and trust gate, so only ever a visible, agent/self-bearing device is pushed, and only once a remote gateway is trusted, exactly as an ordinary directory-change forward would. */
 export function pushHubCatchUp(
   hub: Readonly<Pick<HubSession, "isConnected" | "advertiseDevices">>,
   knownDevices: ReadonlyMap<string, Readonly<PeerAdvert>>,
   onError: ((error: Error) => void) | undefined,
+  hasAnyTrustedGateway: () => boolean,
 ): void {
   const catchUp = [...knownDevices.values()].map((advert) => ({
     device: advert.device,
     advert,
   }));
-  forwardAdvertsToHub(hub, catchUp, onError);
+  forwardAdvertsToHub(hub, catchUp, onError, hasAnyTrustedGateway);
 }
 
 /** Routes a room-domain request through the hub's relay-connect/relay-data pairing when memberId isn't a local peer session -- WireMeshTransport.sendRoomRequest's own fallback, since the member may be a remote agent reachable only via this machine's gateway connection (agent-comms#155's local-to-remote leg). Resolves the same not_connected outcome sendRoomRequest already returned before the hub existed at all when this side isn't currently the gateway. */
