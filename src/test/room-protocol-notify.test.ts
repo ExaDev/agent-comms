@@ -113,6 +113,8 @@ async function makeHarness(): Promise<Harness> {
       slot,
       revocation: createRevocationView(),
       dataStorage: {} as never,
+      userIdentity: {} as never,
+      userIdentityOptions: {},
     }),
     requireTransport: () =>
       ({}) as unknown as ReturnType<RoomProtocolDeps["requireTransport"]>,

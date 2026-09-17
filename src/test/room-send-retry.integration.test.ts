@@ -18,6 +18,7 @@ import {
   type IdentitySlot,
 } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
+import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import type { DeliveryEvent } from "../core/types.js";
 import type { PeerIdentity } from "../core/identity.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
@@ -55,12 +56,19 @@ async function makePeer(
   store.setTransport(
     new WireMeshTransport(store.events, identity, store.roomVerbHandlers),
   );
+  const userIdentityOptions = {
+    dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-user-identity-")),
+  };
   store.setIdentity({
     identity: await toIdentityPort(identity),
     clock: createSystemClock(),
     slot,
     revocation: createRevocationView(),
     dataStorage: createMemoryStorage(),
+    userIdentity: await toIdentityPort(
+      loadOrCreateUserIdentity(userIdentityOptions),
+    ),
+    userIdentityOptions,
   });
   const deliveries: DeliveryEvent[] = [];
   return { store, deliveries };

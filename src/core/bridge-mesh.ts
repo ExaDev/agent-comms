@@ -23,6 +23,7 @@ import { toIdentityPort } from "./wire-mesh-identity.js";
 import type { PeerIdentity } from "./identity.js";
 import { VersionDriftChecker } from "./version-check.js";
 import { getOwnPackageVersion } from "./package-version.js";
+import { loadOrCreateUserIdentity } from "./user-identity.js";
 
 export interface BridgeMesh {
   store: MeshStore;
@@ -60,6 +61,9 @@ export function createBridgeMeshSyncFromIdentity(
   hubUrl?: string,
   fetchLatestVersion?: () => Promise<string | undefined>,
 ): BridgeMeshSync {
+  // The user-principal identity (agent-comms#160) is shared by every bridge on this machine account -- deliberately not scoped to slot, unlike identity above. userIdentityOptions is empty (the default ~/.agent-comms location); every real bridge shares it, and only tests need an override.
+  const userIdentityOptions = {};
+  const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
   const store = new MeshStore(coordinatorPort, hubUrl);
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- oplogDirFor(slot) needs only the slot, not the async identity below, so this can be constructed synchronously right here.
@@ -96,6 +100,8 @@ export function createBridgeMeshSyncFromIdentity(
         slot,
         revocation,
         dataStorage,
+        userIdentity: await toIdentityPort(userIdentity),
+        userIdentityOptions,
       });
     },
   };
