@@ -1,3 +1,33 @@
+## [3.10.0](https://github.com/ExaDev/agent-comms/compare/v3.9.0...v3.10.0) (2026-09-17)
+
+### Features
+
+* **core:** add PeerLifecycle.sendCoordinatorHandover ([47824d8](https://github.com/ExaDev/agent-comms/commit/47824d8a6119985a45aa30df16c6fbbad73cd373))
+* **core:** forward gossip and room-domain requests between the local mesh and the hub ([5f0dfba](https://github.com/ExaDev/agent-comms/commit/5f0dfbaa787e868571b96657c199d05e50de5be2)), references [agent-comms#154](https://github.com/agent-comms/issues/154)
+* **core:** gate DM admission on a user-issued dm:send capability ([b61348c](https://github.com/ExaDev/agent-comms/commit/b61348c13869cde621497e4c85a770f0a7a7210b))
+* **core:** persist issued dm:send grants on the user principal ([2df7a33](https://github.com/ExaDev/agent-comms/commit/2df7a3301537a3b33c04255c45bc22425ce47da5))
+* **core:** resolve gossip-discovered agents in getAgent and sendDm ([50af385](https://github.com/ExaDev/agent-comms/commit/50af385d0c9115379ba4e849a1eb6370190d746c)), references [agent-comms#155](https://github.com/agent-comms/issues/155)
+* **core:** thread the user principal identity through MeshStoreIdentity ([1a32c68](https://github.com/ExaDev/agent-comms/commit/1a32c68d32b00bed2dde1345dd8450e9f351614c)), references [agent-comms#160](https://github.com/agent-comms/issues/160) [agent-comms#162](https://github.com/agent-comms/issues/162)
+* **core:** verify dm:send capability tokens against the user principal ([62ceb84](https://github.com/ExaDev/agent-comms/commit/62ceb8484b44bdab48b45dfb7614caaf2e34811a))
+* **core:** wire graceful coordinator handover into MeshStore.shutdown ([afd98f6](https://github.com/ExaDev/agent-comms/commit/afd98f662696d8ab8b3ed1d41f9e662bf7d74d34))
+
+### Bug Fixes
+
+* **core:** retry becomeCoordinator's bind after EADDRINUSE ([0d6cd6f](https://github.com/ExaDev/agent-comms/commit/0d6cd6f6642ae1d02c8af5b940d06bb34490a66c)), references [agent-comms#170](https://github.com/agent-comms/issues/170)
+
+### Refactoring
+
+* **core:** avoid a redundant array copy in sendCoordinatorHandover ([a332021](https://github.com/ExaDev/agent-comms/commit/a33202199da8267dd825546aded5eccba13e846f))
+
+### Styles
+
+* **core:** reformat isStoredUserIdentity's issuedDeviceGrants check ([1896ff4](https://github.com/ExaDev/agent-comms/commit/1896ff4b3e6d226533d499f21b13dce573979c0e))
+
+### Tests
+
+* **core:** cover gateway forwarding end to end over a real relay hub ([7f98815](https://github.com/ExaDev/agent-comms/commit/7f988151a2aa5dbc0fcdb55bbba4064113b5685b)), references [agent-comms#155](https://github.com/agent-comms/issues/155)
+* **core:** randomise mesh-e2e's coordinator port ([bed922e](https://github.com/ExaDev/agent-comms/commit/bed922eacf61a02684ea40913ea9bddbfb671842))
+
 ## [3.9.0](https://github.com/ExaDev/agent-comms/compare/v3.8.0...v3.9.0) (2026-09-17)
 
 ### Features
