@@ -42,6 +42,7 @@ import type {
   TransportEvents,
 } from "./transport.js";
 import type { CommsStore } from "./comms-store.js";
+import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type {
   AgentIdentity,
   AgentStatus,
@@ -536,9 +537,22 @@ export class MeshStore implements CommsStore {
     return this.roomLifecycle.refreshRoomMembers(roomPath);
   }
 
-  /** The requester's own half of section 6's two-round DM consent flow. Deliberately outside the CommsStore interface, like connection approval, since it is a wire-mesh-specific concern FileStore has no equivalent for. Concrete-only -- reached directly by tests. */
-  async requestDmAccess(counterpart: string): Promise<void> {
-    return this.roomLifecycle.requestDmAccess(counterpart);
+  /** The requester's own half of section 6's two-round DM consent flow, optionally presenting a dm:send grant (agent-comms#162) the counterpart's own user principal already minted for this device via admitAgentForDm -- when given and valid, the counterpart auto-admits immediately rather than holding the request open for a human decision. Deliberately outside the CommsStore interface, like connection approval, since it is a wire-mesh-specific concern FileStore has no equivalent for. Concrete-only -- reached directly by tests. */
+  async requestDmAccess(
+    counterpart: string,
+    dmSendGrant?: CapabilityToken,
+  ): Promise<void> {
+    return this.roomLifecycle.requestDmAccess(counterpart, dmSendGrant);
+  }
+
+  /** Admits bearerId into this user's own DM-communication scope (agent-comms#162): mints and persists a dm:send grant, self-signed by this store's own user principal. Returns the minted token for the caller to deliver to bearerId out of band. Deliberately outside the CommsStore interface, like requestDmAccess above. Concrete-only -- reached directly by tests. */
+  async admitAgentForDm(bearerId: string): Promise<CapabilityToken> {
+    return this.roomLifecycle.admitAgentForDm(bearerId);
+  }
+
+  /** Revokes bearerId's own dm:send grant for real (agent-comms#162), the DM-scope counterpart to kickFromRoom. A no-op if bearerId was never admitted. Deliberately outside the CommsStore interface, like requestDmAccess above. Concrete-only -- reached directly by tests. */
+  async revokeAgentDmAccess(bearerId: string): Promise<void> {
+    return this.roomLifecycle.revokeAgentDmAccess(bearerId);
   }
 
   async joinRoom(roomId: string, agentId: string): Promise<Room> {

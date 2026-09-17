@@ -25,6 +25,7 @@ import {
   verifyRoomToken,
 } from "./room-token-verification.js";
 import { resolveDelegationsRemaining } from "./delegation-policy.js";
+import { verifyDmSendToken } from "./dm-token-verification.js";
 import {
   loadRoomTokens,
   saveIssuedRoomGrant,
@@ -463,7 +464,7 @@ export class RoomProtocol {
   }
 
   /**
-   * Owner-side admission for an incoming room.join request, against either a named room this store owns or a DM path this store is a participant of. Named-room admission always needs a human decision; DM admission needs one only for the party being contacted first -- the reply half of the two-round consent flow (section 6) auto-approves, since a reply on a path this node itself opened is not unsolicited contact.
+   * Owner-side admission for an incoming room.join request, against either a named room this store owns or a DM path this store is a participant of. Named-room admission always needs a human decision; DM admission needs one only for the party being contacted first -- the reply half of the two-round consent flow (section 6) auto-approves, since a reply on a path this node itself opened is not unsolicited contact, and so does a request presenting a valid dm:send capability this node's own user principal already issued the requester (agent-comms#162's own durable admission list, checked before ever falling through to a fresh human decision).
    */
   private async handleRoomJoin(
     request: IncomingManageRequest,
@@ -486,6 +487,24 @@ export class RoomProtocol {
     if (!parsed.participants.includes(peerId)) {
       return { result: "error", code: "not_participant" };
     }
+
+    // A presented dm:send grant is this node's own user principal admitting the requester ahead of time (agent-comms#162) -- verify it against that principal specifically (never this bridge slot's own device identity, the way an ordinary room:member grant is) and auto-admit on success. A token that fails this check is refused outright: it identifies the requester as claiming durable admission it does not actually hold, not as an ordinary unsolicited contact that still deserves a human decision.
+    if (request.token !== undefined) {
+      const { identity, clock, revocation, userIdentity } =
+        this.deps.requireIdentity();
+      const verdict = await verifyDmSendToken(request.token, {
+        identity,
+        clock,
+        revocation,
+        expectedBearer: deviceIdFromHex(handle.id),
+        userPrincipalDeviceId: userIdentity.deviceId,
+      });
+      if (!verdict.ok) {
+        return { result: "error", code: "unauthorized" };
+      }
+      return this.admitRoomJoin(roomPath, handle, true);
+    }
+
     // The reciprocal half of section 6's own two-round DM flow: this node's own outbound room.join to the same path (recorded by joinRemoteRoom before this response was even awaited) is the consent that makes the counterpart's own reply not unsolicited contact.
     const autoApprove = this.deps.dmRequestsInitiatedByMe.has(roomPath);
     return this.admitRoomJoin(roomPath, handle, autoApprove);
