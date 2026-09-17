@@ -9,6 +9,7 @@
  */
 
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
+import * as bindRetry from "./bind-retry.js";
 import { connectWsUrl } from "./ws-dial.js";
 import { HubSession } from "./hub-session.js";
 import { mergeKnownDevices } from "./gossip-directory.js";
@@ -653,17 +654,19 @@ export class WireMeshTransport implements MeshTransport {
 
   async becomeCoordinator(host: string, port: number): Promise<void> {
     const id = nanoid(LISTENER_ID_LENGTH);
-    const listener = await this.wireTransport.listen(
-      `${host}:${String(port)}`,
-      (connection) => {
-        const tracked = this.coordinatorListeners.get(id);
-        void this.handleAcceptedConnection(
-          connection,
-          tracked?.policy,
-          false,
-          true,
-        );
-      },
+    const listener = await bindRetry.retryOnAddrInUse(
+      async () =>
+        this.wireTransport.listen(`${host}:${String(port)}`, (connection) => {
+          const tracked = this.coordinatorListeners.get(id);
+          void this.handleAcceptedConnection(
+            connection,
+            tracked?.policy,
+            false,
+            true,
+          );
+        }),
+      bindRetry.BECOME_COORDINATOR_BIND_RETRIES,
+      bindRetry.BECOME_COORDINATOR_BIND_RETRY_DELAY_MS,
     );
     this._isCoordinator = true;
     this.coordinatorListeners.set(id, {
