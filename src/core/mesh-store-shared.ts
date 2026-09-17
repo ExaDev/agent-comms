@@ -44,6 +44,9 @@ export const MAX_QUEUED_DELIVERIES_PER_AGENT = 100;
 /** The coordinator's own bind host -- always loopback, since the mesh coordinator role only ever needs to be reachable from other local peers on this machine. Shared between mesh-store.ts's own init() and PeerLifecycle's handleBecomeCoordinator. */
 export const COORDINATOR_HOST = "127.0.0.1";
 
+/** The production relay hub this machine's gateway dials once it becomes the local mesh coordinator (agent-comms#154). Configuration: MeshStore's own constructor accepts an override, threaded from createBridgeMesh/createBridgeMeshSync, for tests and any future non-default deployment -- this is only the default. */
+export const DEFAULT_HUB_URL = "wss://mesh.exadev.io/";
+
 /** Shallow-clones an entry together with its own `readBy` array, so a merged history never shares mutable array references with either input it was built from. */
 function cloneWithReadBy<T extends { readBy: string[] }>(entry: T): T {
   return { ...entry, readBy: [...entry.readBy] };

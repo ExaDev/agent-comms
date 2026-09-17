@@ -9,13 +9,14 @@ import type {
   SerialisedState,
 } from "./wire-protocol.js";
 import { COORDINATOR_HOST } from "./mesh-store-shared.js";
+import type { CoordinatorGateway } from "./coordinator-gateway.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { RoomProtocol } from "./room-protocol.js";
 import type { StaleAgentChecker } from "./stale-agent-checker.js";
 import type { ConnectionHandle, MeshTransport } from "./transport.js";
 import type { AgentIdentity } from "./types.js";
 
-/** The state and collaborators PeerLifecycle needs from MeshStore. peerInfo/agents are direct references into MeshStore's own fields; coordinatorPort is a readonly value copied once; serialise is MeshStore's own retained method (constraint: it must stay directly on MeshStore.prototype, so PeerLifecycle calls it through this closure rather than owning it); roomProtocol/deliveryEngine/staleAgentChecker are the already-constructed instances (construction order: ... -\> roomProtocol -\> ... -\> staleAgentChecker -\> peerLifecycle), narrowed to what peer-lifecycle bookkeeping ever needs. */
+/** The state and collaborators PeerLifecycle needs from MeshStore. peerInfo/agents are direct references into MeshStore's own fields; coordinatorPort is a readonly value copied once; serialise is MeshStore's own retained method (constraint: it must stay directly on MeshStore.prototype, so PeerLifecycle calls it through this closure rather than owning it); roomProtocol/deliveryEngine/staleAgentChecker/coordinatorGateway are the already-constructed instances (construction order: ... -\> roomProtocol -\> ... -\> staleAgentChecker -\> coordinatorGateway -\> peerLifecycle), narrowed to what peer-lifecycle bookkeeping ever needs. */
 export interface PeerLifecycleDeps {
   peerInfo: Map<string, PeerInfo>;
   agents: Map<string, AgentIdentity>;
@@ -26,6 +27,8 @@ export interface PeerLifecycleDeps {
   roomProtocol: Pick<RoomProtocol, "flushPendingRoomRequests">;
   deliveryEngine: Pick<DeliveryEngine, "applyStateSync" | "applyPatch">;
   staleAgentChecker: Pick<StaleAgentChecker, "start">;
+  /** Dials the hub the moment this side takes over as coordinator (agent-comms#154) -- see CoordinatorGateway's own class doc. Narrowed to the one method handleBecomeCoordinator ever calls; onLostCoordinator is MeshStore.shutdown()'s own concern, not this class's. */
+  coordinatorGateway: Pick<CoordinatorGateway, "onBecameCoordinator">;
 }
 
 export class PeerLifecycle {
@@ -114,6 +117,7 @@ export class PeerLifecycle {
       void this.deps.requireTransport().connectToPeer(peer, peerId);
     }
     this.deps.staleAgentChecker.start();
+    await this.deps.coordinatorGateway.onBecameCoordinator();
   }
 
   handlePeerDisconnected(handle: Readonly<ConnectionHandle>): void {

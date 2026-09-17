@@ -33,6 +33,7 @@ interface Harness {
   applyStateSync: ReturnType<typeof vi.fn>;
   applyPatch: ReturnType<typeof vi.fn>;
   staleAgentCheckerStart: ReturnType<typeof vi.fn>;
+  coordinatorGatewayOnBecameCoordinator: ReturnType<typeof vi.fn>;
 }
 
 function makeHarness(): Harness {
@@ -48,6 +49,9 @@ function makeHarness(): Harness {
   const applyPatch = vi.fn().mockResolvedValue(undefined);
   const staleAgentCheckerStart =
     vi.fn<PeerLifecycleDeps["staleAgentChecker"]["start"]>();
+  const coordinatorGatewayOnBecameCoordinator = vi
+    .fn<PeerLifecycleDeps["coordinatorGateway"]["onBecameCoordinator"]>()
+    .mockResolvedValue(undefined);
   const deps: PeerLifecycleDeps = {
     peerInfo: new Map(),
     agents: new Map(),
@@ -58,6 +62,9 @@ function makeHarness(): Harness {
     roomProtocol: { flushPendingRoomRequests },
     deliveryEngine: { applyStateSync, applyPatch },
     staleAgentChecker: { start: staleAgentCheckerStart },
+    coordinatorGateway: {
+      onBecameCoordinator: coordinatorGatewayOnBecameCoordinator,
+    },
   };
   return {
     deps,
@@ -67,6 +74,7 @@ function makeHarness(): Harness {
     applyStateSync,
     applyPatch,
     staleAgentCheckerStart,
+    coordinatorGatewayOnBecameCoordinator,
   };
 }
 
@@ -202,6 +210,7 @@ describe("PeerLifecycle — handleBecomeCoordinator", () => {
       OWNER_ID,
     );
     expect(h.staleAgentCheckerStart).toHaveBeenCalledTimes(1);
+    expect(h.coordinatorGatewayOnBecameCoordinator).toHaveBeenCalledTimes(1);
   });
 });
 
