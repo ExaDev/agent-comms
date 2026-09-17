@@ -1,3 +1,9 @@
+## [3.4.0](https://github.com/ExaDev/agent-comms/compare/v3.3.0...v3.4.0) (2026-09-17)
+
+### Features
+
+* **core:** add hub relay mode ([e0313e4](https://github.com/ExaDev/agent-comms/commit/e0313e46e81180031d7f8cbf3136eadeef15fa76)), closes [#151](https://github.com/ExaDev/agent-comms/issues/151)
+
 ## [3.3.0](https://github.com/ExaDev/agent-comms/compare/v3.2.0...v3.3.0) (2026-09-16)
 
 ### Features
