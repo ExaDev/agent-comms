@@ -1,3 +1,9 @@
+## [3.4.2](https://github.com/ExaDev/agent-comms/compare/v3.4.1...v3.4.2) (2026-09-17)
+
+### Chores
+
+* **deps:** bump actions/upload-artifact from 4 to 7 ([e039d67](https://github.com/ExaDev/agent-comms/commit/e039d67672bb33868659adbe0da214612bfcbc60))
+
 ## [3.4.1](https://github.com/ExaDev/agent-comms/compare/v3.4.0...v3.4.1) (2026-09-17)
 
 ### Documentation
