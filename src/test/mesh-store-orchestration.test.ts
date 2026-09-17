@@ -38,6 +38,8 @@ function fakeTransport(): MeshTransport {
     listListeners: vi.fn().mockReturnValue([]),
     shutdown: vi.fn().mockResolvedValue(undefined),
     unref: vi.fn<() => void>(),
+    connectHub: vi.fn().mockResolvedValue(undefined),
+    disconnectHub: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -264,6 +266,46 @@ describe("MeshStore — init()", () => {
     await store.init();
 
     expect(transport.startDataServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("dials the default hub URL once it becomes coordinator on a fresh bind", async () => {
+    const store = new MeshStore();
+    const transport = fakeTransport();
+    vi.mocked(transport.connectToCoordinator).mockRejectedValue(
+      new Error("ECONNREFUSED"),
+    );
+    store.setTransport(transport);
+
+    await store.init();
+
+    expect(transport.connectHub).toHaveBeenCalledWith("wss://mesh.exadev.io/");
+    expect(transport.connectHub).toHaveBeenCalledTimes(1);
+  });
+
+  it("dials the constructor-supplied hub URL override instead of the default", async () => {
+    const store = new MeshStore(undefined, "wss://hub.example.test/");
+    const transport = fakeTransport();
+    vi.mocked(transport.connectToCoordinator).mockRejectedValue(
+      new Error("ECONNREFUSED"),
+    );
+    store.setTransport(transport);
+
+    await store.init();
+
+    expect(transport.connectHub).toHaveBeenCalledWith(
+      "wss://hub.example.test/",
+    );
+  });
+
+  it("never dials the hub when joining an existing coordinator rather than becoming one", async () => {
+    const store = new MeshStore();
+    const transport = fakeTransport();
+    store.setTransport(transport);
+
+    await store.init();
+
+    expect(transport.connectToCoordinator).toHaveBeenCalledTimes(1);
+    expect(transport.connectHub).not.toHaveBeenCalled();
   });
 });
 
@@ -674,5 +716,26 @@ describe("MeshStore — shutdown()", () => {
     await store.shutdown();
 
     expect(broadcastSpy).not.toHaveBeenCalled();
+  });
+
+  it("drops the held hub connection when this instance had become coordinator", async () => {
+    vi.mocked(transport.connectToCoordinator).mockRejectedValue(
+      new Error("ECONNREFUSED"),
+    );
+    await store.init();
+    expect(transport.connectHub).toHaveBeenCalledTimes(1);
+
+    await store.shutdown();
+
+    expect(transport.disconnectHub).toHaveBeenCalledTimes(1);
+  });
+
+  it("never touches disconnectHub when this instance never became coordinator", async () => {
+    await store.init();
+    expect(transport.connectHub).not.toHaveBeenCalled();
+
+    await store.shutdown();
+
+    expect(transport.disconnectHub).not.toHaveBeenCalled();
   });
 });

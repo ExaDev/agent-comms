@@ -14,8 +14,9 @@ import { CommsError } from "./store.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
 import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
-import { COORDINATOR_HOST } from "./mesh-store-shared.js";
+import { COORDINATOR_HOST, DEFAULT_HUB_URL } from "./mesh-store-shared.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
+import { CoordinatorGateway } from "./coordinator-gateway.js";
 import { DeliveryEngine } from "./delivery-engine.js";
 import { RoomProtocol } from "./room-protocol.js";
 import { RoomMessaging } from "./room-messaging.js";
@@ -71,6 +72,7 @@ export class MeshStore implements CommsStore {
   peerId: string;
   readonly startedAt: string;
   readonly coordinatorPort: number;
+  private readonly hubUrl: string;
 
   private readonly agents = new Map<string, AgentIdentity>();
   private readonly rooms = new Map<string, Room>();
@@ -98,6 +100,7 @@ export class MeshStore implements CommsStore {
   private readonly agentRegistry: AgentRegistry;
   private readonly connectionApproval: ConnectionApproval;
   private readonly staleAgentChecker: StaleAgentChecker;
+  private readonly coordinatorGateway: CoordinatorGateway;
   private readonly peerLifecycle: PeerLifecycle;
 
   /** This store's own current AgentStatus, synchronously -- the value WireMeshTransport's presence re-advertisement timer reads on every tick. undefined before registerAgent has ever run (no self agent record exists yet), in which case there is nothing yet to advertise. */
@@ -167,10 +170,14 @@ export class MeshStore implements CommsStore {
     };
   }
 
-  constructor(coordinatorPort: number = DEFAULT_COORDINATOR_PORT) {
+  constructor(
+    coordinatorPort: number = DEFAULT_COORDINATOR_PORT,
+    hubUrl: string = DEFAULT_HUB_URL,
+  ) {
     this.peerId = nanoid(PEER_ID_LENGTH);
     this.startedAt = new Date().toISOString();
     this.coordinatorPort = coordinatorPort;
+    this.hubUrl = hubUrl;
 
     // Discovery manager — registers available backends
     this.discovery = new DiscoveryManager();
@@ -268,6 +275,16 @@ export class MeshStore implements CommsStore {
         this.deliveryEngine.broadcastPatch(patch),
     });
 
+    this.coordinatorGateway = new CoordinatorGateway({
+      hubUrl: this.hubUrl,
+      connectHub: async (url) => {
+        await this.requireTransport().connectHub?.(url);
+      },
+      disconnectHub: async () => {
+        await this.requireTransport().disconnectHub?.();
+      },
+    });
+
     this.peerLifecycle = new PeerLifecycle({
       peerInfo: this.peerInfo,
       agents: this.agents,
@@ -278,6 +295,7 @@ export class MeshStore implements CommsStore {
       roomProtocol: this.roomProtocol,
       deliveryEngine: this.deliveryEngine,
       staleAgentChecker: this.staleAgentChecker,
+      coordinatorGateway: this.coordinatorGateway,
     });
   }
 
@@ -348,6 +366,7 @@ export class MeshStore implements CommsStore {
           this.coordinatorPort,
         );
         this.staleAgentChecker.start();
+        await this.coordinatorGateway.onBecameCoordinator();
         connected = true;
       } catch (coordErr) {
         const msg =
@@ -750,6 +769,7 @@ export class MeshStore implements CommsStore {
     }
 
     this.staleAgentChecker.stop();
+    await this.coordinatorGateway.onLostCoordinator();
     await this.requireTransport().shutdown();
   }
 }
