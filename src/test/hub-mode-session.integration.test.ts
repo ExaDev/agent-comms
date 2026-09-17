@@ -1,10 +1,11 @@
-// Integration: two real agent-comms WireMeshTransports discovering each other and exchanging messages through a real wire-mesh relay hub (createRelayHub -- the same domain logic the production mesh.exadev.io Durable Object runs) served over local WebSockets. This is agent-comms#151's own acceptance shape: the hub connection is a relay, not a coordinator -- no connect_request/introduce approval applies, peers discover each other via the hub's gossip forwarding + catch-up, and messages ride relay pairings (sendManageRequest's own targetDevice routing).
+// Integration: two real agent-comms WireMeshTransports discovering each other and exchanging messages through a real wire-mesh relay hub (createRelayHub -- the same domain logic the production mesh.exadev.io Durable Object runs) served over local WebSockets. This is agent-comms#151's own acceptance shape: the hub connection is a relay, not a coordinator -- no connect_request/introduce approval applies, peers discover each other via the hub's gossip forwarding + catch-up, and messages ride relay pairings (sendManageRequest's own targetDevice routing). Every transport here is constructed with an explicit GatewayTrust mutually trusting the other side's device-id (agent-comms#156's own deny-by-default trust boundary): without it, hub-session.ts's own directory-merge and consume() gates would drop the other side's gossip/messages entirely before any of this file's own assertions could run.
 
 import { afterEach, describe, expect, it } from "vitest";
 import { realHubOverWs, waitForCondition } from "./hub-helpers.js";
 import { generateIdentity } from "../core/identity.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
+import { GatewayTrust } from "../core/gateway-trust.js";
 import type { ConnectionHandle, TransportEvents } from "../core/transport.js";
 import type { MeshMessage } from "../core/wire-protocol.js";
 
@@ -50,14 +51,43 @@ describe("connectToHub", () => {
 
     const eventsA = recordingEvents();
     const eventsB = recordingEvents();
-    const transportA = new WireMeshTransport(eventsA, generateIdentity());
-    const transportB = new WireMeshTransport(eventsB, generateIdentity());
+    const identityA = generateIdentity();
+    const identityB = generateIdentity();
+    const deviceA = deviceIdToHex(Uint8Array.from(identityA.deviceId));
+    const deviceB = deviceIdToHex(Uint8Array.from(identityB.deviceId));
+    // Gateway trust (agent-comms#156) is deny-all by default: each side's own hub-session directory-merge and consume() gates would otherwise drop the other's gossip/messages entirely, so hub.peers() would never populate and onMessage would never fire. Mutual trust here for both.
+    const gatewayTrustA = new GatewayTrust();
+    gatewayTrustA.add(deviceB);
+    const gatewayTrustB = new GatewayTrust();
+    gatewayTrustB.add(deviceA);
+    const transportA = new WireMeshTransport(
+      eventsA,
+      identityA,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      gatewayTrustA,
+    );
+    const transportB = new WireMeshTransport(
+      eventsB,
+      identityB,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      gatewayTrustB,
+    );
     await transportA.hub.connect(hub.url);
     await transportB.hub.connect(hub.url);
 
     // Discovery: each side's hubPeers should eventually list the other.
-    const deviceA = await transportA.hub.ownDeviceHex();
-    const deviceB = await transportB.hub.ownDeviceHex();
     await waitForCondition(() => {
       return (
         transportA.hub.peers().includes(deviceB) &&
@@ -83,19 +113,47 @@ describe("connectToHub", () => {
     await transportB.shutdown();
   });
 
-  it("never applies a state_sync or state_update relayed by an unauthenticated hub peer (agent-comms#169 security finding: real per-peer admission lands in #156, but nothing today should let any hub peer patch local mesh state)", async () => {
+  it('never applies a state_sync or state_update relayed by a hub peer, even one this side now explicitly trusts (agent-comms#169 security finding: real per-peer admission landed in #156, but gateway trust means "this device\'s traffic is worth acting on", not "this device may directly overwrite this side\'s mesh state")', async () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
     const eventsA = recordingEvents();
     const eventsB = recordingEvents();
-    const transportA = new WireMeshTransport(eventsA, generateIdentity());
-    const transportB = new WireMeshTransport(eventsB, generateIdentity());
+    const identityA = generateIdentity();
+    const identityB = generateIdentity();
+    const deviceA = deviceIdToHex(Uint8Array.from(identityA.deviceId));
+    const deviceB = deviceIdToHex(Uint8Array.from(identityB.deviceId));
+    const gatewayTrustA = new GatewayTrust();
+    gatewayTrustA.add(deviceB);
+    const gatewayTrustB = new GatewayTrust();
+    gatewayTrustB.add(deviceA);
+    const transportA = new WireMeshTransport(
+      eventsA,
+      identityA,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      gatewayTrustA,
+    );
+    const transportB = new WireMeshTransport(
+      eventsB,
+      identityB,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      gatewayTrustB,
+    );
     await transportA.hub.connect(hub.url);
     await transportB.hub.connect(hub.url);
 
-    const deviceA = await transportA.hub.ownDeviceHex();
-    const deviceB = await transportB.hub.ownDeviceHex();
     await waitForCondition(() => {
       return (
         transportA.hub.peers().includes(deviceB) &&
