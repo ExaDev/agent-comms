@@ -22,11 +22,16 @@ import {
   unregisterListener,
   type TrackedListener,
 } from "./listener-registry.js";
-import { findPresenceAdvert, mergeKnownDevices } from "./gossip-directory.js";
+import {
+  findPresenceAdvert,
+  mergeKnownDevices,
+  readvertiseGossip,
+} from "./gossip-directory.js";
 import {
   connectHubGateway,
   forwardAdvertsToHub,
   routeRoomRequestViaHub,
+  sendToLocalPeer,
 } from "./hub-forwarding.js";
 import {
   acceptMeshSession,
@@ -97,7 +102,7 @@ const PRESENCE_READVERTISE_INTERVAL_MS =
 export const PRESENCE_GOSSIP_KEY = "presence/status";
 
 /** The domain-qualified gossip extension key this transport writes this side's own currently-hosted public/private rooms under -- the write half of P3.8's room-discovery replacement for createRoom's own broadcastPatch (agent-comms#48). Same namespacing convention as PRESENCE_GOSSIP_KEY. */
-const HOSTED_ROOMS_GOSSIP_KEY = "room/hosted";
+export const HOSTED_ROOMS_GOSSIP_KEY = "room/hosted";
 
 /** The lightweight, gossip-safe shape a room advertises itself under: enough for a peer to display "this device hosts a discoverable room here" without exposing anything membership- or grant-related. Deliberately excludes secret rooms (never worth advertising at all) and every CRDT membership field a real Room carries -- a gossip-discovered entry is a hint pointing at a room to join, not a substitute for the real Room object join/admission still produces. */
 export interface HostedRoomAdvert {
@@ -191,8 +196,9 @@ export class WireMeshTransport implements MeshTransport {
   private readonly coordinatorListeners = new Map<string, TrackedListener>();
   private defaultListenerId: string | undefined;
 
-  // -- The session dialled via connectToCoordinator, when this instance is not itself the coordinator --
+  // -- The session dialled via connectToCoordinator, when this instance is not itself the coordinator -- and that same coordinator's own device-id hex, set alongside it and never cleared: consumeIncoming's own allowOnBehalfOf gate (see its doc comment) compares every session's authenticated peer identity against the hex, not merely "was this the specific session connectToCoordinator itself dialled", since mesh formation's own reciprocal connectToPeer can just as easily reach this transport over an accepted connection to the identical coordinator device.
   private coordinatorSession: AcceptedMeshSession | undefined;
+  private coordinatorDeviceHex: string | undefined;
 
   // -- The hub relay mode (agent-comms#151), owning its own file under the max-lines cap: see hub-session.ts for the full connection model.
   readonly hub: HubSession;
@@ -293,6 +299,7 @@ export class WireMeshTransport implements MeshTransport {
       },
       handleRoomRequest: this.roomRouter.handleRequest,
       isTrusted: (deviceHex) => this.gatewayTrust.isTrusted(deviceHex),
+      forwardToLocalPeer: sendToLocalPeer.bind(null, this.peerSessions),
     });
     this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;
     this.getCurrentPresence = getCurrentPresence;
@@ -305,7 +312,15 @@ export class WireMeshTransport implements MeshTransport {
       getSelfAgentAdvert !== undefined
     ) {
       this.gossipInterval = setInterval(() => {
-        this.readvertiseGossip();
+        readvertiseGossip(
+          this.allSessions,
+          this.hub,
+          () => this.gatewayTrust.hasAny(),
+          this.events.onError,
+          this.getCurrentPresence,
+          this.getHostedRooms,
+          this.getSelfAgentAdvert,
+        );
       }, presenceReadvertiseIntervalMs);
       this.gossipInterval.unref();
     }
@@ -354,29 +369,6 @@ export class WireMeshTransport implements MeshTransport {
       this.events.onError?.(
         error instanceof Error ? error : new Error(String(error)),
       );
-    }
-  }
-
-  /** Re-sends this side's own current presence status and currently-hosted rooms, together, onto every live session's gossip self-advert -- one gossip frame per tick carrying whichever of the two sources is wired in, rather than a separate frame per fact. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. A no-op tick (neither source wired in, or no sessions exist yet) is expected and silent. The hub's own session (agent-comms#156) is gated separately from every ordinary local-peer session in allSessions: local mesh trust is a different layer (connect_request/introduce approval already gated it before it ever joined allSessions), but the hub session is a broadcast to every connected hub peer, trusted or not, and would otherwise leak this side's own presence/hosted-rooms/self-agent advert onto the hub regardless of GatewayTrust -- forwardAdvertsToHub/pushHubCatchUp's own hasAny gate exists to prevent exactly this for OTHER local peers' adverts, and this side's own self-advert deserves the identical gate, not a bypass. */
-  private readvertiseGossip(): void {
-    const extensions: Record<string, unknown> = {};
-    const status = this.getCurrentPresence?.();
-    if (status !== undefined) extensions[PRESENCE_GOSSIP_KEY] = status;
-    const hostedRooms = this.getHostedRooms?.();
-    if (hostedRooms !== undefined)
-      extensions[HOSTED_ROOMS_GOSSIP_KEY] = hostedRooms;
-    const selfAgentAdvert = this.getSelfAgentAdvert?.();
-    if (selfAgentAdvert !== undefined)
-      extensions[AGENT_SELF_GOSSIP_KEY] = selfAgentAdvert;
-    if (Object.keys(extensions).length === 0) return;
-    for (const session of this.allSessions) {
-      if (this.hub.ownsSession(session) && !this.gatewayTrust.hasAny())
-        continue;
-      session.sendGossipUpdate(extensions).catch((error: unknown) => {
-        this.events.onError?.(
-          error instanceof Error ? error : new Error(String(error)),
-        );
-      });
     }
   }
 
@@ -524,12 +516,13 @@ export class WireMeshTransport implements MeshTransport {
     })();
   }
 
-  /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch. */
+  /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch. Derives roomRouter's own allowOnBehalfOf gate itself, from whether this SPECIFIC handle's peer identity matches coordinatorDeviceHex -- never from which method established this particular session (mesh formation's reciprocal connectToPeer means the same coordinator device can just as easily reach this transport over an accepted connection as over the one connectToCoordinator itself dialled; see coordinatorDeviceHex's own field comment). A coordinator-less instance (coordinatorDeviceHex still undefined, e.g. this transport IS the coordinator) never allows it for anything. */
   private consumeIncoming(
     session: AcceptedMeshSession,
     handle: Readonly<ConnectionHandle>,
   ): void {
-    this.roomRouter.drainSession(session, handle);
+    const allowOnBehalfOf = handle.id === this.coordinatorDeviceHex;
+    this.roomRouter.drainSession(session, handle, allowOnBehalfOf);
     this.drainRevocationAnnouncements(session);
   }
 
@@ -639,6 +632,7 @@ export class WireMeshTransport implements MeshTransport {
       const handle: ConnectionHandle = {
         id: deviceIdToHex(coordinatorDeviceId),
       };
+      this.coordinatorDeviceHex = handle.id;
       this.trackSession(handle.id, session);
       this.consumeIncoming(session, handle);
       this.watchForDisconnect(session, handle, handle.id);
