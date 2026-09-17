@@ -1,3 +1,22 @@
+## [3.6.0](https://github.com/ExaDev/agent-comms/compare/v3.5.0...v3.6.0) (2026-09-17)
+
+### Features
+
+* **core:** add connectHub/disconnectHub to the transport contract ([8e67e64](https://github.com/ExaDev/agent-comms/commit/8e67e64b9babb5a31f30a26d0dae6c81e3466495))
+* **core:** add CoordinatorGateway connection-lifecycle collaborator ([9c6634c](https://github.com/ExaDev/agent-comms/commit/9c6634c022f6b55699b33f5f51272c26b7b406e9))
+* **core:** thread hubUrl through createBridgeMesh/createBridgeMeshSync ([f7aaaea](https://github.com/ExaDev/agent-comms/commit/f7aaaeaf0b8b22f6c824b7bfe6293d34231a75ce))
+* **core:** wire CoordinatorGateway into MeshStore's become/lose paths ([27f3b90](https://github.com/ExaDev/agent-comms/commit/27f3b90a35aac40c71854abc13fe7decd40dcbd6))
+
+### Bug Fixes
+
+* **core:** drop state_sync/state_update relayed by hub peers ([9db4d68](https://github.com/ExaDev/agent-comms/commit/9db4d68dc862ae5c512bd0c274e7f7b01f1c1c7a)), references [#169](https://github.com/ExaDev/agent-comms/issues/169) [#151](https://github.com/ExaDev/agent-comms/issues/151)
+* **core:** isolate a hub dial failure from local coordinator election ([2100b2c](https://github.com/ExaDev/agent-comms/commit/2100b2c33c0062b440c95282e6deb53f1d178724))
+
+### Tests
+
+* **core:** extract real-hub-over-ws test harness into hub-helpers ([fd47fde](https://github.com/ExaDev/agent-comms/commit/fd47fdecfa9eddc9c5a9fab6b93a255e4974ce64))
+* **core:** point the multi-process smoke test at an unreachable hub ([5cd582a](https://github.com/ExaDev/agent-comms/commit/5cd582af5841a0456fa5aea09cbc48bf63727d42)), references [agent-comms#154](https://github.com/agent-comms/issues/154)
+
 ## [3.5.0](https://github.com/ExaDev/agent-comms/compare/v3.4.2...v3.5.0) (2026-09-17)
 
 ### Features
