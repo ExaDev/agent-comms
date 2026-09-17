@@ -8,9 +8,7 @@ import * as path from "node:path";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
-function isVersionedPackageJson(
-  value: unknown,
-): value is { version: string } {
+function isVersionedPackageJson(value: unknown): value is { version: string } {
   if (typeof value !== "object" || value === null) return false;
   if (!("version" in value)) return false;
   return typeof value.version === "string";
