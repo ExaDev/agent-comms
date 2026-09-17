@@ -283,6 +283,9 @@ export class MeshStore implements CommsStore {
       disconnectHub: async () => {
         await this.requireTransport().disconnectHub?.();
       },
+      onError: (error) => {
+        this.onError?.(error);
+      },
     });
 
     this.peerLifecycle = new PeerLifecycle({
