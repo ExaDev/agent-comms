@@ -4,6 +4,8 @@
  * peerId is deviceIdToHex(identity.deviceId), not identity.fingerprint -- WireMeshTransport's own session bookkeeping is keyed by device-id, so MeshStore's own notion of "this peer's id" has to be the same value for the two to correlate. Every existing agent id changes the first time a bridge starts through this factory: there is no migration path, since the value is a hash of genuinely different bytes (device-id is SHA-256(raw public key); fingerprint is SHA-256(certificate DER)) -- a hard cutover, already established as correct when identity.ts first grew deviceId, not relitigated here.
  *
  * Split into a synchronous half (wireBridgeMesh) and an async half (attachMintingIdentity, wrapping toIdentityPort's WebCrypto import) because deriving the IdentityPort MeshStore mints room-membership grants against is unavoidably async, but not every bridge entry point can await one inline -- a plugin loader that calls its extension's default export synchronously (e.g. pi's own) cannot. createBridgeMeshSync exposes both halves for that case, deferring attachIdentity() to wherever the bridge's own lifecycle first has an async context (its own session-start hook), which is always well before the bridge does anything identity-dependent like createRoom. createBridgeMesh remains the convenient all-in-one for every bridge whose own entry point is already async.
+ *
+ * Also starts this bridge's own VersionDriftChecker (agent-comms#166) and wires its result into the CommsTool it builds, so every real bridge gets npm release-drift reporting on whoami/update for free from this one construction point, with no per-bridge wiring. fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup); a test that would otherwise trigger real network I/O on every createBridgeMesh call injects a fake resolver instead.
  */
 
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
@@ -16,6 +18,8 @@ import { WireMeshTransport } from "./wire-mesh-transport.js";
 import { loadOrCreateIdentity, oplogDirFor } from "./identity-store.js";
 import type { IdentitySlot } from "./identity-store.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
+import { VersionDriftChecker } from "./version-check.js";
+import { getOwnPackageVersion } from "./package-version.js";
 
 export interface BridgeMesh {
   store: MeshStore;
@@ -32,6 +36,7 @@ export function createBridgeMeshSync(
   slot: Readonly<IdentitySlot>,
   coordinatorPort?: number,
   hubUrl?: string,
+  fetchLatestVersion?: () => Promise<string | undefined>,
 ): BridgeMeshSync {
   const identity = loadOrCreateIdentity(slot);
   const store = new MeshStore(coordinatorPort, hubUrl);
@@ -51,7 +56,14 @@ export function createBridgeMeshSync(
       () => store.selfAgentAdvert,
     ),
   );
-  const tool = new CommsTool(store, store.discovery);
+  const versionChecker = new VersionDriftChecker({
+    currentVersion: getOwnPackageVersion(),
+    ...(fetchLatestVersion !== undefined ? { fetchLatestVersion } : {}),
+  });
+  versionChecker.start();
+  const tool = new CommsTool(store, store.discovery, () =>
+    versionChecker.getNewerVersionIfAny(),
+  );
   const revocation = createRevocationView();
   return {
     store,
@@ -72,11 +84,13 @@ export async function createBridgeMesh(
   slot: Readonly<IdentitySlot>,
   coordinatorPort?: number,
   hubUrl?: string,
+  fetchLatestVersion?: () => Promise<string | undefined>,
 ): Promise<BridgeMesh> {
   const { store, tool, attachIdentity } = createBridgeMeshSync(
     slot,
     coordinatorPort,
     hubUrl,
+    fetchLatestVersion,
   );
   await attachIdentity();
   return { store, tool };
