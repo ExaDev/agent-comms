@@ -12,6 +12,8 @@ import * as net from "node:net";
 
 const SMOKE_PORT = 19877;
 const SMOKE_HOST = "127.0.0.1";
+// A guaranteed-unreachable local address, not the real default hub (agent-comms#154's MeshStore now dials one on becoming coordinator) -- this smoke test's own concern is the coordinator/discovery/delivery path across a real process boundary, not live connectivity to production infrastructure. Pointing at an address nothing listens on exercises CoordinatorGateway's own failure-isolation (a dial failure must never block local coordinator election) deterministically and offline, rather than this test's outcome depending on whether the CI runner can reach the internet.
+const UNREACHABLE_HUB_URL = "ws://127.0.0.1:1/";
 
 interface TestMessage {
   type: string;
@@ -120,7 +122,7 @@ function buildScript(name: string, actions: string): string {
     `const fs = require("node:fs");`,
     `function log(msg) { process.stdout.write(JSON.stringify(msg) + "\\n"); }`,
     `(async () => {`,
-    `  const store = new MeshStore(${String(SMOKE_PORT)});`,
+    `  const store = new MeshStore(${String(SMOKE_PORT)}, "${UNREACHABLE_HUB_URL}");`,
     `  const slot = { harness: "smoke-${name}", cwd: "/test/${name}", dir: fs.mkdtempSync(path.join(os.tmpdir(), "agent-comms-smoke-${name}-")) };`,
     `  const identity = loadOrCreateIdentity(slot);`,
     `  store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));`,
