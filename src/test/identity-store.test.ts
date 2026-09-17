@@ -16,6 +16,8 @@ import {
   deleteGroupToken,
   loadGroupTokens,
   loadOrCreateIdentity,
+  loadIdentityForFront,
+  probeSlotOwner,
   oplogDirFor,
   releaseIdentityLock,
   saveGroupToken,
@@ -185,6 +187,60 @@ test("a corrupt identity file is regenerated", () => {
 
   const regenerated = loadOrCreateIdentity(slot);
   expect(regenerated.fingerprint).toMatch(/^[0-9A-F]{2}(:[0-9A-F]{2})+$/);
+  releaseIdentityLock(slot);
+});
+
+test("probeSlotOwner reports undefined for a never-touched slot", () => {
+  const { slot } = tempSlot("claude-code");
+  expect(probeSlotOwner(slot)).toBeUndefined();
+});
+
+test("probeSlotOwner reports the live PID holding a slot's lock", () => {
+  const { slot } = tempSlot("claude-code");
+  loadOrCreateIdentity(slot);
+  expect(probeSlotOwner(slot)).toBe(process.pid);
+  releaseIdentityLock(slot);
+});
+
+test("probeSlotOwner reports undefined once the lock is released", () => {
+  const { slot } = tempSlot("claude-code");
+  loadOrCreateIdentity(slot);
+  releaseIdentityLock(slot);
+  expect(probeSlotOwner(slot)).toBeUndefined();
+});
+
+test("probeSlotOwner reports undefined for a lock left by a dead process", () => {
+  const { slot, dir } = tempSlot("claude-code");
+  loadOrCreateIdentity(slot);
+  const lockFile = slotFile(dir, ".lock");
+  releaseIdentityLock(slot);
+  // A pid that is exceedingly unlikely to be alive on any real machine, standing in for a crashed process's stale lock file (matching the "a stale lock from a dead process" test above, which relies on the same never-recycled-in-practice assumption).
+  const deadPid = 999_999;
+  fs.writeFileSync(lockFile, `${String(deadPid)}\n`);
+  expect(probeSlotOwner(slot)).toBeUndefined();
+});
+
+test("loadIdentityForFront creates and persists an identity without taking the slot's lock", () => {
+  const { slot, dir } = tempSlot("claude-code");
+  const identity = loadIdentityForFront(slot);
+  expect(fs.existsSync(slotFile(dir, ".json"))).toBe(true);
+  expect(fs.existsSync(path.join(dir, "identity-claude-code--_tmp_project.lock"))).toBe(
+    false,
+  );
+  expect(probeSlotOwner(slot)).toBeUndefined();
+
+  const reloaded = loadIdentityForFront(slot);
+  expect(reloaded.fingerprint).toBe(identity.fingerprint);
+  expect(reloaded.deviceId).toEqual(identity.deviceId);
+});
+
+test("loadIdentityForFront's identity matches what loadOrCreateIdentity would later assume for the same slot", () => {
+  const { slot } = tempSlot("claude-code");
+  const front = loadIdentityForFront(slot);
+
+  const owned = loadOrCreateIdentity(slot);
+  expect(owned.fingerprint).toBe(front.fingerprint);
+  expect(owned.deviceId).toEqual(front.deviceId);
   releaseIdentityLock(slot);
 });
 

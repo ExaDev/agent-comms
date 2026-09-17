@@ -280,6 +280,27 @@ function createIdentity(identityFile: string): PeerIdentity {
 }
 
 /**
+ * Probes a slot's current lock holder without taking it -- the cc-peer front (agent-comms#157) uses this read-only check to decide whether a local Claude Code session already fronts itself (a live agent-comms bridge already holds the slot) before attaching, and to notice a session's own bridge taking the slot over later so the front can yield. Returns the live PID currently holding the slot's lock, or undefined when the slot is unlocked or its recorded holder is no longer alive.
+ */
+export function probeSlotOwner(slot: Readonly<IdentitySlot>): number | undefined {
+  const { lockFile } = slotPaths(slot);
+  const heldBy = readLockPid(lockFile);
+  if (heldBy === undefined) return undefined;
+  return isPidAlive(heldBy) ? heldBy : undefined;
+}
+
+/**
+ * Loads (creating on first use) the persisted identity for a slot without taking its exclusivity lock. The cc-peer front (agent-comms#157) uses this to assume a not-yet-live session's own future identity, so the device-id -- and with it every agent id, room membership, and pending delivery already addressed to it -- carries over unchanged the moment that session's own bridge starts and claims the slot for real. Callers must have already confirmed via probeSlotOwner that no live bridge currently holds the slot; re-probing atomically against a concurrent acquisition isn't possible across the two separate files (identity vs lock) this store keeps, so it's the front's own periodic re-probe, not this function, that detects and reacts to a real bridge taking over afterwards.
+ */
+export function loadIdentityForFront(
+  slot: Readonly<IdentitySlot>,
+): PeerIdentity {
+  const { dir, identityFile } = slotPaths(slot);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return loadStoredIdentity(identityFile) ?? createIdentity(identityFile);
+}
+
+/**
  * Release the slot lock on graceful shutdown. A lock held by another PID (taken over after this process crashed and restarted) is left alone.
  */
 export function releaseIdentityLock(slot: Readonly<IdentitySlot>): void {
