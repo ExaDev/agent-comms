@@ -100,7 +100,7 @@ export class HubSession {
     })();
   }
 
-  /** Dispatches inbound relayed manage-requests: each is handled with a handle keyed by the SENDING device (request.fromDevice names it on relay-routed requests), so onMessage and every downstream consumer see the true origin, never the hub. Replies ride respond()'s own relay routing back. */
+  /** Dispatches inbound relayed manage-requests: each is handled with a handle keyed by the SENDING device (request.fromDevice names it on relay-routed requests), so onMessage and every downstream consumer see the true origin, never the hub. Replies ride respond()'s own relay routing back. A state_sync/state_update is dropped before ever reaching onMessage/applyPatch -- see isStateMutatingMessage's own doc for why: the hub has no per-peer admission control yet (that lands in agent-comms#156), so accepting one from an arbitrary hub peer would let it directly patch this side's mesh state (a security review finding on agent-comms#169, which is what first wired a hub connection into production's default coordinator path at all). */
   private consume(session: AcceptedMeshSession): void {
     void (async () => {
       for await (const request of session.incomingManageRequests) {
@@ -111,7 +111,7 @@ export class HubSession {
             : "hub-peer";
         this.hubPeersKnown.add(senderHex);
         const message = extractMessage(request.command);
-        if (message !== undefined) {
+        if (message !== undefined && !isStateMutatingMessage(message)) {
           this.deps.events.onMessage({ id: senderHex }, message);
         }
         await request.respond({ result: "ok" }).catch(() => undefined);
@@ -148,4 +148,9 @@ function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
     bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
   return bytes;
+}
+
+/** A state_sync or state_update carries authority to directly overwrite or patch this side's own mesh state (agents, rooms, messages, deliveries) -- on an ordinary peer session that authority is meaningful because the peer already passed connect_request/introduce approval or the coordinator's own trusted mesh membership. A hub-relayed sender has passed neither: today's hub accepts any self-generated identity and gates nothing per-peer (agent-comms#156's own future deliverable), so treating its state_sync/state_update as equally authoritative would let an arbitrary hub peer inject an outcome indistinguishable from a genuine mesh event, e.g. a spoofed inbound delivery. Every other legacy message method this session might relay is already inert on receipt (PeerLifecycle's own handleDataMessage only reacts to these two), so filtering exactly these two is a complete fix for this specific path, not a partial one. */
+function isStateMutatingMessage(message: MeshMessage): boolean {
+  return message.method === "state_sync" || message.method === "state_update";
 }
