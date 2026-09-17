@@ -1,3 +1,32 @@
+## [3.13.0](https://github.com/ExaDev/agent-comms/compare/v3.12.0...v3.13.0) (2026-09-17)
+
+### Features
+
+* **core:** add GatewayTrust, the cross-machine gateway allowlist ([4060f76](https://github.com/ExaDev/agent-comms/commit/4060f7670e98b7f31c87421ccc5d752d98ccaa08))
+* **core:** expose gateway trust as gateway_trust/gateway_untrust/gateway_list_trusted tool actions ([703ae00](https://github.com/ExaDev/agent-comms/commit/703ae00da078c4436a617a3859d9c86ae2aa2355))
+* **core:** gate hub gossip forwarding on gateway trust ([3f2b7c7](https://github.com/ExaDev/agent-comms/commit/3f2b7c7cdfeea81007e3ef483792db5a84bcc733))
+* **core:** gate hub session dispatch and directory merge on gateway trust ([f11f82e](https://github.com/ExaDev/agent-comms/commit/f11f82e25d69e13e91cd02416c89b6d02a0bc801))
+* **core:** wire GatewayTrust through MeshStore and WireMeshTransport ([3e63783](https://github.com/ExaDev/agent-comms/commit/3e63783f355e656d1395b2a12f72f3e605614911))
+
+### Bug Fixes
+
+* **core:** gate readvertiseGossip's own hub-directed self-advert on gateway trust ([e75ef0b](https://github.com/ExaDev/agent-comms/commit/e75ef0b64a4b31765d2624f72e4764acdecbd91d))
+
+### Documentation
+
+* **core:** escape angle-bracket type refs in GatewayTrust doc comments ([ae74011](https://github.com/ExaDev/agent-comms/commit/ae74011ed1e036acc19d623db005cfe617895342))
+
+### Styles
+
+* **core:** apply eslint/prettier autofix to hub-forwarding.test.ts ([48a0fd5](https://github.com/ExaDev/agent-comms/commit/48a0fd5f3556f0f7d8fa39c02c743c72838edd21))
+
+### Tests
+
+* **core:** cover sendRoomRequest's gateway-trust gate in its own file ([c5a377a](https://github.com/ExaDev/agent-comms/commit/c5a377a87f6b79277c40e9e76ede6f6fc78c2347))
+* **core:** establish mutual gateway trust in hub-session integration tests ([fb2f5d1](https://github.com/ExaDev/agent-comms/commit/fb2f5d18de7e16732cb1eea03dcacb4588e6ad0d)), references [agent-comms#156](https://github.com/agent-comms/issues/156) [#169](https://github.com/ExaDev/agent-comms/issues/169)
+* **core:** prove gateway trust's deny-by-default posture end to end ([7559c21](https://github.com/ExaDev/agent-comms/commit/7559c212cca909b1e3ec43d799340fa9370f70a1))
+* **core:** trust remote devices explicitly in gateway forwarding tests ([685b754](https://github.com/ExaDev/agent-comms/commit/685b75481dc7e0d862c86c51ff60060cb18479ab)), references [agent-comms#156](https://github.com/agent-comms/issues/156)
+
 ## [3.12.0](https://github.com/ExaDev/agent-comms/compare/v3.11.0...v3.12.0) (2026-09-17)
 
 ### Features
