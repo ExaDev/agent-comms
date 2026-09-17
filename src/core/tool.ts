@@ -20,6 +20,7 @@ import type { ListenerInfo } from "./transport.js";
 import type { CommsStore } from "./comms-store.js";
 import type { DiscoveryManager } from "./discovery.js";
 import { CommsError } from "./store.js";
+import { getOwnPackageVersion } from "./package-version.js";
 
 /** Table column widths for the plain-text listing helpers below, chosen to line up with the existing aligned output. */
 const ROOM_TYPE_COLUMN_WIDTH = 7;
@@ -124,7 +125,16 @@ export class CommsTool {
   constructor(
     private readonly store: CommsStore & MeshOnlyFeatures,
     private readonly discovery?: DiscoveryManager,
+    /** Returns the newest npm release known to be available, or undefined when none is known (no checker wired up, no successful check yet, or this bridge is already current). Wired at bridge construction time by a VersionDriftChecker (see version-check.ts) -- optional so every existing call site, and every test that has no interest in drift reporting, is unaffected. */
+    private readonly getNewerVersionIfAny?: () => string | undefined,
   ) {}
+
+  /** The "Update available: ..." line appended to whoami/update output when a newer release is known, or undefined when there's nothing to report. */
+  private formatUpdateAvailableLine(): string | undefined {
+    const newerVersion = this.getNewerVersionIfAny?.();
+    if (newerVersion === undefined) return undefined;
+    return `Update available: ${newerVersion} (running ${getOwnPackageVersion()})`;
+  }
 
   async handle(
     ctx: Readonly<CommsContext>,
@@ -244,8 +254,13 @@ export class CommsTool {
     if (action.name !== undefined) patch.name = action.name;
     if (action.tags !== undefined) patch.tags = action.tags;
     const agent = await this.store.updateAgent(ctx.agentId, patch);
+    const lines = [
+      `Updated: name=${agent.name}, visibility=${agent.visibility}, status=${agent.status}, version=${getOwnPackageVersion()}`,
+    ];
+    const updateAvailable = this.formatUpdateAvailableLine();
+    if (updateAvailable !== undefined) lines.push(updateAvailable);
     return {
-      content: `Updated: name=${agent.name}, visibility=${agent.visibility}, status=${agent.status}`,
+      content: lines.join("\n"),
       isError: false,
     };
   }
@@ -253,16 +268,20 @@ export class CommsTool {
   private async whoami(ctx: Readonly<CommsContext>): Promise<CommsResult> {
     const agent = await this.store.getAgent(ctx.agentId);
     if (!agent) return { content: "Not registered.", isError: true };
+    const lines = [
+      `ID: ${agent.id}`,
+      `Name: ${agent.name}`,
+      `Harness: ${agent.harness}`,
+      `Visibility: ${agent.visibility}`,
+      `Status: ${agent.status}`,
+      `Version: ${getOwnPackageVersion()}`,
+      `Tags: ${agent.tags.join(", ") || "(none)"}`,
+      `Rooms: ${agent.subscribedRooms.join(", ") || "(none)"}`,
+    ];
+    const updateAvailable = this.formatUpdateAvailableLine();
+    if (updateAvailable !== undefined) lines.push(updateAvailable);
     return {
-      content: [
-        `ID: ${agent.id}`,
-        `Name: ${agent.name}`,
-        `Harness: ${agent.harness}`,
-        `Visibility: ${agent.visibility}`,
-        `Status: ${agent.status}`,
-        `Tags: ${agent.tags.join(", ") || "(none)"}`,
-        `Rooms: ${agent.subscribedRooms.join(", ") || "(none)"}`,
-      ].join("\n"),
+      content: lines.join("\n"),
       isError: false,
     };
   }
