@@ -7,12 +7,14 @@ import {
   detachFrontedSession,
 } from "../bridges/cc-peer/front-relay.js";
 import type {
+  FrontRelayAliasDirectory,
+  FrontRelayAliasPool,
   FrontRelayPeer,
   FrontRelayStore,
 } from "../bridges/cc-peer/front-relay.js";
 import type { CcPeerRosterEntryLike } from "../bridges/cc-peer/front.js";
 import type { CommsTool } from "../core/tool.js";
-import type { DeliveryEvent, RoomMessage } from "../core/types.js";
+import type { DeliveryEvent, DmMessage, RoomMessage } from "../core/types.js";
 
 function rosterEntry(
   overrides: Readonly<Partial<CcPeerRosterEntryLike>> = {},
@@ -85,8 +87,39 @@ function roomMessage(overrides: Partial<RoomMessage> = {}): RoomMessage {
   };
 }
 
+function dmMessage(overrides: Partial<DmMessage> = {}): DmMessage {
+  return {
+    id: "msg-1",
+    from: "peer-a",
+    to: "agent-1",
+    content: "hi from the mesh",
+    timestamp: "2026-01-01T00:00:00.000Z",
+    readBy: [],
+    ...overrides,
+  };
+}
+
+function fakeAliasPool(): FrontRelayAliasPool & { ensureCalls: string[] } {
+  const ensureCalls: string[] = [];
+  return {
+    ensureCalls,
+    ensure: vi.fn(async (name: string) => {
+      ensureCalls.push(name);
+      return Promise.resolve();
+    }),
+  };
+}
+
+function fakeAliasDirectory(
+  nameFor: (correspondentId: string) => string = (id) => `mesh-${id}`,
+): FrontRelayAliasDirectory {
+  return {
+    ensure: vi.fn(nameFor),
+  };
+}
+
 describe("buildFrontedSessionRecord — outbound (mesh -> cc-peer)", () => {
-  it("wires store.onDelivery to send the formatted event to the session's own pid", () => {
+  it("wires store.onDelivery to send the formatted event to the session's own pid", async () => {
     const store = fakeStore();
     const peer = fakePeer();
     const entry = rosterEntry({ pid: 333 });
@@ -98,6 +131,8 @@ describe("buildFrontedSessionRecord — outbound (mesh -> cc-peer)", () => {
       store,
       tool: fakeTool(),
       peer,
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
     });
 
     expect(store.onDelivery).toBeDefined();
@@ -105,10 +140,155 @@ describe("buildFrontedSessionRecord — outbound (mesh -> cc-peer)", () => {
       type: "room_message",
       message: roomMessage(),
     };
-    void store.onDelivery?.("agent-1", event);
+    await store.onDelivery?.("agent-1", event);
 
     expect(peer.sendCalls).toHaveLength(1);
     expect(peer.sendCalls[0]?.target).toEqual({ pid: 333 });
+  });
+
+  it("materialises a reply alias for the event's own correspondent and mentions it in the delivered body", async () => {
+    const store = fakeStore();
+    const peer = fakePeer();
+    const aliasPool = fakeAliasPool();
+    const aliasDirectory = fakeAliasDirectory((id) => `mesh-${id}`);
+
+    buildFrontedSessionRecord({
+      entry: rosterEntry(),
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store,
+      tool: fakeTool(),
+      peer,
+      aliasPool,
+      aliasDirectory,
+    });
+
+    const event: DeliveryEvent = {
+      type: "dm",
+      message: dmMessage({ from: "correspondent-1" }),
+    };
+    await store.onDelivery?.("agent-1", event);
+
+    expect(aliasDirectory.ensure).toHaveBeenCalledWith("correspondent-1");
+    expect(aliasPool.ensureCalls).toEqual(["mesh-correspondent-1"]);
+    expect(peer.sendCalls[0]?.body).toContain(
+      'reply via peer "mesh-correspondent-1"',
+    );
+  });
+
+  it("delivers an event with no single correspondent (e.g. member_joined) without touching the alias pool", async () => {
+    const store = fakeStore();
+    const peer = fakePeer();
+    const aliasPool = fakeAliasPool();
+
+    buildFrontedSessionRecord({
+      entry: rosterEntry(),
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store,
+      tool: fakeTool(),
+      peer,
+      aliasPool,
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    const event: DeliveryEvent = {
+      type: "member_joined",
+      room: "owner/project",
+      agent: "agent-2",
+    };
+    await store.onDelivery?.("agent-1", event);
+
+    expect(aliasPool.ensureCalls).toEqual([]);
+    expect(peer.sendCalls).toHaveLength(1);
+  });
+
+  it("still delivers the event, without a reply hint, if materialising the alias fails", async () => {
+    const store = fakeStore();
+    const peer = fakePeer();
+    const failure = new Error("alias worker failed to start");
+    const aliasPool: FrontRelayAliasPool = {
+      ensure: vi.fn(async () => Promise.reject(failure)),
+    };
+
+    buildFrontedSessionRecord({
+      entry: rosterEntry(),
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store,
+      tool: fakeTool(),
+      peer,
+      aliasPool,
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    const event: DeliveryEvent = {
+      type: "dm",
+      message: dmMessage({ from: "correspondent-1" }),
+    };
+    await store.onDelivery?.("agent-1", event);
+
+    expect(peer.sendCalls).toHaveLength(1);
+    expect(peer.sendCalls[0]?.body).not.toContain("reply via peer");
+  });
+});
+
+describe("buildFrontedSessionRecord — alias reply (cc-peer -> mesh DM)", () => {
+  it("sends a mesh DM to the correspondent, as this session's own agent id, when a reply arrives on its alias", () => {
+    const tool = fakeTool();
+    const record = buildFrontedSessionRecord({
+      entry: rosterEntry({ cwd: "/tmp/my-project" }),
+      agentId: "agent-1",
+      roomId: "owner/my-project",
+      store: fakeStore(),
+      tool,
+      peer: fakePeer(),
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    record.handleAliasReply("correspondent-1", {
+      from: "local-session",
+      fromName: "my-local-session",
+      body: "reply body",
+    });
+
+    expect(tool.handleCalls).toHaveLength(1);
+    expect(tool.handleCalls[0]).toEqual({
+      ctx: {
+        agentId: "agent-1",
+        harness: "claude-code",
+        cwd: "/tmp/my-project",
+        pid: process.pid,
+      },
+      action: {
+        action: "dm",
+        target: "correspondent-1",
+        content: "reply body",
+      },
+    });
+  });
+});
+
+describe("buildFrontedSessionRecord — stale alias notification", () => {
+  it("sends a clear error back to the session's own pid rather than silently dropping the reply", () => {
+    const peer = fakePeer();
+    const record = buildFrontedSessionRecord({
+      entry: rosterEntry({ pid: 555 }),
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store: fakeStore(),
+      tool: fakeTool(),
+      peer,
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    record.notifyStaleAlias("mesh-stale");
+
+    expect(peer.sendCalls).toHaveLength(1);
+    expect(peer.sendCalls[0]?.target).toEqual({ pid: 555 });
+    expect(peer.sendCalls[0]?.body).toContain("mesh-stale");
   });
 });
 
@@ -124,6 +304,8 @@ describe("buildFrontedSessionRecord — inbound (cc-peer -> mesh)", () => {
       store: fakeStore(),
       tool,
       peer: fakePeer(),
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
     });
 
     record.handleInbound({
@@ -157,6 +339,8 @@ describe("buildFrontedSessionRecord — inbound (cc-peer -> mesh)", () => {
       store: fakeStore(),
       tool,
       peer: fakePeer(),
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
     });
 
     record.handleInbound({ from: "local-session", body: "hi" });
@@ -180,6 +364,8 @@ describe("buildFrontedSessionRecord — record shape", () => {
       store: fakeStore(),
       tool: fakeTool(),
       peer: fakePeer(),
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
     });
 
     expect(record.pid).toBe(entry.pid);

@@ -10,6 +10,7 @@ import type { DeliveryEvent } from "../../core/types.js";
 import type { FrontedSessionRecord } from "./front-controller.js";
 import type { CcPeerRosterEntryLike } from "./front.js";
 import type { CcPeerInboundMessage, CcPeerRef } from "./bridge.js";
+import { correspondentForEvent } from "./reply-aliases.js";
 
 /** The narrow slice of MeshStore a fronted session's own record needs -- onDelivery to wire the mesh-to-session direction, setAgentOffline/shutdown for detachFrontedSession's own teardown. */
 export interface FrontRelayStore {
@@ -28,6 +29,16 @@ export interface FrontRelayPeer {
   ) => Promise<{ msgId: string }>;
 }
 
+/** The narrow slice of AliasPool (cc-peer's own cc-peer/alias-pool subpath) this relay needs -- materialising the real OS-backed reply alias a correspondent's name was already minted for by FrontRelayAliasDirectory. Narrowed so this module has no compile-time dependency on the cc-peer package itself -- front-runtime.ts supplies the real AliasPool. */
+export interface FrontRelayAliasPool {
+  ensure: (name: string) => Promise<void>;
+}
+
+/** The narrow slice of ReplyAliasDirectory (reply-aliases.ts) this relay needs to mint/recall the alias name for one correspondent on the mesh-to-session direction. */
+export interface FrontRelayAliasDirectory {
+  ensure: (correspondentId: string) => string;
+}
+
 export interface FrontedRelayRecord extends FrontedSessionRecord {
   agentId: string;
   roomId: string;
@@ -41,18 +52,45 @@ export interface BuildFrontedSessionRecordDeps {
   store: FrontRelayStore;
   tool: Pick<CommsTool, "handle">;
   peer: FrontRelayPeer;
+  aliasPool: FrontRelayAliasPool;
+  aliasDirectory: FrontRelayAliasDirectory;
 }
 
 /**
- * Wires both relay directions for one fronted session and returns the record CcPeerFront tracks it under. Mesh-to-session: store.onDelivery sends the formatted event to this session's own pid via the shared peer. Session-to-mesh: the returned handleInbound (called by the front's shared "message" listener once it's matched this record by socket path) posts the message into this session's own project room, exactly as wireCcPeerBridge's own peer.on("message") handler does for the one-shot bridge command.
+ * Wires both relay directions for one fronted session and returns the record CcPeerFront tracks it under. Mesh-to-session: store.onDelivery sends the formatted event to this session's own pid via the shared peer -- for an event with a single originating correspondent (a dm or room_message, per correspondentForEvent), it first materialises a reply alias for that correspondent and mentions it in the delivered body, so the session can address a reply to that specific correspondent the way it addresses any other local peer (agent-comms#158). Session-to-mesh: the returned handleInbound (called by the front's shared "message" listener once it's matched this record by socket path) posts the message into this session's own project room, exactly as wireCcPeerBridge's own peer.on("message") handler does for the one-shot bridge command; handleAliasReply (called once CcPeerFront has resolved an inbound alias message to its correspondent) instead sends a mesh DM to that correspondent, as this session's own agentId; notifyStaleAlias delivers a clear error back into the session for a reply on an alias the directory no longer recognises.
  */
 export function buildFrontedSessionRecord(
   deps: Readonly<BuildFrontedSessionRecordDeps>,
 ): FrontedRelayRecord {
-  const { entry, agentId, roomId, store, tool, peer } = deps;
+  const {
+    entry,
+    agentId,
+    roomId,
+    store,
+    tool,
+    peer,
+    aliasPool,
+    aliasDirectory,
+  } = deps;
 
-  store.onDelivery = (_targetId, event) => {
-    void peer.send({ pid: entry.pid }, formatDeliveryEvent(event));
+  store.onDelivery = async (_targetId, event) => {
+    const body = formatDeliveryEvent(event);
+    const correspondentId = correspondentForEvent(event);
+    if (correspondentId === undefined) {
+      await peer.send({ pid: entry.pid }, body);
+      return;
+    }
+    const aliasName = aliasDirectory.ensure(correspondentId);
+    try {
+      await aliasPool.ensure(aliasName);
+      await peer.send(
+        { pid: entry.pid },
+        `${body} (reply via peer "${aliasName}")`,
+      );
+    } catch {
+      // The alias failed to materialise (e.g. the worker process failed to start) -- deliver the message anyway, just without a reply hint the session couldn't actually use.
+      await peer.send({ pid: entry.pid }, body);
+    }
   };
 
   return {
@@ -77,6 +115,31 @@ export function buildFrontedSessionRecord(
           pid: process.pid,
         },
         action,
+      );
+    },
+    handleAliasReply: (
+      correspondentId: string,
+      message: Readonly<{ body: string }>,
+    ) => {
+      const action = buildAction({
+        action: "dm",
+        target: correspondentId,
+        content: message.body,
+      });
+      void tool.handle(
+        {
+          agentId,
+          harness: "claude-code",
+          cwd: entry.cwd,
+          pid: process.pid,
+        },
+        action,
+      );
+    },
+    notifyStaleAlias: (aliasName: string) => {
+      void peer.send(
+        { pid: entry.pid },
+        `Reply not delivered: peer "${aliasName}" is no longer a known correspondent (reply aliases don't survive a front restart). Wait for a new message from them and reply to that instead.`,
       );
     },
   };
