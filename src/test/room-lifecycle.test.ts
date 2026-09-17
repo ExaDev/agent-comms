@@ -6,7 +6,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { tmpdir } from "node:os";
 import { bytesToHex, deviceIdFromHex } from "wire-mesh-core/domain/device-id";
-import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
+import {
+  mintCapabilityToken,
+  verifyCapabilityToken,
+} from "wire-mesh-core/domain/tokens";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
@@ -234,6 +237,30 @@ describe("RoomLifecycle — createRoom", () => {
     });
     const { slot } = h.deps.requireIdentity();
     expect(loadRoomTokens(slot)[created.id]).toBeDefined();
+  });
+
+  it("mints the owner's own root grant through the shared room:member delegation policy, so it verifies with delegations-remaining forced to 0 (agent-comms#163)", async () => {
+    const h = await makeHarness();
+    const created = await h.lifecycle.createRoom({
+      name: "My Room",
+      type: "public",
+      owner: h.ids.ownerId,
+      description: "a room",
+    });
+    const { slot, identity, clock, revocation } = h.deps.requireIdentity();
+    const token = loadRoomTokens(slot)[created.id];
+    if (token === undefined) {
+      throw new Error("expected a persisted room token");
+    }
+    const verdict = await verifyCapabilityToken(token, {
+      identity,
+      clock,
+      revocation,
+    });
+    if (!verdict.ok) {
+      throw new Error(`expected the minted token to verify: ${verdict.reason}`);
+    }
+    expect(verdict.claims["delegations-remaining"]).toBe(0);
   });
 
   it("slugs the given name into the room-path grammar", async () => {

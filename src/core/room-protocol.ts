@@ -21,8 +21,10 @@ import type {
 import { parseRoomPath } from "./room-path.js";
 import {
   ROOM_MEMBER_CAPABILITY,
+  ROOM_MEMBER_DELEGATION_POLICY,
   verifyRoomToken,
 } from "./room-token-verification.js";
+import { resolveDelegationsRemaining } from "./delegation-policy.js";
 import {
   loadRoomTokens,
   saveIssuedRoomGrant,
@@ -521,10 +523,15 @@ export class RoomProtocol {
       clock,
       tokenId,
       bearer: deviceIdFromHex(handle.id),
-      capability: "room:member",
+      capability: ROOM_MEMBER_CAPABILITY,
       scope: { kind: "room", path: roomPath },
       expires: clock.now() + ROOM_TOKEN_LIFETIME_MS,
-      delegationsRemaining: 0,
+      delegationsRemaining: resolveDelegationsRemaining(
+        ROOM_MEMBER_DELEGATION_POLICY,
+        ROOM_MEMBER_CAPABILITY,
+        handle.id,
+        0,
+      ),
     });
     if (!verdict.ok) {
       return { result: "error", code: "mint_failed" };
