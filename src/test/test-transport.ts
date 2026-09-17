@@ -51,6 +51,7 @@ export async function wireTestTransport(
       undefined,
       dataStorage,
       () => store.selfAgentAdvert,
+      store.gatewayTrust,
     ),
   );
   store.setIdentity({

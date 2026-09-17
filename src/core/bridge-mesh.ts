@@ -79,6 +79,7 @@ export function createBridgeMeshSyncFromIdentity(
       () => store.hostedRooms,
       dataStorage,
       () => store.selfAgentAdvert,
+      store.gatewayTrust,
     ),
   );
   const versionChecker = new VersionDriftChecker({
