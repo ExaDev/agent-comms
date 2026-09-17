@@ -10,6 +10,7 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@exadev/eslint-config'
   - wire-mesh-core
+  - cc-peer@1.4.1
 overrides:
   "@anthropic-ai/sdk": ">=0.91.1"
   basic-ftp: ">=6.0.1"
