@@ -1,3 +1,28 @@
+## [3.9.0](https://github.com/ExaDev/agent-comms/compare/v3.8.0...v3.9.0) (2026-09-17)
+
+### Features
+
+* **bridges:** wire the default cc-peer front into every real bridge entry point ([4bb8def](https://github.com/ExaDev/agent-comms/commit/4bb8def55a924bf7ecd62c365ded75bb35ebf9a6))
+* **cc-peer:** add DI-testable relay wiring for one fronted session ([7113949](https://github.com/ExaDev/agent-comms/commit/7113949b5968e94d02eb9e4d940908d1a6bc2039))
+* **cc-peer:** add pure roster-selection and inbound-routing logic for the default front ([84b058d](https://github.com/ExaDev/agent-comms/commit/84b058d2d1f0b4e3620ebcb8bfed1baa4340eba5)), references [agent-comms#157](https://github.com/agent-comms/issues/157)
+* **cc-peer:** add the coordinator-only periodic front controller ([d739908](https://github.com/ExaDev/agent-comms/commit/d739908fbd133ba0197cc9c2b3724418236cfefc))
+* **cc-peer:** add the store.onCoordinatorRoleChanged glue for the default front ([668fbf2](https://github.com/ExaDev/agent-comms/commit/668fbf21de0231a7c74593b22c3325d3cdcbb915))
+* **cc-peer:** wire the default front's real cc-peer/MeshStore construction ([4d8dcb7](https://github.com/ExaDev/agent-comms/commit/4d8dcb7077ceb841fe030b271da97d1806280001))
+* **core:** add an onCoordinatorRoleChanged hook to MeshStore ([401b1f8](https://github.com/ExaDev/agent-comms/commit/401b1f8a5c257fcb6f6cd761820335cbe0af65f0)), references [agent-comms#157](https://github.com/agent-comms/issues/157)
+* **core:** add read-only slot probing and lock-free identity loading ([63e9964](https://github.com/ExaDev/agent-comms/commit/63e99644a914441420ab9381ad8686fe00a9f2e5))
+
+### Refactoring
+
+* **core:** split bridge-mesh construction from identity loading ([5e9615e](https://github.com/ExaDev/agent-comms/commit/5e9615e0fa0aba8e0204c874e7a9e903a56f4fce)), references [agent-comms#157](https://github.com/agent-comms/issues/157)
+
+### Documentation
+
+* **readme:** document the default cc-peer front ([71c1d5c](https://github.com/ExaDev/agent-comms/commit/71c1d5c368d41a48300d54271b10c95c548c3d55))
+
+### Styles
+
+* **core:** satisfy prettier formatting for the new identity-store tests ([dcf42d0](https://github.com/ExaDev/agent-comms/commit/dcf42d06f8a6072ae46468d806cfcb50d40e5428))
+
 ## [3.8.0](https://github.com/ExaDev/agent-comms/compare/v3.7.0...v3.8.0) (2026-09-17)
 
 ### Features
