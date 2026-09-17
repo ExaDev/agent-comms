@@ -11,6 +11,7 @@
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
 import { connectWsUrl } from "./ws-dial.js";
 import { HubSession } from "./hub-session.js";
+import { mergeKnownDevices } from "./gossip-directory.js";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
@@ -206,20 +207,6 @@ export class WireMeshTransport implements MeshTransport {
 
   // -- Every device-id this side has ever heard gossip from, across every session's own directory, keyed by device-id hex -- the mesh-wide aggregation P3.8's own room-discovery design and the eventual agent register/update/offline retirement both need and don't otherwise have (agent-comms#48's own 2026-09-14 investigation confirmed no such aggregation existed anywhere in this file). Merged, never cleared on disconnect: a device's last-known advert (including its own presence/status, or any future gossiped extension) stays queryable even while its session is momentarily down, the same way the legacy agents Map keeps a record after setAgentOffline rather than deleting it outright.
   private readonly knownDevices = new Map<string, PeerAdvert>();
-
-  /** Merges one session event's own directory into the mesh-wide knownDevices view, keeping the newer advert (by snapshot-seconds) whenever this device-id is already known from an earlier event or a different session. */
-  private mergeKnownDevices(directory: readonly DirectoryEntry[]): void {
-    for (const entry of directory) {
-      const deviceIdHex = deviceIdToHex(entry.device);
-      const existing = this.knownDevices.get(deviceIdHex);
-      if (
-        existing === undefined ||
-        entry.advert["snapshot-seconds"] >= existing["snapshot-seconds"]
-      ) {
-        this.knownDevices.set(deviceIdHex, entry.advert);
-      }
-    }
-  }
 
   /** Every device this side has ever heard gossip from, mesh-wide -- not just its own directly-connected peers -- with each one's own latest full advert (addresses, snapshot-seconds, and every open-extension field such as presence/status). */
   listKnownDevices(): readonly {
@@ -566,7 +553,7 @@ export class WireMeshTransport implements MeshTransport {
   ): void {
     void (async () => {
       for await (const event of session.events) {
-        this.mergeKnownDevices(event.directory);
+        mergeKnownDevices(this.knownDevices, event.directory);
         this.reportPresenceAdvert(handle, deviceIdHex, event.directory);
         if (event.state.status === "closed") {
           const wasTracked = this.peerSessions.get(deviceIdHex) === session;
@@ -958,6 +945,18 @@ export class WireMeshTransport implements MeshTransport {
     return [...this.coordinatorListeners.values()]
       .filter((tracked) => !tracked.isDefault)
       .map((tracked) => `${tracked.host}:${String(tracked.port)}`);
+  }
+
+  // -----------------------------------------------------------------------
+  // MeshTransport -- Hub (gateway role, agent-comms#154)
+  // -----------------------------------------------------------------------
+
+  async connectHub(url: string): Promise<void> {
+    await this.hub.connect(url);
+  }
+
+  async disconnectHub(): Promise<void> {
+    await this.hub.disconnect();
   }
 
   // -----------------------------------------------------------------------
