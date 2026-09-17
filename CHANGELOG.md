@@ -1,3 +1,26 @@
+## [3.8.0](https://github.com/ExaDev/agent-comms/compare/v3.7.0...v3.8.0) (2026-09-17)
+
+### Features
+
+* **core:** add issuer-side delegation policy resolver ([4d1a4a4](https://github.com/ExaDev/agent-comms/commit/4d1a4a4aec00d1e63918c8a9e8717f8606c0ed30))
+* **core:** add VersionDriftChecker for npm release drift detection ([d6ac974](https://github.com/ExaDev/agent-comms/commit/d6ac9744910ae4860fedd15ec0330487c28b5a16))
+* **core:** admit and remove a device from the user principal's group ([23a6864](https://github.com/ExaDev/agent-comms/commit/23a6864d5d813ce166f78f7602bad5ea4868cd1a))
+* **core:** read this package's own version from package.json ([0590d33](https://github.com/ExaDev/agent-comms/commit/0590d33f41e40cf89ea63f524afa1f34775f0ba1))
+* **core:** record the user principal's own issued device-membership grants ([980dee4](https://github.com/ExaDev/agent-comms/commit/980dee49ff16937967e3965a4f21ff387af68a63))
+* **core:** start a VersionDriftChecker for every bridge on construction ([8c09b02](https://github.com/ExaDev/agent-comms/commit/8c09b02fad3d49fafca151aa350381d027efbfa1))
+* **core:** store a device's own held group:member token ([0ee1eff](https://github.com/ExaDev/agent-comms/commit/0ee1eff48dc138d978a68a511c16903512441fe8))
+* **core:** surface this bridge's own version in whoami/update output ([9bb5215](https://github.com/ExaDev/agent-comms/commit/9bb5215a25799779764dfa6ba08e637aafd24313))
+* **core:** verify group:member device-membership tokens ([2ba0a7a](https://github.com/ExaDev/agent-comms/commit/2ba0a7a7e6044cb181c691d879c247a77aa54e20))
+* **core:** wire room:member mints through the delegation policy ([4817398](https://github.com/ExaDev/agent-comms/commit/4817398a00e6b5cf5b5ea342b31679cf957b2f80))
+
+### Bug Fixes
+
+* **core:** narrow resolveDelegationsRemaining's return type by overload ([8bd2a35](https://github.com/ExaDev/agent-comms/commit/8bd2a35d69010972db29bc065d16493750a60dc8))
+
+### Styles
+
+* **core:** keep isVersionedPackageJson's signature on one line ([6179f70](https://github.com/ExaDev/agent-comms/commit/6179f70a8e2569b0b9c7c90d529e4964e3b08bd5))
+
 ## [3.7.0](https://github.com/ExaDev/agent-comms/compare/v3.6.0...v3.7.0) (2026-09-17)
 
 ### Features
