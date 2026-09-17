@@ -12,8 +12,12 @@ import type { PeerInfo, SerialisedState } from "../core/wire-protocol.js";
 const OWNER_ID = "owner-device";
 const COORDINATOR_PORT = 19876;
 
-function peerInfo(id: string, port = 1): PeerInfo {
-  return { id, port, startedAt: "2026-01-01T00:00:00.000Z" };
+function peerInfo(
+  id: string,
+  port = 1,
+  startedAt = "2026-01-01T00:00:00.000Z",
+): PeerInfo {
+  return { id, port, startedAt };
 }
 
 function emptyState(): SerialisedState {
@@ -24,6 +28,7 @@ interface Harness {
   deps: PeerLifecycleDeps;
   lifecycle: PeerLifecycle;
   transport: {
+    isCoordinator: boolean;
     connectToPeer: ReturnType<typeof vi.fn>;
     send: ReturnType<typeof vi.fn>;
     broadcast: ReturnType<typeof vi.fn>;
@@ -39,6 +44,7 @@ interface Harness {
 
 function makeHarness(): Harness {
   const transport = {
+    isCoordinator: false,
     connectToPeer: vi.fn().mockResolvedValue(undefined),
     send: vi.fn().mockResolvedValue(undefined),
     broadcast: vi.fn().mockResolvedValue(undefined),
@@ -228,6 +234,76 @@ describe("PeerLifecycle — handleBecomeCoordinator", () => {
       h.lifecycle.handleBecomeCoordinator([peerInfo("a")]),
     ).resolves.toBeUndefined();
     expect(h.transport.becomeCoordinator).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("PeerLifecycle — sendCoordinatorHandover", () => {
+  it("does nothing when this side is not the coordinator", async () => {
+    const h = makeHarness();
+    h.transport.isCoordinator = false;
+    h.deps.peerInfo.set(OWNER_ID, peerInfo(OWNER_ID));
+    h.deps.peerInfo.set("other", peerInfo("other"));
+
+    await h.lifecycle.sendCoordinatorHandover();
+
+    expect(h.transport.send).not.toHaveBeenCalled();
+    expect(h.transport.broadcast).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when this side is the coordinator but no other peers remain", async () => {
+    const h = makeHarness();
+    h.transport.isCoordinator = true;
+    h.deps.peerInfo.set(OWNER_ID, peerInfo(OWNER_ID));
+
+    await h.lifecycle.sendCoordinatorHandover();
+
+    expect(h.transport.send).not.toHaveBeenCalled();
+  });
+
+  it("sends become_coordinator to the longest-running remaining peer, carrying every other remaining peer", async () => {
+    const h = makeHarness();
+    h.transport.isCoordinator = true;
+    h.deps.peerInfo.set(
+      OWNER_ID,
+      peerInfo(OWNER_ID, 1, "2026-01-03T00:00:00.000Z"),
+    );
+    const oldest = peerInfo("oldest", 1, "2026-01-01T00:00:00.000Z");
+    const middle = peerInfo("middle", 1, "2026-01-02T00:00:00.000Z");
+    const newest = peerInfo("newest", 1, "2026-01-04T00:00:00.000Z");
+    h.deps.peerInfo.set(oldest.id, oldest);
+    h.deps.peerInfo.set(middle.id, middle);
+    h.deps.peerInfo.set(newest.id, newest);
+
+    await h.lifecycle.sendCoordinatorHandover();
+
+    expect(h.transport.send).toHaveBeenCalledTimes(1);
+    expect(h.transport.send).toHaveBeenCalledWith(
+      { id: "oldest" },
+      {
+        method: "become_coordinator",
+        peerList: expect.arrayContaining([middle, newest]) as PeerInfo[],
+      },
+    );
+    const [, message] = h.transport.send.mock.calls[0] as [
+      unknown,
+      { peerList: PeerInfo[] },
+    ];
+    expect(message.peerList).toHaveLength(2);
+  });
+
+  it("picks the sole remaining peer as successor and sends an empty handoff list", async () => {
+    const h = makeHarness();
+    h.transport.isCoordinator = true;
+    h.deps.peerInfo.set(OWNER_ID, peerInfo(OWNER_ID));
+    const onlyPeer = peerInfo("only-peer");
+    h.deps.peerInfo.set(onlyPeer.id, onlyPeer);
+
+    await h.lifecycle.sendCoordinatorHandover();
+
+    expect(h.transport.send).toHaveBeenCalledWith(
+      { id: "only-peer" },
+      { method: "become_coordinator", peerList: [] },
+    );
   });
 });
 
