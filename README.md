@@ -153,6 +153,10 @@ npx agent-comms bridge cc-peer --pid=12345
 
 One bridge process relays for exactly one local Claude Code session, the same "one bridge process is one agent is one device" model every other bridge here follows. Inbound messages from that session are posted into this bridge's own project room; mesh deliveries addressed to this bridge's agent are relayed back to that same session via `cc-peer`'s own `send()`.
 
+### Default cc-peer front
+
+A Claude Code session with no agent-comms bridge of its own is still reachable from the mesh: whichever bridge on the machine currently holds the mesh coordinator role fronts every local session it discovers via `cc-peer`'s own roster, using the same `(harness, cwd)` identity slot that session's own `claude-code` bridge would use if it started. Identity belongs to the slot, not to whichever process is currently serving it — the session's own bridge holds the slot when it's live; the front holds it otherwise, and yields the moment a real bridge for that slot appears, so addressing, room membership, and queued deliveries all carry over unchanged across the transition. No configuration is needed: every bridge in this repo wires the front to its own coordinator-role transitions automatically, and a machine with no local Claude Code sessions (or no `cc-peer` sockets at all) runs it as a clean no-op.
+
 ## Adding a new harness
 
 A bridge is two things:
