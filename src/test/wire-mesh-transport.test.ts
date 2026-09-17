@@ -755,20 +755,7 @@ describe("WireMeshTransport send/sendRoomRequest to an unknown or broken peer", 
     }
   });
 
-  test("sendRoomRequest to a member with no live session resolves not_connected rather than throwing", async () => {
-    const identity = generateIdentity();
-    const transport = new WireMeshTransport(noopEvents(), identity);
-    try {
-      const outcome = await transport.sendRoomRequest(
-        "nobody-home",
-        { verb: "room.send", params: {} },
-        { kind: "agent-comms-mesh" },
-      );
-      expect(outcome).toEqual({ result: "error", code: "not_connected" });
-    } finally {
-      await transport.shutdown();
-    }
-  });
+  // sendRoomRequest's own gateway-trust gate (agent-comms#156) has its own dedicated coverage in wire-mesh-transport-gateway-trust.test.ts, split out the same reason wire-mesh-transport-hub.test.ts/wire-mesh-transport-shutdown-unref.test.ts already were.
 
   // A test proving send()'s own catch/onError path (a send failing against a session whose remote end just closed) was attempted the same way and hit the identical flakiness as the gossip-failure test above -- watchForDisconnect's own cleanup consistently won the race against a still-tracked-but-broken session. Left as a documented gap for the same reason.
 });
