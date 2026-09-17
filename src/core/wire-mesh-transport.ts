@@ -10,6 +10,7 @@
 
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
 import { connectWsUrl } from "./ws-dial.js";
+import { HubSession } from "./hub-session.js";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
@@ -194,6 +195,9 @@ export class WireMeshTransport implements MeshTransport {
   // -- The session dialled via connectToCoordinator, when this instance is not itself the coordinator --
   private coordinatorSession: AcceptedMeshSession | undefined;
 
+  // -- The hub relay mode (agent-comms#151), owning its own file under the max-lines cap: see hub-session.ts for the full connection model.
+  readonly hub: HubSession;
+
   // -- Every live session, keyed by the peer's authenticated device-id hex (== ConnectionHandle.id) -- covers coordinator-client, coordinator-accepted, and peer data sessions alike, since send()/broadcast() must reach whichever kind of session a peer happens to be reachable through. A single-slot-per-key map by construction: mesh formation genuinely establishes TWO independent sessions to the same peer (see the dataDials comment below), and the second one registered here simply overwrites the first as far as addressing goes -- fine for send()/broadcast() (either socket reaches the same peer), but NOT fine for shutdown, which must close every live session regardless of whether it's still reachable through this map. allSessions below exists specifically so shutdown never leaks the one this map's overwrite silently stopped tracking.
   private readonly peerSessions = new Map<string, AcceptedMeshSession>();
 
@@ -280,6 +284,16 @@ export class WireMeshTransport implements MeshTransport {
       privateKeyPem: identity.privateKey,
     });
     this.identityReady = toIdentityPort(identity);
+    this.hub = new HubSession({
+      identityReady: this.identityReady,
+      events: this.events,
+      isShuttingDown: this.isShuttingDown.bind(this),
+      advertisedAddresses: this.advertisedAddresses,
+      onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+      trackForShutdown: (session) => {
+        this.allSessions.add(session);
+      },
+    });
     this.roomRouter = createRoomRouter({
       events,
       ...(roomVerbHandlers !== undefined ? { handlers: roomVerbHandlers } : {}),
@@ -405,7 +419,9 @@ export class WireMeshTransport implements MeshTransport {
     const deviceIdHex = deviceIdToHex(peerDeviceId);
     const identity = await this.identityReady;
     const session = await acceptMeshSession(connection, identity, [DOMAIN], {
-      onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+      onFrame: async (conn, frame) => {
+        await this.handleDataFrame(conn, frame);
+      },
       addresses: this.advertisedAddresses,
     });
     if (this.isShuttingDown()) {
@@ -620,7 +636,9 @@ export class WireMeshTransport implements MeshTransport {
     );
     const identity = await this.identityReady;
     const session = await acceptMeshSession(connection, identity, [DOMAIN], {
-      onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+      onFrame: async (conn, frame) => {
+        await this.handleDataFrame(conn, frame);
+      },
       addresses: this.advertisedAddresses,
     });
     this.coordinatorSession = session;
@@ -719,7 +737,9 @@ export class WireMeshTransport implements MeshTransport {
     }
     const identity = await this.identityReady;
     const session = await acceptMeshSession(connection, identity, [DOMAIN], {
-      onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+      onFrame: async (conn, frame) => {
+        await this.handleDataFrame(conn, frame);
+      },
       addresses: this.advertisedAddresses,
     });
     if (this.isShuttingDown()) {
@@ -814,7 +834,9 @@ export class WireMeshTransport implements MeshTransport {
       : await this.wireTransport.connect(`${host}:${String(port)}`);
     const identity = await this.identityReady;
     const session = await acceptMeshSession(connection, identity, [DOMAIN], {
-      onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+      onFrame: async (conn, frame) => {
+        await this.handleDataFrame(conn, frame);
+      },
       addresses: this.advertisedAddresses,
     });
     const outcome = await session.sendManageRequest(
