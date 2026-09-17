@@ -126,4 +126,28 @@ export class PeerLifecycle {
   handlePeerDisconnected(handle: Readonly<ConnectionHandle>): void {
     this.deps.peerInfo.delete(handle.id);
   }
+
+  /** Graceful coordinator handover (agent-comms#170): called by MeshStore.shutdown() while the transport is still up. A no-op unless this side currently holds the coordinator role and at least one other peer remains connected -- neither condition is this class's own business to log or report on, since a solo coordinator shutting down or a non-coordinator peer shutting down are both entirely ordinary. When both hold, picks the longest-running remaining peer (the one with the earliest recorded PeerInfo.startedAt, matching the README's documented policy) as the successor and sends it become_coordinator carrying every other remaining peer -- exactly the peerList shape handleBecomeCoordinator already expects (it dials each entry itself; the successor doesn't need to be told about itself). The crash-race path (each surviving peer independently racing to rebind the coordinator port) is a separate mechanism and untouched by this method. */
+  async sendCoordinatorHandover(): Promise<void> {
+    const transport = this.deps.requireTransport();
+    if (!transport.isCoordinator) return;
+
+    const selfId = this.deps.getPeerId();
+    const remainingPeers = [...this.deps.peerInfo.values()].filter(
+      (peer) => peer.id !== selfId,
+    );
+    if (remainingPeers.length === 0) return;
+
+    const bySuccession = [...remainingPeers].sort(
+      (a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt),
+    );
+    const [successor, ...handoffList] = bySuccession;
+    // remainingPeers.length > 0 (checked above) guarantees bySuccession has at least one entry -- this narrows the type for TypeScript rather than handling a real runtime case.
+    if (successor === undefined) return;
+
+    await transport.send(
+      { id: successor.id },
+      { method: "become_coordinator", peerList: handoffList },
+    );
+  }
 }
