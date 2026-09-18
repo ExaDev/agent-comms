@@ -97,7 +97,7 @@ test.describe("Deferred mesh connection", () => {
     );
     expect(flagBefore).toBeNull();
 
-    // Click the connect button — this sets the localStorage flag and calls meshClient.connect() + ws.connect(). However, our stubs prevent actual connections, so we verify the flag was set (which is the primary side effect of clicking).
+    // Click the connect button — this sets the localStorage flag and calls meshClient.connect(). However, our stubs prevent actual connections, so we verify the flag was set (which is the primary side effect of clicking).
     await btn.click();
 
     // The localStorage flag should now be set
