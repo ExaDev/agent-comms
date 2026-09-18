@@ -40,6 +40,16 @@ export function mergeKnownDevices(
   }
 }
 
+/** Every device this side has ever heard gossip from, mesh-wide -- not just its own directly-connected peers -- with each one's own latest full advert (addresses, snapshot-seconds, and every open-extension field such as presence/status). The trivial array-conversion half of WireMeshTransport's own listKnownDevices, split out purely to keep that file under the repo's max-lines cap, the same reason mergeKnownDevices above already lives here rather than there. */
+export function listKnownDevicesEntries(
+  knownDevices: ReadonlyMap<string, Readonly<PeerAdvert>>,
+): readonly { deviceId: string; advert: Readonly<PeerAdvert> }[] {
+  return Array.from(knownDevices, ([deviceId, advert]) => ({
+    deviceId,
+    advert,
+  }));
+}
+
 /** Reads a presence extension from one specific device's own gossiped self-advert, if this event's directory carries a fresh one for exactly that device-id -- never for any other device-id a multi-hop directory might mention, since only the session's own authenticated peer's advert is that session's business to report. Returns undefined for a missing presence/status key, or a value that isn't a recognised AgentStatus -- an advert simply not participating in this convention, not an error (the same verifier obligation peer-advert's own open extension tail is documented under). */
 export function findPresenceAdvert(
   deviceIdHex: string,
