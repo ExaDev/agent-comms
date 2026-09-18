@@ -329,7 +329,10 @@ test("loadGatewayTrust does not require an identity to have been created first, 
   expect(() => {
     saveGatewayTrust(slot, ["aabbcc"], []);
   }).not.toThrow();
-  expect(loadGatewayTrust(slot)).toEqual({ devices: ["aabbcc"], principals: [] });
+  expect(loadGatewayTrust(slot)).toEqual({
+    devices: ["aabbcc"],
+    principals: [],
+  });
 });
 
 test("saveGatewayTrust persists the trusted device and principal sets, loadGatewayTrust reloads the same lists", () => {
