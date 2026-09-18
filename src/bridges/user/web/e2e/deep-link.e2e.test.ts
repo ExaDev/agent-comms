@@ -29,8 +29,8 @@ test.describe("Deep linking", () => {
     });
     const result = await res.json();
     expect(result.isError).toBeFalsy();
-    // Result content: 'Created public room "name" (id).'
-    const idMatch = /\(([a-zA-Z0-9_-]+)\)\.$/.exec(result.content as string);
+    // Result content: 'Created public room "name" (id).' -- id is the room's real owner-qualified path (`<owner-hex>/<local-name>`), so the extraction pattern must allow the "/" separator, not just the bare local-name charset.
+    const idMatch = /\(([a-zA-Z0-9_/-]+)\)\.$/.exec(result.content as string);
     const roomId = idMatch?.[1];
     expect(roomId).toBeTruthy();
 
@@ -92,7 +92,8 @@ test.describe("Deep linking", () => {
       }),
     });
     const createResult = await createRes.json();
-    const idMatch = /\(([a-zA-Z0-9_-]+)\)\.$/.exec(
+    // Same owner-qualified path shape as the other deep-link test above -- the extraction pattern must allow the "/" separator.
+    const idMatch = /\(([a-zA-Z0-9_/-]+)\)\.$/.exec(
       createResult.content as string,
     );
     const roomId = idMatch?.[1];
@@ -107,8 +108,8 @@ test.describe("Deep linking", () => {
     await roomItem.click();
     await expect(page.locator("header")).toContainText(roomName);
 
-    // URL should now contain ?room=<roomId>
-    const url = page.url();
-    expect(url).toContain(`room=${roomId}`);
+    // URL should now contain ?room=<roomId> -- roomId's own "/" separator is percent-encoded by the browser's URL/URLSearchParams API, so compare the decoded query param rather than a raw substring.
+    const url = new URL(page.url());
+    expect(url.searchParams.get("room")).toBe(roomId);
   });
 });
