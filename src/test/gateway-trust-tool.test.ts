@@ -1,5 +1,5 @@
 /**
- * CommsTool's gateway-trust actions (agent-comms#156) -- add/remove/list a trusted remote device-id, mirroring visibility.integration.test.ts's own "CommsTool visibility actions" pattern for the sibling mesh-only, MeshOnlyFeatures-gated config surface.
+ * CommsTool's gateway-trust actions (agent-comms#156) -- add/remove/list a trusted remote device-id, mirroring visibility.integration.test.ts's own "CommsTool visibility actions" pattern for the sibling mesh-only, MeshOnlyFeatures-gated config surface. Also covers the `principal` flag (agent-comms#193) that routes gateway_trust/gateway_untrust to GatewayTrust's principal-keyed allowlist (agent-comms#187) instead of the bare-device one, and gateway_list_trusted's own reporting of both sets together.
  */
 import { test, describe, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
@@ -9,6 +9,7 @@ import { wireTestTransport } from "./test-transport.js";
 
 const TEST_PORT = 0;
 const DEVICE_HEX = "aabbccdd";
+const PRINCIPAL_HEX = "eeff0011";
 
 describe("CommsTool gateway trust actions", () => {
   test("gateway_trust adds a device to the allowlist", async () => {
@@ -63,6 +64,61 @@ describe("CommsTool gateway trust actions", () => {
     await store.shutdown();
   });
 
+  test("gateway_trust with principal: true adds a principal, not a bare device", async () => {
+    const store = new MeshStore(TEST_PORT);
+    await wireTestTransport(store);
+    await store.init();
+    const agent = await store.registerAgent({
+      name: "gateway-trust-principal-test",
+      harness: "test",
+      cwd: "/test",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
+    const tool = new CommsTool(store);
+
+    const result = await tool.handle(
+      { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
+      { action: "gateway_trust", device: PRINCIPAL_HEX, principal: true },
+    );
+
+    expect(result.isError, result.content).toBe(false);
+    expect(result.content).toContain(PRINCIPAL_HEX);
+    expect(store.listTrustedGatewayPrincipals()).toEqual([PRINCIPAL_HEX]);
+    expect(store.listTrustedGateways()).toEqual([]);
+
+    await store.shutdown();
+  });
+
+  test("gateway_untrust with principal: true removes a principal, not a bare device", async () => {
+    const store = new MeshStore(TEST_PORT);
+    await wireTestTransport(store);
+    await store.init();
+    const agent = await store.registerAgent({
+      name: "gateway-untrust-principal-test",
+      harness: "test",
+      cwd: "/test",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
+    const tool = new CommsTool(store);
+    store.addTrustedGatewayPrincipal(PRINCIPAL_HEX);
+    store.addTrustedGateway(DEVICE_HEX);
+
+    const result = await tool.handle(
+      { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
+      { action: "gateway_untrust", device: PRINCIPAL_HEX, principal: true },
+    );
+
+    expect(result.isError, result.content).toBe(false);
+    expect(store.listTrustedGatewayPrincipals()).toEqual([]);
+    expect(store.listTrustedGateways()).toEqual([DEVICE_HEX]);
+
+    await store.shutdown();
+  });
+
   test("gateway_list_trusted lists every currently trusted device", async () => {
     const store = new MeshStore(TEST_PORT);
     await wireTestTransport(store);
@@ -85,6 +141,34 @@ describe("CommsTool gateway trust actions", () => {
 
     expect(result.isError, result.content).toBe(false);
     expect(result.content).toContain(DEVICE_HEX);
+
+    await store.shutdown();
+  });
+
+  test("gateway_list_trusted reports both trusted devices and trusted principals", async () => {
+    const store = new MeshStore(TEST_PORT);
+    await wireTestTransport(store);
+    await store.init();
+    const agent = await store.registerAgent({
+      name: "gateway-list-principal-test",
+      harness: "test",
+      cwd: "/test",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
+    const tool = new CommsTool(store);
+    store.addTrustedGateway(DEVICE_HEX);
+    store.addTrustedGatewayPrincipal(PRINCIPAL_HEX);
+
+    const result = await tool.handle(
+      { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
+      { action: "gateway_list_trusted" },
+    );
+
+    expect(result.isError, result.content).toBe(false);
+    expect(result.content).toContain(DEVICE_HEX);
+    expect(result.content).toContain(PRINCIPAL_HEX);
 
     await store.shutdown();
   });
@@ -149,5 +233,42 @@ describe("buildAction gateway trust parsing", () => {
 
   test("buildAction throws for gateway_untrust without device", () => {
     expect(() => buildAction({ action: "gateway_untrust" })).toThrow(/device/);
+  });
+
+  test("buildAction parses gateway_trust with principal: true", () => {
+    const action = buildAction({
+      action: "gateway_trust",
+      device: PRINCIPAL_HEX,
+      principal: true,
+    });
+    expect(action.action).toBe("gateway_trust");
+    if (action.action === "gateway_trust") {
+      expect(action.device).toBe(PRINCIPAL_HEX);
+      expect(action.principal).toBe(true);
+    }
+  });
+
+  test("buildAction parses gateway_untrust with principal: true", () => {
+    const action = buildAction({
+      action: "gateway_untrust",
+      device: PRINCIPAL_HEX,
+      principal: true,
+    });
+    expect(action.action).toBe("gateway_untrust");
+    if (action.action === "gateway_untrust") {
+      expect(action.device).toBe(PRINCIPAL_HEX);
+      expect(action.principal).toBe(true);
+    }
+  });
+
+  test("buildAction omits principal for gateway_trust when not given", () => {
+    const action = buildAction({
+      action: "gateway_trust",
+      device: DEVICE_HEX,
+    });
+    expect(action.action).toBe("gateway_trust");
+    if (action.action === "gateway_trust") {
+      expect(action.principal).toBeUndefined();
+    }
   });
 });
