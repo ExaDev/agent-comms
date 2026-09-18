@@ -375,6 +375,12 @@ async function upstream(
   return dispatchAction(orpcClient, input);
 }
 
+/** The three structured one-shot reads (agent-comms#206) have no ActionResult-shaped "not connected" sentinel to return -- unlike upstream() above, a genuine failure here throws, the same way a real network error from the upstream call would. */
+function requireOrpcClient(): MeshOrpcClient {
+  if (!orpcClient) throw new Error("Not connected to mesh yet");
+  return orpcClient;
+}
+
 const tabImpl = implement(tabContract).$context<TabRouterContext>();
 
 // Declared ahead of tabRouter (its .current assigned after it, below) so disconnect's own handler -- itself a value inside tabRouter -- can close over this ref; the closure only reads it once a real call arrives, well after the assignment below has run.
@@ -438,6 +444,16 @@ const tabRouter = {
   ),
   pushUnsubscribe: tabImpl.pushUnsubscribe.handler(async ({ input }) =>
     upstream({ action: "push_unsubscribe", agentId: input.agentId }),
+  ),
+
+  getRoomMessages: tabImpl.getRoomMessages.handler(async ({ input }) =>
+    requireOrpcClient().getRoomMessages(input),
+  ),
+  getMeshGraph: tabImpl.getMeshGraph.handler(async () =>
+    requireOrpcClient().getMeshGraph({}),
+  ),
+  getMeshTrace: tabImpl.getMeshTrace.handler(async ({ input }) =>
+    requireOrpcClient().getMeshTrace(input),
   ),
 
   subscribeEvents: tabImpl.subscribeEvents.handler(async function* ({
