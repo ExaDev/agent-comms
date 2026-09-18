@@ -1,3 +1,9 @@
+## [3.31.0](https://github.com/ExaDev/agent-comms/compare/v3.30.0...v3.31.0) (2026-09-18)
+
+### Features
+
+* **bridge:** proxy the structured one-shot reads through the worker's tab-facing leg ([a33beb6](https://github.com/ExaDev/agent-comms/commit/a33beb61cfdb655ebded055fc1298a7b776c5ba6))
+
 ## [3.30.0](https://github.com/ExaDev/agent-comms/compare/v3.29.3...v3.30.0) (2026-09-18)
 
 ### Features
