@@ -1,8 +1,7 @@
 /**
  * E2e tests — URL deep linking (?room=, ?dm= query parameters).
  *
- * Verifies that navigating with query parameters auto-selects the
- * correct room or DM target.
+ * Verifies that navigating with query parameters auto-selects the correct room or DM target.
  */
 
 import { expect } from "@playwright/test";
@@ -38,9 +37,8 @@ test.describe("Deep linking", () => {
     // Navigate with the room deep link (uses room ID, not name)
     await page.goto(`http://127.0.0.1:${port}?room=${roomId}`);
 
-    // The deep link should join the room — wait for the header to update
-    // (joining clears messages so we can't rely on "Connected to mesh")
-    await expect(page.locator("#header")).toContainText(roomName, {
+    // The deep link should join the room — wait for the header to update (joining clears messages so we can't rely on "Connected to mesh")
+    await expect(page.locator("header")).toContainText(roomName, {
       timeout: 10000,
     });
   });
@@ -60,12 +58,8 @@ test.describe("Deep linking", () => {
     // Navigate with a DM deep link
     await page.goto(`http://127.0.0.1:${port}?dm=agent-123`);
 
-    // The deep link sets dmTarget — wait for the header to update
-    // (onSelectAgent clears messages so we can't rely on "Connected to mesh")
-    await expect(page.locator("#header")).toContainText("DM with agent-123", {
-      timeout: 10000,
-    });
-    await expect(page.locator("#header")).toContainText("DM with agent-123", {
+    // The deep link sets dmTarget — wait for the header to update (onSelectAgent clears messages so we can't rely on "Connected to mesh")
+    await expect(page.locator("header")).toContainText("DM with agent-123", {
       timeout: 10000,
     });
   });
@@ -76,12 +70,12 @@ test.describe("Deep linking", () => {
   }) => {
     await page.goto(`http://127.0.0.1:${port}?room=nonexistent-room`);
 
-    await expect(page.locator("#messages")).toContainText("Connected to mesh", {
+    await expect(page.getByText("Connected to mesh")).toBeVisible({
       timeout: 10000,
     });
 
     // The deep link can't resolve, so header stays at default
-    await expect(page.locator("#header")).toContainText("Select a room");
+    await expect(page.locator("header")).toContainText("Select a room");
   });
 
   test("URL updates when navigating to a room", async ({ page, port }) => {
@@ -105,15 +99,13 @@ test.describe("Deep linking", () => {
     expect(roomId).toBeTruthy();
 
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
     // Click the room in sidebar
-    const roomItem = page.locator("#room-list .room-item", {
-      hasText: roomName,
-    });
+    const roomItem = page.getByText(roomName);
     await roomItem.waitFor({ state: "visible", timeout: 10000 });
     await roomItem.click();
-    await expect(page.locator("#header")).toContainText(roomName);
+    await expect(page.locator("header")).toContainText(roomName);
 
     // URL should now contain ?room=<roomId>
     const url = page.url();

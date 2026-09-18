@@ -1,14 +1,9 @@
 /**
  * E2e tests — deferred mesh connection flow and connect prompt.
  *
- * Tests the boot logic that shows a "Connect to local mesh" prompt on
- * first visit (no localStorage flag) and auto-connects on return visits.
+ * Tests the boot logic that shows a "Connect to local mesh" prompt on first visit (no localStorage flag) and auto-connects on return visits.
  *
- * Because the E2E server runs on localhost (which normally triggers
- * auto-connect), the "first visit" and "clearing localStorage" tests
- * stub out WebSocket and SharedWorker via addInitScript to prevent
- * the connection from completing. This keeps `connected=false` so the
- * connect prompt stays visible for assertion.
+ * Because the E2E server runs on localhost (which normally triggers auto-connect), the "first visit" and "clearing localStorage" tests stub out WebSocket and SharedWorker via addInitScript to prevent the connection from completing. This keeps `connected=false` so the connect prompt stays visible for assertion.
  */
 
 import type { Page } from "@playwright/test";
@@ -16,9 +11,7 @@ import { expect } from "@playwright/test";
 import { test } from "./fixtures.js";
 
 /**
- * Injects stub WebSocket and SharedWorker constructors that never connect.
- * This prevents the app from reaching `connected=true`, keeping the
- * connect prompt visible for testing.
+ * Injects stub WebSocket and SharedWorker constructors that never connect. This prevents the app from reaching `connected=true`, keeping the connect prompt visible for testing.
  */
 async function blockNetworkConnections(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -72,36 +65,30 @@ test.describe("Deferred mesh connection", () => {
     page,
     port,
   }) => {
-    // Block network so the mesh never connects.
-    // This keeps connected=false and messages empty,
-    // which is the condition that renders the connect prompt.
+    // Block network so the mesh never connects. This keeps connected=false and messages empty, which is the condition that renders the connect prompt.
     await blockNetworkConnections(page);
 
     await page.goto(`http://127.0.0.1:${port}`);
 
-    // The connect prompt should be visible
-    const prompt = page.locator(".connect-prompt");
-    await expect(prompt).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.getByText("Connect to a local mesh to discover agents and rooms."),
+    ).toBeVisible({ timeout: 10000 });
 
-    // The connect button should be present with correct text
-    const btn = page.locator(".connect-btn");
+    const btn = page.getByRole("button", { name: "Connect to local mesh" });
     await expect(btn).toBeVisible();
-    await expect(btn).toHaveText("Connect to local mesh");
   });
 
   test("clicking connect sets localStorage and establishes mesh connection", async ({
     page,
     port,
   }) => {
-    // Block network to keep the connect prompt visible,
-    // then click the button. After clicking, we unblock
-    // the network so the WS can connect.
+    // Block network to keep the connect prompt visible, then click the button. After clicking, we unblock the network so the WS can connect.
     await blockNetworkConnections(page);
 
     await page.goto(`http://127.0.0.1:${port}`);
 
     // Wait for the connect prompt
-    const btn = page.locator(".connect-btn");
+    const btn = page.getByRole("button", { name: "Connect to local mesh" });
     await expect(btn).toBeVisible({ timeout: 10000 });
 
     // Before clicking, the flag should not be set
@@ -110,10 +97,7 @@ test.describe("Deferred mesh connection", () => {
     );
     expect(flagBefore).toBeNull();
 
-    // Click the connect button — this sets the localStorage flag
-    // and calls meshClient.connect() + ws.connect().
-    // However, our stubs prevent actual connections, so we verify
-    // the flag was set (which is the primary side effect of clicking).
+    // Click the connect button — this sets the localStorage flag and calls meshClient.connect() + ws.connect(). However, our stubs prevent actual connections, so we verify the flag was set (which is the primary side effect of clicking).
     await btn.click();
 
     // The localStorage flag should now be set
@@ -127,17 +111,18 @@ test.describe("Deferred mesh connection", () => {
     page,
     port,
   }) => {
-    // On localhost, the app auto-connects without prompting.
-    // Verify the connection is established.
+    // On localhost, the app auto-connects without prompting. Verify the connection is established.
     await page.goto(`http://127.0.0.1:${port}`);
 
     // Wait for the auto-connected state
-    await expect(page.locator("#messages")).toContainText("Connected to mesh", {
+    await expect(page.getByText("Connected to mesh")).toBeVisible({
       timeout: 10000,
     });
 
     // The connect prompt should NOT be shown (already connected)
-    await expect(page.locator(".connect-prompt")).not.toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Connect to local mesh" }),
+    ).not.toBeVisible();
   });
 
   test("returning visit auto-connects without prompting", async ({
@@ -154,18 +139,18 @@ test.describe("Deferred mesh connection", () => {
     await page.reload();
 
     // Should see "Connected to mesh" system message (auto-connected)
-    await expect(page.locator("#messages")).toContainText("Connected to mesh", {
+    await expect(page.getByText("Connected to mesh")).toBeVisible({
       timeout: 10000,
     });
 
     // The connect prompt should NOT appear
-    await expect(page.locator(".connect-prompt")).not.toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Connect to local mesh" }),
+    ).not.toBeVisible();
   });
 
   test("localStorage flag persists across reloads", async ({ page, port }) => {
-    // Manually set the flag, then verify it persists through a reload.
-    // On localhost the app auto-connects regardless, but the flag
-    // should still be in localStorage after reload.
+    // Manually set the flag, then verify it persists through a reload. On localhost the app auto-connects regardless, but the flag should still be in localStorage after reload.
     await page.goto(`http://127.0.0.1:${port}`);
     await page.evaluate(() => {
       localStorage.setItem("agent-comms-connected", "true");
@@ -173,7 +158,7 @@ test.describe("Deferred mesh connection", () => {
 
     // Reload — flag should persist
     await page.reload();
-    await expect(page.locator("#messages")).toContainText("Connected to mesh", {
+    await expect(page.getByText("Connected to mesh")).toBeVisible({
       timeout: 10000,
     });
 
@@ -184,7 +169,9 @@ test.describe("Deferred mesh connection", () => {
     expect(flag).toBe("true");
 
     // No connect prompt on subsequent loads
-    await expect(page.locator(".connect-prompt")).not.toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Connect to local mesh" }),
+    ).not.toBeVisible();
   });
 
   test("clearing localStorage resets to connect prompt", async ({
@@ -193,7 +180,7 @@ test.describe("Deferred mesh connection", () => {
   }) => {
     // First, establish a connected state
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh", {
+    await expect(page.getByText("Connected to mesh")).toBeVisible({
       timeout: 10000,
     });
 
@@ -202,19 +189,17 @@ test.describe("Deferred mesh connection", () => {
       localStorage.removeItem("agent-comms-connected");
     });
 
-    // Block network so auto-connect on reload cannot complete,
-    // keeping the prompt visible
+    // Block network so auto-connect on reload cannot complete, keeping the prompt visible
     await blockNetworkConnections(page);
 
-    // Reload — without the flag, and with WS blocked,
-    // the prompt should appear
+    // Reload — without the flag, and with WS blocked, the prompt should appear
     await page.reload();
 
-    const prompt = page.locator(".connect-prompt");
-    await expect(prompt).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.getByText("Connect to a local mesh to discover agents and rooms."),
+    ).toBeVisible({ timeout: 10000 });
 
-    const btn = page.locator(".connect-btn");
+    const btn = page.getByRole("button", { name: "Connect to local mesh" });
     await expect(btn).toBeVisible();
-    await expect(btn).toHaveText("Connect to local mesh");
   });
 });

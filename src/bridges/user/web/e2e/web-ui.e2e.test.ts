@@ -1,8 +1,7 @@
 /**
  * E2e tests — full browser automation of the agent-comms web UI.
  *
- * Tests the complete flow: page load, WebSocket connect,
- * room creation, message sending, delivery events.
+ * Tests the complete flow: page load, WebSocket connect, room creation, message sending, delivery events.
  *
  * Each test uses a unique room name to avoid collisions.
  */
@@ -25,16 +24,18 @@ test.describe("Web UI", () => {
     await expect(page).toHaveTitle("Agent Comms");
 
     // Sidebar header visible
-    await expect(page.locator("#sidebar h2")).toContainText("Agent Comms");
+    await expect(
+      page.getByRole("navigation").getByText("Agent Comms"),
+    ).toBeVisible();
 
     // Input bar present
-    await expect(page.locator("#input")).toBeVisible();
-    await expect(page.locator("#send-btn")).toBeVisible();
+    await expect(page.getByLabel("Message")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
   });
 
   test("header shows default text", async ({ page, port }) => {
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#header")).toHaveText("Select a room");
+    await expect(page.locator("header")).toHaveText("Select a room");
   });
 
   test("REST API lists agents", async ({ port }) => {
@@ -71,19 +72,19 @@ test.describe("Web UI", () => {
     port,
   }) => {
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
   });
 
   test("can create a room via /create command", async ({ page, port }) => {
     const roomName = uniqueName("e2e-room");
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    await page.locator("#input").fill(`/create ${roomName}`);
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill(`/create ${roomName}`);
+    await page.getByRole("button", { name: "Send" }).click();
 
     // Should see the room in sidebar
-    await expect(page.locator("#room-list")).toContainText(roomName, {
+    await expect(page.getByRole("navigation").getByText(roomName)).toBeVisible({
       timeout: 10000,
     });
   });
@@ -103,49 +104,45 @@ test.describe("Web UI", () => {
     });
 
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
     // Click the room in sidebar to join
-    const roomItem = page.locator("#room-list .room-item", {
-      hasText: roomName,
-    });
+    const roomItem = page.getByText(roomName);
     await roomItem.waitFor({ state: "visible", timeout: 10000 });
     await roomItem.click();
 
     // Wait for join to complete
-    await expect(page.locator("#header")).toContainText(roomName);
+    await expect(page.locator("header")).toContainText(roomName);
 
     // Type and send a message
-    await page.locator("#input").fill("Hello from e2e!");
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill("Hello from e2e!");
+    await page.getByRole("button", { name: "Send" }).click();
 
     // The server responds with a "Sent to" result
-    await expect(page.locator("#messages")).toContainText("Sent to", {
+    await expect(page.getByText("Sent to", { exact: false })).toBeVisible({
       timeout: 10000,
     });
   });
 
   test("/help shows command list", async ({ page, port }) => {
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    await page.locator("#input").fill("/help");
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill("/help");
+    await page.getByRole("button", { name: "Send" }).click();
 
-    await expect(page.locator("#messages")).toContainText("/join");
-    await expect(page.locator("#messages")).toContainText("/dm");
+    await expect(page.getByText("/join", { exact: false })).toBeVisible();
+    await expect(page.getByText("/dm", { exact: false })).toBeVisible();
   });
 
   test("unknown command shows error", async ({ page, port }) => {
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    await page.locator("#input").fill("/foobar");
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill("/foobar");
+    await page.getByRole("button", { name: "Send" }).click();
 
-    await expect(page.locator("#messages")).toContainText(
-      "Unknown command: /foobar",
-    );
+    await expect(page.getByText("Unknown command: /foobar")).toBeVisible();
   });
 
   test("can join a room via /join command", async ({ page, port }) => {
@@ -163,15 +160,15 @@ test.describe("Web UI", () => {
     });
 
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    await page.locator("#input").fill(`/join ${roomName}`);
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill(`/join ${roomName}`);
+    await page.getByRole("button", { name: "Send" }).click();
 
-    await expect(page.locator("#header")).toContainText(roomName, {
+    await expect(page.locator("header")).toContainText(roomName, {
       timeout: 10000,
     });
-    await expect(page.locator("#messages")).toContainText("Joined");
+    await expect(page.getByText("Joined", { exact: false })).toBeVisible();
   });
 
   test("can leave a room via /leave command", async ({ page, port }) => {
@@ -189,26 +186,21 @@ test.describe("Web UI", () => {
     });
 
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
     // Join via sidebar click first
-    const roomItem = page.locator("#room-list .room-item", {
-      hasText: roomName,
-    });
+    const roomItem = page.getByText(roomName);
     await roomItem.waitFor({ state: "visible", timeout: 10000 });
     await roomItem.click();
-    await expect(page.locator("#header")).toContainText(roomName);
+    await expect(page.locator("header")).toContainText(roomName);
 
     // Leave
-    await page.locator("#input").fill("/leave");
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill("/leave");
+    await page.getByRole("button", { name: "Send" }).click();
 
-    await expect(page.locator("#messages")).toContainText(
-      `Left room "${roomName}"`,
-      {
-        timeout: 10000,
-      },
-    );
+    await expect(page.getByText(`Left room "${roomName}"`)).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("GET /api/rooms/:id/messages returns messages", async ({ port }) => {
@@ -255,17 +247,15 @@ test.describe("Web UI", () => {
     const roomName = uniqueName("count-room");
 
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    await page.locator("#input").fill(`/create ${roomName}`);
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill(`/create ${roomName}`);
+    await page.getByRole("button", { name: "Send" }).click();
 
     // Room appears in sidebar with (1) member count
-    const roomItem = page.locator("#room-list .room-item", {
-      hasText: roomName,
+    await expect(page.getByText(`${roomName} (1)`)).toBeVisible({
+      timeout: 10000,
     });
-    await expect(roomItem).toBeVisible({ timeout: 10000 });
-    await expect(roomItem).toContainText("(1)");
   });
 
   test("sending a message returns confirmation via WebSocket", async ({
