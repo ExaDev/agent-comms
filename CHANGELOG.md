@@ -1,3 +1,9 @@
+## [3.32.0](https://github.com/ExaDev/agent-comms/compare/v3.31.0...v3.32.0) (2026-09-18)
+
+### Features
+
+* **bridge:** cut the web UI's one-shot reads over to TanStack Query ([46f4fa6](https://github.com/ExaDev/agent-comms/commit/46f4fa6035eb5464b61016cbfcb0a3cfcb106260))
+
 ## [3.31.0](https://github.com/ExaDev/agent-comms/compare/v3.30.0...v3.31.0) (2026-09-18)
 
 ### Features
