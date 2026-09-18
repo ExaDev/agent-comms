@@ -734,8 +734,13 @@ export class RoomLifecycle {
 
   /**
    * Admits bearerId into this user's own DM-communication scope (agent-comms#162): mints a fresh dm:send grant, self-signed by this store's own user principal (userIdentity, distinct from the per-bridge-slot device identity every other room:member grant above is minted against), with no parent -- a root-level admission, exactly like mintOwnerRootGrant's own room-owner self-grant. Records the token-id the same way admitRoomJoin/inviteToRoom record theirs (saveIssuedDmGrant), so revokeAgentDmAccess can later name which one to revoke. Returns the minted token for the caller to get to bearerId out of band (there is no wire-level push here, deliberately: this issue adds the receiver-side check and the admission primitive it checks against, not a new delivery mechanism for the grant itself).
+   *
+   * delegationsRemaining defaults to 0 -- the original, non-delegable behaviour, unchanged for a bearer that is just a bare device with no principal of its own. Passing a positive value admits bearerId as a user PRINCIPAL rather than a single device (agent-comms#187): the principal itself then holds enough delegation depth to mint further dm:send tokens (bearer = one of its own devices, parent = this grant) via dm-send-delegation.ts's delegateDmSendToDevice, the dm:send counterpart to how #161's device-membership tokens already let a principal admit its own devices. verifyDmSendToken needs no change to accept the result: its chain-walk already resolves rootIssuer through arbitrarily many hops back to this call's own userIdentity, regardless of how many of those hops this grant itself permits.
    */
-  async admitAgentForDm(bearerId: string): Promise<CapabilityToken> {
+  async admitAgentForDm(
+    bearerId: string,
+    delegationsRemaining = 0,
+  ): Promise<CapabilityToken> {
     const { userIdentity, userIdentityOptions, clock } =
       this.deps.requireIdentity();
     const tokenId = randomId();
@@ -747,8 +752,7 @@ export class RoomLifecycle {
       capability: DM_SEND_CAPABILITY,
       scope: { kind: "user", path: deviceIdToHex(userIdentity.deviceId) },
       expires: clock.now() + DM_SEND_GRANT_LIFETIME_MS,
-      // dm:send is a root-level, self-signed admission (issuer = userIdentity, no parent) that this API never exposes a caller-chosen delegation depth for -- unlike room:member/group:member, there is no per-agent-override mechanism here to route through resolveDelegationsRemaining, so this stays the direct literal every non-delegable root grant already used before delegation-policy.ts existed.
-      delegationsRemaining: 0,
+      delegationsRemaining,
     });
     if (!verdict.ok) {
       throw new CommsError(
