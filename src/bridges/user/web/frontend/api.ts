@@ -11,6 +11,8 @@ import type {
   Action,
   ActionResult,
   AgentsResponse,
+  MeshGraph,
+  MeshTraceResult,
   MessagesResponse,
   RoomsResponse,
   WsFrame,
@@ -47,6 +49,20 @@ function isWsFrame(value: unknown): value is WsFrame {
   return isObject(value) && typeof value.type === "string";
 }
 
+function isMeshGraph(value: unknown): value is MeshGraph {
+  return (
+    isObject(value) && Array.isArray(value.nodes) && Array.isArray(value.edges)
+  );
+}
+
+function isMeshTraceResult(value: unknown): value is MeshTraceResult {
+  if (!isObject(value)) return false;
+  if (typeof value.rttMs !== "number") return false;
+  if (!isObject(value.local)) return false;
+  if (!isObject(value.outcome)) return false;
+  return typeof value.outcome.result === "string";
+}
+
 // ---------------------------------------------------------------------------
 // REST client
 // ---------------------------------------------------------------------------
@@ -76,6 +92,38 @@ export async function fetchRoomMessages(
   const res = await fetch(url);
   const body: unknown = await res.json();
   if (!isMessagesResponse(body)) throw new Error("Invalid messages response");
+  return body;
+}
+
+/** Reads server.ts's mesh endpoints' own jsonError response body (an "error" string field), falling back to the response's own status text when the body isn't the expected shape (e.g. a network-level failure with no JSON body at all). */
+async function readMeshErrorMessage(res: Response): Promise<string> {
+  try {
+    const body: unknown = await res.json();
+    if (isObject(body) && typeof body.error === "string") return body.error;
+  } catch {
+    // fall through to statusText below
+  }
+  return res.statusText || `HTTP ${String(res.status)}`;
+}
+
+export async function fetchMeshGraph(): Promise<MeshGraph> {
+  const res = await fetch("/api/mesh/graph");
+  if (!res.ok) throw new Error(await readMeshErrorMessage(res));
+  const body: unknown = await res.json();
+  if (!isMeshGraph(body)) throw new Error("Invalid mesh graph response");
+  return body;
+}
+
+export async function fetchMeshTrace(
+  target: string,
+  timeoutMs?: number,
+): Promise<MeshTraceResult> {
+  const params = new URLSearchParams({ target });
+  if (timeoutMs !== undefined) params.set("timeoutMs", String(timeoutMs));
+  const res = await fetch(`/api/mesh/trace?${params.toString()}`);
+  if (!res.ok) throw new Error(await readMeshErrorMessage(res));
+  const body: unknown = await res.json();
+  if (!isMeshTraceResult(body)) throw new Error("Invalid mesh trace response");
   return body;
 }
 
