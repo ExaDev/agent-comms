@@ -27,6 +27,11 @@ import {
 import { meshContract } from "./contract.js";
 import type { SerialisedState } from "./contract.js";
 import type { MeshEventPublisher } from "./event-publisher.js";
+import {
+  getMeshGraphRead,
+  getMeshTraceRead,
+  getRoomMessagesRead,
+} from "./reads.js";
 
 export interface MeshRouterContext {
   controller: ChatController;
@@ -110,6 +115,18 @@ export const meshRouter = {
 
   pushUnsubscribe: impl.pushUnsubscribe.handler(async ({ context, input }) =>
     pushUnsubscribeAction(context.controller, context.pushManager, input),
+  ),
+
+  getRoomMessages: impl.getRoomMessages.handler(async ({ context, input }) =>
+    getRoomMessagesRead(context.controller, input),
+  ),
+
+  getMeshGraph: impl.getMeshGraph.handler(({ context }) =>
+    getMeshGraphRead(context.controller),
+  ),
+
+  getMeshTrace: impl.getMeshTrace.handler(async ({ context, input }) =>
+    getMeshTraceRead(context.controller, input),
   ),
 
   subscribeEvents: impl.subscribeEvents.handler(async function* ({
