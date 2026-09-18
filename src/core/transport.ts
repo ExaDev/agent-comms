@@ -274,4 +274,53 @@ export interface MeshTransport {
    * Asks deviceId for its own, currently-running wire-mesh-core version, live, right now rather than whatever it last gossiped (agent-comms#198's own cache-bust query_version action). Optional, same caveat as listKnownDevices/connectHub: WireMeshTransport is the only implementation that offers it today, riding wire-mesh-core's own version.get manage-command (wire-mesh#179).
    */
   queryVersion?: (deviceId: string) => Promise<ManageOutcome>;
+
+  /**
+   * Assembles this side's own best-effort view of the mesh's connection graph (agent-comms#199) out of every device's own self-reported `topology/peers` gossip extension (wire-mesh#180) -- the cheap, possibly-stale counterpart to meshTrace's own live read. Device-ids throughout are hex strings (matching listKnownDevices' own precedent), never raw wire-mesh-core DeviceId bytes. Same optionality caveat as listKnownDevices/connectHub.
+   */
+  meshGraph?: () => MeshGraph;
+
+  /**
+   * Sends the wire-level path.trace manage-command (wire-mesh#181) to a specific device-id, direct or via the hub, and measures the real end-to-end round trip -- the live, cache-bust counterpart to meshGraph's gossiped snapshot. Resolves an error-shaped MeshTraceResult.outcome (never rejects) when targetDeviceHex is unreachable through any known path, mirroring sendRoomRequest's own not_connected convention. Same optionality caveat as listKnownDevices/connectHub.
+   */
+  meshTrace?: (
+    targetDeviceHex: string,
+    timeoutMs?: number,
+  ) => Promise<MeshTraceResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Mesh topology graph and path trace (agent-comms#199)
+// ---------------------------------------------------------------------------
+
+export interface MeshGraphEdge {
+  kind: "direct" | "relay";
+  from: string;
+  to: string;
+  /** The hub device-id this relay edge is reached via, when known -- absent for a "direct" edge, and for a "relay" edge whose hub is a bare, identity-less relay (wire-mesh-node/cloudflare-hub's own RelayHub) with no device-id of its own to report. */
+  via?: string;
+}
+
+export interface MeshGraph {
+  nodes: string[];
+  edges: MeshGraphEdge[];
+}
+
+export interface MeshTraceLocal {
+  relayed: boolean;
+  hubAddress?: string;
+}
+
+export interface MeshTraceRemote {
+  relayed: boolean;
+  hubAddress?: string;
+}
+
+export interface MeshTraceResult {
+  /** Real end-to-end round-trip time in milliseconds. */
+  rttMs: number;
+  local: MeshTraceLocal;
+  /** The receiver's own reported relayed/hub-address -- absent when outcome is an error rather than a successful path-trace-ok. */
+  remote?: MeshTraceRemote;
+  outcome: ManageOutcome;
 }
