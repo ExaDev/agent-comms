@@ -1,42 +1,24 @@
 /**
- * Web UI server — HTTP + WebSocket for browser-based chat.
+ * Web UI server — HTTP + oRPC WebSocket for browser-based chat.
  *
- * Serves a single-page frontend and exposes a JSON API over HTTP
- * with real-time delivery events over WebSocket.
+ * Serves a single-page frontend and exposes a JSON API over HTTP, plus a real-time oRPC endpoint (meshRouter, implementing contract.ts's meshContract) on /ws/mesh -- state sync, state patches, delivery events, and every mutating action all go through this one endpoint now; there is no longer a separate hand-rolled chat socket or a second, differently-shaped mesh socket.
  *
- * REST endpoints:
- *   GET  /           → frontend HTML
- *   GET  /api/agents → list agents
- *   GET  /api/rooms  → list rooms
- *   GET  /api/rooms/:id/messages → read room messages
- *   POST /api/action → execute any CommsAction
- *   GET  /api/mesh/graph → the mesh's connection graph (agent-comms#199/#201)
- *   GET  /api/mesh/trace?target=<deviceHex>&timeoutMs=<n> → live path trace to a device
+ * REST endpoints: GET  /           → frontend HTML GET  /api/agents → list agents GET  /api/rooms  → list rooms GET  /api/rooms/:id/messages → read room messages POST /api/action → execute any CommsAction (test scaffolding only -- the real frontend drives everything through /ws/mesh) GET  /api/mesh/graph → the mesh's connection graph (agent-comms#199/#201) GET  /api/mesh/trace?target=<deviceHex>&timeoutMs=<n> → live path trace to a device
  *
- * When AGENT_COMMS_WEB_CONSOLE_DIST points at a built wire-mesh web-console
- * (see web-console-static.ts), GET /web-console/* also serves that as an
- * alternate, generic reference-client UI alongside the frontend above.
- *
- * WebSocket:
- *   Server pushes delivery events as JSON frames.
- *   Client sends action objects.
+ * When AGENT_COMMS_WEB_CONSOLE_DIST points at a built wire-mesh web-console (see web-console-static.ts), GET /web-console/* also serves that as an alternate, generic reference-client UI alongside the frontend above.
  */
 
 import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer } from "ws";
 import { RPCHandler } from "@orpc/server/websocket";
 import { PushManager } from "../../../core/push-manager.js";
-import type { PushSubscription } from "../../../core/web-push.js";
 import { ChatController } from "../controller.js";
 import type { MeshStore } from "../../../core/mesh-store.js";
 import { CommsError } from "../../../core/store.js";
-import type {
-  MeshMessage,
-  MeshStatePatch,
-} from "../../../core/wire-protocol.js";
+import type { MeshStatePatch } from "../../../core/wire-protocol.js";
 import type { WebUrlStatus } from "../../../core/tool.js";
 import {
   createRoomAction,
@@ -130,7 +112,6 @@ export interface WebServerHandle {
   server: http.Server;
   controller: ChatController;
   wss: WebSocketServer;
-  orpcWss: WebSocketServer;
   pushManager: PushManager;
   publisher: MeshEventPublisher;
 }
@@ -206,37 +187,21 @@ export async function createWebServer(
     publisher.publish({ kind: "delivery", event });
   });
 
-  // Separate WS servers for chat, legacy mesh bridge, and the new oRPC mesh endpoints -- /ws/mesh-orpc is a dark-launched addition, kept fully side-by-side with the other two until PR7 retires them.
   const wss = new WebSocketServer({ noServer: true });
-  const meshWss = new WebSocketServer({ noServer: true });
-  const orpcWss = new WebSocketServer({ noServer: true });
   const rpcHandler = new RPCHandler(meshRouter);
 
   server.on("upgrade", (req, socket, head) => {
-    if (req.url === "/ws/mesh-orpc") {
-      orpcWss.handleUpgrade(req, socket, head, (ws) => {
-        orpcWss.emit("connection", ws, req);
-      });
-    } else if (req.url === "/ws/mesh") {
-      meshWss.handleUpgrade(req, socket, head, (ws) => {
-        meshWss.emit("connection", ws, req);
-      });
-    } else {
+    if (req.url === "/ws/mesh") {
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
       });
+    } else {
+      socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+      socket.destroy();
     }
   });
 
   wss.on("connection", (ws) => {
-    handleWebSocket(ws, controller, pushManager);
-  });
-
-  meshWss.on("connection", (ws) => {
-    handleMeshWebSocket(ws, controller);
-  });
-
-  orpcWss.on("connection", (ws) => {
     // RPCHandler.upgrade() wants a DOM-shaped WebSocket (addEventListener's overload set), which "ws"'s own type declarations don't structurally satisfy (its addEventListener options param is narrower than DOM's) -- .message()/.close() accept the looser { send } shape "ws" does satisfy, and are the documented manual equivalent to .upgrade().
     const context = { controller, publisher, pushManager };
     ws.on("message", (data, isBinary) => {
@@ -258,7 +223,7 @@ export async function createWebServer(
     console.log(`Agent Comms web UI: http://${WEB_HOST}:${String(actualPort)}`);
   });
 
-  return { server, controller, wss, orpcWss, pushManager, publisher };
+  return { server, controller, wss, pushManager, publisher };
 }
 
 class HandleRef {
@@ -292,7 +257,6 @@ export async function runWeb(userName: string, port = 0): Promise<void> {
   // Graceful shutdown
   const cleanup = async (): Promise<void> => {
     handle.wss.close();
-    handle.orpcWss.close();
     handle.server.close();
     await handle.controller.shutdown();
     process.exit(0);
@@ -507,119 +471,8 @@ function handleRequest(
 }
 
 // ---------------------------------------------------------------------------
-// WebSocket handler
+// Mesh state patch fan-out
 // ---------------------------------------------------------------------------
-
-function handleWebSocket(
-  ws: WebSocket,
-  controller: ChatController,
-  pushManager: PushManager,
-): void {
-  // Track whether this WebSocket is alive for push fallback decisions.
-  let wsAlive = true;
-  // Track the agent ID if the client subscribes to push notifications.
-  let pushAgentId: string | undefined;
-
-  // Push delivery events to this client
-  function onMessage(event: unknown): void {
-    if (wsAlive) {
-      ws.send(JSON.stringify({ type: "delivery", event }));
-    }
-  }
-
-  controller.on("message", onMessage);
-
-  ws.on("close", () => {
-    wsAlive = false;
-    controller.off("message", onMessage);
-  });
-
-  ws.on("message", (data) => {
-    void (async () => {
-      try {
-        const raw =
-          typeof data === "string"
-            ? data
-            : new TextDecoder().decode(
-                data instanceof ArrayBuffer
-                  ? data
-                  : Buffer.isBuffer(data)
-                    ? data
-                    : Buffer.concat(data),
-              );
-        const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed !== "object" || parsed === null)
-          throw new Error("Invalid JSON");
-        const params = Object.fromEntries(Object.entries(parsed));
-
-        // Handle push subscription messages from the PWA
-        if (params.action === "push_subscribe") {
-          const sub = parsePushSubscription(params.subscription);
-          if (!sub) {
-            ws.send(
-              JSON.stringify({
-                type: "error",
-                message: "Invalid push subscription",
-              }),
-            );
-            return;
-          }
-          const agentId = getString(params, "agentId") ?? controller.agentId;
-          pushAgentId = agentId;
-          pushManager.addSubscription(agentId, sub);
-          ws.send(
-            JSON.stringify({
-              type: "result",
-              result: {
-                content: "Push subscription registered",
-                isError: false,
-              },
-            }),
-          );
-          return;
-        }
-
-        if (params.action === "push_unsubscribe") {
-          const agentId =
-            getString(params, "agentId") ?? pushAgentId ?? controller.agentId;
-          pushManager.removeSubscription(agentId);
-          pushAgentId = undefined;
-          ws.send(
-            JSON.stringify({
-              type: "result",
-              result: { content: "Push subscription removed", isError: false },
-            }),
-          );
-          return;
-        }
-
-        const result = await executeAction(controller, params);
-        ws.send(JSON.stringify({ type: "result", result }));
-      } catch (err) {
-        ws.send(
-          JSON.stringify({
-            type: "error",
-            message: err instanceof Error ? err.message : String(err),
-          }),
-        );
-      }
-    })();
-  });
-
-  // Send initial state
-  void (async () => {
-    const agents = await controller.getAgents();
-    const rooms = await controller.getRooms();
-    ws.send(JSON.stringify({ type: "state", agents, rooms }));
-  })();
-}
-
-// ---------------------------------------------------------------------------
-// Mesh WebSocket handler — bridges browser peers to the TCP mesh
-// ---------------------------------------------------------------------------
-
-/** Active mesh WS connections — shared across handler invocations. */
-const meshPeers = new Set<WebSocket>();
 
 /**
  * Stores this wiring has already been applied to. A WeakSet (not a single boolean) because a process can run multiple concurrent WebServerHandle instances, each with its own MeshStore (multiple bridges each starting their own web UI) -- a single once-ever flag would silently wire only the first store any handle in the process ever created, leaving every later handle's store.onPatch never set and its publisher never fed. Confirmed directly: this was the original bug behind the single boolean this replaces (frontend/mesh-worker.ts's own module-level meshPatchListenerActive), caught by a multi-test-in-one-process run where only the first test's server ever received state_patch events.
@@ -627,7 +480,7 @@ const meshPeers = new Set<WebSocket>();
 const patchListenerWiredStores = new WeakSet<MeshStore>();
 
 /**
- * Wires the given store's single MeshStore.onPatch callback to do two things on every patch: forward it to legacy mesh peers (unchanged behaviour) and publish it as a state_patch MeshEvent on the new oRPC event stream. Called once per WebServerHandle at server-start time (createWebServer), rather than lazily on first /ws/mesh connection as before -- store.onPatch is a single overwritable field, so both consumers have to share one registration or the second one silently clobbers the first. Idempotent per store, not per process.
+ * Publishes every state patch the given store produces as a state_patch MeshEvent on the oRPC event stream. Called once per WebServerHandle at server-start time (createWebServer). Idempotent per store, not per process.
  */
 function ensurePatchListener(
   store: MeshStore,
@@ -636,72 +489,8 @@ function ensurePatchListener(
   if (patchListenerWiredStores.has(store)) return;
   patchListenerWiredStores.add(store);
   store.onPatch = (patch: MeshStatePatch): void => {
-    const msg: MeshMessage = {
-      method: "state_update",
-      patch,
-    };
-    const data = JSON.stringify(msg);
-    for (const peer of meshPeers) {
-      if (peer.readyState === WebSocket.OPEN) {
-        peer.send(data);
-      }
-    }
     publisher.publish({ kind: "state_patch", patch });
   };
-}
-
-/**
- * Handles a WebSocket connection on /ws/mesh.
- *
- * Sends the current mesh state as a state_sync message on connect, then forwards all mesh state patches in real-time. Browser peers send action objects which are executed through the ChatController.
- */
-function handleMeshWebSocket(ws: WebSocket, controller: ChatController): void {
-  const store = controller.meshStore;
-
-  meshPeers.add(ws);
-
-  // Send initial state_sync
-  const state = store.serialise();
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ method: "state_sync", state }));
-  }
-
-  ws.on("close", () => {
-    meshPeers.delete(ws);
-  });
-
-  ws.on("message", (data) => {
-    void (async () => {
-      try {
-        const raw =
-          typeof data === "string"
-            ? data
-            : new TextDecoder().decode(
-                data instanceof ArrayBuffer
-                  ? data
-                  : Buffer.isBuffer(data)
-                    ? data
-                    : Buffer.concat(data),
-              );
-        const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed !== "object" || parsed === null) {
-          throw new Error("Invalid JSON");
-        }
-        const params = Object.fromEntries(Object.entries(parsed));
-
-        // Execute action through the controller
-        const result = await executeAction(controller, params);
-        ws.send(JSON.stringify({ type: "result", result }));
-      } catch (err) {
-        ws.send(
-          JSON.stringify({
-            type: "error",
-            message: err instanceof Error ? err.message : String(err),
-          }),
-        );
-      }
-    })();
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -793,21 +582,6 @@ function getRoomType(
     return value;
   }
   return undefined;
-}
-
-function parsePushSubscription(value: unknown): PushSubscription | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
-  if (!("endpoint" in value) || typeof value.endpoint !== "string")
-    return undefined;
-  if (!("keys" in value)) return undefined;
-  const keys = value.keys;
-  if (typeof keys !== "object" || keys === null) return undefined;
-  if (!("p256dh" in keys) || typeof keys.p256dh !== "string") return undefined;
-  if (!("auth" in keys) || typeof keys.auth !== "string") return undefined;
-  return {
-    endpoint: value.endpoint,
-    keys: { p256dh: keys.p256dh, auth: keys.auth },
-  };
 }
 
 // ---------------------------------------------------------------------------

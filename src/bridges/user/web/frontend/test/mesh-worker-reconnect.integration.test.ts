@@ -46,7 +46,6 @@ afterEach(async () => {
   rooms.clear();
   if (handle) {
     handle.wss.close();
-    handle.orpcWss.close();
     handle.server.close();
     await handle.controller.shutdown();
     handle = undefined;
@@ -102,7 +101,7 @@ describe("mesh-worker upstream reconnect", () => {
     const connectedCountBefore = countBroadcastsOfType(received, "connected");
 
     // Sever the connection from the server side -- not a client-initiated close, a real mid-session drop.
-    const serverSideSockets = [...handle!.orpcWss.clients];
+    const serverSideSockets = [...handle!.wss.clients];
     expect(serverSideSockets.length).toBe(1);
     serverSideSockets[0]?.terminate();
 

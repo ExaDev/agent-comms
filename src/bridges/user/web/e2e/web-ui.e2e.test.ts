@@ -8,7 +8,6 @@
 
 import { expect } from "@playwright/test";
 import { test } from "./fixtures.js";
-import WS from "ws";
 
 let testCounter = 0;
 function uniqueName(prefix: string): string {
@@ -258,63 +257,5 @@ test.describe("Web UI", () => {
     });
   });
 
-  test("sending a message returns confirmation via WebSocket", async ({
-    port,
-  }) => {
-    const roomName = uniqueName("ws-send-room");
-
-    // Create room
-    await fetch(`http://127.0.0.1:${port}/api/action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "create_room",
-        name: roomName,
-        type: "public",
-      }),
-    });
-
-    // Connect WebSocket and collect frames
-    const ws = await new Promise<WS>((resolve) => {
-      const socket = new WS(`ws://127.0.0.1:${port}`);
-      socket.on("open", () => resolve(socket));
-    });
-
-    const frames: Record<string, unknown>[] = [];
-    ws.on("message", (raw) => {
-      frames.push(JSON.parse(raw.toString()) as Record<string, unknown>);
-    });
-
-    // Join and send
-    ws.send(JSON.stringify({ action: "join_room", room: roomName }));
-    ws.send(
-      JSON.stringify({
-        action: "send",
-        target: roomName,
-        content: "Hello via WebSocket!",
-      }),
-    );
-
-    // Wait for frames to accumulate
-    const FRAME_ACCUMULATION_WAIT_MS = 500;
-    await new Promise((r) => {
-      setTimeout(r, FRAME_ACCUMULATION_WAIT_MS);
-    });
-
-    const results = frames.filter(
-      (f) =>
-        f.type === "result" &&
-        typeof (f.result as Record<string, unknown>)?.content === "string",
-    );
-
-    // Should see join result and send result
-    const sendResult = results.find((f) =>
-      ((f.result as Record<string, unknown>)?.content as string)?.includes(
-        "Sent to",
-      ),
-    );
-    expect(sendResult).toBeTruthy();
-
-    ws.close();
-  });
+  // A prior version of this test drove the legacy chat socket's raw JSON action/result frames directly against the root path to prove "sending a message returns a confirmation". That wire protocol no longer exists -- state, patches, actions, and delivery all go through the oRPC endpoint on /ws/mesh now, exercised end-to-end by orpc-router.integration.test.ts. The same user-facing behaviour this test verified is already covered above by "can send a message to a room", which drives the real browser UI rather than a raw socket.
 });

@@ -1,5 +1,5 @@
 /**
- * Integration tests for the dark-launched oRPC router (/ws/mesh-orpc).
+ * Integration tests for the server's oRPC router on /ws/mesh.
  *
  * Drives every procedure through a real oRPC client over a real WebSocket connection against a real running server -- not a mocked transport -- including a resume/lastEventId replay test proving subscribeEvents actually closes the gap the plan set out to close: an event published while a subscriber is disconnected is still delivered once it reconnects with its last-received event id.
  */
@@ -33,14 +33,12 @@ const sockets: WsWebSocket[] = [];
 let handle: WebServerHandle | undefined;
 
 /**
- * Connects a fresh oRPC client to a real running server's /ws/mesh-orpc endpoint over a real WebSocket -- not a mock. "ws"'s own WebSocket type declarations don't structurally satisfy WebSocketLike (its addEventListener options param is narrower than DOM's, an upstream typing gap between "ws" and the browser lib oRPC's client targets, not a real capability gap -- "ws" does implement addEventListener/removeEventListener/send/readyState). The cast below is the single, contained boundary point for that gap.
+ * Connects a fresh oRPC client to a real running server's /ws/mesh endpoint over a real WebSocket -- not a mock. "ws"'s own WebSocket type declarations don't structurally satisfy WebSocketLike (its addEventListener options param is narrower than DOM's, an upstream typing gap between "ws" and the browser lib oRPC's client targets, not a real capability gap -- "ws" does implement addEventListener/removeEventListener/send/readyState). The cast below is the single, contained boundary point for that gap.
  */
 function connectMeshClient(port: number): MeshClient {
   const link = new RPCLink({
     connect: async () => {
-      const socket = new WsWebSocket(
-        `ws://127.0.0.1:${String(port)}/ws/mesh-orpc`,
-      );
+      const socket = new WsWebSocket(`ws://127.0.0.1:${String(port)}/ws/mesh`);
       sockets.push(socket);
       return new Promise<WebSocketLike>((resolve, reject) => {
         socket.once("open", () => {
@@ -131,7 +129,7 @@ function extractRoomId(createRoomContent: string): string {
   return id;
 }
 
-describe("oRPC router over /ws/mesh-orpc", () => {
+describe("oRPC router over /ws/mesh", () => {
   it("listRooms responds through a real websocket round trip", async () => {
     const { client } = await setup();
     const result = await client.listRooms({});

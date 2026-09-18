@@ -191,9 +191,9 @@ export function getStateSnapshot(): StateSnapshot {
 }
 
 // ---------------------------------------------------------------------------
-// oRPC client connection to /ws/mesh-orpc -- the worker's upstream half.
+// oRPC client connection to /ws/mesh -- the worker's upstream half.
 //
-// mesh-client.ts (unchanged until a later PR) still sends an "init" message carrying a URL built for the legacy /ws/mesh path; toOrpcUrl rewrites it to the temporary oRPC path (added server-side, dark-launched, in the PR preceding this one) so the worker's own tab-facing contract with mesh-client.ts stays identical while its real upstream traffic moves onto oRPC. Reconnection is RPCLink's own `reconnect` option; resuming a subscribeEvents stream across a reconnect specifically needs RetryLinkPlugin as well -- WebSocketLinkTransport's reconnect only re-establishes the raw socket, it does not itself resume an in-flight event-iterator by lastEventId (confirmed against the installed beta's own source, not assumed from either option's name).
+// Reconnection is RPCLink's own `reconnect` option; resuming a subscribeEvents stream across a reconnect specifically needs RetryLinkPlugin as well -- WebSocketLinkTransport's reconnect only re-establishes the raw socket, it does not itself resume an in-flight event-iterator by lastEventId (confirmed against the installed beta's own source, not assumed from either option's name).
 // ---------------------------------------------------------------------------
 
 type MeshOrpcClient = ContractRouterClient<MeshContract>;
@@ -204,21 +204,15 @@ let eventPumpGeneration = 0;
 /** Republishes every event this worker receives from the real server to any tab subscribed via the worker's own oRPC downstream (tab-contract.ts's subscribeEvents). Resumable the same way the server's own publisher is -- a tab's oRPC client can reconnect to this worker (a new MessagePort, or the same one after a drop) and resume from its own lastEventId. */
 export const localPublisher = new MeshEventPublisher();
 
-function toOrpcUrl(legacyMeshUrl: string): string {
-  return legacyMeshUrl.replace(/\/ws\/mesh$/, "/ws/mesh-orpc");
-}
-
 /** Base delay for the reconnect backoff, doubled per attempt and capped at RECONNECT_MAX_DELAY_MS. */
 const RECONNECT_BASE_DELAY_MS = 1000;
 /** Upper bound on the reconnect backoff delay. */
 const RECONNECT_MAX_DELAY_MS = 30_000;
 
 export function connect(url: string): void {
-  const orpcUrl = toOrpcUrl(url);
-
   const link = new RPCLink({
     connect: async () => {
-      const socket = new WebSocket(orpcUrl);
+      const socket = new WebSocket(url);
       socket.addEventListener("open", () => {
         broadcastToPorts({ type: "connected" });
       });
