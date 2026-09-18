@@ -11,6 +11,7 @@ import type {
   AgentId,
   AgentIdentity,
   CommsAction,
+  ConnectionCode,
   MeshVisibility,
   NetworkInterface,
   Room,
@@ -21,6 +22,16 @@ import type { CommsStore } from "./comms-store.js";
 import type { DiscoveryManager } from "./discovery.js";
 import { CommsError } from "./store.js";
 import { getOwnPackageVersion } from "./package-version.js";
+import type {
+  GenerateConnectionCodeOptions,
+  RedeemConnectionCodeOptions,
+  RedeemConnectionCodeResult,
+} from "./connection-code.js";
+import { fetchPgpPublicKeyByFingerprint } from "./pgp-keyserver.js";
+import {
+  handleGatewayGenerateConnectionCode,
+  handleGatewayRedeemConnectionCode,
+} from "./connection-code-tool.js";
 
 /** Table column widths for the plain-text listing helpers below, chosen to line up with the existing aligned output. */
 const ROOM_TYPE_COLUMN_WIDTH = 7;
@@ -106,6 +117,13 @@ export interface MeshOnlyFeatures {
   addTrustedGateway?: (deviceHex: string) => void;
   removeTrustedGateway?: (deviceHex: string) => void;
   listTrustedGateways?: () => string[];
+  generateConnectionCode?: (
+    options: Readonly<GenerateConnectionCodeOptions>,
+  ) => Promise<ConnectionCode>;
+  redeemConnectionCode?: (
+    candidate: Readonly<ConnectionCode>,
+    options: Readonly<RedeemConnectionCodeOptions>,
+  ) => Promise<RedeemConnectionCodeResult>;
 }
 
 /** Uniform "this bridge isn't backed by a mesh transport" result for a MeshOnlyFeatures method that isn't present on the current store. */
@@ -117,7 +135,7 @@ function notMeshBacked(action: string): CommsResult {
 }
 
 /** Runs a mesh store call that may throw, converting a thrown error into a CommsResult instead of repeating the same try/catch at every call site. `action` performs the call and returns the success message directly. */
-async function tryMeshAction(
+export async function tryMeshAction(
   verb: string,
   action: () => Promise<string>,
 ): Promise<CommsResult> {
@@ -149,6 +167,10 @@ export class CommsTool {
     private readonly discovery?: DiscoveryManager,
     /** Returns the newest npm release known to be available, or undefined when none is known (no checker wired up, no successful check yet, or this bridge is already current). Wired at bridge construction time by a VersionDriftChecker (see version-check.ts) -- optional so every existing call site, and every test that has no interest in drift reporting, is unaffected. */
     private readonly getNewerVersionIfAny?: () => string | undefined,
+    /** Fetches a signer's armored PGP public key by fingerprint, used by gateway_redeem_connection_code when the caller supplies a fingerprint but not the key text itself. Defaults to the real keys.openpgp.org lookup (pgp-keyserver.ts); a test that would otherwise trigger real network I/O injects a fake resolver instead, the same reasoning bridge-mesh.ts's own fetchLatestVersion override already establishes for getNewerVersionIfAny above. */
+    private readonly fetchPgpPublicKeyByFingerprintImpl: (
+      fingerprint: string,
+    ) => Promise<string> = fetchPgpPublicKeyByFingerprint,
   ) {}
 
   /** The "Update available: ..." line appended to whoami/update output when a newer release is known, or undefined when there's nothing to report. */
@@ -238,6 +260,14 @@ export class CommsTool {
           return this.gatewayUntrust(action);
         case "gateway_list_trusted":
           return this.gatewayListTrusted();
+        case "gateway_generate_connection_code":
+          return await handleGatewayGenerateConnectionCode(this.store, action);
+        case "gateway_redeem_connection_code":
+          return await handleGatewayRedeemConnectionCode(
+            this.store,
+            action,
+            this.fetchPgpPublicKeyByFingerprintImpl,
+          );
         default:
           return {
             content: `Unknown action: ${JSON.stringify(action).slice(0, UNKNOWN_ACTION_PREVIEW_LENGTH)}`,

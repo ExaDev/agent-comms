@@ -18,6 +18,12 @@ import { COORDINATOR_HOST, DEFAULT_HUB_URL } from "./mesh-store-shared.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import { CoordinatorGateway } from "./coordinator-gateway.js";
 import { GatewayTrust } from "./gateway-trust.js";
+import {
+  ConnectionCodeLedger,
+  type GenerateConnectionCodeOptions,
+  type RedeemConnectionCodeOptions,
+  type RedeemConnectionCodeResult,
+} from "./connection-code.js";
 import type { IdentitySlot } from "./identity-store.js";
 import { DeliveryEngine } from "./delivery-engine.js";
 import { RoomProtocol } from "./room-protocol.js";
@@ -51,6 +57,7 @@ import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type {
   AgentIdentity,
   AgentStatus,
+  ConnectionCode,
   DeliveryEvent,
   DmMessage,
   MeshVisibility,
@@ -101,6 +108,9 @@ export class MeshStore implements CommsStore {
 
   /** The cross-machine trust boundary (agent-comms#156), constructed once in the constructor below (mirroring discovery above) and shared with WireMeshTransport by every construction site (bridge-mesh.ts, test-transport.ts) that passes it into WireMeshTransport's own constructor, so store.addTrustedGateway() and the transport's own hub-forwarding/hub-session gates read the exact same set. Persists across restarts (agent-comms#186) when a slot is passed to this store's own constructor; stays in-memory only, exactly as before, for every construction site that omits one. Public so those construction sites can reach it; addTrustedGateway/removeTrustedGateway/listTrustedGateways below are the methods CommsTool actually calls through MeshOnlyFeatures. */
   readonly gatewayTrust: GatewayTrust;
+
+  /** The connection-code generate/redeem pair (agent-comms#188) bootstrapping gatewayTrust above between two devices with no existing mesh connection. Persists across restarts the same way gatewayTrust does, sharing the same slot passed to this store's own constructor. generateConnectionCode/redeemConnectionCode below are the methods CommsTool actually calls through MeshOnlyFeatures; redeemConnectionCode is also where a successful redemption's deviceId gets fed into gatewayTrust.add, the actual point of this whole bootstrap. */
+  private readonly connectionCodes: ConnectionCodeLedger;
 
   private readonly deliveryEngine: DeliveryEngine;
   private readonly roomProtocol: RoomProtocol;
@@ -189,13 +199,15 @@ export class MeshStore implements CommsStore {
   constructor(
     coordinatorPort: number = DEFAULT_COORDINATOR_PORT,
     hubUrl: string = DEFAULT_HUB_URL,
-    gatewayTrustSlot?: Readonly<IdentitySlot>,
+    /** Shared between gatewayTrust and connectionCodes below -- both are per-slot persisted bootstrap state for the same trust boundary, so a single slot is this store's one notion of "which bridge instance's own disk state this is". */
+    slot?: Readonly<IdentitySlot>,
   ) {
     this.peerId = nanoid(PEER_ID_LENGTH);
     this.startedAt = new Date().toISOString();
     this.coordinatorPort = coordinatorPort;
     this.hubUrl = hubUrl;
-    this.gatewayTrust = new GatewayTrust(gatewayTrustSlot);
+    this.gatewayTrust = new GatewayTrust(slot);
+    this.connectionCodes = new ConnectionCodeLedger(slot);
 
     // Discovery manager — registers available backends
     this.discovery = new DiscoveryManager();
@@ -828,6 +840,27 @@ export class MeshStore implements CommsStore {
   /** Every currently trusted remote device-id (hex). */
   listTrustedGateways(): string[] {
     return this.gatewayTrust.list();
+  }
+
+  // -----------------------------------------------------------------------
+  // Connection codes (agent-comms#188) -- bootstrapping gateway trust with no existing mesh connection between the two devices
+  // -----------------------------------------------------------------------
+
+  /** Generates a fresh single-use ConnectionCode vouching for this store's own device-id (peerId), for the operator to relay to a counterpart out of band. See ConnectionCodeLedger.generate's own doc comment for what options does. */
+  async generateConnectionCode(
+    options: Readonly<GenerateConnectionCodeOptions> = {},
+  ): Promise<ConnectionCode> {
+    return this.connectionCodes.generate(this.peerId, options);
+  }
+
+  /** Validates a candidate ConnectionCode (see ConnectionCodeLedger.redeem for the checks performed) and, only once it passes every check, trusts the device-id it vouches for via gatewayTrust.add -- the actual point of this whole bootstrap. A rejected candidate never reaches gatewayTrust at all. */
+  async redeemConnectionCode(
+    candidate: Readonly<ConnectionCode>,
+    options: Readonly<RedeemConnectionCodeOptions> = {},
+  ): Promise<RedeemConnectionCodeResult> {
+    const result = await this.connectionCodes.redeem(candidate, options);
+    this.gatewayTrust.add(result.deviceId);
+    return result;
   }
 
   // -----------------------------------------------------------------------

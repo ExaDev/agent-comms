@@ -70,6 +70,8 @@ export const MCP_TOOL_PARAMS = z.object({
     "gateway_trust",
     "gateway_untrust",
     "gateway_list_trusted",
+    "gateway_generate_connection_code",
+    "gateway_redeem_connection_code",
   ]),
   name: z.string().optional(),
   visibility: VisibilityEnum.optional(),
@@ -98,8 +100,22 @@ export const MCP_TOOL_PARAMS = z.object({
   capability: z.string().optional(),
   expires: z.number().optional(),
   delegationsRemaining: z.number().optional(),
-  /** A remote gateway's own device-id (hex), for gateway_trust/gateway_untrust. */
+  /** A remote gateway's own device-id (hex), for gateway_trust/gateway_untrust, and for gateway_redeem_connection_code (the code's own embedded deviceId field). */
   device: z.string().optional(),
+  /** The connection code's own nonce (gateway_redeem_connection_code). */
+  code: z.string().optional(),
+  /** ISO-8601 expiry for gateway_generate_connection_code's ttlMs override, or the redeemed code's own expiresAt field for gateway_redeem_connection_code. */
+  expiresAt: z.string().optional(),
+  /** ttlMs override for gateway_generate_connection_code; defaults to DEFAULT_CONNECTION_CODE_TTL_MS when omitted. */
+  ttlMs: z.number().optional(),
+  /** Armored PGP private key to sign a generated code with (gateway_generate_connection_code), or armored PGP public key to verify a redeemed code's signature against (gateway_redeem_connection_code). Both are supplied per call -- agent-comms never generates, stores, or manages PGP key material itself. */
+  privateKey: z.string().optional(),
+  publicKey: z.string().optional(),
+  /** Passphrase for privateKey, if it is passphrase-protected (gateway_generate_connection_code). */
+  passphrase: z.string().optional(),
+  /** The redeemed code's own signature field (gateway_redeem_connection_code), or a PGP fingerprint the caller already independently trusts, used either to pin a supplied publicKey or to fetch one from a keyserver when publicKey is omitted. */
+  signature: z.string().optional(),
+  fingerprint: z.string().optional(),
 });
 
 export type ToolParams = z.infer<typeof MCP_TOOL_PARAMS>;
@@ -391,6 +407,32 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       return { action: "gateway_untrust", device: p.device };
     case "gateway_list_trusted":
       return { action: "gateway_list_trusted" };
+    case "gateway_generate_connection_code":
+      return {
+        action: "gateway_generate_connection_code",
+        ...(p.ttlMs !== undefined && { ttlMs: p.ttlMs }),
+        ...(p.privateKey !== undefined && { privateKey: p.privateKey }),
+        ...(p.passphrase !== undefined && { passphrase: p.passphrase }),
+      };
+    case "gateway_redeem_connection_code":
+      if (p.code === undefined)
+        throw new BuildActionError("gateway_redeem_connection_code", "code");
+      if (p.expiresAt === undefined)
+        throw new BuildActionError(
+          "gateway_redeem_connection_code",
+          "expiresAt",
+        );
+      if (p.device === undefined)
+        throw new BuildActionError("gateway_redeem_connection_code", "device");
+      return {
+        action: "gateway_redeem_connection_code",
+        code: p.code,
+        expiresAt: p.expiresAt,
+        device: p.device,
+        ...(p.signature !== undefined && { signature: p.signature }),
+        ...(p.publicKey !== undefined && { publicKey: p.publicKey }),
+        ...(p.fingerprint !== undefined && { fingerprint: p.fingerprint }),
+      };
     default:
       return p.action satisfies never;
   }
