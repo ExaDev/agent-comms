@@ -1,3 +1,26 @@
+## [3.22.0](https://github.com/ExaDev/agent-comms/compare/v3.21.0...v3.22.0) (2026-09-18)
+
+### Features
+
+* **core:** add mesh graph and trace result types to MeshTransport ([d116642](https://github.com/ExaDev/agent-comms/commit/d1166421b0f69d44bb31da4382debae659035f20))
+* **core:** implement mesh_graph/mesh_trace over WireMeshTransport ([c713f3a](https://github.com/ExaDev/agent-comms/commit/c713f3adcd30de0d1f2c89622acc6cc785eb182a)), references [agent-comms#216](https://github.com/agent-comms/issues/216)
+* **mesh-store:** delegate meshGraph/meshTrace to the underlying transport ([a643fc2](https://github.com/ExaDev/agent-comms/commit/a643fc290f62848a42ebfc5f322903ce159cae81))
+* **tool:** add mesh_graph/mesh_trace CommsTool actions ([984efd9](https://github.com/ExaDev/agent-comms/commit/984efd90cdb545f415ced0b62492ab635a3b423c))
+* **web:** implement oRPC router dark-launched on /ws/mesh-orpc ([54c4d01](https://github.com/ExaDev/agent-comms/commit/54c4d0170be36d11626b65b5bd8e9530bbb63dfd))
+
+### Refactoring
+
+* **core:** extract listKnownDevices' array conversion to gossip-directory ([5caba8a](https://github.com/ExaDev/agent-comms/commit/5caba8a036584b68a69961d329efa8bdb3d89ba6))
+* **tool:** extract mesh discovery/advertise/listener actions to their own module ([1a253e8](https://github.com/ExaDev/agent-comms/commit/1a253e81c72e0b62fe88fb4a3c3f0afcb748c34a))
+
+### Tests
+
+* cover mesh_graph/mesh_trace end-to-end and at the tool layer ([7ec7bd2](https://github.com/ExaDev/agent-comms/commit/7ec7bd22f4eec7c5680904518e1d21c7629c7ed7))
+
+### Build
+
+* bump wire-mesh-core to 1.58.0 ([21bcafe](https://github.com/ExaDev/agent-comms/commit/21bcafe7d0452660ef7c02ae45f65bc99b76547f)), references [wire-mesh#180](https://github.com/wire-mesh/issues/180) [wire-mesh#181](https://github.com/wire-mesh/issues/181)
+
 ## [3.21.0](https://github.com/ExaDev/agent-comms/compare/v3.20.0...v3.21.0) (2026-09-18)
 
 ### Features
