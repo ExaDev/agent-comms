@@ -26,6 +26,7 @@ import type {
 } from "./transport.js";
 import type { MeshMessage } from "./wire-protocol.js";
 import { extractMessage } from "./room-router.js";
+import type { RoomRequestOrigin } from "./room-router.js";
 import { connectWsUrl } from "./ws-dial.js";
 import {
   buildCommand,
@@ -54,10 +55,11 @@ export interface HubSessionDeps {
   trackForShutdown: (session: AcceptedMeshSession) => void;
   /** Fires with every remote (non-self) directory entry the hub's own gossip/catch-up surfaces, every time the session's directory changes (agent-comms#155's own remote-directory-merge leg) -- the transport merges these into its own mesh-wide knownDevices the same way it already merges a local peer session's directory, so a hub-learned agent surfaces in listAgents/getAgent with no separate lookup path. */
   onDirectory: (entries: readonly DirectoryEntry[]) => void;
-  /** Dispatches an already-received, non-legacy-frame request (a real core/room verb: room.send, room.notify, room.join, ...) to WireMeshTransport's own roomRouter, the identical dispatch a local peer session's own drainSession already uses -- the outbound half of agent-comms#155's "remote to local" routing leg. Deferred the same lazy-`this`-capture way DeliveryEngine's own sendRoomRequestToMember closure is, since roomRouter is constructed after this class's own instance in WireMeshTransport's constructor. */
+  /** Dispatches an already-received, non-legacy-frame request (a real core/room verb: room.send, room.notify, room.join, ...) to WireMeshTransport's own roomRouter, the identical dispatch a local peer session's own drainSession already uses -- the outbound half of agent-comms#155's "remote to local" routing leg. Deferred the same lazy-`this`-capture way DeliveryEngine's own sendRoomRequestToMember closure is, since roomRouter is constructed after this class's own instance in WireMeshTransport's constructor. Declared with the identical (request, handle, origin?) shape RoomRouter.handleRequest itself has (agent-comms#216) so WireMeshTransport can keep wiring this dep as a direct method reference rather than a wrapper -- dispatchHubRequest below is what actually supplies a non-empty origin, carrying this side's own dialled hub address. */
   handleRoomRequest: (
     request: IncomingManageRequest,
     handle: Readonly<ConnectionHandle>,
+    origin?: Readonly<RoomRequestOrigin>,
   ) => Promise<void>;
   /** The gateway trust boundary (agent-comms#156): whether the given device-id (hex) is currently trusted as a bare device. Since agent-comms#192, this gates only the traffic that carries no independent per-message security of its own: the legacy FRAME_VERB path (consume()'s own doc explains why) and dispatchHubRequest's own hubPeersKnown bookkeeping for a room-domain sender. A real room-domain verb's own dispatch is never gated on this at all; see dispatchHubRequest's own doc for why that is sound. connect()'s own directory-merge filter uses isTrustedForDirectory below instead, not this. */
   isTrusted: (deviceHex: string) => boolean;
@@ -156,14 +158,20 @@ export class HubSession {
     })();
   }
 
-  /** Consumes one hub session's inbound relayed manage-requests until it ends, dispatching each in arrival order to dispatchHubRequest -- see that function's own doc for the actual per-request trust decision. Split out purely so the decision itself is directly unit-testable against fake requests/deps (hub-session-dispatch.test.ts), the same reason hub-forwarding.ts's own forwardAdvertsToHub/pushHubCatchUp are standalone functions rather than private methods. */
+  /** Consumes one hub session's inbound relayed manage-requests until it ends, dispatching each in arrival order to dispatchHubRequest -- see that function's own doc for the actual per-request trust decision. Split out purely so the decision itself is directly unit-testable against fake requests/deps (hub-session-dispatch.test.ts), the same reason hub-forwarding.ts's own forwardAdvertsToHub/pushHubCatchUp are standalone functions rather than private methods. Passes this.url through as dispatchHubRequest's own hubAddress -- this side's own dialled address for the hub every request on this specific session arrived over (agent-comms#216), the answering-side equivalent of tracePath's own local.hubAddress above. */
   private consume(session: AcceptedMeshSession, ownDeviceHex: string): void {
     void (async () => {
       for await (const request of session.incomingManageRequests) {
         if (this.deps.isShuttingDown()) break;
-        await dispatchHubRequest(request, ownDeviceHex, this.deps, (hex) => {
-          this.hubPeersKnown.add(hex);
-        });
+        await dispatchHubRequest(
+          request,
+          ownDeviceHex,
+          this.deps,
+          (hex) => {
+            this.hubPeersKnown.add(hex);
+          },
+          this.url,
+        );
       }
     })();
   }
@@ -270,13 +278,14 @@ export type HubRequestDispatchDeps = Pick<
  *
  * A real room-domain verb (room.send, room.join, room.notify, ...) is never gated on isTrusted at all (agent-comms#192): it is independently gated by its own room:member capability token, verified regardless of which transport path it arrived over, and already principal-aware since agent-comms#187 (device-membership-verification.ts's own chain-walk). Stacking the coarse bare-device allowlist in front of that check would be redundant, not protective, and for room.join specifically (the one deliberately ungated verb, whose own security model is a human decision) it would actively defeat the protocol's own intended design by never letting an untrusted device reach that approval step at all. onKnownPeer is still only called here for a sender isTrusted already recognises: reaching this branch has not yet had its own token verified (that happens inside handleRoomRequest/forwardToLocalPeer), so hubPeersKnown stays "gateway-trusted hub peers", never "every device that has sent a syntactically valid room-domain request".
  *
- * Multi-device gateway routing (agent-comms#184, wire-mesh-core 1.48.1's own IncomingManageRequest.toDevice, read directly from each relay-data frame's own to-device field rather than guessed from pairing state): when the request carries a toDevice naming a different device than ownDeviceHex, the command is first re-stamped with an on-behalf-of params field naming the true sender before forwardToLocalPeer forwards it on to that device's own local mesh session (one this gateway is directly connected to, never merely gossiped-about); room-router.ts's own resolveHandle reads that field back out on the receiving end, so the forwarded request is attributed to the true remote sender there, never to this gateway. Its outcome is relayed straight back. Only when forwardToLocalPeer finds no such local session (toDevice is absent, matches ownDeviceHex, or names a device this gateway doesn't actually front) does the request fall through to handleRoomRequest, dispatched against this side's own local mesh state, the same fallback a sender still on a pre-#184 wire-mesh-core (never stamping toDevice at all) already relied on.
+ * Multi-device gateway routing (agent-comms#184, wire-mesh-core 1.48.1's own IncomingManageRequest.toDevice, read directly from each relay-data frame's own to-device field rather than guessed from pairing state): when the request carries a toDevice naming a different device than ownDeviceHex, the command is first re-stamped with an on-behalf-of params field naming the true sender before forwardToLocalPeer forwards it on to that device's own local mesh session (one this gateway is directly connected to, never merely gossiped-about); room-router.ts's own resolveHandle reads that field back out on the receiving end, so the forwarded request is attributed to the true remote sender there, never to this gateway. Its outcome is relayed straight back. Only when forwardToLocalPeer finds no such local session (toDevice is absent, matches ownDeviceHex, or names a device this gateway doesn't actually front) does the request fall through to handleRoomRequest, dispatched against this side's own local mesh state, the same fallback a sender still on a pre-#184 wire-mesh-core (never stamping toDevice at all) already relied on -- and it's exactly that fallback call which carries hubAddress on to handleRoomRequest as origin.relayHubAddress (agent-comms#216), never the forwardToLocalPeer branch: a request forwarded on to a different local device is answered by that device's own session, not this gateway's hub session, so this gateway's own dialled hub address would be the wrong fact to attach to it.
  */
 export async function dispatchHubRequest(
   request: IncomingManageRequest,
   ownDeviceHex: string,
   deps: Readonly<HubRequestDispatchDeps>,
   onKnownPeer: (deviceHex: string) => void,
+  hubAddress?: string,
 ): Promise<void> {
   if (request.fromDevice === undefined) {
     if (request.command.verb === FRAME_VERB) {
@@ -332,7 +341,11 @@ export async function dispatchHubRequest(
       return;
     }
   }
-  await deps.handleRoomRequest(request, handle);
+  await deps.handleRoomRequest(
+    request,
+    handle,
+    hubAddress !== undefined ? { relayHubAddress: hubAddress } : {},
+  );
 }
 
 /** A state_sync or state_update carries authority to directly overwrite or patch this side's own mesh state (agents, rooms, messages, deliveries) -- on an ordinary peer session that authority is meaningful because the peer already passed connect_request/introduce approval or the coordinator's own trusted mesh membership. A hub-relayed sender has passed neither, and gateway trust (agent-comms#156, dispatchHubRequest's own isTrusted gate for the legacy frame path) doesn't grant it either: being on the allowlist means "this device's traffic is worth acting on," not "this device may directly overwrite this side's mesh state" -- a strictly stronger claim no hub-relayed sender has ever been asked to prove, since the hub itself still accepts any self-generated identity with no admission control of its own (gating the hub is deliberately out of scope for agent-comms#156). Treating a trusted sender's state_sync/state_update as equally authoritative would let it inject an outcome indistinguishable from a genuine mesh event, e.g. a spoofed inbound delivery -- so this filter stays unconditional, applied even to a sender dispatchHubRequest has already let past the trust gate. Every other legacy message method this session might relay is already inert on receipt (PeerLifecycle's own handleDataMessage only reacts to these two), so filtering exactly these two is a complete fix for this specific path, not a partial one. */

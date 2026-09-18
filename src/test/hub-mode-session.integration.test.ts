@@ -244,4 +244,63 @@ describe("connectToHub", () => {
     await transportA.shutdown();
     await transportB.shutdown();
   });
+
+  it("reports the answering side's own dialled hub address on a hub-relayed path.trace (agent-comms#216)", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+
+    const eventsA = recordingEvents();
+    const eventsB = recordingEvents();
+    const identityA = generateIdentity();
+    const identityB = generateIdentity();
+    const deviceA = deviceIdToHex(Uint8Array.from(identityA.deviceId));
+    const deviceB = deviceIdToHex(Uint8Array.from(identityB.deviceId));
+    const gatewayTrustA = new GatewayTrust();
+    gatewayTrustA.add(deviceB);
+    const gatewayTrustB = new GatewayTrust();
+    gatewayTrustB.add(deviceA);
+    const transportA = new WireMeshTransport(
+      eventsA,
+      identityA,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      gatewayTrustA,
+    );
+    const transportB = new WireMeshTransport(
+      eventsB,
+      identityB,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      gatewayTrustB,
+    );
+    await transportA.hub.connect(hub.url);
+    await transportB.hub.connect(hub.url);
+
+    await waitForCondition(() => {
+      return (
+        transportA.hub.peers().includes(deviceB) &&
+        transportB.hub.peers().includes(deviceA)
+      );
+    });
+
+    // A and B are only gossip-discovered through the hub here (never directly connected), so meshTrace's own direct-session lookup misses and it falls to the hub-relayed path -- exactly the case agent-comms#216 fixes: B answers over the same session it dialled the hub with, and should now report that dialled address back as remote.hubAddress.
+    const result = await transportA.meshTrace(deviceB);
+
+    expect(result.outcome.result).toBe("ok");
+    expect(result.remote?.relayed).toBe(true);
+    expect(result.remote?.hubAddress).toBe(hub.url);
+
+    await transportA.shutdown();
+    await transportB.shutdown();
+  });
 });

@@ -283,4 +283,40 @@ describe("dispatchHubRequest", () => {
     const [, handleArg] = handleRoomRequest.mock.calls[0] ?? [];
     expect(handleArg).toEqual({ id: deviceIdToHex(deviceIdBytes(SENDER_HEX)) });
   });
+
+  it("threads the given hubAddress through to handleRoomRequest as origin.relayHubAddress (agent-comms#216)", async () => {
+    const { request } = fakeRequest({
+      verb: "room:member",
+      fromDevice: SENDER_HEX,
+    });
+    const handleRoomRequest = vi.fn().mockResolvedValue(undefined);
+    const deps = fakeDeps({ isTrusted: () => false, handleRoomRequest });
+
+    await dispatchHubRequest(
+      request,
+      OWN_HEX,
+      deps,
+      fakeOnKnownPeer(),
+      "wss://hub.example/",
+    );
+
+    expect(handleRoomRequest).toHaveBeenCalledTimes(1);
+    const [, , originArg] = handleRoomRequest.mock.calls[0] ?? [];
+    expect(originArg).toEqual({ relayHubAddress: "wss://hub.example/" });
+  });
+
+  it("passes an empty origin to handleRoomRequest when no hubAddress was given", async () => {
+    const { request } = fakeRequest({
+      verb: "room:member",
+      fromDevice: SENDER_HEX,
+    });
+    const handleRoomRequest = vi.fn().mockResolvedValue(undefined);
+    const deps = fakeDeps({ isTrusted: () => false, handleRoomRequest });
+
+    await dispatchHubRequest(request, OWN_HEX, deps, fakeOnKnownPeer());
+
+    expect(handleRoomRequest).toHaveBeenCalledTimes(1);
+    const [, , originArg] = handleRoomRequest.mock.calls[0] ?? [];
+    expect(originArg).toEqual({});
+  });
 });
