@@ -1,3 +1,19 @@
+## [3.25.0](https://github.com/ExaDev/agent-comms/compare/v3.24.0...v3.25.0) (2026-09-18)
+
+### Features
+
+* **bridge:** add mesh graph/trace types and REST client to the frontend ([2a03b1b](https://github.com/ExaDev/agent-comms/commit/2a03b1bfc3f4af0ce131ca931018cb907436a6b4))
+* **bridge:** render a live mesh connection graph and path-trace view ([3b3a5e0](https://github.com/ExaDev/agent-comms/commit/3b3a5e0d592f43b2f017ace9d1481345f8b8260d))
+* **bridge:** serve the mesh's connection graph and path trace over REST ([b7e5915](https://github.com/ExaDev/agent-comms/commit/b7e591533bbb9ff381f8573775932f5ecbd7ef84))
+
+### Bug Fixes
+
+* **core:** include every mesh graph edge endpoint in its own node list ([5bc68f8](https://github.com/ExaDev/agent-comms/commit/5bc68f8ca3e2745e08c8d85d4a8b5302518d2fef))
+
+### Chores
+
+* **deps:** add d3-force for the mesh graph view's layout ([3cd2369](https://github.com/ExaDev/agent-comms/commit/3cd236920f010d34de504a86421c8e6f3e098782))
+
 ## [3.24.0](https://github.com/ExaDev/agent-comms/compare/v3.23.0...v3.24.0) (2026-09-18)
 
 ### Features
