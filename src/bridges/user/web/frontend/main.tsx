@@ -9,7 +9,13 @@ import { createRoot } from "react-dom/client";
 import { MantineProvider } from "@mantine/core";
 import { useEffect } from "react";
 import { App } from "./components/App.js";
-import { CommsWs, fetchAgents, fetchRoomMessages, fetchRooms } from "./api.js";
+import {
+  CommsWs,
+  fetchAgents,
+  fetchMeshGraph,
+  fetchRoomMessages,
+  fetchRooms,
+} from "./api.js";
 import { parseInput, routeAction } from "./input.js";
 import { State } from "./state.js";
 import { useClientState } from "./use-client-state.js";
@@ -148,6 +154,16 @@ async function refreshState(): Promise<void> {
   const [agents, rooms] = await Promise.all([fetchAgents(), fetchRooms()]);
   state.setAgents(agents);
   state.setRooms(rooms);
+  await refreshMeshGraph();
+}
+
+/** Refreshes the mesh's connection graph on the same triggers refreshState already reacts to (agent-comms#201) -- a failure here (most commonly this bridge running on a FileStore rather than a real mesh transport, so mesh_graph simply isn't supported) leaves state.meshGraph as it was rather than breaking the agents/rooms refresh it rides alongside. */
+async function refreshMeshGraph(): Promise<void> {
+  try {
+    state.setMeshGraph(await fetchMeshGraph());
+  } catch {
+    // Not mesh-backed, or the transport doesn't support mesh_graph -- leave meshGraph unset.
+  }
 }
 
 async function onJoinRoom(roomId: string): Promise<void> {
@@ -261,6 +277,7 @@ function Root() {
       dmTarget={s.dmTarget}
       messages={s.messages}
       connected={s.connected}
+      meshGraph={s.meshGraph}
       onJoinRoom={(roomId) => {
         void onJoinRoom(roomId);
       }}
