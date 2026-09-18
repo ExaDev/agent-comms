@@ -1,3 +1,9 @@
+## [3.27.0](https://github.com/ExaDev/agent-comms/compare/v3.26.0...v3.27.0) (2026-09-18)
+
+### Features
+
+* **bridge:** cut mesh-client.ts over to the real oRPC message-port client ([116ee65](https://github.com/ExaDev/agent-comms/commit/116ee65b10629dfb43c51516ffe7d1a8ddd28bd4))
+
 ## [3.26.0](https://github.com/ExaDev/agent-comms/compare/v3.25.0...v3.26.0) (2026-09-18)
 
 ### Features
