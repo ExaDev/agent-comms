@@ -322,3 +322,54 @@ This works for both room messages and DMs.
 ## Stale agent cleanup
 
 The coordinator probes registered agent PIDs every 5 seconds using signal 0 (existence check). Dead agents are marked offline and the status is broadcast to all peers. Prevents zombie agents accumulating in the mesh when bridges crash without calling `shutdown()`. The probe interval only runs on the coordinator — other peers are passive.
+
+## Gateway trust and connection codes
+
+Two devices on different machines can only relay traffic through each other's hub once each side explicitly trusts the other's device-id — a deny-by-default, pin-the-key model with no directory lookup, deliberately mirroring how an ordinary peer connection is already pinned.
+
+```
+# Trust a remote device you already know the device-id for
+agent_comms({ action: "gateway_trust", device: "1a2b3c..." })
+
+# Stop trusting it
+agent_comms({ action: "gateway_untrust", device: "1a2b3c..." })
+
+# List every currently trusted device
+agent_comms({ action: "gateway_list_trusted" })
+```
+
+The device-id itself normally has to be learned out of band (Slack, email, a phone call) before it can be pasted into `gateway_trust`. A connection code is a single-use, short-lived artifact that makes that hand-off itself verifiable instead of a bare, unauthenticated string:
+
+```
+ConnectionCode {
+  code: nonce            # single-use
+  expiresAt: timestamp   # short-lived
+  deviceId: hex          # the device being vouched for
+  signature?: PgpSignature over (code, expiresAt, deviceId)
+}
+```
+
+`code`/`expiresAt` are the always-checked half: proof that whoever redeems this was on the other end of this exact exchange, recently. `signature` is optional and answers a different question — this claim was made by whoever holds a specific long-lived PGP key. It's checked only when present, and never required: a device with no PGP identity still generates and redeems a bare code.
+
+```
+# Generate a code vouching for this device, unsigned
+agent_comms({ action: "gateway_generate_connection_code" })
+
+# ...or signed with a PGP private key you already have (agent-comms never generates or stores PGP key material itself -- you supply it per call, the same way you would to `gpg --sign` directly)
+agent_comms({ action: "gateway_generate_connection_code", privateKey: "-----BEGIN PGP PRIVATE KEY BLOCK-----..." })
+
+# Relay the printed code to the counterpart out of band, then redeem it on their side -- a successful redemption trusts the device it vouches for, exactly as if gateway_trust had been called directly
+agent_comms({
+  action: "gateway_redeem_connection_code",
+  code: "...", expiresAt: "2026-01-01T00:15:00.000Z", device: "1a2b3c...",
+})
+
+# Redeeming a signed code needs the signer's public key to verify against -- paste it directly, or supply a fingerprint you already trust and let the redeemer fetch it from keys.openpgp.org
+agent_comms({
+  action: "gateway_redeem_connection_code",
+  code: "...", expiresAt: "...", device: "1a2b3c...", signature: "...",
+  fingerprint: "aabbccddeeff00112233445566778899aabbccd",
+})
+```
+
+The fingerprint is never a trust anchor supplied by the keyserver — it's the thing the redeemer already independently trusts (from a business card, a prior verification, wherever), and the redeemer's own check is that the key actually fetched or pasted verifies to that exact fingerprint, not merely that *some* key was found. Redemption never calls back to whoever generated the code: the whole point is bootstrapping trust before any connection between the two devices exists.
