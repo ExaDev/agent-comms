@@ -129,6 +129,9 @@ export interface MeshOnlyFeatures {
     candidate: Readonly<ConnectionCode>,
     options: Readonly<RedeemConnectionCodeOptions>,
   ) => Promise<RedeemConnectionCodeResult>;
+  addTrustedGatewayPrincipal?: (deviceHex: string) => void;
+  removeTrustedGatewayPrincipal?: (deviceHex: string) => void;
+  listTrustedGatewayPrincipals?: () => string[];
 }
 
 /** Uniform "this bridge isn't backed by a mesh transport" result for a MeshOnlyFeatures method that isn't present on the current store. */
