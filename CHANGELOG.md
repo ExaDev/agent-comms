@@ -1,3 +1,28 @@
+## [3.16.0](https://github.com/ExaDev/agent-comms/compare/v3.15.0...v3.16.0) (2026-09-18)
+
+### Features
+
+* **core:** add ConnectionCodeLedger for connection-code generation and redemption ([a47358f](https://github.com/ExaDev/agent-comms/commit/a47358f376b0574adc40226c9fa0e55ac1d7330b)), references [agent-comms#188](https://github.com/agent-comms/issues/188)
+* **core:** add keyserver lookup for a connection code's signing key ([81142ad](https://github.com/ExaDev/agent-comms/commit/81142ad14b89bd39d52435bbccf46d0351350a58)), references [agent-comms#188](https://github.com/agent-comms/issues/188)
+* **core:** let a principal delegate a received dm:send grant to its own device ([36456ae](https://github.com/ExaDev/agent-comms/commit/36456aeff2c36e75fb86d0090baa0459f984a2b3))
+* **core:** let admitAgentForDm admit a delegable user principal ([3384982](https://github.com/ExaDev/agent-comms/commit/3384982f718f205efbd0d6d92298f90a245ebecf)), references [agent-comms#187](https://github.com/agent-comms/issues/187)
+* **core:** let GatewayTrust admit a user principal, not just a bare device ([6025362](https://github.com/ExaDev/agent-comms/commit/60253626782a23ec1d5b1689e202e31a43c0321d))
+* **core:** persist a per-slot connection-code ledger ([1320900](https://github.com/ExaDev/agent-comms/commit/13209006a55a2483d6f7b6919d33c1275710a8eb)), references [agent-comms#188](https://github.com/agent-comms/issues/188)
+* **core:** wire gateway_generate_connection_code and gateway_redeem_connection_code ([2815ac4](https://github.com/ExaDev/agent-comms/commit/2815ac49f7dd200f2e4da50274dcb7b965cd3cfd))
+
+### Documentation
+
+* document gateway trust and connection codes ([60b8669](https://github.com/ExaDev/agent-comms/commit/60b866922a631d92920f308645ddccdba11c9d1f))
+
+### Styles
+
+* **core:** match prettier's multiline formatting for the gateway-trust object literals ([f45fca8](https://github.com/ExaDev/agent-comms/commit/f45fca8749de884ff21442b5b90fdbc7d712bf9b))
+
+### Tests
+
+* **core:** cover gateway_generate_connection_code and gateway_redeem_connection_code end to end ([c5ba830](https://github.com/ExaDev/agent-comms/commit/c5ba8301ce5ccd1b24b2ff677eebecdca26d4d46))
+* **core:** prove a principal's own device auto-admits via a delegated dm:send token ([f1c4da9](https://github.com/ExaDev/agent-comms/commit/f1c4da9dc5492b2f15ac8ac9cb60a5a2f8dee427)), references [agent-comms#187](https://github.com/agent-comms/issues/187)
+
 ## [3.15.0](https://github.com/ExaDev/agent-comms/compare/v3.14.0...v3.15.0) (2026-09-18)
 
 ### Features
