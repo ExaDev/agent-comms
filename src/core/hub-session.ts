@@ -10,6 +10,7 @@ import {
   type ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
+import { tracePath as coreTracePath } from "wire-mesh-core/domain/path-trace";
 import type {
   CapabilityScope,
   CapabilityToken,
@@ -18,7 +19,11 @@ import type {
 } from "wire-mesh-core/generated/protocol";
 import type { IdentityPort } from "wire-mesh-core/ports/identity";
 import type { Connection } from "wire-mesh-core/ports/transport";
-import type { ConnectionHandle, TransportEvents } from "./transport.js";
+import type {
+  ConnectionHandle,
+  MeshTraceResult,
+  TransportEvents,
+} from "./transport.js";
 import type { MeshMessage } from "./wire-protocol.js";
 import { extractMessage } from "./room-router.js";
 import { connectWsUrl } from "./ws-dial.js";
@@ -71,6 +76,8 @@ export class HubSession {
   private session: AcceptedMeshSession | undefined;
   /** The raw connection underlying `session` -- MeshSession's own sendGossipUpdate only ever advertises this side's own single device, so advertising OTHER (local mesh) devices onto the hub (agent-comms#155's outbound leg) needs a raw gossip frame sent directly, bypassing that per-session single-self-advert limit. */
   private connection: Connection | undefined;
+  /** The URL this side itself dialled to reach the hub -- tracePath's own local.hubAddress (agent-comms#199), the equivalent of wire-mesh-core's own TracePathOptions.localHubAddress. */
+  private url: string | undefined;
   private readonly hubPeersKnown = new Set<string>();
 
   constructor(private readonly deps: Readonly<HubSessionDeps>) {}
@@ -97,6 +104,7 @@ export class HubSession {
     if (session === undefined) return;
     this.session = undefined;
     this.connection = undefined;
+    this.url = undefined;
     await session.close();
   }
 
@@ -123,6 +131,7 @@ export class HubSession {
     }
     this.session = session;
     this.connection = connection;
+    this.url = url;
     this.deps.trackForShutdown(session);
     // Merge the hub's directory (its catch-up arrives as the first session events) and keep refreshing it on every subsequent one. Every trusted remote entry is also surfaced via onDirectory, so the transport can merge it into its own mesh-wide knownDevices (agent-comms#155's remote-directory-merge leg). Filtered to isTrustedForDirectory (agent-comms#156, widened by agent-comms#187's principal allowlist per agent-comms#192) before either hubPeersKnown tracking or onDirectory sees it: an untrusted device's gossiped presence is not merely withheld from listAgents, it is never even recorded as "known" here, so nothing downstream can act on it via any path this class exposes.
     void (async () => {
@@ -166,6 +175,7 @@ export class HubSession {
     if (this.session === session) {
       this.session = undefined;
       this.connection = undefined;
+      this.url = undefined;
     }
   }
 
@@ -212,6 +222,28 @@ export class HubSession {
       token,
       HUB_ROOM_REQUEST_TIMEOUT_MS,
     );
+  }
+
+  /** Sends path.trace to a specific hub-reachable peer, through the hub's relay-connect/relay-data pairing -- WireMeshTransport.meshTrace's own hub-relayed fallback (agent-comms#199), mirroring sendRoomRequest's own not_connected contract and HUB_ROOM_REQUEST_TIMEOUT_MS default for the identical reason (an unreachable target-device is silently dropped by the hub, not answered with an error). Delegates the actual send/RTT-measurement/response-parsing to wire-mesh-core's own tracePath, reporting this.url (the address this side itself dialled to reach the hub) as local.hubAddress. */
+  async tracePath(
+    peerDeviceHex: string,
+    timeoutMs?: number,
+  ): Promise<MeshTraceResult> {
+    const session = this.session;
+    if (session === undefined) {
+      return {
+        rttMs: 0,
+        local: { relayed: true },
+        outcome: { result: "error", code: "not_connected" },
+      };
+    }
+    return coreTracePath({
+      session,
+      clock: { now: () => Date.now() },
+      targetDevice: hexToBytes(peerDeviceHex),
+      timeoutMs: timeoutMs ?? HUB_ROOM_REQUEST_TIMEOUT_MS,
+      ...(this.url !== undefined ? { localHubAddress: this.url } : {}),
+    });
   }
 }
 
