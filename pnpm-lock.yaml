@@ -204,8 +204,8 @@ importers:
         specifier: 2.3.0
         version: 2.3.0
       cc-peer:
-        specifier: 1.4.1
-        version: 1.4.1
+        specifier: 1.5.0
+        version: 1.5.0
       openpgp:
         specifier: 6.3.1
         version: 6.3.1
@@ -219,8 +219,8 @@ importers:
         specifier: 1.3.6
         version: 1.3.6
       wire-mesh-core:
-        specifier: 1.48.2
-        version: 1.48.2
+        specifier: 1.57.0
+        version: 1.57.0
       ws:
         specifier: 8.21.1
         version: 8.21.1
@@ -3080,8 +3080,8 @@ packages:
     resolution: {integrity: sha512-76WB3hq8BoaGkMkBVJ27fW5LJU+qqDLEpgRNCG/SYKhODWXpVPOTD4UcUto3IEzYLA52nsvbhb0wabhHDn3qXg==}
     engines: {node: '>=20'}
 
-  cc-peer@1.4.1:
-    resolution: {integrity: sha512-TETcA2MOexkQ+xlBXAV/ftOfK9t2k6C73JJY3CHCkKue7ddh7vZyRU+TWK3lJ1gVbCTDcas8q7ousdvc8sad1w==}
+  cc-peer@1.5.0:
+    resolution: {integrity: sha512-jDWTD1xGVBZfW6fHOtgtClKwTDNgEMy5eSo5sOGw4KpiHJUHY7PAVBU0YfqzyGUR6H2uA/wL9CbrK62YjXn7Ww==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -6348,8 +6348,8 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
-  wire-mesh-core@1.48.2:
-    resolution: {integrity: sha512-s5oCOGG6LRs7PVZfPBvEaPL7aIGaFWC/NTg0tuSdm5txeSk949xPjlXmp4Wr/+Jnz5VTogaNv2f9Yfsyyt4CMw==}
+  wire-mesh-core@1.57.0:
+    resolution: {integrity: sha512-QCkaQKtL1teN7c9DI2j2E/k3fTfkF0FL94tUtR0lyURXeg2J+5zJMSv+ANrKBZXu95EjP1uKamqnMTt3h9gp0g==}
 
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
@@ -9538,7 +9538,7 @@ snapshots:
     dependencies:
       '@cto.af/wtf8': 0.0.5
 
-  cc-peer@1.4.1:
+  cc-peer@1.5.0:
     dependencies:
       zod: 4.5.4
 
@@ -13172,7 +13172,7 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  wire-mesh-core@1.48.2:
+  wire-mesh-core@1.57.0:
     dependencies:
       cbor2: 2.3.0
       cddl.js: 1.0.1
