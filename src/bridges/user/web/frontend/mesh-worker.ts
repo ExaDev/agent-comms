@@ -15,6 +15,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import type { MeshContract } from "../contract.js";
 import { MeshEventPublisher } from "../event-publisher.js";
 import { tabContract } from "./tab-contract.js";
+import { dispatchAction } from "./dispatch-action.js";
 import type {
   AgentIdentity as CoreAgentIdentity,
   Room as CoreRoom,
@@ -292,67 +293,6 @@ async function pumpEvents(
     } catch {
       // Transport dropped mid-stream. Loop back and resume from lastEventId once subscribeEvents() can succeed again.
     }
-  }
-}
-
-async function dispatchAction(
-  client: Readonly<MeshOrpcClient>,
-  action: Record<string, unknown>,
-): Promise<{ content: string; isError: boolean }> {
-  const str = (key: string): string => {
-    const value = action[key];
-    return typeof value === "string" ? value : "";
-  };
-  const optStr = (key: string): string | undefined => {
-    const value = action[key];
-    return typeof value === "string" ? value : undefined;
-  };
-  const roomType = (): "public" | "private" | "secret" => {
-    const value = action.type;
-    return value === "public" || value === "private" || value === "secret"
-      ? value
-      : "public";
-  };
-
-  switch (action.action) {
-    case "send":
-      return client.send({ target: str("target"), content: str("content") });
-    case "dm":
-      return client.dm({ target: str("target"), content: str("content") });
-    case "join_room":
-      return client.joinRoom({ room: str("room") });
-    case "leave_room":
-      return client.leaveRoom({ room: optStr("room") });
-    case "create_room":
-      return client.createRoom({
-        name: str("name"),
-        type: roomType(),
-        description: optStr("description"),
-      });
-    case "list_rooms":
-      return client.listRooms({});
-    case "list_agents":
-      return client.listAgents({});
-    case "read_room":
-      return client.readRoom({ room: optStr("room") });
-    case "destroy_room":
-      return client.destroyRoom({ room: str("room") });
-    case "invite":
-      return client.invite({ room: str("room"), agent: str("agent") });
-    case "decline_invite":
-      return client.declineInvite({
-        room: str("room"),
-        reason: str("reason"),
-      });
-    case "kick":
-      return client.kick({ room: str("room"), agent: str("agent") });
-    case "rename_agent":
-      return client.renameAgent({ agent: str("agent"), name: str("name") });
-    default:
-      return {
-        content: `Unknown action: ${String(action.action)}`,
-        isError: true,
-      };
   }
 }
 
