@@ -8,6 +8,8 @@
  * Also starts this bridge's own VersionDriftChecker (agent-comms#166) and wires its result into the CommsTool it builds, so every real bridge gets npm release-drift reporting on whoami/update for free from this one construction point, with no per-bridge wiring. fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup); a test that would otherwise trigger real network I/O on every createBridgeMesh call injects a fake resolver instead.
  *
  * createBridgeMeshSync/createBridgeMesh own loadOrCreateIdentity's slot lock on the caller's behalf; createBridgeMeshSyncFromIdentity/createBridgeMeshFromIdentity take an already-loaded identity instead and never touch the lock at all -- the cc-peer front (agent-comms#157) uses these directly, via loadIdentityForFront's lock-free load, to build a mesh identity for a not-yet-live session's slot while leaving that slot's own lock free for its real bridge to acquire normally later.
+ *
+ * Passes slot through to MeshStore's own constructor (agent-comms#186) so the gatewayTrust allowlist it builds loads whatever remote device-ids were trusted before the last restart, and persists every subsequent addTrustedGateway/removeTrustedGateway back to that same slot's storage.
  */
 
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
@@ -64,7 +66,7 @@ export function createBridgeMeshSyncFromIdentity(
   // The user-principal identity (agent-comms#160) is shared by every bridge on this machine account -- deliberately not scoped to slot, unlike identity above. userIdentityOptions is empty (the default ~/.agent-comms location); every real bridge shares it, and only tests need an override.
   const userIdentityOptions = {};
   const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
-  const store = new MeshStore(coordinatorPort, hubUrl);
+  const store = new MeshStore(coordinatorPort, hubUrl, slot);
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- oplogDirFor(slot) needs only the slot, not the async identity below, so this can be constructed synchronously right here.
   const dataStorage = createNodeFsStorage({ dir: oplogDirFor(slot) });

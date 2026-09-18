@@ -18,6 +18,7 @@ import { COORDINATOR_HOST, DEFAULT_HUB_URL } from "./mesh-store-shared.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import { CoordinatorGateway } from "./coordinator-gateway.js";
 import { GatewayTrust } from "./gateway-trust.js";
+import type { IdentitySlot } from "./identity-store.js";
 import { DeliveryEngine } from "./delivery-engine.js";
 import { RoomProtocol } from "./room-protocol.js";
 import { RoomMessaging } from "./room-messaging.js";
@@ -98,8 +99,8 @@ export class MeshStore implements CommsStore {
 
   discovery: DiscoveryManager;
 
-  /** The cross-machine trust boundary (agent-comms#156) -- constructed once here (mirroring discovery above) and shared with WireMeshTransport by every construction site (bridge-mesh.ts, test-transport.ts) that passes it into WireMeshTransport's own constructor, so store.addTrustedGateway() and the transport's own hub-forwarding/hub-session gates read the exact same in-memory set. Public so those construction sites can reach it; addTrustedGateway/removeTrustedGateway/listTrustedGateways below are the methods CommsTool actually calls through MeshOnlyFeatures. */
-  readonly gatewayTrust = new GatewayTrust();
+  /** The cross-machine trust boundary (agent-comms#156), constructed once in the constructor below (mirroring discovery above) and shared with WireMeshTransport by every construction site (bridge-mesh.ts, test-transport.ts) that passes it into WireMeshTransport's own constructor, so store.addTrustedGateway() and the transport's own hub-forwarding/hub-session gates read the exact same set. Persists across restarts (agent-comms#186) when a slot is passed to this store's own constructor; stays in-memory only, exactly as before, for every construction site that omits one. Public so those construction sites can reach it; addTrustedGateway/removeTrustedGateway/listTrustedGateways below are the methods CommsTool actually calls through MeshOnlyFeatures. */
+  readonly gatewayTrust: GatewayTrust;
 
   private readonly deliveryEngine: DeliveryEngine;
   private readonly roomProtocol: RoomProtocol;
@@ -188,11 +189,13 @@ export class MeshStore implements CommsStore {
   constructor(
     coordinatorPort: number = DEFAULT_COORDINATOR_PORT,
     hubUrl: string = DEFAULT_HUB_URL,
+    gatewayTrustSlot?: Readonly<IdentitySlot>,
   ) {
     this.peerId = nanoid(PEER_ID_LENGTH);
     this.startedAt = new Date().toISOString();
     this.coordinatorPort = coordinatorPort;
     this.hubUrl = hubUrl;
+    this.gatewayTrust = new GatewayTrust(gatewayTrustSlot);
 
     // Discovery manager — registers available backends
     this.discovery = new DiscoveryManager();
