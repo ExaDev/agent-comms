@@ -9,7 +9,7 @@
  *
  * createBridgeMeshSync/createBridgeMesh own loadOrCreateIdentity's slot lock on the caller's behalf; createBridgeMeshSyncFromIdentity/createBridgeMeshFromIdentity take an already-loaded identity instead and never touch the lock at all -- the cc-peer front (agent-comms#157) uses these directly, via loadIdentityForFront's lock-free load, to build a mesh identity for a not-yet-live session's slot while leaving that slot's own lock free for its real bridge to acquire normally later.
  *
- * Passes slot through to MeshStore's own constructor (agent-comms#186) so the gatewayTrust allowlist it builds loads whatever remote device-ids were trusted before the last restart, and persists every subsequent addTrustedGateway/removeTrustedGateway back to that same slot's storage.
+ * Passes slot through to MeshStore's own constructor (agent-comms#186) so the gatewayTrust allowlist it builds loads whatever remote device-ids were trusted before the last restart, and persists every subsequent addTrustedGateway/removeTrustedGateway back to that same slot's storage. The same slot also backs MeshStore's connectionCodes ledger (agent-comms#188), for the same reason.
  */
 
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
