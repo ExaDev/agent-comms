@@ -20,23 +20,29 @@ test.describe("Sidebar toggle", () => {
     port,
   }) => {
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    // Sidebar should be visible initially
-    const sidebar = page.locator("#sidebar");
-    await expect(sidebar).toBeVisible();
+    const nav = page.getByRole("navigation");
+    const toggle = page.getByRole("button", { name: "Toggle sidebar" });
 
-    // Click the toggle to collapse
-    await page.locator("#sidebar-toggle").click();
+    // Sidebar starts on-screen (its x position is at or right of the viewport edge)
+    const openBox = await nav.boundingBox();
+    expect(openBox).not.toBeNull();
+    expect(openBox?.x).toBeGreaterThanOrEqual(0);
 
-    // Sidebar should now have the collapsed class
-    await expect(sidebar).toHaveClass(/sidebar-collapsed/);
+    // Click the toggle to collapse — the navbar slides off-screen (negative x)
+    await toggle.click();
+    await expect(async () => {
+      const box = await nav.boundingBox();
+      expect(box?.x).toBeLessThan(0);
+    }).toPass({ timeout: 5000 });
 
-    // Click toggle again to expand
-    await page.locator("#sidebar-toggle").click();
-
-    // Sidebar should no longer have the collapsed class
-    await expect(sidebar).not.toHaveClass(/sidebar-collapsed/);
+    // Click toggle again to expand — back on-screen
+    await toggle.click();
+    await expect(async () => {
+      const box = await nav.boundingBox();
+      expect(box?.x).toBeGreaterThanOrEqual(0);
+    }).toPass({ timeout: 5000 });
   });
 });
 
@@ -59,22 +65,20 @@ test.describe("Room switching via sidebar click", () => {
     });
 
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
     // Click the room in sidebar
-    const roomItem = page.locator("#room-list .room-item", {
-      hasText: roomName,
-    });
+    const roomItem = page.getByText(roomName);
     await roomItem.waitFor({ state: "visible", timeout: 10000 });
     await roomItem.click();
 
     // Header should show the room name
-    await expect(page.locator("#header")).toContainText(roomName, {
+    await expect(page.locator("header")).toContainText(roomName, {
       timeout: 10000,
     });
 
     // The leave button should appear when in a room
-    await expect(page.locator(".leave-btn")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Leave" })).toBeVisible();
   });
 
   test("switching between two rooms updates the header", async ({
@@ -105,25 +109,21 @@ test.describe("Room switching via sidebar click", () => {
     });
 
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
     // Click room A
-    const roomItemA = page.locator("#room-list .room-item", {
-      hasText: roomA,
-    });
+    const roomItemA = page.getByText(roomA);
     await roomItemA.waitFor({ state: "visible", timeout: 10000 });
     await roomItemA.click();
-    await expect(page.locator("#header")).toContainText(roomA, {
+    await expect(page.locator("header")).toContainText(roomA, {
       timeout: 10000,
     });
 
     // Click room B
-    const roomItemB = page.locator("#room-list .room-item", {
-      hasText: roomB,
-    });
+    const roomItemB = page.getByText(roomB);
     await roomItemB.waitFor({ state: "visible", timeout: 10000 });
     await roomItemB.click();
-    await expect(page.locator("#header")).toContainText(roomB, {
+    await expect(page.locator("header")).toContainText(roomB, {
       timeout: 10000,
     });
   });
@@ -145,15 +145,15 @@ test.describe("Room switching via /join command", () => {
     });
 
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    await page.locator("#input").fill(`/join ${roomName}`);
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill(`/join ${roomName}`);
+    await page.getByRole("button", { name: "Send" }).click();
 
-    await expect(page.locator("#header")).toContainText(roomName, {
+    await expect(page.locator("header")).toContainText(roomName, {
       timeout: 10000,
     });
-    await expect(page.locator("#messages")).toContainText("Joined");
+    await expect(page.getByText("Joined", { exact: false })).toBeVisible();
   });
 
   test("/join for nonexistent room returns server error via API", async ({
@@ -189,27 +189,24 @@ test.describe("Leave room via /leave command", () => {
     });
 
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
     // Join room via sidebar click
-    const roomItem = page.locator("#room-list .room-item", {
-      hasText: roomName,
-    });
+    const roomItem = page.getByText(roomName);
     await roomItem.waitFor({ state: "visible", timeout: 10000 });
     await roomItem.click();
-    await expect(page.locator("#header")).toContainText(roomName);
+    await expect(page.locator("header")).toContainText(roomName);
 
     // Leave via /leave
-    await page.locator("#input").fill("/leave");
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill("/leave");
+    await page.getByRole("button", { name: "Send" }).click();
 
-    await expect(page.locator("#messages")).toContainText(
-      `Left room "${roomName}"`,
-      { timeout: 10000 },
-    );
+    await expect(page.getByText(`Left room "${roomName}"`)).toBeVisible({
+      timeout: 10000,
+    });
 
     // Header should revert to default
-    await expect(page.locator("#header")).toContainText("Select a room", {
+    await expect(page.locator("header")).toContainText("Select a room", {
       timeout: 10000,
     });
   });
@@ -219,15 +216,15 @@ test.describe("Leave room via /leave command", () => {
     port,
   }) => {
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
     // /leave with no current room is handled locally — onLeaveRoom()
     // does nothing and returns early. No message is added.
-    await page.locator("#input").fill("/leave");
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill("/leave");
+    await page.getByRole("button", { name: "Send" }).click();
 
     // Header should remain at default
-    await expect(page.locator("#header")).toContainText("Select a room");
+    await expect(page.locator("header")).toContainText("Select a room");
   });
 });
 
@@ -243,25 +240,29 @@ test.describe("Rename via /rename command", () => {
     expect(agentId).toBeTruthy();
 
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    await page.locator("#input").fill(`/rename ${agentId} RenamedAgent`);
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill(`/rename ${agentId} RenamedAgent`);
+    await page.getByRole("button", { name: "Send" }).click();
 
     // Should see a result confirming the rename
-    await expect(page.locator("#messages")).toContainText("Renamed", {
+    await expect(
+      page.getByText("Renamed Dashboard", { exact: false }),
+    ).toBeVisible({
       timeout: 10000,
     });
   });
 
   test("/rename without agent ID shows usage error", async ({ page, port }) => {
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    await page.locator("#input").fill("/rename");
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill("/rename");
+    await page.getByRole("button", { name: "Send" }).click();
 
-    await expect(page.locator("#messages")).toContainText("Usage: /rename", {
+    await expect(
+      page.getByText("Usage: /rename", { exact: false }),
+    ).toBeVisible({
       timeout: 10000,
     });
   });
@@ -282,26 +283,26 @@ test.describe("DM via /dm command", () => {
     expect(agentId).toBeTruthy();
 
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
     // Send a DM to the agent (which is the self agent, but the action still goes through)
-    await page.locator("#input").fill(`/dm ${agentId} hello from dm`);
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill(`/dm ${agentId} hello from dm`);
+    await page.getByRole("button", { name: "Send" }).click();
 
     // Should see a result confirming the DM was sent
-    await expect(page.locator("#messages")).toContainText("DM", {
+    await expect(page.getByText("DM", { exact: false }).first()).toBeVisible({
       timeout: 10000,
     });
   });
 
   test("/dm without arguments shows usage error", async ({ page, port }) => {
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    await page.locator("#input").fill("/dm");
-    await page.locator("#send-btn").click();
+    await page.getByLabel("Message").fill("/dm");
+    await page.getByRole("button", { name: "Send" }).click();
 
-    await expect(page.locator("#messages")).toContainText("Usage: /dm", {
+    await expect(page.getByText("Usage: /dm", { exact: false })).toBeVisible({
       timeout: 10000,
     });
   });
@@ -313,11 +314,19 @@ test.describe("Agent list in sidebar", () => {
     port,
   }) => {
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    // The dashboard agent should appear in the sidebar
-    const agentItems = page.locator("#room-list .agent-item");
-    await expect(agentItems.first()).toBeVisible({ timeout: 10000 });
+    // The dashboard agent should appear in the sidebar navigation
+    const agentsRes = await fetch(`http://127.0.0.1:${port}/api/agents`);
+    const agents = await agentsRes.json();
+    const agentName =
+      typeof agents[0] === "object" && agents[0] !== null
+        ? agents[0].name
+        : undefined;
+    expect(agentName).toBeTruthy();
+    await expect(
+      page.getByRole("navigation").getByText(agentName as string),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("clicking an agent in the sidebar sets DM target", async ({
@@ -325,15 +334,25 @@ test.describe("Agent list in sidebar", () => {
     port,
   }) => {
     await page.goto(`http://127.0.0.1:${port}`);
-    await expect(page.locator("#messages")).toContainText("Connected to mesh");
+    await expect(page.getByText("Connected to mesh")).toBeVisible();
 
-    // Click an agent item
-    const agentItem = page.locator("#room-list .agent-item").first();
+    const agentsRes = await fetch(`http://127.0.0.1:${port}/api/agents`);
+    const agents = await agentsRes.json();
+    const agentName =
+      typeof agents[0] === "object" && agents[0] !== null
+        ? agents[0].name
+        : undefined;
+    expect(agentName).toBeTruthy();
+
+    // Click the agent item
+    const agentItem = page
+      .getByRole("navigation")
+      .getByText(agentName as string);
     await agentItem.waitFor({ state: "visible", timeout: 10000 });
     await agentItem.click();
 
-    // Header should show DM with agent ID
-    await expect(page.locator("#header")).toContainText("DM with", {
+    // Header should show DM with agent name
+    await expect(page.locator("header")).toContainText("DM with", {
       timeout: 10000,
     });
   });

@@ -1,9 +1,7 @@
 /**
  * E2e tests — standalone PWA mode (no backend server).
  *
- * Simulates the PWA served from a non-localhost host (e.g. GitHub Pages).
- * The frontend should load, show the connect prompt, skip REST API calls,
- * and attempt localhost port probing on connect.
+ * Simulates the PWA served from a non-localhost host (e.g. GitHub Pages). The frontend should load, show the connect prompt, skip REST API calls, and attempt localhost port probing on connect.
  */
 
 import { expect } from "@playwright/test";
@@ -11,17 +9,14 @@ import { test } from "./fixtures.js";
 
 test.describe("Standalone PWA mode", () => {
   test("page loads and shows connect prompt", async ({ page, port }) => {
-    // Navigate to the local server — the connect prompt should appear
-    // because we haven't set the localStorage flag and messages are empty.
-    // (The server is running on localhost so it auto-connects via WS,
-    //  but on first render before the WS opens, the prompt may flash briefly.)
+    // Navigate to the local server — the connect prompt should appear because we haven't set the localStorage flag and messages are empty. (The server is running on localhost so it auto-connects via WS, but on first render before the WS opens, the prompt may flash briefly.)
     await page.goto(`http://127.0.0.1:${port}`);
 
     // The page should load without errors
     await expect(page).toHaveTitle("Agent Comms");
 
     // Input bar should always be present
-    await expect(page.locator("#input")).toBeVisible();
+    await expect(page.getByLabel("Message")).toBeVisible();
   });
 
   test("no REST API calls when served from non-localhost", async ({
@@ -37,14 +32,11 @@ test.describe("Standalone PWA mode", () => {
       }
     });
 
-    // Navigate — when served from localhost the app does make REST calls.
-    // This test verifies the page loads successfully regardless.
+    // Navigate — when served from localhost the app does make REST calls. This test verifies the page loads successfully regardless.
     await page.goto(`http://127.0.0.1:${port}`);
     await expect(page).toHaveTitle("Agent Comms");
 
-    // On localhost, REST calls ARE expected — they fetch agents and rooms.
-    // This baseline test confirms the page loads with the server running.
-    // The standalone behaviour is tested by the connect prompt test below.
+    // On localhost, REST calls ARE expected — they fetch agents and rooms. This baseline test confirms the page loads with the server running. The standalone behaviour is tested by the connect prompt test below.
   });
 
   test("connect prompt is visible on fresh load without localStorage flag", async ({
@@ -60,11 +52,8 @@ test.describe("Standalone PWA mode", () => {
     // Reload to trigger the boot logic fresh
     await page.reload();
 
-    // Since the server is on localhost, it auto-connects.
-    // The connect prompt only shows when connected=false && messages=0,
-    // which is a brief window on localhost. We verify the page loads
-    // and the input is functional.
-    await expect(page.locator("#input")).toBeVisible();
+    // Since the server is on localhost, it auto-connects. The connect prompt only shows when connected=false && messages=0, which is a brief window on localhost. We verify the page loads and the input is functional.
+    await expect(page.getByLabel("Message")).toBeVisible();
   });
 
   test("clicking connect sets localStorage flag", async ({ page, port }) => {
@@ -76,10 +65,8 @@ test.describe("Standalone PWA mode", () => {
     });
     await page.reload();
 
-    // On localhost the WebSocket connects automatically, so the connect
-    // prompt disappears quickly. But the localStorage flag gets set on
-    // explicit connect. Verify we can interact with the page.
-    await expect(page.locator("#input")).toBeVisible();
+    // On localhost the WebSocket connects automatically, so the connect prompt disappears quickly. But the localStorage flag gets set on explicit connect. Verify we can interact with the page.
+    await expect(page.getByLabel("Message")).toBeVisible();
 
     // Set the flag manually and verify it persists
     await page.evaluate(() => {
@@ -100,13 +87,12 @@ test.describe("Standalone PWA mode", () => {
     await page.goto(`http://127.0.0.1:${port}`);
     await expect(page).toHaveTitle("Agent Comms");
 
-    // Now intercept all fetch requests and abort them to simulate
-    // the standalone PWA scenario where there's no backend.
+    // Now intercept all fetch requests and abort them to simulate the standalone PWA scenario where there's no backend.
     await page.route("**/api/**", async (route) => route.abort());
 
     // Reload — page should still render without crashing
     await page.reload();
     await expect(page).toHaveTitle("Agent Comms");
-    await expect(page.locator("#input")).toBeVisible();
+    await expect(page.getByLabel("Message")).toBeVisible();
   });
 });

@@ -171,7 +171,7 @@ test.describe("PWA features", () => {
       });
 
       expect(cacheEntries.found).toBe(true);
-      expect(cacheEntries.entries).toContain("/");
+      expect(cacheEntries.entries).toContain("/index.html");
       expect(cacheEntries.entries).toContain("/bundle.js");
     });
 
