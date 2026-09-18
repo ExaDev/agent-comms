@@ -470,6 +470,10 @@ export const CommsActionSchema = defineSchema(
       publicKey: z.string().optional(),
       fingerprint: z.string().optional(),
     }),
+    z.object({
+      action: z.literal("query_version"),
+      device: z.string(),
+    }),
   ]),
 );
 export type CommsAction = z.infer<typeof CommsActionSchema>;

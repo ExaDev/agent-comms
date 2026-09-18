@@ -10,6 +10,8 @@
  * createBridgeMeshSync/createBridgeMesh own loadOrCreateIdentity's slot lock on the caller's behalf; createBridgeMeshSyncFromIdentity/createBridgeMeshFromIdentity take an already-loaded identity instead and never touch the lock at all -- the cc-peer front (agent-comms#157) uses these directly, via loadIdentityForFront's lock-free load, to build a mesh identity for a not-yet-live session's slot while leaving that slot's own lock free for its real bridge to acquire normally later.
  *
  * Passes slot through to MeshStore's own constructor (agent-comms#186) so the gatewayTrust allowlist it builds loads whatever remote device-ids were trusted before the last restart, and persists every subsequent addTrustedGateway/removeTrustedGateway back to that same slot's storage. The same slot also backs MeshStore's connectionCodes ledger (agent-comms#188), for the same reason.
+ *
+ * The returned store's own getCcPeerVersion field starts undefined and is read live (never snapshotted) by both WireMeshTransport's gossip tick and CommsTool's whoami/update/list_agents -- front-runtime.ts and bridges/cc-peer/run.ts set it once, right after this factory returns, rather than this factory taking it as a parameter: only those two call sites ever have a value for it, so threading it through every createBridgeMesh* signature here would be dead weight on every other caller (agent-comms#198).
  */
 
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
@@ -70,20 +72,20 @@ export function createBridgeMeshSyncFromIdentity(
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- oplogDirFor(slot) needs only the slot, not the async identity below, so this can be constructed synchronously right here.
   const dataStorage = createNodeFsStorage({ dir: oplogDirFor(slot) });
-  store.setTransport(
-    new WireMeshTransport(
-      store.events,
-      identity,
-      store.roomVerbHandlers,
-      undefined,
-      () => store.selfStatus,
-      undefined,
-      () => store.hostedRooms,
-      dataStorage,
-      () => store.selfAgentAdvert,
-      store.gatewayTrust,
-    ),
+  const transport = new WireMeshTransport(
+    store.events,
+    identity,
+    store.roomVerbHandlers,
+    undefined,
+    () => store.selfStatus,
+    undefined,
+    () => store.hostedRooms,
+    dataStorage,
+    () => store.selfAgentAdvert,
+    store.gatewayTrust,
   );
+  transport.getCcPeerVersion = () => store.getCcPeerVersion?.();
+  store.setTransport(transport);
   const versionChecker = new VersionDriftChecker({
     currentVersion: getOwnPackageVersion(),
     ...(fetchLatestVersion !== undefined ? { fetchLatestVersion } : {}),

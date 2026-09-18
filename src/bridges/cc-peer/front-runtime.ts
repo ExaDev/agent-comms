@@ -4,7 +4,7 @@
  * Untested directly, exactly like run.ts's own real construction (see cc-peer-bridge.test.ts's header comment): front.ts, front-controller.ts, and front-relay.ts already carry the front's entire decision/diffing/relay logic under direct DI-based unit tests, so this file's only remaining job -- calling the real cc-peer/core APIs in the right order -- is exercised by actually running a bridge as this machine's coordinator.
  */
 
-import { CcPeer } from "cc-peer";
+import { CcPeer, CC_PEER_VERSION } from "cc-peer";
 import type { InboundMessage as CcPeerInboundMessage } from "cc-peer";
 import { AliasPool } from "cc-peer/alias-pool";
 import type { AliasMessage } from "cc-peer/alias-pool";
@@ -114,6 +114,7 @@ export function createDefaultCcPeerFront(
       options.coordinatorPort,
       options.hubUrl,
     );
+    store.getCcPeerVersion = () => CC_PEER_VERSION;
 
     const reg = await ensureRegistered({
       store,
