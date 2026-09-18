@@ -1,83 +1,70 @@
+// @vitest-environment jsdom
 /**
  * Component interaction tests for JoinForm.
  */
 
-import { describe, it, expect } from "vitest";
-import { render as preactRender } from "preact";
-import { act } from "preact/test-utils";
-import { Window } from "happy-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { JoinForm } from "../components/JoinForm.js";
+import { stubMantineJsdomGlobals } from "./jsdom-mantine-polyfills.js";
+import { renderWithMantine } from "./render-with-mantine.js";
 
-let windowRef: Window | undefined;
+beforeEach(() => {
+  stubMantineJsdomGlobals();
+});
 
-function setup(): { container: HTMLElement; cleanup: () => void } {
-  windowRef = new Window();
-  const doc = (windowRef as unknown as { document: Document }).document;
-  (globalThis as Record<string, unknown>).document = doc;
-  const container = doc.createElement("div");
-  return {
-    container,
-    cleanup: () => {
-      delete (globalThis as Record<string, unknown>).document;
-      windowRef?.close();
-      windowRef = undefined;
-    },
-  };
-}
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("JoinForm interactions", () => {
-  it("renders hidden when not visible", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <JoinForm visible={false} onSubmit={() => {}} onCancel={() => {}} />,
-        container,
-      );
-      const form = container.querySelector("#join-form")!;
-      expect(form.classList.contains("hidden")).toBeTruthy();
-    } finally {
-      cleanup();
-    }
+  it("renders nothing when not visible", () => {
+    renderWithMantine(
+      <JoinForm visible={false} onSubmit={() => {}} onCancel={() => {}} />,
+    );
+    expect(screen.queryByLabelText("Room name")).not.toBeInTheDocument();
   });
 
-  it("does not call onSubmit when room name is empty", () => {
-    const { container, cleanup } = setup();
-    try {
-      let submitted = false;
-      preactRender(
-        <JoinForm
-          visible={true}
-          onSubmit={() => {
-            submitted = true;
-          }}
-          onCancel={() => {}}
-        />,
-        container,
-      );
-      const btn = container.querySelector(".join-submit")!;
-      btn.click();
-      expect(submitted).toBe(false);
-    } finally {
-      cleanup();
-    }
+  it("does not call onSubmit when room name is empty", async () => {
+    const user = userEvent.setup();
+    let submitted = false;
+    renderWithMantine(
+      <JoinForm
+        visible={true}
+        onSubmit={() => {
+          submitted = true;
+        }}
+        onCancel={() => {}}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Join" }));
+    expect(submitted).toBe(false);
   });
 
   it("renders input and submit button when visible", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <JoinForm visible={true} onSubmit={() => {}} onCancel={() => {}} />,
-        container,
-      );
-      const input = container.querySelector("input.join-input")!;
-      expect(input).toBeTruthy();
-      expect(input.getAttribute("placeholder")).toBe("Room name...");
+    renderWithMantine(
+      <JoinForm visible={true} onSubmit={() => {}} onCancel={() => {}} />,
+    );
+    const input = screen.getByLabelText("Room name");
+    expect(input).toHaveAttribute("placeholder", "Room name...");
+    expect(screen.getByRole("button", { name: "Join" })).toBeInTheDocument();
+  });
 
-      const btn = container.querySelector("button.join-submit")!;
-      expect(btn).toBeTruthy();
-      expect(btn.textContent).toBe("Join");
-    } finally {
-      cleanup();
-    }
+  it("calls onSubmit with the trimmed room name", async () => {
+    const user = userEvent.setup();
+    let submittedName: string | undefined;
+    renderWithMantine(
+      <JoinForm
+        visible={true}
+        onSubmit={(name) => {
+          submittedName = name;
+        }}
+        onCancel={() => {}}
+      />,
+    );
+    await user.type(screen.getByLabelText("Room name"), "my-room");
+    await user.click(screen.getByRole("button", { name: "Join" }));
+    expect(submittedName).toBe("my-room");
   });
 });
