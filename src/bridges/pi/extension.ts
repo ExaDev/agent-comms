@@ -32,15 +32,14 @@ import {
   type IdentitySlot,
 } from "../../core/identity-store.js";
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
-import { tryStartWebServer, type WebServerHandle } from "../user/web/server.js";
+import {
+  tryStartWebServer,
+  getWebPort,
+  getWebUrlStatus,
+  type WebServerHandle,
+} from "../user/web/server.js";
 import { ChatController } from "../user/controller.js";
 import { nanoid } from "../../core/nanoid.js";
-
-/** Resolve the listening port from a running web server handle. */
-function getWebPort(handle: WebServerHandle): number | undefined {
-  const addr = handle.server.address();
-  return typeof addr === "object" && addr ? addr.port : undefined;
-}
 
 export default function (pi: ExtensionAPI) {
   // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us
@@ -50,6 +49,7 @@ export default function (pi: ExtensionAPI) {
 
   let agentId: string | undefined;
   let webHandle: WebServerHandle | undefined;
+  tool.getWebUrlStatus = () => getWebUrlStatus(webHandle);
   let uiCtx: ExtensionUIContext | undefined;
   let projectRoom: string | undefined;
   const informationalBuffer: string[] = [];
@@ -300,29 +300,6 @@ export default function (pi: ExtensionAPI) {
     }),
 
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      if (params.action === "web_url") {
-        if (!webHandle) {
-          return {
-            content: [{ type: "text", text: "Web UI is not running." }],
-            details: { action: "web_url" },
-            isError: true,
-          };
-        }
-        const port = getWebPort(webHandle);
-        if (port === undefined || port === 0) {
-          return {
-            content: [{ type: "text", text: "Web UI port not yet assigned." }],
-            details: { action: "web_url" },
-            isError: true,
-          };
-        }
-        return {
-          content: [{ type: "text", text: `http://127.0.0.1:${String(port)}` }],
-          details: { action: "web_url" },
-          isError: false,
-        };
-      }
-
       if (agentId === undefined) {
         return {
           content: [{ type: "text", text: "Error: not registered" }],
