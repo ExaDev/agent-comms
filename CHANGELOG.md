@@ -1,3 +1,9 @@
+## [3.26.0](https://github.com/ExaDev/agent-comms/compare/v3.25.0...v3.26.0) (2026-09-18)
+
+### Features
+
+* **bridge:** make mesh-worker serve tabs over oRPC too, still dark ([35529cc](https://github.com/ExaDev/agent-comms/commit/35529cc2a9d0eb0818af310f06be2f3b49fd1ea7))
+
 ## [3.25.0](https://github.com/ExaDev/agent-comms/compare/v3.24.0...v3.25.0) (2026-09-18)
 
 ### Features
