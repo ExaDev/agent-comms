@@ -104,16 +104,6 @@ export type DeliveryEvent =
     };
 
 // ---------------------------------------------------------------------------
-// WebSocket frames (server → client)
-// ---------------------------------------------------------------------------
-
-export type WsFrame =
-  | { type: "delivery"; event: DeliveryEvent }
-  | { type: "result"; result: ActionResult }
-  | { type: "error"; message: string }
-  | { type: "state"; agents: Agent[]; rooms: Room[] };
-
-// ---------------------------------------------------------------------------
 // Actions (client → server)
 // ---------------------------------------------------------------------------
 

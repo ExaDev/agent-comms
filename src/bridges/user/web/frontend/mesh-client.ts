@@ -13,7 +13,7 @@
 import { createORPCClient, getEventMeta } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
 import type { ContractRouterClient } from "@orpc/contract";
-import type { Agent, Room } from "./types.js";
+import type { Agent, ActionResult, DeliveryEvent, Room } from "./types.js";
 import type { TabContract } from "./tab-contract.js";
 import type { MeshEvent } from "../contract.js";
 import { dispatchAction } from "./dispatch-action.js";
@@ -27,6 +27,29 @@ type RoomLike = Room;
 type TabClient = ContractRouterClient<TabContract>;
 
 export type MeshStateListener = (state: MeshClientState) => void;
+export type MeshDeliveryListener = (event: DeliveryEvent) => void;
+
+/**
+ * The delivery-event "type" values the web UI actually knows how to display (messages.ts's own deliveryEventToMessage, a closed, exhaustively-checked switch over types.ts's own DeliveryEvent union). The wire event carries two mesh-internal variants beyond that union -- connection_request/capability_request, part of the CLI/TUI's own connection-approval flows, never meant for this UI -- so this is a genuine filter, not a duplicate of the wider type.
+ */
+const DISPLAYABLE_DELIVERY_TYPES = new Set<string>([
+  "room_message",
+  "dm",
+  "room_invite",
+  "member_joined",
+  "member_left",
+  "room_members",
+  "member_status",
+  "delivery_status",
+  "invite_declined",
+  "name_changed",
+]);
+
+function isUiDeliveryEvent(
+  event: Readonly<{ type: string }>,
+): event is DeliveryEvent {
+  return DISPLAYABLE_DELIVERY_TYPES.has(event.type);
+}
 
 export interface MeshClientState {
   agents: AgentIdentity[];
@@ -52,6 +75,7 @@ export class MeshClient {
     connected: false,
   };
   private readonly listeners = new Set<MeshStateListener>();
+  private readonly deliveryListeners = new Set<MeshDeliveryListener>();
   private eventPumpGeneration = 0;
 
   constructor() {
@@ -118,11 +142,21 @@ export class MeshClient {
     };
   }
 
-  /** Send an action through the mesh worker. */
-  sendAction(action: Record<string, unknown>): void {
+  /** Subscribe to delivery events (room messages, DMs, invites, ...). Returns an unsubscribe function. */
+  onDelivery(listener: MeshDeliveryListener): () => void {
+    this.deliveryListeners.add(listener);
+    return () => {
+      this.deliveryListeners.delete(listener);
+    };
+  }
+
+  /** Send an action through the mesh worker, returning the real result. */
+  async sendAction(action: Record<string, unknown>): Promise<ActionResult> {
     const client = this.client;
-    if (!client) return;
-    void dispatchAction(client, action);
+    if (!client) {
+      return { content: "Not connected to mesh yet", isError: true };
+    }
+    return dispatchAction(client, action);
   }
 
   /** Disconnect and clean up. */
@@ -188,7 +222,11 @@ export class MeshClient {
         this.applyPatch(event.patch);
         break;
       case "delivery":
-        // Not yet wired to the UI's message list -- main.tsx's own cutover is what actually consumes delivery events; this class's own state only ever tracked agents/rooms/connected.
+        if (isUiDeliveryEvent(event.event)) {
+          for (const listener of this.deliveryListeners) {
+            listener(event.event);
+          }
+        }
         break;
     }
   }
@@ -227,8 +265,10 @@ export class MeshClient {
       }
       case "message_add":
       case "dm_add":
+        // Room/DM message history isn't part of this class's own state -- main.tsx reads history via the REST /api/rooms/:id/messages endpoint (onJoinRoom) instead.
+        break;
       case "delivery":
-        // Message/DM history and delivery-via-patch aren't part of this class's own state -- main.tsx's own cutover reads those from elsewhere.
+        // A mesh-internal patch variant (cross-peer "a delivery happened" bookkeeping) the browser UI was never the audience for -- real delivery events reach the UI through the top-level "delivery" MeshEvent kind above, not through this state_patch variant.
         break;
     }
   }

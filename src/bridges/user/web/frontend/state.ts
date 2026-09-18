@@ -99,12 +99,6 @@ export class State {
     this.notify();
   }
 
-  /** Bulk update from a state frame (initial WS connection). */
-  applyState(agents: readonly Agent[], rooms: readonly Room[]): void {
-    this.state = { ...this.state, agents, rooms };
-    this.notify();
-  }
-
   /** Reset to initial state. */
   reset(): void {
     this.state = { ...INITIAL_STATE, messages: [] };

@@ -99,19 +99,6 @@ describe("state", () => {
     expect(state.get().meshGraph).toEqual(graph);
   });
 
-  it("applyState sets agents and rooms atomically", () => {
-    const state = new State();
-    const notified = Array<boolean>();
-    state.subscribe(() => {
-      notified.push(true);
-    });
-
-    state.applyState([MOCK_AGENT], [MOCK_ROOM]);
-    expect(state.get().agents).toEqual([MOCK_AGENT]);
-    expect(state.get().rooms).toEqual([MOCK_ROOM]);
-    expect(notified.length).toBe(1);
-  });
-
   it("sets dmTarget and notifies", () => {
     const state = new State();
     const notified: ReturnType<State["get"]>[] = [];
