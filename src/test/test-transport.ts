@@ -12,6 +12,7 @@ import { loadOrCreateIdentity } from "../core/identity-store.js";
 import type { IdentitySlot } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
+import type { UserIdentityOptions } from "../core/user-identity.js";
 import { nanoid } from "../core/nanoid.js";
 import type { MeshStore } from "../core/mesh-store.js";
 
@@ -24,6 +25,7 @@ export async function wireTestTransport(
   slot?: Readonly<IdentitySlot>,
   pendingConnectionTimeoutMs?: number,
   presenceReadvertiseIntervalMs?: number,
+  userIdentityOptions?: Readonly<UserIdentityOptions>,
 ): Promise<IdentitySlot> {
   const resolvedSlot: IdentitySlot = slot ?? {
     harness: "test",
@@ -31,11 +33,14 @@ export async function wireTestTransport(
     dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-identity-")),
   };
   const identity = loadOrCreateIdentity(resolvedSlot);
-  // A fresh throwaway directory per call, matching resolvedSlot's own default: each test MeshStore represents a separate device belonging to a separate person, so it needs its own user-principal identity, never the real machine-wide ~/.agent-comms/user-identity.json a production bridge shares.
-  const userIdentityOptions = {
-    dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-user-identity-")),
-  };
-  const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
+  // A fresh throwaway directory per call, matching resolvedSlot's own default: each test MeshStore represents a separate device belonging to a separate person, so it needs its own user-principal identity, never the real machine-wide ~/.agent-comms/user-identity.json a production bridge shares. A caller that needs to know this store's own principal device-id ahead of time (agent-comms#187's own principal-keyed admission tests) passes an explicit userIdentityOptions naming a directory it already loaded itself, rather than this store minting one it can never be told about afterwards.
+  const resolvedUserIdentityOptions: Readonly<UserIdentityOptions> =
+    userIdentityOptions ?? {
+      dir: fs.mkdtempSync(
+        path.join(tmpdir(), "agent-comms-test-user-identity-"),
+      ),
+    };
+  const userIdentity = loadOrCreateUserIdentity(resolvedUserIdentityOptions);
   // Every real bridge sets peerId to deviceIdToHex(identity.deviceId) before wiring the transport (createBridgeMesh) -- WireMeshTransport's own session bookkeeping is keyed by device-id, so a peer's advertised ID and the identity the other side actually authenticates the connection against must be the same value, or introduction/state-sync never recognises the peer as itself.
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- memory-backed, matching every other throwaway test identity here, rather than a real createNodeFsStorage a test would need to clean up afterwards.
@@ -61,7 +66,7 @@ export async function wireTestTransport(
     revocation: createRevocationView(),
     dataStorage,
     userIdentity: await toIdentityPort(userIdentity),
-    userIdentityOptions,
+    userIdentityOptions: resolvedUserIdentityOptions,
   });
   // Surface transport-level errors instead of leaving them silent — a genuine socket failure during a test run is signal worth seeing even when the test's own assertions still pass, since it can point at a real race the assertions don't happen to catch.
   store.onError = (e) => {

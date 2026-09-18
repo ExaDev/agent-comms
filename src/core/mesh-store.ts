@@ -565,9 +565,12 @@ export class MeshStore implements CommsStore {
     return this.roomLifecycle.requestDmAccess(counterpart, dmSendGrant);
   }
 
-  /** Admits bearerId into this user's own DM-communication scope (agent-comms#162): mints and persists a dm:send grant, self-signed by this store's own user principal. Returns the minted token for the caller to deliver to bearerId out of band. Deliberately outside the CommsStore interface, like requestDmAccess above. Concrete-only -- reached directly by tests. */
-  async admitAgentForDm(bearerId: string): Promise<CapabilityToken> {
-    return this.roomLifecycle.admitAgentForDm(bearerId);
+  /** Admits bearerId into this user's own DM-communication scope (agent-comms#162): mints and persists a dm:send grant, self-signed by this store's own user principal. Returns the minted token for the caller to deliver to bearerId out of band. Deliberately outside the CommsStore interface, like requestDmAccess above. Concrete-only -- reached directly by tests. delegationsRemaining defaults to 0 (non-delegable, the original behaviour); a positive value admits bearerId as a user principal capable of sub-delegating to its own devices (agent-comms#187) -- see RoomLifecycle.admitAgentForDm's own doc comment. */
+  async admitAgentForDm(
+    bearerId: string,
+    delegationsRemaining = 0,
+  ): Promise<CapabilityToken> {
+    return this.roomLifecycle.admitAgentForDm(bearerId, delegationsRemaining);
   }
 
   /** Revokes bearerId's own dm:send grant for real (agent-comms#162), the DM-scope counterpart to kickFromRoom. A no-op if bearerId was never admitted. Deliberately outside the CommsStore interface, like requestDmAccess above. Concrete-only -- reached directly by tests. */
