@@ -1,3 +1,13 @@
+## [3.18.0](https://github.com/ExaDev/agent-comms/compare/v3.17.1...v3.18.0) (2026-09-18)
+
+### Features
+
+* **core:** add web_url action reporting a bridge's own web UI address ([a374032](https://github.com/ExaDev/agent-comms/commit/a374032fada5514b184f438d89887153facf8f94))
+
+### Refactoring
+
+* **bridge:** route pi's web_url action through CommsTool ([d022b11](https://github.com/ExaDev/agent-comms/commit/d022b11bd020621767bb2212c401f6684b7ad8fa))
+
 ## [3.17.1](https://github.com/ExaDev/agent-comms/compare/v3.17.0...v3.17.1) (2026-09-18)
 
 ### Bug Fixes
