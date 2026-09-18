@@ -11,6 +11,10 @@
  *   GET  /api/rooms/:id/messages → read room messages
  *   POST /api/action → execute any CommsAction
  *
+ * When AGENT_COMMS_WEB_CONSOLE_DIST points at a built wire-mesh web-console
+ * (see web-console-static.ts), GET /web-console/* also serves that as an
+ * alternate, generic reference-client UI alongside the frontend above.
+ *
  * WebSocket:
  *   Server pushes delivery events as JSON frames.
  *   Client sends action objects.
@@ -49,6 +53,10 @@ import {
 import { MeshEventPublisher } from "./event-publisher.js";
 import { meshRouter } from "./router.js";
 import type { DeliveryEvent } from "../../../core/types.js";
+import {
+  resolveWebConsoleDist,
+  serveWebConsole,
+} from "./web-console-static.js";
 
 const WEB_HOST = "127.0.0.1";
 
@@ -180,8 +188,10 @@ export async function createWebServer(
     await controller.init();
   }
 
+  const webConsoleDist = resolveWebConsoleDist();
+
   const server = http.createServer((req, res) => {
-    handleRequest(req, res, controller);
+    handleRequest(req, res, controller, webConsoleDist);
   });
 
   const pushManager = new PushManager();
@@ -299,6 +309,7 @@ function handleRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   controller: ChatController,
+  webConsoleDist: string | undefined,
 ): void {
   const url = new URL(req.url ?? "/", `http://localhost`);
 
@@ -310,6 +321,15 @@ function handleRequest(
   if (req.method === "OPTIONS") {
     res.writeHead(HTTP_NO_CONTENT);
     res.end();
+    return;
+  }
+
+  // wire-mesh's web-console — an alternate, generic reference-client UI, served only when AGENT_COMMS_WEB_CONSOLE_DIST resolves to a real build.
+  if (
+    webConsoleDist !== undefined &&
+    req.method === "GET" &&
+    serveWebConsole(webConsoleDist, url.pathname, res)
+  ) {
     return;
   }
 
