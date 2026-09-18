@@ -61,7 +61,13 @@ export function ChatArea({
 
   return (
     <Stack h="100%" gap={0}>
-      <Group justify="space-between" px="md" py="sm" bg="dark.6">
+      <Group
+        component="header"
+        justify="space-between"
+        px="md"
+        py="sm"
+        bg="dark.6"
+      >
         <Group gap="sm">
           <Burger
             opened={sidebarOpened}

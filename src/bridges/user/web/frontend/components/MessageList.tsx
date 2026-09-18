@@ -22,7 +22,12 @@ export function MessageList({
   }, [messages.length]);
 
   return (
-    <ScrollArea flex={1} p="md" viewportRef={viewportRef} aria-label="Messages">
+    <ScrollArea
+      flex={1}
+      p="md"
+      viewportRef={viewportRef}
+      aria-label="Conversation"
+    >
       <Stack gap={4}>
         {messages.map((msg, i) => (
           <Message key={i} message={msg} />
