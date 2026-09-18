@@ -56,6 +56,8 @@ import type {
 import type {
   ListenerInfo,
   ListenerPolicy,
+  MeshGraph,
+  MeshTraceResult,
   MeshTransport,
   TransportEvents,
 } from "./transport.js";
@@ -914,6 +916,33 @@ export class MeshStore implements CommsStore {
 
   listListeners(): ListenerInfo[] {
     return this.requireTransport().listListeners();
+  }
+
+  /** Delegates to the transport's own meshGraph, throwing if the current transport doesn't support it (agent-comms#199) -- CommsTool's own notMeshBacked distinguishes "no MeshStore at all" from this narrower "MeshStore, but a transport without this capability" case by catching the throw, the same way requireTransport's own "no transport set" throw is already handled. */
+  meshGraph(): MeshGraph {
+    const graph = this.requireTransport().meshGraph?.();
+    if (graph === undefined) {
+      throw new CommsError(
+        "mesh_graph requires a transport that supports it",
+        "NOT_SUPPORTED",
+      );
+    }
+    return graph;
+  }
+
+  /** Delegates to the transport's own meshTrace, same "throw if unsupported" contract as meshGraph above. */
+  async meshTrace(
+    target: string,
+    timeoutMs?: number,
+  ): Promise<MeshTraceResult> {
+    const transport = this.requireTransport();
+    if (transport.meshTrace === undefined) {
+      throw new CommsError(
+        "mesh_trace requires a transport that supports it",
+        "NOT_SUPPORTED",
+      );
+    }
+    return transport.meshTrace(target, timeoutMs);
   }
 
   getNetworkInterfaces(): NetworkInterface[] {
