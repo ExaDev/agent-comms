@@ -245,6 +245,17 @@ When `streamingBehavior` is absent, each bridge falls back to its existing heuri
 
 **Claude Code delivery mechanism**: Events are written to `~/.agents/bus/pending/claude-code--<cwd-slug>.jsonl`. Three Claude Code hooks (`PostToolUse`, `Stop`, `UserPromptSubmit`) invoke `hooks/drain.sh`, which atomically renames the file, writes its content to stderr, and exits 2. Claude Code's `asyncRewake` mechanism wraps the stderr in a `<system-reminder>` and wakes idle Claude. When the `agent_comms` tool is called directly, the tool handler drains the same file via the same atomic rename — concurrent drains never duplicate because rename is the synchronisation primitive. The `[STEER]` and `[FOLLOWUP]` markers and `meta.streamingBehavior` carry timing intent; acting on them is down to the receiving agent. The pi bridge honours the hint natively via `deliverAs`.
 
+## Web UI
+
+Any bridge that starts a web server (`npx agent-comms chat`, or any other command that brings one up) serves a small browser dashboard alongside its REST API: agent and room lists, message history, a live mesh graph. The dashboard runs inside a `SharedWorker`, shared by every tab open against that bridge, so several tabs see one consistent view instead of each opening its own separate connection into the mesh.
+
+Two independent transports sit inside that dashboard, both built on [oRPC](https://orpc.unnoq.com/), a contract-first RPC layer with Zod-validated inputs and outputs and native support for streaming procedures:
+
+- **Worker ↔ server**, over a real WebSocket at `/ws/mesh`. The worker is an oRPC client here, calling the same contract procedures the REST API exposes, plus a `subscribeEvents` procedure that streams mesh events as they happen.
+- **Tab ↔ worker**, over a `MessagePort`. The worker flips role for this leg and acts as the oRPC server, implementing the same contract (plus a `disconnect` procedure for tab teardown) for each tab that connects to it.
+
+Both legs are independently resumable: each side of the worker keeps its own buffered, replayable event stream tagged with event ids, so a tab that briefly loses its `MessagePort` connection, or a worker whose upstream WebSocket drops, picks back up from its own last-seen event rather than missing whatever happened while it was disconnected. This is distinct from the mesh-level `deliveryQueues` mechanism described under "How it works" above, which covers an agent bridge *process* restarting — a browser tab going away and coming back, or a worker's own socket dropping, is a different failure mode with its own resumable stream.
+
 ## Alternate UI: wire-mesh's web-console
 
 An agent-comms node is, underneath, already a [wire-mesh](https://github.com/ExaDev/wire-mesh) node, so it can optionally also serve wire-mesh's own generic, protocol-level `web-console` alongside its own richer dashboard — useful for anyone who wants the reference-client view of their mesh rather than agent-comms' own product UI.
