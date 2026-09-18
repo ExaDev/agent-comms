@@ -142,4 +142,114 @@ describe("GatewayTrust persistence (agent-comms#186)", () => {
 
     expect(restartedB.list()).toEqual([]);
   });
+
+  // Principal persistence (agent-comms#187) -- extends #186's own device-only persistence to the second, parallel principal allowlist, per #186's own issue text naming #187 as the one that decides what gets stored.
+  it("persists a trusted principal, surviving a restart alongside the bare-device set", () => {
+    const slot = tempSlot("pi");
+    const first = new GatewayTrust(slot);
+    first.add("aabbcc");
+    first.addPrincipal("112233");
+
+    const restarted = new GatewayTrust(slot);
+
+    expect(restarted.list()).toEqual(["aabbcc"]);
+    expect(restarted.listPrincipals()).toEqual(["112233"]);
+  });
+
+  it("persists a principal removal independently of the bare-device set", () => {
+    const slot = tempSlot("pi");
+    const first = new GatewayTrust(slot);
+    first.addPrincipal("112233");
+    first.addPrincipal("445566");
+    first.removePrincipal("112233");
+
+    const restarted = new GatewayTrust(slot);
+
+    expect(restarted.listPrincipals()).toEqual(["445566"]);
+  });
+});
+
+describe("GatewayTrust -- principal-keyed trust (agent-comms#187)", () => {
+  it("trusts no principal by default", () => {
+    const trust = new GatewayTrust();
+    expect(trust.isTrustedPrincipal("aabbcc")).toBe(false);
+    expect(trust.listPrincipals()).toEqual([]);
+  });
+
+  it("trusts a principal once added, independently of the bare-device set", () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal("AABBCC");
+    expect(trust.isTrustedPrincipal("aabbcc")).toBe(true);
+    expect(trust.listPrincipals()).toEqual(["aabbcc"]);
+    expect(trust.isTrusted("aabbcc")).toBe(false);
+  });
+
+  it("normalises hex case for principals the same way it does for bare devices", () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal("AaBbCc");
+    expect(trust.isTrustedPrincipal("aabbcc")).toBe(true);
+    expect(trust.isTrustedPrincipal("AABBCC")).toBe(true);
+  });
+
+  it("is idempotent: adding the same principal twice keeps it listed once", () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal("aabbcc");
+    trust.addPrincipal("AABBCC");
+    expect(trust.listPrincipals()).toEqual(["aabbcc"]);
+  });
+
+  it("stops trusting a principal once removed", () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal("aabbcc");
+    trust.removePrincipal("AABBCC");
+    expect(trust.isTrustedPrincipal("aabbcc")).toBe(false);
+    expect(trust.listPrincipals()).toEqual([]);
+  });
+
+  it("removing a principal that was never trusted is a safe no-op", () => {
+    const trust = new GatewayTrust();
+    expect(() => {
+      trust.removePrincipal("aabbcc");
+    }).not.toThrow();
+    expect(trust.listPrincipals()).toEqual([]);
+  });
+
+  it("hasAny becomes true once a principal is trusted, even with no bare device ever trusted", () => {
+    const trust = new GatewayTrust();
+    expect(trust.hasAny()).toBe(false);
+    trust.addPrincipal("aabbcc");
+    expect(trust.hasAny()).toBe(true);
+  });
+
+  it("hasAny falls back to false once both the device and principal sets are empty again", () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal("aabbcc");
+    trust.removePrincipal("aabbcc");
+    expect(trust.hasAny()).toBe(false);
+  });
+
+  describe("isTrustedFor -- deciding trust from a verified token's own bearer and chain root", () => {
+    it("passes a bearer that is itself directly trusted, regardless of its chain root", () => {
+      const trust = new GatewayTrust();
+      trust.add("aabbcc");
+      expect(trust.isTrustedFor("aabbcc", "ffffff")).toBe(true);
+    });
+
+    it("passes a bearer whose chain roots at a trusted principal, even though the bearer itself was never individually trusted", () => {
+      const trust = new GatewayTrust();
+      trust.addPrincipal("ffffff");
+      expect(trust.isTrustedFor("aabbcc", "ffffff")).toBe(true);
+    });
+
+    it("refuses a bearer that is neither directly trusted nor rooted at a trusted principal", () => {
+      const trust = new GatewayTrust();
+      expect(trust.isTrustedFor("aabbcc", "ffffff")).toBe(false);
+    });
+
+    it("is case-insensitive on both the bearer and the chain-root hex", () => {
+      const trust = new GatewayTrust();
+      trust.addPrincipal("FFFFFF");
+      expect(trust.isTrustedFor("AABBCC", "ffffff")).toBe(true);
+    });
+  });
 });

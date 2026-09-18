@@ -509,32 +509,57 @@ function gatewayTrustFilePath(slot: Readonly<IdentitySlot>): string {
   return path.join(dir, `${base}.json`);
 }
 
+/** loadGatewayTrust's own return shape: every remote device-id and every remote user-principal device-id (agent-comms#187) this slot's gateway currently trusts, each lowercase hex, in insertion order. */
+export interface LoadedGatewayTrust {
+  devices: string[];
+  principals: string[];
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((entry) => typeof entry === "string")
+  );
+}
+
 /**
- * Every remote device-id this slot's gateway currently trusts, lowercase hex, in insertion order. Empty if the slot has never saved a trusted set, or its gateway trust file is missing or unparseable.
+ * The trusted devices and principals (agent-comms#187) a slot's gateway had persisted before this call, both empty if the slot has never saved a trusted set or its gateway trust file is missing or unparseable. Reads a pre-#187 file (a bare JSON array, agent-comms#186's own original format) as devices-only with no principals -- every gateway-trust file written before principal-keyed trust existed named only bare devices, so there is nothing to migrate, just an older, narrower shape to keep reading correctly.
  */
-export function loadGatewayTrust(slot: Readonly<IdentitySlot>): string[] {
+export function loadGatewayTrust(
+  slot: Readonly<IdentitySlot>,
+): LoadedGatewayTrust {
   let parsed: unknown;
   try {
     parsed = JSON.parse(fs.readFileSync(gatewayTrustFilePath(slot), "utf-8"));
   } catch {
-    return [];
+    return { devices: [], principals: [] };
   }
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter((entry): entry is string => typeof entry === "string");
+  if (isStringArray(parsed)) return { devices: parsed, principals: [] };
+  if (typeof parsed !== "object" || parsed === null) {
+    return { devices: [], principals: [] };
+  }
+  const devices =
+    "devices" in parsed && isStringArray(parsed.devices) ? parsed.devices : [];
+  const principals =
+    "principals" in parsed && isStringArray(parsed.principals)
+      ? parsed.principals
+      : [];
+  return { devices, principals };
 }
 
 /**
- * Persists a slot's complete trusted-gateway device-id set, surviving a restart the same way the identity it gates alongside does. Overwrites whatever was saved before in full: GatewayTrust always calls this with its own current list() after every add/remove, so there is no per-device partial update to preserve here the way saveRoomToken preserves other rooms' tokens.
+ * Persists a slot's complete trusted-gateway device-id and principal-id sets (agent-comms#187 extends agent-comms#186's own original device-only persistence, per that issue's own "agent-comms#187 covers what gets stored" framing), surviving a restart the same way the identity they gate alongside does. Overwrites whatever was saved before in full: GatewayTrust always calls this with its own current list()/listPrincipals() after every add/remove/addPrincipal/removePrincipal, so there is no per-entry partial update to preserve here the way saveRoomToken preserves other rooms' tokens.
  */
 export function saveGatewayTrust(
   slot: Readonly<IdentitySlot>,
-  trusted: readonly string[],
+  devices: readonly string[],
+  principals: readonly string[],
 ): void {
   const { dir } = slotPaths(slot);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const stored: LoadedGatewayTrust = { devices: [...devices], principals: [...principals] };
   fs.writeFileSync(
     gatewayTrustFilePath(slot),
-    `${JSON.stringify(trusted, null, 2)}\n`,
+    `${JSON.stringify(stored, null, 2)}\n`,
     { encoding: "utf-8", mode: 0o600 },
   );
 }

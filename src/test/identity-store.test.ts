@@ -321,40 +321,65 @@ test("deleteGroupToken is a no-op when nothing was saved for that group path", (
 
 test("loadGatewayTrust is empty for a slot that has never saved a trusted set", () => {
   const { slot } = tempSlot("pi");
-  expect(loadGatewayTrust(slot)).toEqual([]);
+  expect(loadGatewayTrust(slot)).toEqual({ devices: [], principals: [] });
 });
 
 test("loadGatewayTrust does not require an identity to have been created first, unlike loadRoomTokens/loadGroupTokens", () => {
   const { slot } = tempSlot("pi");
   expect(() => {
-    saveGatewayTrust(slot, ["aabbcc"]);
+    saveGatewayTrust(slot, ["aabbcc"], []);
   }).not.toThrow();
-  expect(loadGatewayTrust(slot)).toEqual(["aabbcc"]);
+  expect(loadGatewayTrust(slot)).toEqual({ devices: ["aabbcc"], principals: [] });
 });
 
-test("saveGatewayTrust persists the trusted set, loadGatewayTrust reloads the same list", () => {
+test("saveGatewayTrust persists the trusted device and principal sets, loadGatewayTrust reloads the same lists", () => {
   const { slot } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc", "ddeeff"]);
-  expect(loadGatewayTrust(slot)).toEqual(["aabbcc", "ddeeff"]);
+  saveGatewayTrust(slot, ["aabbcc", "ddeeff"], ["112233"]);
+  expect(loadGatewayTrust(slot)).toEqual({
+    devices: ["aabbcc", "ddeeff"],
+    principals: ["112233"],
+  });
 });
 
-test("saveGatewayTrust overwrites the previously saved set rather than merging with it", () => {
+test("saveGatewayTrust overwrites the previously saved sets rather than merging with them", () => {
   const { slot } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc", "ddeeff"]);
-  saveGatewayTrust(slot, ["112233"]);
-  expect(loadGatewayTrust(slot)).toEqual(["112233"]);
+  saveGatewayTrust(slot, ["aabbcc", "ddeeff"], ["112233"]);
+  saveGatewayTrust(slot, ["112233"], ["445566"]);
+  expect(loadGatewayTrust(slot)).toEqual({
+    devices: ["112233"],
+    principals: ["445566"],
+  });
 });
 
-test("saveGatewayTrust persists an empty set, clearing whatever was saved before", () => {
+test("saveGatewayTrust persists empty sets, clearing whatever was saved before", () => {
   const { slot } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc"]);
-  saveGatewayTrust(slot, []);
-  expect(loadGatewayTrust(slot)).toEqual([]);
+  saveGatewayTrust(slot, ["aabbcc"], ["112233"]);
+  saveGatewayTrust(slot, [], []);
+  expect(loadGatewayTrust(slot)).toEqual({ devices: [], principals: [] });
+});
+
+test("loadGatewayTrust reads a pre-agent-comms#187 bare-array file as devices-only, with no principals", () => {
+  const { slot, dir } = tempSlot("pi");
+  // Create the real gateway-trust file at its actual path first (its exact slugified name is an implementation detail), then overwrite its content with the bare-array shape every file written before principal-keyed trust existed actually used.
+  saveGatewayTrust(slot, [], []);
+  const file = fs
+    .readdirSync(dir)
+    .find((f) => f.startsWith("gateway-trust-") && f.endsWith(".json"));
+  if (file === undefined) throw new Error("expected a gateway-trust file");
+  fs.writeFileSync(
+    path.join(dir, file),
+    `${JSON.stringify(["aabbcc", "ddeeff"])}\n`,
+  );
+
+  expect(loadGatewayTrust(slot)).toEqual({
+    devices: ["aabbcc", "ddeeff"],
+    principals: [],
+  });
 });
 
 test("the gateway trust file is written with owner-only permissions", () => {
   const { slot, dir } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc"]);
+  saveGatewayTrust(slot, ["aabbcc"], []);
   const file = fs
     .readdirSync(dir)
     .find((f) => f.startsWith("gateway-trust-") && f.endsWith(".json"));
@@ -366,7 +391,7 @@ test("the gateway trust file is written with owner-only permissions", () => {
 
 test("the gateway trust file is a sibling of the identity file, distinct per (harness, cwd)", () => {
   const { slot, dir } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc"]);
+  saveGatewayTrust(slot, ["aabbcc"], []);
   const file = fs
     .readdirSync(dir)
     .find((f) => f.startsWith("gateway-trust-") && f.endsWith(".json"));
@@ -378,11 +403,11 @@ test("the gateway trust file is a sibling of the identity file, distinct per (ha
 
 test("loadGatewayTrust returns empty for a slot whose gateway trust file is corrupt", () => {
   const { slot, dir } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc"]);
+  saveGatewayTrust(slot, ["aabbcc"], []);
   const file = fs
     .readdirSync(dir)
     .find((f) => f.startsWith("gateway-trust-") && f.endsWith(".json"));
   if (file === undefined) throw new Error("expected a gateway-trust file");
   fs.writeFileSync(path.join(dir, file), "not valid json{{{");
-  expect(loadGatewayTrust(slot)).toEqual([]);
+  expect(loadGatewayTrust(slot)).toEqual({ devices: [], principals: [] });
 });
