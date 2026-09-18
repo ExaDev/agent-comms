@@ -1,3 +1,11 @@
+## [3.15.0](https://github.com/ExaDev/agent-comms/compare/v3.14.0...v3.15.0) (2026-09-18)
+
+### Features
+
+* **core:** let GatewayTrust load and persist its allowlist per bridge slot ([edc40d7](https://github.com/ExaDev/agent-comms/commit/edc40d71950aacbbef782bcc660e5e3619a97df2))
+* **core:** persist a slot's trusted-gateway device-id set ([a338522](https://github.com/ExaDev/agent-comms/commit/a338522f6e969708691cecc29ff5b43c21bd66e8))
+* **core:** thread the identity slot through to MeshStore's gatewayTrust ([c41ef73](https://github.com/ExaDev/agent-comms/commit/c41ef73efb2e96b81e1c8f66a22b81f7dd8a1baa))
+
 ## [3.14.0](https://github.com/ExaDev/agent-comms/compare/v3.13.0...v3.14.0) (2026-09-17)
 
 ### Features
