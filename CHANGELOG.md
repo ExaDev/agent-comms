@@ -1,3 +1,9 @@
+## [3.23.0](https://github.com/ExaDev/agent-comms/compare/v3.22.0...v3.23.0) (2026-09-18)
+
+### Features
+
+* **bridge:** move mesh-worker's upstream connection onto oRPC ([30f2cba](https://github.com/ExaDev/agent-comms/commit/30f2cba3f6a8869663bfbab023a81062de76eb66))
+
 ## [3.22.0](https://github.com/ExaDev/agent-comms/compare/v3.21.0...v3.22.0) (2026-09-18)
 
 ### Features
