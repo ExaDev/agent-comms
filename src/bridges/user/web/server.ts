@@ -117,6 +117,7 @@ export interface WebServerHandle {
   server: http.Server;
   controller: ChatController;
   wss: WebSocketServer;
+  orpcWss: WebSocketServer;
   pushManager: PushManager;
   publisher: MeshEventPublisher;
 }
@@ -242,7 +243,7 @@ export async function createWebServer(
     console.log(`Agent Comms web UI: http://${WEB_HOST}:${String(actualPort)}`);
   });
 
-  return { server, controller, wss, pushManager, publisher };
+  return { server, controller, wss, orpcWss, pushManager, publisher };
 }
 
 class HandleRef {
@@ -276,6 +277,7 @@ export async function runWeb(userName: string, port = 0): Promise<void> {
   // Graceful shutdown
   const cleanup = async (): Promise<void> => {
     handle.wss.close();
+    handle.orpcWss.close();
     handle.server.close();
     await handle.controller.shutdown();
     process.exit(0);
