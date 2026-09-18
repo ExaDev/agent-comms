@@ -125,3 +125,18 @@ test("createBridgeMesh passes an explicit hubUrl through to MeshStore, dialled o
     await hub.close();
   }
 });
+
+test("gateway trust survives a bridge restart: a device trusted before shutdown is still trusted when createBridgeMesh runs again against the same slot (agent-comms#186)", async () => {
+  const slot = tempSlot("test-harness-gateway-trust");
+  const first = await createBridgeMesh(slot);
+  first.store.addTrustedGateway("aabbccdd");
+  expect(first.store.listTrustedGateways()).toEqual(["aabbccdd"]);
+  await first.store.shutdown();
+
+  const restarted = await createBridgeMesh(slot);
+  try {
+    expect(restarted.store.listTrustedGateways()).toEqual(["aabbccdd"]);
+  } finally {
+    await restarted.store.shutdown();
+  }
+});
