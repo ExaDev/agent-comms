@@ -269,4 +269,9 @@ export interface MeshTransport {
    * Drops this side's own held hub connection, if any. A no-op when none is live. Same optionality caveat as connectHub.
    */
   disconnectHub?: () => Promise<void>;
+
+  /**
+   * Asks deviceId for its own, currently-running wire-mesh-core version, live, right now rather than whatever it last gossiped (agent-comms#198's own cache-bust query_version action). Optional, same caveat as listKnownDevices/connectHub: WireMeshTransport is the only implementation that offers it today, riding wire-mesh-core's own version.get manage-command (wire-mesh#179).
+   */
+  queryVersion?: (deviceId: string) => Promise<ManageOutcome>;
 }

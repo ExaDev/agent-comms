@@ -25,7 +25,7 @@ import {
 import {
   findPresenceAdvert,
   mergeKnownDevices,
-  readvertiseGossip,
+  startGossipInterval,
 } from "./gossip-directory.js";
 import {
   connectHubGateway,
@@ -255,6 +255,9 @@ export class WireMeshTransport implements MeshTransport {
   private readonly getSelfAgentAdvert:
     (() => AgentSelfAdvert | undefined) | undefined;
 
+  /** Reads this side's own currently-running cc-peer package version for the next gossip re-advertisement tick (agent-comms#198). Unlike getCurrentPresence/getHostedRooms/getSelfAgentAdvert (constructor-injected, since MeshStore already has a real value for each at construction time), this is a plain mutable field set post-construction -- bridge-mesh.ts assigns it right after building this transport, mirroring MeshStore's own onDelivery/onError/onCoordinatorRoleChanged convention, so this transport doesn't need its own constructor parameter for a fact only two of many bridges ever have. undefined for every bridge that never loads cc-peer at all. */
+  getCcPeerVersion: (() => string | undefined) | undefined;
+
   /** Every peer this side has ever received a frame from, keyed by device-id hex, tracking the raw wire-mesh-core Connection each frame arrived on -- what sendDataFrame needs, since neither AcceptedMeshSession nor MeshSession exposes a generic "send an arbitrary frame" method the way the raw Connection itself does. Registered eagerly on the very first frame from a connection (including one still in quarantine, e.g. before connect_request approval) so a later sendDataFrame call can reach it -- handleDataFrame's own trust gate (peerSessions.has) is what actually decides whether to act on anything received this way, not this map. */
   private readonly connectionsByPeer = new Map<string, Connection>();
 
@@ -309,24 +312,17 @@ export class WireMeshTransport implements MeshTransport {
     this.getHostedRooms = getHostedRooms;
     this.dataStorage = dataStorage;
     this.getSelfAgentAdvert = getSelfAgentAdvert;
-    if (
-      getCurrentPresence !== undefined ||
-      getHostedRooms !== undefined ||
-      getSelfAgentAdvert !== undefined
-    ) {
-      this.gossipInterval = setInterval(() => {
-        readvertiseGossip(
-          this.allSessions,
-          this.hub,
-          () => this.gatewayTrust.hasAny(),
-          this.events.onError,
-          this.getCurrentPresence,
-          this.getHostedRooms,
-          this.getSelfAgentAdvert,
-        );
-      }, presenceReadvertiseIntervalMs);
-      this.gossipInterval.unref();
-    }
+    this.gossipInterval = startGossipInterval(
+      this.allSessions,
+      this.hub,
+      () => this.gatewayTrust.hasAny(),
+      this.events.onError,
+      getCurrentPresence,
+      getHostedRooms,
+      getSelfAgentAdvert,
+      () => this.getCcPeerVersion?.(),
+      presenceReadvertiseIntervalMs,
+    );
   }
 
   /** Sends one data-have or data-request frame directly to an already-connected peer -- the mechanical send primitive a future catch-up policy calls once it decides to (see the dataStorage field comment). Throws if this side has never received any frame from that peer yet (there is no connection to send on), matching sendManageRequest's own "no reachable session" failure mode for an unknown peer. */
@@ -798,6 +794,15 @@ export class WireMeshTransport implements MeshTransport {
       return { result: "error", code: "unauthorized" };
     }
     return routeRoomRequestViaHub(this.hub, memberId, command, scope, token);
+  }
+
+  /** Asks deviceId for its own, currently-running wire-mesh-core version, live, right now (agent-comms#198's own query_version action) -- rides sendRoomRequest's own routing (a direct peerSessions session when one exists, else a trusted hub relay, else "unauthorized") against wire-mesh-core's deliberately-ungated core/version domain (spec/version.cddl): "version:get" on the outer manage-command only exists to satisfy manage-command.verb's own capability-verb grammar, and the scope below (kind "node") is arbitrary -- the receiving side never actually inspects either for this verb. */
+  async queryVersion(deviceId: string): Promise<ManageOutcome> {
+    return this.sendRoomRequest(
+      deviceId,
+      { verb: "version:get", params: { verb: "version.get" } },
+      { kind: "node" },
+    );
   }
 
   // -----------------------------------------------------------------------

@@ -32,7 +32,10 @@ import { RoomLifecycle } from "./room-lifecycle.js";
 import { AgentRegistry } from "./agent-registry.js";
 import { ConnectionApproval } from "./connection-approval.js";
 import { CapabilityAskAdmission } from "./capability-ask.js";
-import type { IncomingManageRequest } from "wire-mesh-core/domain/mesh-session";
+import type {
+  IncomingManageRequest,
+  ManageOutcome,
+} from "wire-mesh-core/domain/mesh-session";
 import type { DeviceId } from "wire-mesh-core/generated/protocol";
 import { StaleAgentChecker } from "./stale-agent-checker.js";
 import { PeerLifecycle } from "./peer-lifecycle.js";
@@ -41,6 +44,10 @@ import type {
   AgentSelfAdvert,
   HostedRoomAdvert,
 } from "./wire-mesh-transport.js";
+import {
+  getPeerAgentCommsVersions,
+  getPeerWireMeshCoreVersion,
+} from "./peer-versions.js";
 import type {
   MeshStatePatch,
   PeerInfo,
@@ -184,6 +191,9 @@ export class MeshStore implements CommsStore {
    */
   onCoordinatorRoleChanged:
     ((isCoordinator: boolean) => void | Promise<void>) | undefined;
+
+  /** This process's own currently-running cc-peer package version, when it is actually fronting a cc-peer session or running the one-shot `bridge cc-peer` command (agent-comms#198) -- undefined by default (matching onDelivery/onPatch/onError/onCoordinatorRoleChanged), since every other bridge never loads the cc-peer package at all. Set once, right after construction, by front-runtime.ts/bridges/cc-peer/run.ts (a plain closure over cc-peer's own exported CC_PEER_VERSION constant) -- read by both this store's own WireMeshTransport construction (bridge-mesh.ts, for the gossiped versions advert) and CommsTool (for whoami/update/list_agents' own self-report), so the one field backs both surfaces. */
+  getCcPeerVersion: (() => string | undefined) | undefined;
 
   /** Serialise the full mesh state for state_sync messages. */
   serialise(): SerialisedState {
@@ -921,6 +931,51 @@ export class MeshStore implements CommsStore {
       }
     }
     return result;
+  }
+
+  // -----------------------------------------------------------------------
+  // Peer versions (agent-comms#198) -- the cached, gossip-backed path
+  // -----------------------------------------------------------------------
+
+  /** deviceId's own gossiped agent-comms package version, if this side has heard it advertised -- undefined for a device this side has never heard gossip from, or one running a version of agent-comms that predates this feature. */
+  getPeerAgentCommsVersion(deviceId: string): string | undefined {
+    return getPeerAgentCommsVersions(this.requireTransport(), deviceId)
+      ?.agentComms;
+  }
+
+  /** deviceId's own gossiped cc-peer package version, present only while that device is actually fronting a cc-peer session or running the one-shot `bridge cc-peer` command -- undefined otherwise, or for a device this side has never heard gossip from. */
+  getPeerCcPeerVersion(deviceId: string): string | undefined {
+    return getPeerAgentCommsVersions(this.requireTransport(), deviceId)?.ccPeer;
+  }
+
+  /** deviceId's own gossiped wire-mesh-core version, self-advertised automatically by wire-mesh-core itself (wire-mesh#179) -- undefined for a device this side has never heard gossip from, or one running a wire-mesh-core older than #179. */
+  getPeerWireMeshCoreVersion(deviceId: string): string | undefined {
+    return getPeerWireMeshCoreVersion(this.requireTransport(), deviceId);
+  }
+
+  // -----------------------------------------------------------------------
+  // Peer versions (agent-comms#198) -- the live, cache-busting path
+  // -----------------------------------------------------------------------
+
+  /** Asks deviceId for its own, currently-running wire-mesh-core version live, right now, rather than trusting whatever it last gossiped -- the query_version action's own backing call. Resolves to a plain, provider-neutral result rather than leaking wire-mesh-core's own ManageOutcome type up to CommsTool, which has no other reason to know that type exists. */
+  async queryVersion(
+    deviceId: string,
+  ): Promise<{ version: string } | { error: string }> {
+    const transport = this.requireTransport();
+    if (transport.queryVersion === undefined) {
+      return {
+        error: "this transport does not support querying a peer's version",
+      };
+    }
+    const outcome: ManageOutcome = await transport.queryVersion(deviceId);
+    if (outcome.result === "error") {
+      return { error: outcome.message ?? outcome.code };
+    }
+    const version: unknown = outcome.version;
+    if (typeof version !== "string") {
+      return { error: "peer answered version.get with no version string" };
+    }
+    return { version };
   }
 
   // -----------------------------------------------------------------------
