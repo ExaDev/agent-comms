@@ -4,10 +4,7 @@
 
 import { describe, it, expect } from "vitest";
 import { State } from "../state.js";
-import type { Agent, MeshGraph, Room } from "../types.js";
-
-/** A device-id is a hex-encoded SHA-256 hash: 32 bytes, 64 hex characters. */
-const DEVICE_ID_HEX_LENGTH = 64;
+import type { Agent, Room } from "../types.js";
 
 const MOCK_AGENT: Agent = {
   id: "abc123",
@@ -73,30 +70,6 @@ describe("state", () => {
     const state = new State();
     state.setConnected(true);
     expect(state.get().connected).toBe(true);
-  });
-
-  it("starts with an undefined mesh graph", () => {
-    const state = new State();
-    expect(state.get().meshGraph).toBe(undefined);
-  });
-
-  it("sets meshGraph and notifies", () => {
-    const state = new State();
-    const graph: MeshGraph = {
-      nodes: [
-        "a".repeat(DEVICE_ID_HEX_LENGTH),
-        "b".repeat(DEVICE_ID_HEX_LENGTH),
-      ],
-      edges: [
-        {
-          kind: "direct",
-          from: "a".repeat(DEVICE_ID_HEX_LENGTH),
-          to: "b".repeat(DEVICE_ID_HEX_LENGTH),
-        },
-      ],
-    };
-    state.setMeshGraph(graph);
-    expect(state.get().meshGraph).toEqual(graph);
   });
 
   it("sets dmTarget and notifies", () => {

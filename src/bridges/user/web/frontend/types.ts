@@ -1,9 +1,14 @@
 /**
  * Client-side types for the agent-comms web UI.
  *
- * These mirror the wire format from server.ts and core/types.ts.
- * No Zod — just interfaces for the browser bundle.
+ * These mirror the wire format from server.ts and core/types.ts. No Zod — just interfaces for the browser bundle.
  */
+
+import type { RoomMessage as CoreRoomMessage } from "../../../../core/types.js";
+import type {
+  MeshGraph as ContractMeshGraph,
+  MeshTraceResult as ContractMeshTraceResult,
+} from "../contract.js";
 
 // ---------------------------------------------------------------------------
 // Agent & Room
@@ -33,15 +38,8 @@ export interface Room {
   invited: string[];
 }
 
-export interface RoomMessage {
-  id: string;
-  from: string;
-  room: string;
-  content: string;
-  timestamp: string;
-  replyTo?: string;
-  readBy: string[];
-}
+/** A type-only alias onto core/types.ts's real Zod-inferred RoomMessage -- a hand-duplicated interface here previously drifted from it under exactOptionalPropertyTypes (an optional field typed `x?: T` here vs Zod's own `x?: T | undefined`), surfaced when agent-comms#206 first passed a real oRPC-sourced RoomMessage[] through this type. A type-only import is erased entirely at build time, so this costs nothing in the browser bundle despite core/types.ts importing Zod at runtime. */
+export type RoomMessage = CoreRoomMessage;
 
 export interface DmMessage {
   id: string;
@@ -146,47 +144,9 @@ export type DisplayMessage =
 // Mesh connection graph & path trace (agent-comms#199/#201)
 // ---------------------------------------------------------------------------
 
-export interface MeshGraphEdge {
-  kind: "direct" | "relay";
-  from: string;
-  to: string;
-  via?: string;
-}
-
-export interface MeshGraph {
-  nodes: string[];
-  edges: MeshGraphEdge[];
-}
-
-export interface MeshTraceLocal {
-  relayed: boolean;
-  hubAddress?: string;
-}
-
-export interface MeshTraceRemote {
-  relayed: boolean;
-  hubAddress?: string;
-}
-
-export interface MeshTraceOutcome {
-  result: "ok" | "error";
-  code?: string;
-}
-
-export interface MeshTraceResult {
-  rttMs: number;
-  local: MeshTraceLocal;
-  remote?: MeshTraceRemote;
-  outcome: MeshTraceOutcome;
-}
-
-// ---------------------------------------------------------------------------
-// REST API responses
-// ---------------------------------------------------------------------------
-
-export type AgentsResponse = Agent[];
-export type RoomsResponse = Room[];
-export type MessagesResponse = RoomMessage[];
+/** Type-only aliases onto contract.ts's own Zod-inferred types -- the same exactOptionalPropertyTypes drift RoomMessage above hit. contract.ts's own MeshGraphSchema/MeshTraceResultSchema already mirror core/transport.ts's hand-written MeshGraph/MeshTraceResult (core's own interfaces aren't Zod-backed, and don't need to be for their many non-browser callers), so aliasing onto contract.ts here rather than core/transport.ts keeps a single Zod-backed source of truth for the browser boundary specifically. */
+export type MeshGraph = ContractMeshGraph;
+export type MeshTraceResult = ContractMeshTraceResult;
 
 // ---------------------------------------------------------------------------
 // Project tree (sidebar directory tree)

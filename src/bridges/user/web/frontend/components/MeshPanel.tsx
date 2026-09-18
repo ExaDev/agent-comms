@@ -1,45 +1,34 @@
 /**
  * MeshPanel — the mesh view: connection graph plus path-trace (agent-comms#201).
  *
- * Owns the trace request lifecycle (loading/error/result) since it's a genuine on-demand network round trip, not reactive state the way agents/rooms/the graph itself are. Clicking a node in the graph selects it as the trace target, so the two sub-views share one selection.
+ * Both the graph and the trace are genuine one-shot reads (agent-comms#206): the graph has no real-time channel of its own, and a trace is a single on-demand network round trip, not reactive state. useQuery/useMutation own their own loading/error/result lifecycles here, replacing what used to be three separate hand-rolled useState calls for the trace and a manually-refreshed prop for the graph.
  */
 
 import { Stack, Tabs, Text } from "@mantine/core";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { fetchMeshTrace } from "../api.js";
-import type { MeshGraph, MeshTraceResult } from "../types.js";
+import type { MeshClient } from "../mesh-client.js";
 import { MeshGraphView } from "./MeshGraphView.js";
 import { MeshTraceView } from "./MeshTraceView.js";
 
 interface MeshPanelProps {
-  graph: MeshGraph | undefined;
+  /** Narrowed to just the two utils this component actually uses, the same Pick-based narrowing dispatch-action.ts's ActionDispatchClient already established for the same "component/function only needs a slice of the full client" shape. */
+  queryUtils: Pick<MeshClient["queryUtils"], "getMeshGraph" | "getMeshTrace">;
 }
 
-export function MeshPanel({ graph }: MeshPanelProps) {
+export function MeshPanel({ queryUtils }: MeshPanelProps) {
   const [selectedTarget, setSelectedTarget] = useState<string | undefined>(
     undefined,
   );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | undefined>(undefined);
-  const [result, setResult] = useState<MeshTraceResult | undefined>(undefined);
+  const graphQuery = useQuery(queryUtils.getMeshGraph.queryOptions());
+  const traceMutation = useMutation(queryUtils.getMeshTrace.mutationOptions());
 
   function handleTrace(): void {
     if (selectedTarget === undefined) return;
-    setLoading(true);
-    setError(undefined);
-    setResult(undefined);
-    fetchMeshTrace(selectedTarget)
-      .then((traceResult) => {
-        setResult(traceResult);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    traceMutation.mutate({ target: selectedTarget });
   }
 
+  const graph = graphQuery.data;
   if (graph === undefined) {
     return (
       <Text c="dimmed" p="md">
@@ -68,9 +57,15 @@ export function MeshPanel({ graph }: MeshPanelProps) {
             selectedTarget={selectedTarget}
             onSelectTarget={setSelectedTarget}
             onTrace={handleTrace}
-            loading={loading}
-            error={error}
-            result={result}
+            loading={traceMutation.isPending}
+            error={
+              traceMutation.error !== null
+                ? traceMutation.error instanceof Error
+                  ? traceMutation.error.message
+                  : "Unknown error"
+                : undefined
+            }
+            result={traceMutation.data}
           />
         </Stack>
       </Tabs.Panel>

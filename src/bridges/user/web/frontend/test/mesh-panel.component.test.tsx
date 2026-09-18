@@ -1,26 +1,36 @@
 // @vitest-environment jsdom
 /**
- * Component tests for MeshPanel — tab switching plus the trace request lifecycle.
+ * Component tests for MeshPanel — tab switching plus the trace request lifecycle, now driven by real TanStack Query hooks (agent-comms#206) rather than a mocked fetch client. Builds a real queryUtils object via createTanstackQueryUtils over a mocked reads client, the same way MeshClient itself does, so the test exercises the real query/mutation wiring rather than reimplementing it.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import { MeshPanel } from "../components/MeshPanel.js";
 import type { MeshGraph, MeshTraceResult } from "../types.js";
 import { stubMantineJsdomGlobals } from "./jsdom-mantine-polyfills.js";
 import { renderWithMantine } from "./render-with-mantine.js";
 
-const fetchMeshTraceMock =
-  vi.fn<(target: string) => Promise<MeshTraceResult>>();
+const getMeshGraphMock = vi.fn<() => Promise<MeshGraph>>();
+const getMeshTraceMock =
+  vi.fn<
+    (
+      input: Readonly<{ target: string; timeoutMs?: number }>,
+    ) => Promise<MeshTraceResult>
+  >();
 
-vi.mock("../api.js", () => ({
-  fetchMeshTrace: async (target: string) => fetchMeshTraceMock(target),
-}));
+const queryUtils = createTanstackQueryUtils({
+  getMeshGraph: async () => getMeshGraphMock(),
+  getMeshTrace: async (
+    input: Readonly<{ target: string; timeoutMs?: number }>,
+  ) => getMeshTraceMock(input),
+});
 
 beforeEach(() => {
   stubMantineJsdomGlobals();
-  fetchMeshTraceMock.mockReset();
+  getMeshGraphMock.mockReset();
+  getMeshTraceMock.mockReset();
 });
 
 afterEach(() => {
@@ -40,31 +50,34 @@ const MOCK_GRAPH: MeshGraph = {
 };
 
 describe("MeshPanel", () => {
-  it("shows an unavailable message when the graph is undefined", () => {
-    renderWithMantine(<MeshPanel graph={undefined} />);
+  it("shows an unavailable message while the graph query has no data", () => {
+    getMeshGraphMock.mockReturnValue(new Promise(() => {}));
+    renderWithMantine(<MeshPanel queryUtils={queryUtils} />);
     expect(
       screen.getByText("Mesh graph is not available on this connection."),
     ).toBeInTheDocument();
   });
 
-  it("shows the graph tab by default", () => {
-    renderWithMantine(<MeshPanel graph={MOCK_GRAPH} />);
+  it("shows the graph tab once the query resolves", async () => {
+    getMeshGraphMock.mockResolvedValue(MOCK_GRAPH);
+    renderWithMantine(<MeshPanel queryUtils={queryUtils} />);
     expect(
-      screen.getByRole("img", { name: "Mesh connection graph" }),
+      await screen.findByRole("img", { name: "Mesh connection graph" }),
     ).toBeInTheDocument();
   });
 
   it("switches to the trace tab and traces a node selected from the graph", async () => {
     const user = userEvent.setup();
-    fetchMeshTraceMock.mockResolvedValue({
+    getMeshGraphMock.mockResolvedValue(MOCK_GRAPH);
+    getMeshTraceMock.mockResolvedValue({
       rttMs: 5,
       local: { relayed: false },
       outcome: { result: "ok" },
     });
-    renderWithMantine(<MeshPanel graph={MOCK_GRAPH} />);
+    renderWithMantine(<MeshPanel queryUtils={queryUtils} />);
 
     await user.click(
-      screen.getByRole("button", { name: `Device ${DEVICE_A}` }),
+      await screen.findByRole("button", { name: `Device ${DEVICE_A}` }),
     );
     await user.click(screen.getByRole("tab", { name: "Trace" }));
     await user.click(screen.getByRole("button", { name: "Trace" }));
@@ -72,15 +85,16 @@ describe("MeshPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("5ms round trip")).toBeInTheDocument();
     });
-    expect(fetchMeshTraceMock).toHaveBeenCalledWith(DEVICE_A);
+    expect(getMeshTraceMock).toHaveBeenCalledWith({ target: DEVICE_A });
   });
 
   it("shows an error when the trace request fails", async () => {
     const user = userEvent.setup();
-    fetchMeshTraceMock.mockRejectedValue(new Error("device unreachable"));
-    renderWithMantine(<MeshPanel graph={MOCK_GRAPH} />);
+    getMeshGraphMock.mockResolvedValue(MOCK_GRAPH);
+    getMeshTraceMock.mockRejectedValue(new Error("device unreachable"));
+    renderWithMantine(<MeshPanel queryUtils={queryUtils} />);
 
-    await user.click(screen.getByRole("tab", { name: "Trace" }));
+    await user.click(await screen.findByRole("tab", { name: "Trace" }));
     await user.click(screen.getByRole("combobox", { name: "Target device" }));
     await user.click(
       await screen.findByRole("option", {

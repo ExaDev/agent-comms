@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import { App, type AppProps } from "../components/App.js";
 import { stubMantineJsdomGlobals } from "./jsdom-mantine-polyfills.js";
 import { renderWithMantine } from "./render-with-mantine.js";
@@ -18,6 +19,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** A stub queryUtils whose reads never resolve -- App itself doesn't read from these, it only forwards them to MeshPanel, so a fake that never settles is enough to exercise the "mesh graph not available yet" branch this test's own "switches to the mesh panel" case checks for. */
+const stubQueryUtils = createTanstackQueryUtils({
+  getRoomMessages: async () => new Promise<never>(() => {}),
+  getMeshGraph: async () => new Promise<never>(() => {}),
+  getMeshTrace: async () => new Promise<never>(() => {}),
+});
+
 const APP_DEFAULTS: AppProps = {
   rooms: [],
   agents: [],
@@ -25,7 +33,7 @@ const APP_DEFAULTS: AppProps = {
   dmTarget: undefined,
   messages: [],
   connected: true,
-  meshGraph: undefined,
+  queryUtils: stubQueryUtils,
   onJoinRoom: () => {},
   onSelectAgent: () => {},
   onRenameAgent: () => {},

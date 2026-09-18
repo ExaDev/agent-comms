@@ -20,9 +20,7 @@ interface MeshTraceViewProps {
 /** Length of the truncated device-id hex label shown in the target picker -- matches MeshGraphView's own node-label truncation. */
 const LABEL_HEX_LENGTH = 8;
 
-function describeSide(
-  side: Readonly<{ relayed: boolean; hubAddress?: string }>,
-): string {
+function describeSide(side: Readonly<MeshTraceResult["local"]>): string {
   if (!side.relayed) return "direct";
   return side.hubAddress !== undefined
     ? `relayed via ${side.hubAddress}`
