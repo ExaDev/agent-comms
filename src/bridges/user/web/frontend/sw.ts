@@ -76,11 +76,18 @@ interface ServiceWorkerRegistration {
   ) => Promise<void>;
 }
 
+/** One entry of the precache manifest vite-plugin-pwa injects at build time, replacing the literal string `self.__WB_MANIFEST` in this file's compiled output with an array literal. */
+interface PrecacheEntry {
+  url: string;
+  revision: string | null;
+}
+
 interface ServiceWorkerGlobalScope {
   location: { origin: string };
   registration: ServiceWorkerRegistration;
   clients: Clients;
   caches: CacheStorage;
+  __WB_MANIFEST: PrecacheEntry[];
   addEventListener: ((
     type: "push",
     listener: (event: PushEvent) => void,
@@ -105,15 +112,8 @@ declare const self: ServiceWorkerGlobalScope;
 
 const CACHE_NAME = "agent-comms-v1";
 
-const APP_SHELL = [
-  "./",
-  "./bundle.js",
-  "./sw.js",
-  "./manifest.json",
-  "./icons/icon-96x96.svg",
-  "./icons/icon-192x192.svg",
-  "./icons/icon-512x512.svg",
-];
+/** The app shell to precache, derived from vite-plugin-pwa's own build-time scan of dist/ -- this is what closes the previous gap where mesh-worker.js, built as a separate non-hashed bundle outside Vite's own module graph, was never in the hand-maintained list. */
+const APP_SHELL = self.__WB_MANIFEST.map((entry) => entry.url);
 
 // ---------------------------------------------------------------------------
 // Install — pre-cache the app shell

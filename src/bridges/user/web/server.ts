@@ -45,7 +45,7 @@ const HTTP_NOT_FOUND = 404;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const INDEX_HTML = fs.readFileSync(
-  path.join(__dirname, "frontend", "index.html"),
+  path.join(__dirname, "dist", "index.html"),
   "utf-8",
 );
 
