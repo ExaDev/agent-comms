@@ -104,7 +104,17 @@ export default defineConfig(
   },
   {
     files: ["**/*.json"],
+    ignores: ["turbo.json"],
     language: "json/json",
+    plugins: { json },
+    rules: {
+      "json/no-duplicate-keys": "error",
+    },
+  },
+  {
+    // turbo.json's own task definitions carry non-obvious WHY-comments (cache exclusions, deliberately uncached tasks) -- JSONC, not strict JSON, so those survive.
+    files: ["turbo.json"],
+    language: "json/jsonc",
     plugins: { json },
     rules: {
       "json/no-duplicate-keys": "error",
