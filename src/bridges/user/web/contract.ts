@@ -159,3 +159,6 @@ export type MeshEvent = z.infer<typeof MeshEventSchema>;
 export type MeshStatePatch = z.infer<typeof MeshStatePatchSchema>;
 export type SerialisedState = z.infer<typeof SerialisedStateSchema>;
 export type ActionResult = z.infer<typeof ActionResultSchema>;
+
+/** Type-only handle onto the contract's shape for building a typed client (`ContractRouterClient<MeshContract>`) without importing the contract's own runtime value -- browser code that only needs the type (mesh-worker.ts, mesh-client.ts) can `import type` this and never bundle Zod/core's schemas at all, since a type-only import is erased entirely at build time. */
+export type MeshContract = typeof meshContract;

@@ -1,18 +1,19 @@
 /**
  * SharedWorker — browser mesh node.
  *
- * Runs a lightweight mesh state store connected to the server's /ws/mesh
- * endpoint. Maintains a local copy of all mesh state (agents, rooms,
- * messages, DMs) by applying state_sync and state_update patches received
- * over WebSocket. Exposes a postMessage API for the main thread to query
- * state, execute actions, and subscribe to real-time updates.
+ * Runs a lightweight mesh state store connected to the server's oRPC mesh endpoint. Maintains a local copy of all mesh state (agents, rooms, messages, DMs) by applying state_sync and state_patch events from the unified subscribeEvents stream. Exposes a postMessage API for the main thread to query state, execute actions, and subscribe to real-time updates -- that tab-facing postMessage protocol is unchanged by the oRPC migration; only how the worker itself talks upstream changed.
  *
- * Built as a separate IIFE bundle (mesh-worker.js) so the SharedWorker
- * runs in its own global scope independent of the main app bundle.
+ * Built as a separate IIFE bundle (mesh-worker.js) so the SharedWorker runs in its own global scope independent of the main app bundle.
  */
 
+import { createORPCClient, getEventMeta } from "@orpc/client";
+import { RPCLink } from "@orpc/client/websocket";
+import { RetryLinkPlugin } from "@orpc/client/plugins";
+import type { ContractRouterClient } from "@orpc/contract";
+import type { MeshContract } from "../contract.js";
+
 // ---------------------------------------------------------------------------
-// SharedWorker environment types (self-contained, no external imports)
+// SharedWorker environment types
 // ---------------------------------------------------------------------------
 
 interface SharedWorkerGlobalScope {
@@ -65,7 +66,7 @@ interface RoomMessage {
   room: string;
   content: string;
   timestamp: string;
-  replyTo?: string;
+  replyTo?: string | undefined;
   readBy: string[];
 }
 
@@ -217,117 +218,172 @@ export function getStateSnapshot(): StateSnapshot {
 }
 
 // ---------------------------------------------------------------------------
-// WebSocket connection to /ws/mesh
+// oRPC client connection to /ws/mesh-orpc -- the worker's upstream half.
+//
+// mesh-client.ts (unchanged until a later PR) still sends an "init" message carrying a URL built for the legacy /ws/mesh path; toOrpcUrl rewrites it to the temporary oRPC path (added server-side, dark-launched, in the PR preceding this one) so the worker's own tab-facing contract with mesh-client.ts stays identical while its real upstream traffic moves onto oRPC. Reconnection is RPCLink's own `reconnect` option; resuming a subscribeEvents stream across a reconnect specifically needs RetryLinkPlugin as well -- WebSocketLinkTransport's reconnect only re-establishes the raw socket, it does not itself resume an in-flight event-iterator by lastEventId (confirmed against the installed beta's own source, not assumed from either option's name).
 // ---------------------------------------------------------------------------
 
-let ws: WebSocket | undefined;
-let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-let wsUrl: string | undefined;
+type MeshOrpcClient = ContractRouterClient<MeshContract>;
 
-function connect(url: string): void {
-  wsUrl = url;
-  if (reconnectTimer !== undefined) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = undefined;
-  }
+let orpcClient: MeshOrpcClient | undefined;
+let eventPumpGeneration = 0;
 
-  const socket = new WebSocket(url);
-  ws = socket;
-
-  socket.onopen = () => {
-    broadcastToPorts({ type: "connected" });
-  };
-
-  socket.onclose = () => {
-    ws = undefined;
-    broadcastToPorts({ type: "disconnected" });
-    scheduleReconnect();
-  };
-
-  socket.onerror = () => {
-    // onclose fires after this
-  };
-
-  socket.onmessage = (event: MessageEvent) => {
-    const raw: unknown = JSON.parse(
-      typeof event.data === "string" ? event.data : String(event.data),
-    );
-    handleServerMessage(raw);
-  };
+function toOrpcUrl(legacyMeshUrl: string): string {
+  return legacyMeshUrl.replace(/\/ws\/mesh$/, "/ws/mesh-orpc");
 }
 
-/** Delay before retrying a dropped mesh WebSocket connection. */
-const RECONNECT_DELAY_MS = 3000;
+/** Base delay for the reconnect backoff, doubled per attempt and capped at RECONNECT_MAX_DELAY_MS. */
+const RECONNECT_BASE_DELAY_MS = 1000;
+/** Upper bound on the reconnect backoff delay. */
+const RECONNECT_MAX_DELAY_MS = 30_000;
 
-function scheduleReconnect(): void {
-  if (wsUrl === undefined) return;
-  reconnectTimer = setTimeout(() => {
-    if (wsUrl !== undefined) connect(wsUrl);
-  }, RECONNECT_DELAY_MS);
-}
+export function connect(url: string): void {
+  const orpcUrl = toOrpcUrl(url);
 
-function handleServerMessage(raw: unknown): void {
-  if (isMeshStateMessage(raw)) {
-    if (raw.method === "state_sync") {
-      applyStateSync(raw.state);
-      broadcastToPorts({ type: "state", state: getStateSnapshot() });
-    } else {
-      applyPatch(raw.patch);
-      broadcastToPorts({ type: "patch", patch: raw.patch });
-    }
-    return;
-  }
-
-  // Action responses from the server — { type: "result" } or { type: "error" }
-  if (typeof raw === "object" && raw !== null && "type" in raw) {
-    if (
-      raw.type === "result" &&
-      "result" in raw &&
-      typeof raw.result === "object" &&
-      raw.result !== null &&
-      "content" in raw.result &&
-      typeof raw.result.content === "string" &&
-      "isError" in raw.result &&
-      typeof raw.result.isError === "boolean"
-    ) {
-      broadcastToPorts({
-        type: "actionResult",
-        id: "",
-        result: { content: raw.result.content, isError: raw.result.isError },
+  const link = new RPCLink({
+    connect: async () => {
+      const socket = new WebSocket(orpcUrl);
+      socket.addEventListener("open", () => {
+        broadcastToPorts({ type: "connected" });
       });
-    } else if (
-      raw.type === "error" &&
-      "message" in raw &&
-      typeof raw.message === "string"
-    ) {
-      broadcastToPorts({
-        type: "actionError",
-        id: "",
-        message: raw.message,
+      socket.addEventListener("close", () => {
+        broadcastToPorts({ type: "disconnected" });
       });
+      return new Promise<WebSocket>((resolve, reject) => {
+        socket.addEventListener(
+          "open",
+          () => {
+            resolve(socket);
+          },
+          { once: true },
+        );
+        socket.addEventListener("error", reject, { once: true });
+      });
+    },
+    reconnect: {
+      enabled: true,
+      delay: (info) =>
+        Math.min(
+          RECONNECT_BASE_DELAY_MS * 2 ** info.attempt,
+          RECONNECT_MAX_DELAY_MS,
+        ),
+    },
+    plugins: [new RetryLinkPlugin()],
+  });
+
+  const client: MeshOrpcClient = createORPCClient(link);
+  orpcClient = client;
+  void pumpEvents(client, ++eventPumpGeneration);
+}
+
+/**
+ * Consumes the unified event stream for as long as this generation is current -- eventPumpGeneration lets a fresh connect() call (a new "init" message) abandon a stale pump loop instead of running two concurrently against the same worker state.
+ *
+ * Confirmed empirically (a real server-side socket termination, not assumed from either option's name): RetryLinkPlugin does NOT transparently resume an already-active subscribeEvents() call across a transport-level drop -- the in-flight for-await throws (an AbortError from the closed socket) instead of pausing and resuming underneath the same iterator. The outer while loop here is what actually implements resume-after-reconnect: on any thrown error it loops back and calls subscribeEvents again with lastEventId, which naturally blocks until RPCLink's own reconnect option re-establishes the underlying socket, then resumes exactly where the stream left off.
+ */
+async function pumpEvents(
+  client: Readonly<MeshOrpcClient>,
+  generation: number,
+): Promise<void> {
+  let lastEventId: string | undefined;
+
+  while (generation === eventPumpGeneration) {
+    try {
+      const events = await client.subscribeEvents(
+        lastEventId === undefined ? {} : { lastEventId },
+      );
+      for await (const event of events) {
+        if (generation !== eventPumpGeneration) return;
+        const meta = getEventMeta(event);
+        if (meta?.id !== undefined) lastEventId = meta.id;
+        switch (event.kind) {
+          case "state_sync":
+            applyStateSync(event.state);
+            broadcastToPorts({ type: "state", state: getStateSnapshot() });
+            break;
+          case "state_patch":
+            applyPatch(event.patch);
+            broadcastToPorts({ type: "patch", patch: event.patch });
+            break;
+          case "delivery":
+            // Not yet part of the worker's tab-facing protocol -- delivery events still flow to tabs over the separate legacy chat socket (main.tsx's CommsWs) until that cutover lands.
+            break;
+        }
+      }
+      // The server ended the stream normally -- nothing left to resume.
+      return;
+    } catch {
+      // Transport dropped mid-stream. Loop back and resume from lastEventId once subscribeEvents() can succeed again.
     }
   }
 }
 
-function isMeshStateMessage(
-  value: unknown,
-): value is
-  | { method: "state_sync"; state: SerialisedState }
-  | { method: "state_update"; patch: MeshStatePatch } {
-  if (typeof value !== "object" || value === null) return false;
-  if (!("method" in value)) return false;
-  const method = value.method;
-  return (
-    typeof method === "string" &&
-    (method === "state_sync" || method === "state_update")
-  );
+async function dispatchAction(
+  client: Readonly<MeshOrpcClient>,
+  action: Record<string, unknown>,
+): Promise<{ content: string; isError: boolean }> {
+  const str = (key: string): string => {
+    const value = action[key];
+    return typeof value === "string" ? value : "";
+  };
+  const optStr = (key: string): string | undefined => {
+    const value = action[key];
+    return typeof value === "string" ? value : undefined;
+  };
+  const roomType = (): "public" | "private" | "secret" => {
+    const value = action.type;
+    return value === "public" || value === "private" || value === "secret"
+      ? value
+      : "public";
+  };
+
+  switch (action.action) {
+    case "send":
+      return client.send({ target: str("target"), content: str("content") });
+    case "dm":
+      return client.dm({ target: str("target"), content: str("content") });
+    case "join_room":
+      return client.joinRoom({ room: str("room") });
+    case "leave_room":
+      return client.leaveRoom({ room: optStr("room") });
+    case "create_room":
+      return client.createRoom({
+        name: str("name"),
+        type: roomType(),
+        description: optStr("description"),
+      });
+    case "list_rooms":
+      return client.listRooms({});
+    case "list_agents":
+      return client.listAgents({});
+    case "read_room":
+      return client.readRoom({ room: optStr("room") });
+    case "destroy_room":
+      return client.destroyRoom({ room: str("room") });
+    case "invite":
+      return client.invite({ room: str("room"), agent: str("agent") });
+    case "decline_invite":
+      return client.declineInvite({
+        room: str("room"),
+        reason: str("reason"),
+      });
+    case "kick":
+      return client.kick({ room: str("room"), agent: str("agent") });
+    case "rename_agent":
+      return client.renameAgent({ agent: str("agent"), name: str("name") });
+    default:
+      return {
+        content: `Unknown action: ${String(action.action)}`,
+        isError: true,
+      };
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Port management — fan-out to all connected main-thread tabs
 // ---------------------------------------------------------------------------
 
-const ports = new Set<MessagePortLike>();
+export const ports = new Set<MessagePortLike>();
 
 function broadcastToPorts(msg: WorkerOutbound): void {
   const data = JSON.stringify(msg);
@@ -346,9 +402,20 @@ function handlePortMessage(msg: WorkerInbound): void {
       connect(msg.url);
       break;
     case "action": {
-      if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(msg.action));
-      }
+      const client = orpcClient;
+      if (!client) break;
+      const id = msg.id;
+      dispatchAction(client, msg.action)
+        .then((result) => {
+          broadcastToPorts({ type: "actionResult", id, result });
+        })
+        .catch((err: unknown) => {
+          broadcastToPorts({
+            type: "actionError",
+            id,
+            message: err instanceof Error ? err.message : String(err),
+          });
+        });
       break;
     }
     case "getState":
