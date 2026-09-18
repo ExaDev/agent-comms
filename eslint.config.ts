@@ -76,6 +76,11 @@ export default defineConfig(
   },
   eslintConfigPrettier,
   {
+    // Playwright's fixture-dependency resolution parses each fixture function's own source text, requiring its first parameter to be a literal object-destructuring pattern even when the fixture depends on nothing -- a plain identifier throws "First argument must use the object destructuring pattern" at runtime, so the empty `{}` here is Playwright's own API contract, not a code smell.
+    files: ["src/bridges/user/web/e2e/fixtures.ts"],
+    rules: { "no-empty-pattern": "off" },
+  },
+  {
     files: [
       "**/*.test.ts",
       "**/*.test.tsx",

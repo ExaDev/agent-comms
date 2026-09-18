@@ -30,10 +30,7 @@ interface Fixtures {
 }
 
 export const test = base.extend<Fixtures>({
-  server: async (
-    _fixtures,
-    use: (handle: WebServerHandle) => Promise<void>,
-  ) => {
+  server: async ({}, use: (handle: WebServerHandle) => Promise<void>) => {
     // Each test gets its own coordinator port to avoid EADDRINUSE races
     // when the previous test's TLS transport hasn't released 19876 yet.
     const coordinatorPort = await allocFreePort();
