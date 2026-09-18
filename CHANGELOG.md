@@ -1,3 +1,9 @@
+## [3.29.3](https://github.com/ExaDev/agent-comms/compare/v3.29.2...v3.29.3) (2026-09-18)
+
+### Documentation
+
+* **bridge:** document the web UI's oRPC-based tab/worker/server transport ([5ff8f17](https://github.com/ExaDev/agent-comms/commit/5ff8f172f6732cd17034d830a868a7f84ce26b04))
+
 ## [3.29.2](https://github.com/ExaDev/agent-comms/compare/v3.29.1...v3.29.2) (2026-09-18)
 
 ### Documentation
