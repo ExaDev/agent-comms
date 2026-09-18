@@ -44,6 +44,17 @@ import {
   gatewayListTrusted,
 } from "./gateway-trust-actions.js";
 import { meshGraphAction, meshTraceAction } from "./mesh-graph-trace-tool.js";
+import {
+  meshDiscoverAction,
+  meshAdvertiseAction,
+  meshInterfacesAction,
+  meshUnadvertiseAction,
+  meshListenAction,
+  meshUnlistenAction,
+  meshListenersAction,
+  meshSetVisibilityAction,
+  meshGetVisibilityAction,
+} from "./mesh-network-actions.js";
 
 /** Table column widths for the plain-text listing helpers below, chosen to line up with the existing aligned output. */
 const ROOM_TYPE_COLUMN_WIDTH = 7;
@@ -51,11 +62,6 @@ const AGENT_NAME_COLUMN_WIDTH = 25;
 const AGENT_HARNESS_COLUMN_WIDTH = 12;
 const AGENT_STATUS_COLUMN_WIDTH = 7;
 const AGENT_VISIBILITY_COLUMN_WIDTH = 9;
-const INTERFACE_NAME_COLUMN_WIDTH = 12;
-const INTERFACE_FAMILY_COLUMN_WIDTH = 4;
-const LISTENER_HOST_COLUMN_WIDTH = 15;
-const LISTENER_PORT_COLUMN_WIDTH = 6;
-const LISTENER_POLICY_COLUMN_WIDTH = 11;
 
 /** Start/end indices into an ISO-8601 timestamp string ("YYYY-MM-DDTHH:MM:SS.sssZ") that slice out the "HH:MM:SS" portion. */
 const ISO_TIME_START_INDEX = 11;
@@ -63,9 +69,6 @@ const ISO_TIME_END_INDEX = 19;
 
 /** Maximum length of the JSON preview shown for an unrecognised action. */
 const UNKNOWN_ACTION_PREVIEW_LENGTH = 100;
-
-/** Default port the mesh coordinator listens on when advertising with no explicit port given. */
-const DEFAULT_MESH_COORDINATOR_PORT = 19876;
 
 export interface CommsContext {
   agentId: AgentId;
@@ -277,23 +280,23 @@ export class CommsTool {
         case "capability_pending":
           return this.capabilityPending(ctx);
         case "mesh_discover":
-          return await this.meshDiscover(action);
+          return await meshDiscoverAction(this.discovery, action);
         case "mesh_advertise":
-          return await this.meshAdvertise(ctx, action);
+          return await meshAdvertiseAction(this.discovery, action);
         case "mesh_unadvertise":
-          return await this.meshUnadvertise(action);
+          return await meshUnadvertiseAction(this.discovery, action);
         case "mesh_interfaces":
-          return this.meshInterfaces();
+          return meshInterfacesAction(this.store);
         case "mesh_listen":
-          return await this.meshListen(ctx, action);
+          return await meshListenAction(this.store, action);
         case "mesh_unlisten":
-          return await this.meshUnlisten(ctx, action);
+          return await meshUnlistenAction(this.store, action);
         case "mesh_listeners":
-          return this.meshListeners(ctx);
+          return meshListenersAction(this.store);
         case "mesh_set_visibility":
-          return await this.meshSetVisibility(action);
+          return await meshSetVisibilityAction(this.store, action);
         case "mesh_get_visibility":
-          return this.meshGetVisibility(action);
+          return meshGetVisibilityAction(this.store);
         case "mesh_graph":
           return meshGraphAction(this.store);
         case "mesh_trace":
@@ -585,165 +588,6 @@ export class CommsTool {
   ): Promise<CommsResult> {
     await this.store.destroyRoom(action.room, ctx.agentId);
     return { content: `Destroyed room "${action.room}".`, isError: false };
-  }
-
-  private async meshDiscover(
-    action: CommsAction & { action: "mesh_discover" },
-  ): Promise<CommsResult> {
-    if (!this.discovery) {
-      return {
-        content: "Discovery is not available (no backends registered).",
-        isError: true,
-      };
-    }
-    const meshes = await this.discovery.discover(action.method);
-    if (meshes.length === 0) {
-      return { content: "No meshes discovered.", isError: false };
-    }
-    const lines = meshes.map(
-      (m) =>
-        `  ${m.host}:${String(m.port)}  ${m.name}${m.agentCount !== undefined ? ` (${String(m.agentCount)} agents)` : ""}`,
-    );
-    return {
-      content: `Discovered meshes:\n${lines.join("\n")}`,
-      isError: false,
-    };
-  }
-
-  private async meshAdvertise(
-    ctx: Readonly<CommsContext>,
-    action: CommsAction & { action: "mesh_advertise" },
-  ): Promise<CommsResult> {
-    if (!this.discovery) {
-      return {
-        content: "Discovery is not available (no backends registered).",
-        isError: true,
-      };
-    }
-    // Default to the mesh coordinator port if not specified
-    const port = action.port ?? DEFAULT_MESH_COORDINATOR_PORT;
-    const opts: { name: string; port: number; adapter?: string } = {
-      name: action.name,
-      port,
-    };
-    if (action.adapter !== undefined) opts.adapter = action.adapter;
-    const id = await this.discovery.advertise(action.method, opts);
-    return {
-      content: `Advertising mesh "${action.name}" on ${action.method} (port ${String(port)}). ID: ${id}`,
-      isError: false,
-    };
-  }
-
-  private meshInterfaces(): CommsResult {
-    if (!this.store.getNetworkInterfaces)
-      return notMeshBacked("mesh_interfaces");
-    const interfaces = this.store.getNetworkInterfaces();
-    if (interfaces.length === 0)
-      return { content: "No network interfaces found.", isError: false };
-
-    const lines = interfaces.map((iface: Readonly<NetworkInterface>) => {
-      const internal = iface.internal ? " (internal)" : "";
-      return `${iface.name.padEnd(INTERFACE_NAME_COLUMN_WIDTH)} ${iface.family.padEnd(INTERFACE_FAMILY_COLUMN_WIDTH)} ${iface.address}${internal}`;
-    });
-    return {
-      content: `Interfaces:\n${lines.join("\n")}`,
-      isError: false,
-    };
-  }
-
-  private async meshUnadvertise(
-    action: CommsAction & { action: "mesh_unadvertise" },
-  ): Promise<CommsResult> {
-    if (!this.discovery) {
-      return {
-        content: "Discovery is not available (no backends registered).",
-        isError: true,
-      };
-    }
-    await this.discovery.stopAdvertising(action.id);
-    return { content: `Stopped advertising ${action.id}.`, isError: false };
-  }
-
-  private async meshListen(
-    _ctx: Readonly<CommsContext>,
-    action: CommsAction & { action: "mesh_listen" },
-  ): Promise<CommsResult> {
-    const policy = action.policy ?? "full";
-    const validPolicies = ["full", "observe", "rooms-only", "gateway"];
-    if (!validPolicies.includes(policy)) {
-      return {
-        content: `Invalid policy "${policy}". Must be one of: ${validPolicies.join(", ")}`,
-        isError: true,
-      };
-    }
-    if (!this.store.addListener) return notMeshBacked("mesh_listen");
-    const addListener = this.store.addListener.bind(this.store);
-    return tryMeshAction("add listener", async () => {
-      const id = await addListener(action.host, action.port ?? 0, policy);
-      return `Listener added: ${id} on ${action.host}${String(action.port ?? "auto")} with policy ${policy}.`;
-    });
-  }
-
-  private async meshUnlisten(
-    _ctx: Readonly<CommsContext>,
-    action: CommsAction & { action: "mesh_unlisten" },
-  ): Promise<CommsResult> {
-    if (!this.store.removeListener) return notMeshBacked("mesh_unlisten");
-    const removeListener = this.store.removeListener.bind(this.store);
-    return tryMeshAction("remove listener", async () => {
-      await removeListener(action.id);
-      return `Listener ${action.id} removed.`;
-    });
-  }
-
-  private meshListeners(_ctx: Readonly<CommsContext>): CommsResult {
-    if (!this.store.listListeners) return notMeshBacked("mesh_listeners");
-    const listeners = this.store.listListeners();
-    if (listeners.length === 0)
-      return { content: "No listeners (not coordinator).", isError: false };
-
-    const lines = listeners.map((l: Readonly<ListenerInfo>) => {
-      const flag = l.isDefault ? " (default)" : "";
-      return `${l.id}  ${l.host.padEnd(LISTENER_HOST_COLUMN_WIDTH)} ${String(l.port).padEnd(LISTENER_PORT_COLUMN_WIDTH)} ${l.policy.padEnd(LISTENER_POLICY_COLUMN_WIDTH)}${flag}`;
-    });
-    return {
-      content: `Listeners:\n  ID      Host             Port   Policy      \n${lines.map((l) => `  ${l}`).join("\n")}`,
-      isError: false,
-    };
-  }
-
-  private async meshSetVisibility(
-    action: CommsAction & { action: "mesh_set_visibility" },
-  ): Promise<CommsResult> {
-    if (!this.store.setVisibility) {
-      return {
-        content: "Visibility control is not available on this store.",
-        isError: true,
-      };
-    }
-    await this.store.setVisibility(action.visibility, action.adapter);
-    const adapter =
-      action.adapter !== undefined ? ` on adapter "${action.adapter}"` : "";
-    return {
-      content: `Mesh visibility set to "${action.visibility}"${adapter}.`,
-      isError: false,
-    };
-  }
-
-  private meshGetVisibility(
-    _action: CommsAction & { action: "mesh_get_visibility" },
-  ): CommsResult {
-    if (!this.store.getVisibility) {
-      return {
-        content: "Visibility control is not available on this store.",
-        isError: true,
-      };
-    }
-    const visibility = this.store.getVisibility();
-    return {
-      content: `Mesh visibility: ${visibility}`,
-      isError: false,
-    };
   }
 
   private async meshConnect(
