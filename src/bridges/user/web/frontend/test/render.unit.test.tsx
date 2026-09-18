@@ -1,33 +1,25 @@
+// @vitest-environment jsdom
 /**
- * Unit tests for Preact components — render into happy-dom containers.
+ * Unit tests for React components — render via Testing Library.
  */
 
-import { describe, it, beforeEach, afterEach, expect } from "vitest";
-import { render as preactRender } from "preact";
-import { Window } from "happy-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { screen } from "@testing-library/react";
 import { Message } from "../components/Message.js";
 import { MessageList } from "../components/MessageList.js";
 import { ChatArea } from "../components/ChatArea.js";
 import { Sidebar } from "../components/Sidebar.js";
 import type { Agent, DisplayMessage, Room } from "../types.js";
+import { stubMantineJsdomGlobals } from "./jsdom-mantine-polyfills.js";
+import { renderWithMantine } from "./render-with-mantine.js";
 
-let windowRef: Window | undefined;
+beforeEach(() => {
+  stubMantineJsdomGlobals();
+});
 
-function setup(): { container: HTMLElement; cleanup: () => void } {
-  windowRef = new Window();
-  const doc = (windowRef as unknown as { document: Document }).document;
-  // Preact's JSX transform may reference globalThis.document
-  (globalThis as Record<string, unknown>).document = doc;
-  const container = doc.createElement("div");
-  return {
-    container,
-    cleanup: () => {
-      delete (globalThis as Record<string, unknown>).document;
-      windowRef?.close();
-      windowRef = undefined;
-    },
-  };
-}
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const MOCK_CHAT: DisplayMessage = {
   type: "chat",
@@ -77,56 +69,35 @@ const MOCK_AGENT: Agent = {
   subscribedRooms: [],
 };
 
+const SIDEBAR_DEFAULTS = {
+  onSelectAgent: () => {},
+  onRenameAgent: () => {},
+  onCreateRoom: () => {},
+  onJoinRoomInput: () => {},
+};
+
 describe("Message component", () => {
   it("renders chat message with sender and time", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(<Message message={MOCK_CHAT} />, container);
-      const el = container.querySelector(".msg") as HTMLElement;
-      expect(el).toBeTruthy();
-      expect(el.textContent?.includes("Alice")).toBeTruthy();
-      expect(el.textContent?.includes("14:30:45")).toBeTruthy();
-      expect(el.textContent?.includes("Hello world")).toBeTruthy();
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(<Message message={MOCK_CHAT} />);
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("14:30:45")).toBeInTheDocument();
+    expect(screen.getByText(": Hello world")).toBeInTheDocument();
   });
 
   it("renders DM message with badge", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(<Message message={MOCK_DM} />, container);
-      const el = container.querySelector(".msg.dm") as HTMLElement;
-      expect(el).toBeTruthy();
-      expect(el.textContent?.includes("DM")).toBeTruthy();
-      expect(el.textContent?.includes("Bob")).toBeTruthy();
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(<Message message={MOCK_DM} />);
+    expect(screen.getByText("DM")).toBeInTheDocument();
+    expect(screen.getByText("Bob")).toBeInTheDocument();
   });
 
   it("renders system message", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(<Message message={MOCK_SYSTEM} />, container);
-      const el = container.querySelector(".msg.system") as HTMLElement;
-      expect(el).toBeTruthy();
-      expect(el.textContent).toBe("Connected");
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(<Message message={MOCK_SYSTEM} />);
+    expect(screen.getByText("Connected")).toBeInTheDocument();
   });
 
   it("renders status message", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(<Message message={MOCK_STATUS} />, container);
-      const el = container.querySelector(".msg.status") as HTMLElement;
-      expect(el).toBeTruthy();
-      expect(el.textContent?.includes("busy")).toBeTruthy();
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(<Message message={MOCK_STATUS} />);
+    expect(screen.getByText("Agent is now busy")).toBeInTheDocument();
   });
 });
 
@@ -134,266 +105,159 @@ const MOCK_MESSAGE_COUNT = 3;
 
 describe("MessageList component", () => {
   it("renders multiple messages", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <MessageList messages={[MOCK_CHAT, MOCK_DM, MOCK_SYSTEM]} />,
-        container,
-      );
-      const msgs = container.querySelectorAll(".msg");
-      expect(msgs.length).toBe(MOCK_MESSAGE_COUNT);
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <MessageList messages={[MOCK_CHAT, MOCK_DM, MOCK_SYSTEM]} />,
+    );
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("Bob")).toBeInTheDocument();
+    expect(screen.getByText("Connected")).toBeInTheDocument();
   });
 
   it("renders empty list", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(<MessageList messages={[]} />, container);
-      const msgs = container.querySelectorAll(".msg");
-      expect(msgs.length).toBe(0);
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(<MessageList messages={[]} />);
+    expect(screen.getByLabelText("Messages").textContent).toBe("");
   });
 });
 
 describe("ChatArea component", () => {
+  const chatAreaDefaults = {
+    messages: [] as readonly DisplayMessage[],
+    connected: true,
+    sidebarOpened: true,
+    onToggleSidebar: () => {},
+    onSendAction: () => {},
+    onLeaveRoom: () => {},
+    onConnectToMesh: () => {},
+  };
+
   it("renders header with default text", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <ChatArea
-          messages={[]}
-          currentRoom={undefined}
-          dmTarget={undefined}
-          connected={true}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      const header = container.querySelector("#header") as HTMLElement;
-      expect(header).toBeTruthy();
-      expect(header.textContent?.includes("Select a room")).toBeTruthy();
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        currentRoom={undefined}
+        dmTarget={undefined}
+      />,
+    );
+    expect(screen.getByText("Select a room")).toBeInTheDocument();
   });
 
   it("renders header with room name and leave button", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <ChatArea
-          messages={[]}
-          currentRoom="test-room"
-          dmTarget={undefined}
-          connected={true}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      const header = container.querySelector("#header") as HTMLElement;
-      expect(header.textContent?.includes("test-room")).toBeTruthy();
-      const leaveBtn = container.querySelector(".leave-btn") as HTMLElement;
-      expect(
-        leaveBtn,
-        "leave button should be present when room is active",
-      ).toBeTruthy();
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        currentRoom="test-room"
+        dmTarget={undefined}
+      />,
+    );
+    expect(screen.getByText("test-room")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Leave" })).toBeInTheDocument();
   });
 
   it("renders header with DM target", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <ChatArea
-          messages={[]}
-          currentRoom={undefined}
-          dmTarget="agent-1"
-          connected={true}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      const header = container.querySelector("#header") as HTMLElement;
-      expect(header.textContent?.includes("DM with agent-1")).toBeTruthy();
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        currentRoom={undefined}
+        dmTarget="agent-1"
+      />,
+    );
+    expect(screen.getByText("DM with agent-1")).toBeInTheDocument();
   });
 
   it("does not show leave button without active room", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <ChatArea
-          messages={[]}
-          currentRoom={undefined}
-          dmTarget={undefined}
-          connected={true}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      const leaveBtn = container.querySelector(".leave-btn");
-      expect(leaveBtn).toBe(null);
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        currentRoom={undefined}
+        dmTarget={undefined}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Leave" }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders input bar", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <ChatArea
-          messages={[]}
-          currentRoom={undefined}
-          dmTarget={undefined}
-          connected={true}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      const input = container.querySelector("#input") as HTMLElement;
-      expect(input).toBeTruthy();
-      const sendBtn = container.querySelector("#send-btn") as HTMLElement;
-      expect(sendBtn).toBeTruthy();
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        currentRoom={undefined}
+        dmTarget={undefined}
+      />,
+    );
+    expect(screen.getByLabelText("Message")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
   });
 });
 
 describe("Sidebar component", () => {
   it("renders rooms with active state", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <Sidebar
-          rooms={[MOCK_ROOM]}
-          agents={[]}
-          currentRoom="r1"
-          onJoinRoom={() => {}}
-          onSelectAgent={() => {}}
-          onCreateRoom={() => {}}
-          onJoinRoomInput={() => {}}
-        />,
-        container,
-      );
-      const roomItem = container.querySelector(".room-item") as HTMLElement;
-      expect(roomItem).toBeTruthy();
-      expect(roomItem.classList.contains("active")).toBeTruthy();
-      expect(roomItem.textContent?.includes("Room 1")).toBeTruthy();
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <Sidebar
+        rooms={[MOCK_ROOM]}
+        agents={[]}
+        currentRoom="r1"
+        onJoinRoom={() => {}}
+        {...SIDEBAR_DEFAULTS}
+      />,
+    );
+    const roomLink = screen.getByText("Room 1 (2)");
+    expect(roomLink).toBeInTheDocument();
   });
 
   it("renders agents with status dots", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <Sidebar
-          rooms={[]}
-          agents={[MOCK_AGENT]}
-          currentRoom={undefined}
-          onJoinRoom={() => {}}
-          onSelectAgent={() => {}}
-          onCreateRoom={() => {}}
-          onJoinRoomInput={() => {}}
-        />,
-        container,
-      );
-      const agentItem = container.querySelector(".agent-item") as HTMLElement;
-      expect(agentItem).toBeTruthy();
-      expect(agentItem.textContent?.includes("Agent 1")).toBeTruthy();
-      const dot = container.querySelector(".status-dot") as HTMLElement;
-      expect(dot).toBeTruthy();
-      expect(dot.classList.contains("active")).toBeTruthy();
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <Sidebar
+        rooms={[]}
+        agents={[MOCK_AGENT]}
+        currentRoom={undefined}
+        onJoinRoom={() => {}}
+        {...SIDEBAR_DEFAULTS}
+      />,
+    );
+    expect(screen.getByText("Agent 1")).toBeInTheDocument();
   });
 
   it("renders empty agent list", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <Sidebar
-          rooms={[]}
-          agents={[]}
-          currentRoom={undefined}
-          onJoinRoom={() => {}}
-          onSelectAgent={() => {}}
-          onCreateRoom={() => {}}
-          onJoinRoomInput={() => {}}
-        />,
-        container,
-      );
-      const agents = container.querySelectorAll(".agent-item");
-      expect(agents.length).toBe(0);
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <Sidebar
+        rooms={[]}
+        agents={[]}
+        currentRoom={undefined}
+        onJoinRoom={() => {}}
+        {...SIDEBAR_DEFAULTS}
+      />,
+    );
+    expect(screen.queryByText("Agent 1")).not.toBeInTheDocument();
   });
 
   it("renders create room toggle button", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <Sidebar
-          rooms={[]}
-          agents={[]}
-          currentRoom={undefined}
-          onJoinRoom={() => {}}
-          onSelectAgent={() => {}}
-          onCreateRoom={() => {}}
-          onJoinRoomInput={() => {}}
-        />,
-        container,
-      );
-      const btn = container.querySelector("#create-room-toggle") as HTMLElement;
-      expect(btn).toBeTruthy();
-      expect(btn.textContent).toBe("+");
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <Sidebar
+        rooms={[]}
+        agents={[]}
+        currentRoom={undefined}
+        onJoinRoom={() => {}}
+        {...SIDEBAR_DEFAULTS}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Create room" }),
+    ).toBeInTheDocument();
   });
 
   it("renders join room toggle button", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <Sidebar
-          rooms={[]}
-          agents={[]}
-          currentRoom={undefined}
-          onJoinRoom={() => {}}
-          onSelectAgent={() => {}}
-          onCreateRoom={() => {}}
-          onJoinRoomInput={() => {}}
-        />,
-        container,
-      );
-      const btn = container.querySelector("#join-toggle-btn") as HTMLElement;
-      expect(btn).toBeTruthy();
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <Sidebar
+        rooms={[]}
+        agents={[]}
+        currentRoom={undefined}
+        onJoinRoom={() => {}}
+        {...SIDEBAR_DEFAULTS}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "+ Join Room" }),
+    ).toBeInTheDocument();
   });
 });

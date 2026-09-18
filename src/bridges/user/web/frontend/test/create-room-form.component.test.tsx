@@ -1,128 +1,88 @@
+// @vitest-environment jsdom
 /**
  * Component interaction tests for CreateRoomForm.
  */
 
-import { describe, it, expect } from "vitest";
-import { render as preactRender } from "preact";
-import { act } from "preact/test-utils";
-import { Window } from "happy-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { CreateRoomForm } from "../components/CreateRoomForm.js";
+import { stubMantineJsdomGlobals } from "./jsdom-mantine-polyfills.js";
+import { renderWithMantine } from "./render-with-mantine.js";
 
-let windowRef: Window | undefined;
+beforeEach(() => {
+  stubMantineJsdomGlobals();
+});
 
-function setup(): { container: HTMLElement; cleanup: () => void } {
-  windowRef = new Window();
-  const doc = (windowRef as unknown as { document: Document }).document;
-  (globalThis as Record<string, unknown>).document = doc;
-  const container = doc.createElement("div");
-  return {
-    container,
-    cleanup: () => {
-      delete (globalThis as Record<string, unknown>).document;
-      windowRef?.close();
-      windowRef = undefined;
-    },
-  };
-}
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("CreateRoomForm interactions", () => {
-  it("calls onCancel when cancel button is clicked", () => {
-    const { container, cleanup } = setup();
-    try {
-      let cancelled = false;
-      preactRender(
-        <CreateRoomForm
-          visible={true}
-          onSubmit={() => {}}
-          onCancel={() => {
-            cancelled = true;
-          }}
-        />,
-        container,
-      );
-      const btn = container.querySelector(".create-room-cancel")!;
-      btn.click();
-      expect(cancelled).toBe(true);
-    } finally {
-      cleanup();
-    }
+  it("calls onCancel when cancel button is clicked", async () => {
+    const user = userEvent.setup();
+    let cancelled = false;
+    renderWithMantine(
+      <CreateRoomForm
+        visible={true}
+        onSubmit={() => {}}
+        onCancel={() => {
+          cancelled = true;
+        }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(cancelled).toBe(true);
   });
 
-  it("calls onSubmit with form values when submitted", () => {
-    const { container, cleanup } = setup();
-    try {
-      let submitted:
-        | {
-            name: string;
-            type: "public" | "private" | "secret";
-            description: string;
-          }
-        | undefined;
-      preactRender(
-        <CreateRoomForm
-          visible={true}
-          onSubmit={(name, type, description) => {
-            submitted = { name, type, description };
-          }}
-          onCancel={() => {}}
-        />,
-        container,
-      );
+  it("calls onSubmit with form values when submitted", async () => {
+    const user = userEvent.setup();
+    let submitted:
+      | {
+          name: string;
+          type: "public" | "private" | "secret";
+          description: string;
+        }
+      | undefined;
+    renderWithMantine(
+      <CreateRoomForm
+        visible={true}
+        onSubmit={(name, type, description) => {
+          submitted = { name, type, description };
+        }}
+        onCancel={() => {}}
+      />,
+    );
 
-      // Fill in name via direct input simulation
-      const nameInput = container.querySelector("input[name='room-name']")!;
-      nameInput.value = "test-room";
-      // Trigger Preact's onInput by dispatching the right event
-      nameInput.dispatchEvent(
-        new (windowRef as unknown as { Event: typeof Event }).Event("input", {
-          bubbles: true,
-        }),
-      );
+    await user.type(screen.getByLabelText(/Room name/), "test-room");
+    await user.click(screen.getByRole("combobox", { name: "Type" }));
+    await user.click(await screen.findByRole("option", { name: "Private" }));
+    await user.type(
+      screen.getByLabelText("Description (optional)"),
+      "A test room",
+    );
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
-      // Select private type
-      const select = container.querySelector("select[name='room-type']")!;
-      select.value = "private";
-      select.dispatchEvent(
-        new (windowRef as unknown as { Event: typeof Event }).Event("change", {
-          bubbles: true,
-        }),
-      );
+    expect(submitted).toEqual({
+      name: "test-room",
+      type: "private",
+      description: "A test room",
+    });
+  });
 
-      // Fill description
-      const descInput = container.querySelector(
-        "input[name='room-description']",
-      )!;
-      descInput.value = "A test room";
-      descInput.dispatchEvent(
-        new (windowRef as unknown as { Event: typeof Event }).Event("input", {
-          bubbles: true,
-        }),
-      );
-
-      // Submit via form
-      act(() => {
-        const form = container.querySelector("form")!;
-        form.dispatchEvent(
-          new (windowRef as unknown as { Event: typeof Event }).Event("submit"),
-        );
-      });
-
-      // In happy-dom, Preact's synthetic event system may not fully
-      // propagate input values through useState. Test that the form
-      // was at least submitted (name is required, so it would be empty
-      // string if input simulation didn't work).
-      // If submitted is undefined, the form prevented submit (empty name).
-      // If submitted is defined, check the values came through.
-      if (submitted) {
-        expect(submitted.name).toBe("test-room");
-        expect(submitted.type).toBe("private");
-        expect(submitted.description).toBe("A test room");
-      }
-      // If submitted is undefined, happy-dom couldn't propagate input
-      // values to Preact state — the structural test still passes
-      // because the form exists with the right inputs (tested in unit tests).
-    } finally {
-      cleanup();
-    }
+  it("does not submit when name is empty", async () => {
+    const user = userEvent.setup();
+    let submitted = false;
+    renderWithMantine(
+      <CreateRoomForm
+        visible={true}
+        onSubmit={() => {
+          submitted = true;
+        }}
+        onCancel={() => {}}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(submitted).toBe(false);
   });
 });

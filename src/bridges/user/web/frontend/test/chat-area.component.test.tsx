@@ -1,100 +1,78 @@
+// @vitest-environment jsdom
 /**
  * Component interaction tests for ChatArea.
  */
 
-import { describe, it, expect } from "vitest";
-import { render as preactRender } from "preact";
-import { Window } from "happy-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ChatArea } from "../components/ChatArea.js";
 import type { DisplayMessage } from "../types.js";
+import { stubMantineJsdomGlobals } from "./jsdom-mantine-polyfills.js";
+import { renderWithMantine } from "./render-with-mantine.js";
 
-let windowRef: Window | undefined;
+beforeEach(() => {
+  stubMantineJsdomGlobals();
+});
 
-function setup(): { container: HTMLElement; cleanup: () => void } {
-  windowRef = new Window();
-  const doc = (windowRef as unknown as { document: Document }).document;
-  (globalThis as Record<string, unknown>).document = doc;
-  const container = doc.createElement("div");
-  return {
-    container,
-    cleanup: () => {
-      delete (globalThis as Record<string, unknown>).document;
-      windowRef?.close();
-      windowRef = undefined;
-    },
-  };
-}
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+const chatAreaDefaults = {
+  sidebarOpened: true,
+  onToggleSidebar: () => {},
+  onSendAction: () => {},
+  onLeaveRoom: () => {},
+  onConnectToMesh: () => {},
+};
 
 describe("ChatArea interactions", () => {
-  it("calls onLeaveRoom when leave button is clicked", () => {
-    const { container, cleanup } = setup();
-    try {
-      let leftCalled = false;
-      preactRender(
-        <ChatArea
-          messages={[]}
-          currentRoom="room-1"
-          dmTarget={undefined}
-          connected={true}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {
-            leftCalled = true;
-          }}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      const btn = container.querySelector(".leave-btn")!;
-      expect(btn).toBeTruthy();
-      btn.click();
-      expect(leftCalled).toBe(true);
-    } finally {
-      cleanup();
-    }
+  it("calls onLeaveRoom when leave button is clicked", async () => {
+    const user = userEvent.setup();
+    let leftCalled = false;
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        messages={[]}
+        currentRoom="room-1"
+        dmTarget={undefined}
+        connected={true}
+        onLeaveRoom={() => {
+          leftCalled = true;
+        }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Leave" }));
+    expect(leftCalled).toBe(true);
   });
 
   it("does not render leave button when no room is active", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <ChatArea
-          messages={[]}
-          currentRoom={undefined}
-          dmTarget={undefined}
-          connected={true}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      expect(container.querySelector(".leave-btn")).toBe(null);
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        messages={[]}
+        currentRoom={undefined}
+        dmTarget={undefined}
+        connected={true}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Leave" }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders send button", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <ChatArea
-          messages={[]}
-          currentRoom={undefined}
-          dmTarget={undefined}
-          connected={true}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      const btn = container.querySelector("#send-btn")!;
-      expect(btn).toBeTruthy();
-      expect(btn.textContent).toBe("Send");
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        messages={[]}
+        currentRoom={undefined}
+        dmTarget={undefined}
+        connected={true}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
   });
 
   it("renders messages", () => {
@@ -107,24 +85,17 @@ describe("ChatArea interactions", () => {
       },
       { type: "system", text: "Joined" },
     ];
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <ChatArea
-          messages={messages}
-          currentRoom="r1"
-          dmTarget={undefined}
-          connected={true}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      expect(container.querySelectorAll(".msg").length).toBe(2);
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        messages={messages}
+        currentRoom="r1"
+        dmTarget={undefined}
+        connected={true}
+      />,
+    );
+    expect(screen.getByText("A")).toBeInTheDocument();
+    expect(screen.getByText("Joined")).toBeInTheDocument();
   });
 
   // -----------------------------------------------------------------------
@@ -132,105 +103,74 @@ describe("ChatArea interactions", () => {
   // -----------------------------------------------------------------------
 
   it("renders connect prompt when disconnected with no messages", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <ChatArea
-          messages={[]}
-          currentRoom={undefined}
-          dmTarget={undefined}
-          connected={false}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      const prompt = container.querySelector(".connect-prompt");
-      expect(prompt, "should render .connect-prompt").toBeTruthy();
-      const btn = container.querySelector(".connect-btn");
-      expect(btn, "should render .connect-btn").toBeTruthy();
-      expect(btn?.textContent).toBe("Connect to local mesh");
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        messages={[]}
+        currentRoom={undefined}
+        dmTarget={undefined}
+        connected={false}
+      />,
+    );
+    expect(
+      screen.getByText("Connect to a local mesh to discover agents and rooms."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Connect to local mesh" }),
+    ).toBeInTheDocument();
   });
 
   it("does not render connect prompt when connected", () => {
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <ChatArea
-          messages={[]}
-          currentRoom={undefined}
-          dmTarget={undefined}
-          connected={true}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      expect(
-        container.querySelector(".connect-prompt"),
-        "should not render .connect-prompt when connected",
-      ).toBe(null);
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        messages={[]}
+        currentRoom={undefined}
+        dmTarget={undefined}
+        connected={true}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Connect to local mesh" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not render connect prompt when disconnected but messages exist", () => {
     const messages: DisplayMessage[] = [
       { type: "system", text: "Previous session" },
     ];
-    const { container, cleanup } = setup();
-    try {
-      preactRender(
-        <ChatArea
-          messages={messages}
-          currentRoom={undefined}
-          dmTarget={undefined}
-          connected={false}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {}}
-        />,
-        container,
-      );
-      expect(
-        container.querySelector(".connect-prompt"),
-        "should not render .connect-prompt when messages exist",
-      ).toBe(null);
-    } finally {
-      cleanup();
-    }
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        messages={messages}
+        currentRoom={undefined}
+        dmTarget={undefined}
+        connected={false}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Connect to local mesh" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("calls onConnectToMesh when connect button is clicked", () => {
-    const { container, cleanup } = setup();
-    try {
-      let connectCalled = false;
-      preactRender(
-        <ChatArea
-          messages={[]}
-          currentRoom={undefined}
-          dmTarget={undefined}
-          connected={false}
-          onSendAction={() => {}}
-          onLeaveRoom={() => {}}
-          onConnectToMesh={() => {
-            connectCalled = true;
-          }}
-        />,
-        container,
-      );
-      const btn = container.querySelector(".connect-btn")!;
-      expect(btn).toBeTruthy();
-      btn.click();
-      expect(connectCalled).toBe(true);
-    } finally {
-      cleanup();
-    }
+  it("calls onConnectToMesh when connect button is clicked", async () => {
+    const user = userEvent.setup();
+    let connectCalled = false;
+    renderWithMantine(
+      <ChatArea
+        {...chatAreaDefaults}
+        messages={[]}
+        currentRoom={undefined}
+        dmTarget={undefined}
+        connected={false}
+        onConnectToMesh={() => {
+          connectCalled = true;
+        }}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Connect to local mesh" }),
+    );
+    expect(connectCalled).toBe(true);
   });
 });
