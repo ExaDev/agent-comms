@@ -20,13 +20,13 @@ import type { MeshStore } from "../core/mesh-store.js";
 const TEST_IDENTITY_CWD_ID_LENGTH = 8;
 
 /** Wires store onto a fresh WireMeshTransport and a persisted identity slot, returning the slot so a test can inspect (or reuse) the persisted room tokens directly via loadRoomTokens(). Defaults to a throwaway temp-dir slot per call -- pass an explicit slot when a test needs the same identity to survive across more than one wireTestTransport call (e.g. simulating a restart). pendingConnectionTimeoutMs overrides WireMeshTransport's own default 5-minute connect_request expiry -- a test proving that expiry behaviour needs it far shorter than any real approval window. presenceReadvertiseIntervalMs likewise overrides the default 20s presence re-advertisement cadence -- a test proving that behaviour needs it far shorter too, or a test that doesn't care about presence at all wants it long enough to never fire spuriously mid-test. Wires getSelfAgentAdvert (`() => store.selfAgentAdvert`) the same way createBridgeMesh does -- a test relying on gossip carrying the registered agent/self extension (e.g. remote-directory-merge coverage, agent-comms#155) needs this wired exactly like production does. */
-export async function wireTestTransport(
+async function wireTransportInternal(
   store: MeshStore,
   slot?: Readonly<IdentitySlot>,
   pendingConnectionTimeoutMs?: number,
   presenceReadvertiseIntervalMs?: number,
   userIdentityOptions?: Readonly<UserIdentityOptions>,
-): Promise<IdentitySlot> {
+): Promise<{ slot: IdentitySlot; transport: WireMeshTransport }> {
   const resolvedSlot: IdentitySlot = slot ?? {
     harness: "test",
     cwd: nanoid(TEST_IDENTITY_CWD_ID_LENGTH),
@@ -45,20 +45,19 @@ export async function wireTestTransport(
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- memory-backed, matching every other throwaway test identity here, rather than a real createNodeFsStorage a test would need to clean up afterwards.
   const dataStorage = createMemoryStorage();
-  store.setTransport(
-    new WireMeshTransport(
-      store.events,
-      identity,
-      store.roomVerbHandlers,
-      pendingConnectionTimeoutMs,
-      () => store.selfStatus,
-      presenceReadvertiseIntervalMs,
-      undefined,
-      dataStorage,
-      () => store.selfAgentAdvert,
-      store.gatewayTrust,
-    ),
+  const transport = new WireMeshTransport(
+    store.events,
+    identity,
+    store.roomVerbHandlers,
+    pendingConnectionTimeoutMs,
+    () => store.selfStatus,
+    presenceReadvertiseIntervalMs,
+    undefined,
+    dataStorage,
+    () => store.selfAgentAdvert,
+    store.gatewayTrust,
   );
+  store.setTransport(transport);
   store.setIdentity({
     identity: await toIdentityPort(identity),
     clock: createSystemClock(),
@@ -72,7 +71,42 @@ export async function wireTestTransport(
   store.onError = (e) => {
     console.error(`[transport error, peerId=${store.peerId}]`, e.message);
   };
+  return { slot: resolvedSlot, transport };
+}
+
+/** Wires store onto a fresh WireMeshTransport and a persisted identity slot, returning the slot so a test can inspect (or reuse) the persisted room tokens directly via loadRoomTokens(). Defaults to a throwaway temp-dir slot per call -- pass an explicit slot when a test needs the same identity to survive across more than one wireTestTransport call (e.g. simulating a restart). pendingConnectionTimeoutMs overrides WireMeshTransport's own default 5-minute connect_request expiry -- a test proving that expiry behaviour needs it far shorter than any real approval window. presenceReadvertiseIntervalMs likewise overrides the default 20s presence re-advertisement cadence -- a test proving that behaviour needs it far shorter too, or a test that doesn't care about presence at all wants it long enough to never fire spuriously mid-test. Wires getSelfAgentAdvert (`() => store.selfAgentAdvert`) the same way createBridgeMesh does -- a test relying on gossip carrying the registered agent/self extension (e.g. remote-directory-merge coverage, agent-comms#155) needs this wired exactly like production does. */
+export async function wireTestTransport(
+  store: MeshStore,
+  slot?: Readonly<IdentitySlot>,
+  pendingConnectionTimeoutMs?: number,
+  presenceReadvertiseIntervalMs?: number,
+  userIdentityOptions?: Readonly<UserIdentityOptions>,
+): Promise<IdentitySlot> {
+  const { slot: resolvedSlot } = await wireTransportInternal(
+    store,
+    slot,
+    pendingConnectionTimeoutMs,
+    presenceReadvertiseIntervalMs,
+    userIdentityOptions,
+  );
   return resolvedSlot;
+}
+
+/** Same wiring as wireTestTransport, but also returns the constructed WireMeshTransport instance itself -- needed by any test that has to reach transport.hub directly (connectHub, hub.peers(), hub.isConnected), since MeshStore exposes no public hub-connect wrapper outside CoordinatorGateway's own becomeCoordinator flow (agent-comms#192's own hub-mode room-verb-gating tests are the first to need this, alongside the real room verb handlers store.roomVerbHandlers already wires in). */
+export async function wireTestTransportWithHub(
+  store: MeshStore,
+  slot?: Readonly<IdentitySlot>,
+  pendingConnectionTimeoutMs?: number,
+  presenceReadvertiseIntervalMs?: number,
+  userIdentityOptions?: Readonly<UserIdentityOptions>,
+): Promise<{ slot: IdentitySlot; transport: WireMeshTransport }> {
+  return wireTransportInternal(
+    store,
+    slot,
+    pendingConnectionTimeoutMs,
+    presenceReadvertiseIntervalMs,
+    userIdentityOptions,
+  );
 }
 
 // Generous on purpose: waitFor returns the instant its condition holds, so a long ceiling costs nothing on the happy path (a local run settles in well under a second) and only matters for the worst case -- a loaded CI runner working through a real, sequential chain of TLS handshakes (each one genuine X.509 certificate work, not instant) for the accept-flow's second connection direction, confirmed to need meaningfully more than 5s on at least one real CI run.
