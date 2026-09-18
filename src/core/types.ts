@@ -280,6 +280,21 @@ export interface NetworkInterface {
 }
 
 // ---------------------------------------------------------------------------
+// ConnectionCode
+// ---------------------------------------------------------------------------
+
+/** A single-use, short-lived artifact bootstrapping GatewayTrust between two devices that have never established a mesh connection (agent-comms#188): `code`/`expiresAt` answer freshness/liveness and are always checked; `signature` is an optional detached PGP signature (armored) over `${code}:${expiresAt}:${deviceId}`, checked only when present, never required -- a device with no PGP identity still generates and redeems a bare code. */
+export const ConnectionCodeSchema = defineSchema(
+  z.object({
+    code: z.string(),
+    expiresAt: z.string(),
+    deviceId: z.string(),
+    signature: z.string().optional(),
+  }),
+);
+export type ConnectionCode = z.infer<typeof ConnectionCodeSchema>;
+
+// ---------------------------------------------------------------------------
 // CommsAction
 // ---------------------------------------------------------------------------
 
@@ -435,6 +450,21 @@ export const CommsActionSchema = defineSchema(
       device: z.string(),
     }),
     z.object({ action: z.literal("gateway_list_trusted") }),
+    z.object({
+      action: z.literal("gateway_generate_connection_code"),
+      ttlMs: z.number().optional(),
+      privateKey: z.string().optional(),
+      passphrase: z.string().optional(),
+    }),
+    z.object({
+      action: z.literal("gateway_redeem_connection_code"),
+      code: z.string(),
+      expiresAt: z.string(),
+      device: z.string(),
+      signature: z.string().optional(),
+      publicKey: z.string().optional(),
+      fingerprint: z.string().optional(),
+    }),
   ]),
 );
 export type CommsAction = z.infer<typeof CommsActionSchema>;

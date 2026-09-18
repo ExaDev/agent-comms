@@ -28,7 +28,9 @@ test("loadConnectionCodeLedger does not require an identity to have been created
   const slot = tempSlot("test");
   expect(() => {
     saveConnectionCodeLedger(slot, {
-      issued: { nonce1: { expiresAt: "2026-01-01T00:00:00.000Z", deviceId: "aabbcc" } },
+      issued: {
+        nonce1: { expiresAt: "2026-01-01T00:00:00.000Z", deviceId: "aabbcc" },
+      },
       redeemed: {},
     });
   }).not.toThrow();
@@ -44,7 +46,8 @@ test("saveConnectionCodeLedger persists both issued and redeemed maps, loadConne
       nonce1: {
         expiresAt: "2026-01-01T00:00:00.000Z",
         deviceId: "aabbcc",
-        signature: "-----BEGIN PGP SIGNATURE-----\nfake\n-----END PGP SIGNATURE-----",
+        signature:
+          "-----BEGIN PGP SIGNATURE-----\nfake\n-----END PGP SIGNATURE-----",
       },
     },
     redeemed: { nonce2: "2026-01-02T00:00:00.000Z" },
@@ -55,7 +58,8 @@ test("saveConnectionCodeLedger persists both issued and redeemed maps, loadConne
       nonce1: {
         expiresAt: "2026-01-01T00:00:00.000Z",
         deviceId: "aabbcc",
-        signature: "-----BEGIN PGP SIGNATURE-----\nfake\n-----END PGP SIGNATURE-----",
+        signature:
+          "-----BEGIN PGP SIGNATURE-----\nfake\n-----END PGP SIGNATURE-----",
       },
     },
     redeemed: { nonce2: "2026-01-02T00:00:00.000Z" },
@@ -65,7 +69,9 @@ test("saveConnectionCodeLedger persists both issued and redeemed maps, loadConne
 test("saveConnectionCodeLedger overwrites the previously saved ledger rather than merging with it", () => {
   const slot = tempSlot("test");
   saveConnectionCodeLedger(slot, {
-    issued: { nonce1: { expiresAt: "2026-01-01T00:00:00.000Z", deviceId: "aabbcc" } },
+    issued: {
+      nonce1: { expiresAt: "2026-01-01T00:00:00.000Z", deviceId: "aabbcc" },
+    },
     redeemed: {},
   });
   saveConnectionCodeLedger(slot, {
@@ -84,7 +90,10 @@ test("loadConnectionCodeLedger ignores a malformed issued record rather than thr
   const { dir } = { dir: slot.dir };
   fs.mkdirSync(dir as string, { recursive: true });
   fs.writeFileSync(
-    path.join(dir as string, `connection-codes-${slot.harness}--_tmp_project.json`),
+    path.join(
+      dir as string,
+      `connection-codes-${slot.harness}--_tmp_project.json`,
+    ),
     JSON.stringify({ issued: { bad: { deviceId: "aabbcc" } }, redeemed: {} }),
   );
   expect(loadConnectionCodeLedger(slot)).toEqual({ issued: {}, redeemed: {} });
@@ -94,7 +103,10 @@ test("loadConnectionCodeLedger returns empty for an unparseable file", () => {
   const slot = tempSlot("test");
   fs.mkdirSync(slot.dir as string, { recursive: true });
   fs.writeFileSync(
-    path.join(slot.dir as string, `connection-codes-${slot.harness}--_tmp_project.json`),
+    path.join(
+      slot.dir as string,
+      `connection-codes-${slot.harness}--_tmp_project.json`,
+    ),
     "not json",
   );
   expect(loadConnectionCodeLedger(slot)).toEqual({ issued: {}, redeemed: {} });

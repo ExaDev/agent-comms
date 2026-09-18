@@ -592,8 +592,7 @@ function isStoredConnectionCode(value: unknown): value is StoredConnectionCode {
   if (!("expiresAt" in value) || !("deviceId" in value)) return false;
   if (typeof value.expiresAt !== "string" || typeof value.deviceId !== "string")
     return false;
-  if ("signature" in value && typeof value.signature !== "string")
-    return false;
+  if ("signature" in value && typeof value.signature !== "string") return false;
   return true;
 }
 
@@ -614,12 +613,14 @@ export function loadConnectionCodeLedger(
   if (typeof parsed !== "object" || parsed === null)
     return { issued: {}, redeemed: {} };
   const issuedRaw =
-    "issued" in parsed && typeof parsed.issued === "object" &&
+    "issued" in parsed &&
+    typeof parsed.issued === "object" &&
     parsed.issued !== null
       ? parsed.issued
       : {};
   const redeemedRaw =
-    "redeemed" in parsed && typeof parsed.redeemed === "object" &&
+    "redeemed" in parsed &&
+    typeof parsed.redeemed === "object" &&
     parsed.redeemed !== null
       ? parsed.redeemed
       : {};
