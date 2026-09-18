@@ -108,6 +108,13 @@ describe("tab-facing oRPC downstream", () => {
     expect(result.content).toBe("Not connected to mesh yet");
   });
 
+  it("read procedures reject when no upstream client exists yet -- they have no ActionResult sentinel to fall back to", async () => {
+    const { client } = connectTab();
+    await expect(client.getRoomMessages({ room: "room-1" })).rejects.toThrow();
+    await expect(client.getMeshGraph({})).rejects.toThrow();
+    await expect(client.getMeshTrace({ target: "device-1" })).rejects.toThrow();
+  });
+
   it("disconnect closes the underlying peer without throwing -- the pagehide eviction mechanism the migration plan flagged as needing real verification", async () => {
     const { client } = connectTab();
     const result = await client.disconnect({});
