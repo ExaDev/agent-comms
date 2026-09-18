@@ -113,6 +113,55 @@ describe("connectToHub", () => {
     await transportB.shutdown();
   });
 
+  it("discovers a peer via gossip when that peer is trusted only as a principal, not as a bare device (agent-comms#192's own directory-merge widening)", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+
+    const eventsA = recordingEvents();
+    const eventsB = recordingEvents();
+    const identityA = generateIdentity();
+    const identityB = generateIdentity();
+    const deviceA = deviceIdToHex(Uint8Array.from(identityA.deviceId));
+    const deviceB = deviceIdToHex(Uint8Array.from(identityB.deviceId));
+    // B trusts A's device as a PRINCIPAL (addPrincipal), never on the bare-device allowlist (add) -- proving connect()'s own directory-merge filter now accepts isTrustedForDirectory (bare-device OR principal), not only the original bare-device isTrusted. A trusts nothing at all: whether B's own gossip surfaces here has nothing to do with what A trusts, only with what B's own incoming filter accepts.
+    const gatewayTrustA = new GatewayTrust();
+    const gatewayTrustB = new GatewayTrust();
+    gatewayTrustB.addPrincipal(deviceA);
+    const transportA = new WireMeshTransport(
+      eventsA,
+      identityA,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      gatewayTrustA,
+    );
+    const transportB = new WireMeshTransport(
+      eventsB,
+      identityB,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      gatewayTrustB,
+    );
+    await transportA.hub.connect(hub.url);
+    await transportB.hub.connect(hub.url);
+
+    await waitForCondition(() => transportB.hub.peers().includes(deviceA));
+    // The bare-device allowlist is untouched by this widening: A was never added() to gatewayTrustB, only addPrincipal()'d, so isTrusted(deviceA) itself must still read false even though isTrustedForDirectory let the gossip through.
+    expect(gatewayTrustB.isTrusted(deviceA)).toBe(false);
+
+    await transportA.shutdown();
+    await transportB.shutdown();
+  });
+
   it('never applies a state_sync or state_update relayed by a hub peer, even one this side now explicitly trusts (agent-comms#169 security finding: real per-peer admission landed in #156, but gateway trust means "this device\'s traffic is worth acting on", not "this device may directly overwrite this side\'s mesh state")', async () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
