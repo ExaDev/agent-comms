@@ -192,40 +192,34 @@ describe("Web server integration", () => {
     }
   });
 
-  it("accepts WebSocket connections", async () => {
+  it("rejects a WebSocket upgrade at any path other than /ws/mesh", async () => {
     const { port, cleanup } = await setup();
     try {
       await new Promise<void>((resolve, reject) => {
         const ws = new WS(`ws://127.0.0.1:${String(port)}`);
         ws.on("open", () => {
-          ws.close();
+          reject(new Error("expected the upgrade to be rejected"));
+        });
+        ws.on("error", () => {
           resolve();
         });
-        ws.on("error", reject);
       });
     } finally {
       await cleanup();
     }
   });
 
-  it("sends state frame on WebSocket connect", async () => {
+  it("accepts a WebSocket upgrade at /ws/mesh", async () => {
     const { port, cleanup } = await setup();
     try {
-      const frame = await new Promise<unknown>((resolve, reject) => {
-        const ws = new WS(`ws://127.0.0.1:${String(port)}`);
-        ws.on("message", (data: WS.Data) => {
-          const parsed: unknown = JSON.parse(data.toString());
-          resolve(parsed);
+      await new Promise<void>((resolve, reject) => {
+        const ws = new WS(`ws://127.0.0.1:${String(port)}/ws/mesh`);
+        ws.on("open", () => {
           ws.close();
+          resolve();
         });
         ws.on("error", reject);
       });
-      expect(
-        typeof frame === "object" && frame !== null && "type" in frame,
-        "should receive a JSON frame",
-      ).toBeTruthy();
-      const typed = frame as { type: string };
-      expect(typed.type).toBe("state");
     } finally {
       await cleanup();
     }
