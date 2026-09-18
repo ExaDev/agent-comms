@@ -566,3 +566,86 @@ export function saveGatewayTrust(
     { encoding: "utf-8", mode: 0o600 },
   );
 }
+
+/** A generated connection code's own persisted record (agent-comms#188): everything ConnectionCode carries except its own nonce, which is this record's key instead of a repeated field. */
+export interface StoredConnectionCode {
+  expiresAt: string;
+  deviceId: string;
+  signature?: string;
+}
+
+/** A slot's own connection-code ledger (agent-comms#188): every code this slot has generated (still outstanding, so the artifact survives a restart between generation and hand-off) and every nonce this slot has redeemed (so a restart can't reopen a single-use code to a second redemption within its own short validity window). Two independent halves of one bootstrap flow, not a request/response pair -- a generated code's own record here is never consulted by whichever remote slot later redeems it, since redemption validates the code's four self-contained fields directly rather than calling back to its issuer. */
+export interface ConnectionCodeLedgerData {
+  issued: Record<string, StoredConnectionCode>;
+  redeemed: Record<string, string>;
+}
+
+/** A slot's own connection-code ledger lives in its own sibling JSON file, mirroring gatewayTrustFilePath's own reasoning: the ledger has no dependency on this slot's own key material, so ConnectionCodeLedger can be constructed against a slot before or independently of that slot's identity ever being loaded. */
+function connectionCodesFilePath(slot: Readonly<IdentitySlot>): string {
+  const { dir } = slotPaths(slot);
+  const base = `connection-codes-${slot.harness}--${slugifyCwd(slot.cwd)}`;
+  return path.join(dir, `${base}.json`);
+}
+
+function isStoredConnectionCode(value: unknown): value is StoredConnectionCode {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("expiresAt" in value) || !("deviceId" in value)) return false;
+  if (typeof value.expiresAt !== "string" || typeof value.deviceId !== "string")
+    return false;
+  if ("signature" in value && typeof value.signature !== "string")
+    return false;
+  return true;
+}
+
+/**
+ * A slot's currently persisted connection-code ledger: every code it has issued, keyed by nonce, and every nonce it has redeemed, mapped to that code's own expiresAt (kept only so a stale entry can be pruned once its expiry has passed, the same reason issued entries carry their own expiresAt). Both halves default to empty if the slot has never saved a ledger, or its ledger file is missing or unparseable.
+ */
+export function loadConnectionCodeLedger(
+  slot: Readonly<IdentitySlot>,
+): ConnectionCodeLedgerData {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(
+      fs.readFileSync(connectionCodesFilePath(slot), "utf-8"),
+    );
+  } catch {
+    return { issued: {}, redeemed: {} };
+  }
+  if (typeof parsed !== "object" || parsed === null)
+    return { issued: {}, redeemed: {} };
+  const issuedRaw =
+    "issued" in parsed && typeof parsed.issued === "object" &&
+    parsed.issued !== null
+      ? parsed.issued
+      : {};
+  const redeemedRaw =
+    "redeemed" in parsed && typeof parsed.redeemed === "object" &&
+    parsed.redeemed !== null
+      ? parsed.redeemed
+      : {};
+  const issued: Record<string, StoredConnectionCode> = {};
+  for (const [nonce, record] of Object.entries(issuedRaw)) {
+    if (isStoredConnectionCode(record)) issued[nonce] = record;
+  }
+  const redeemed: Record<string, string> = {};
+  for (const [nonce, expiresAt] of Object.entries(redeemedRaw)) {
+    if (typeof expiresAt === "string") redeemed[nonce] = expiresAt;
+  }
+  return { issued, redeemed };
+}
+
+/**
+ * Persists a slot's complete connection-code ledger, surviving a restart the same way the identity it bootstraps trust for does. Overwrites whatever was saved before in full: ConnectionCodeLedger always calls this with its own current issued/redeemed maps after every generate/redeem, so there is no per-code partial update to preserve here the way saveRoomToken preserves other rooms' tokens.
+ */
+export function saveConnectionCodeLedger(
+  slot: Readonly<IdentitySlot>,
+  ledger: Readonly<ConnectionCodeLedgerData>,
+): void {
+  const { dir } = slotPaths(slot);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(
+    connectionCodesFilePath(slot),
+    `${JSON.stringify(ledger, null, 2)}\n`,
+    { encoding: "utf-8", mode: 0o600 },
+  );
+}
