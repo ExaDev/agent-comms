@@ -26,6 +26,11 @@ export default defineConfig(
     files: ["**/*.{ts,tsx}"],
     rules: { "exadev/barrel-policy": ["error", { mode: "siblings" }] },
   },
+  // @exadev/eslint-config auto-wires eslint-plugin-react once it's a devDependency, but doesn't set its own React version -- without this, every lint run prints "React version not specified in eslint-plugin-react settings" even though nothing is actually misconfigured. `version: "detect"` crashes outright ("contextOrFilename.getFilename is not a function") -- eslint-plugin-react 7.37.5's detection codepath calls a context method ESLint 10's flat-config rule context no longer exposes the way it expects -- so this pins the installed react version explicitly instead; bump it when react's own version bumps.
+  {
+    files: ["**/*.{ts,tsx}"],
+    settings: { react: { version: "19.3.0" } },
+  },
   {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
