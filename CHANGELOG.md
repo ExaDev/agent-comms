@@ -1,3 +1,9 @@
+## [3.28.0](https://github.com/ExaDev/agent-comms/compare/v3.27.0...v3.28.0) (2026-09-18)
+
+### Features
+
+* **bridge:** cut main.tsx over to meshClient, delete CommsWs entirely ([01c0a0d](https://github.com/ExaDev/agent-comms/commit/01c0a0d87fc1a6b5e8e46640dd65b218c398ede8))
+
 ## [3.27.0](https://github.com/ExaDev/agent-comms/compare/v3.26.0...v3.27.0) (2026-09-18)
 
 ### Features
