@@ -115,7 +115,7 @@ describe("MessageList component", () => {
 
   it("renders empty list", () => {
     renderWithMantine(<MessageList messages={[]} />);
-    expect(screen.getByLabelText("Messages").textContent).toBe("");
+    expect(screen.getByLabelText("Conversation").textContent).toBe("");
   });
 });
 
