@@ -20,6 +20,7 @@ afterEach(() => {
 });
 
 const chatAreaDefaults = {
+  rooms: [],
   sidebarOpened: true,
   onToggleSidebar: () => {},
   onSendAction: () => {},

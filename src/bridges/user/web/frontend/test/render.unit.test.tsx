@@ -122,6 +122,7 @@ describe("MessageList component", () => {
 describe("ChatArea component", () => {
   const chatAreaDefaults = {
     messages: [] as readonly DisplayMessage[],
+    rooms: [] as readonly Room[],
     connected: true,
     sidebarOpened: true,
     onToggleSidebar: () => {},
