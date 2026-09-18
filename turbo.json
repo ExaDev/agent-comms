@@ -3,12 +3,12 @@
 
   "tasks": {
     "build:frontend:run": {
-      "inputs": ["src/bridges/user/web/build.ts", "src/bridges/user/web/frontend/**"],
+      "inputs": ["src/bridges/user/web/vite.config.ts", "src/bridges/user/web/frontend/**"],
       "outputs": ["src/bridges/user/web/dist/**"]
     },
     "build:run": {
       "dependsOn": ["build:frontend:run"],
-      // Excludes build:frontend:run's own output (nested under src/, since the esbuild bundle lands in src/bridges/user/web/dist/) -- without this, restoring that output on a cache hit changes build:run's own input hash and forces a spurious re-execution.
+      // Excludes build:frontend:run's own output (nested under src/, since the Vite bundle lands in src/bridges/user/web/dist/) -- without this, restoring that output on a cache hit changes build:run's own input hash and forces a spurious re-execution.
       "inputs": ["src/**", "!src/bridges/user/web/dist/**", "scripts/copy-web-assets.ts", "tsconfig.json"],
       "outputs": ["dist/**"]
     },
