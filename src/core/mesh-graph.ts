@@ -16,7 +16,12 @@ import type {
 } from "wire-mesh-core/domain/mesh-session";
 import type { PeerAdvert } from "wire-mesh-core/generated/protocol";
 import type { HubSession } from "./hub-session.js";
-import type { MeshGraph, MeshTraceResult } from "./transport.js";
+import type { RoomRequestOrigin } from "./room-router.js";
+import type {
+  ConnectionHandle,
+  MeshGraph,
+  MeshTraceResult,
+} from "./transport.js";
 
 /**
  * Assembles this side's own best-effort view of the mesh's connection graph out of knownDevices (WireMeshTransport's own mesh-wide gossip aggregation, the identical map listKnownDevices already reads), converted to DirectoryEntry[] the same way hub-forwarding.ts's own pushHubCatchUp already does for its unrelated purpose. Device-ids are hex-encoded, never raw wire-mesh-core DeviceId bytes, matching listKnownDevices' own precedent.
@@ -72,9 +77,13 @@ export async function traceMeshPath(
   };
 }
 
-/** Answers an incoming path.trace (agent-comms#199), registered as this side's own "path.trace" room-router handler (createRoomRouter's handlers are keyed by params.verb regardless of domain, despite the room-flavoured name -- see WireMeshTransport's own constructor for where this is wired in alongside the real room verbs). Omits hubAddress unconditionally: RoomVerbHandler's own (request, handle) signature carries no reference to which raw session/connection the request arrived on, so there is no way to look up "the address this side dialled to reach the hub that relayed it" from here -- buildPathTraceResponse's own hubAddress parameter is optional exactly for a receiver with no address to report, so this is an honest omission, not a workaround. Tracked as agent-comms#216 for a future RoomVerbHandler signature change that would let this report it. */
+/** Answers an incoming path.trace (agent-comms#199), registered as this side's own "path.trace" room-router handler (createRoomRouter's handlers are keyed by params.verb regardless of domain, despite the room-flavoured name -- see WireMeshTransport's own constructor for where this is wired in alongside the real room verbs). Reports origin?.relayHubAddress (agent-comms#216) as buildPathTraceResponse's own hubAddress parameter -- that function itself already gates inclusion on the request actually being relayed (request.fromDevice set), so this passes it through unconditionally rather than duplicating that check here; handle is unused, kept only to occupy RoomVerbHandler's own positional slot ahead of origin. */
 export async function handlePathTraceRequest(
   request: Readonly<IncomingManageRequest>,
+  _handle: Readonly<ConnectionHandle>,
+  origin?: Readonly<RoomRequestOrigin>,
 ): Promise<ManageOutcome> {
-  return Promise.resolve(buildPathTraceResponse(request));
+  return Promise.resolve(
+    buildPathTraceResponse(request, origin?.relayHubAddress),
+  );
 }
