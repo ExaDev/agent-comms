@@ -6,6 +6,14 @@
 
 import type { DeliveryEvent, DisplayMessage, RoomMessage } from "./types.js";
 
+/** Format an ISO timestamp to HH:MM:SS for display. */
+const ISO_TIME_OF_DAY_START = 11;
+const ISO_TIME_OF_DAY_END = 19;
+
+export function formatTime(timestamp: string): string {
+  return timestamp.slice(ISO_TIME_OF_DAY_START, ISO_TIME_OF_DAY_END);
+}
+
 /**
  * Convert a delivery event to a display message for the UI.
  * Returns undefined if the event should not be displayed

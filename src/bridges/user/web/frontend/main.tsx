@@ -1,21 +1,27 @@
 /**
- * Entry point — bootstraps the web UI with Preact.
+ * Entry point — bootstraps the web UI with React + Mantine.
  *
- * Owns the state store, WebSocket connection, and action handlers.
- * Renders the App component on every state change.
+ * Owns the state store, WebSocket connection, and action handlers. The Root component subscribes to state changes via useClientState and re-renders reactively; this file itself stays a plain imperative shell around that one component, same as before the framework swap.
  */
 
-import { render } from "preact";
-import "./styles.css";
+import mantineStyles from "@mantine/core/styles.css?inline";
+import { createRoot } from "react-dom/client";
+import { MantineProvider } from "@mantine/core";
+import { useEffect } from "react";
 import { App } from "./components/App.js";
 import { CommsWs, fetchAgents, fetchRoomMessages, fetchRooms } from "./api.js";
-import { requireElement } from "./dom.js";
 import { parseInput, routeAction } from "./input.js";
 import { State } from "./state.js";
+import { useClientState } from "./use-client-state.js";
 import { MeshClient } from "./mesh-client.js";
+import { theme } from "./theme.js";
 import type { Action, DisplayMessage, WsFrame } from "./types.js";
 
 import { isLocalHost, hasConnectedBefore } from "./boot-logic.js";
+
+const mantineStyleEl = document.createElement("style");
+mantineStyleEl.textContent = mantineStyles;
+document.head.appendChild(mantineStyleEl);
 
 /** Whether the page is served from a local mesh server (vs standalone PWA). */
 const isLocalServer = isLocalHost(location.host);
@@ -26,7 +32,10 @@ import { parseDeepLink, resolveDeepLink, syncUrl } from "./url-sync.js";
 // Mount point
 // ---------------------------------------------------------------------------
 
-const rootEl = requireElement(document, "#root");
+const rootEl = document.getElementById("root");
+if (rootEl === null) {
+  throw new Error("missing #root element");
+}
 
 // ---------------------------------------------------------------------------
 // State
@@ -41,9 +50,7 @@ const state = new State();
 const meshClient = new MeshClient();
 
 meshClient.subscribe((meshState) => {
-  // Apply real-time mesh state updates on top of the REST-fetched baseline.
-  // The MeshClient delivers authoritative state from the mesh worker,
-  // which maintains a local copy of all agents and rooms.
+  // Apply real-time mesh state updates on top of the REST-fetched baseline. The MeshClient delivers authoritative state from the mesh worker, which maintains a local copy of all agents and rooms.
   if (meshState.agents.length > 0) {
     state.setAgents(meshState.agents);
   }
@@ -53,10 +60,7 @@ meshClient.subscribe((meshState) => {
   state.setConnected(meshState.connected);
 });
 
-// Don't auto-connect the MeshClient on first load.
-// The user must explicitly connect to avoid Chrome's "access device"
-// prompt appearing before the user understands the UI.
-// meshClient.connect() is called from onConnectToMesh().
+// Don't auto-connect the MeshClient on first load. The user must explicitly connect to avoid Chrome's "access device" prompt appearing before the user understands the UI. meshClient.connect() is called from onConnectToMesh().
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -228,17 +232,24 @@ function onRenameAgent(agentId: string, newName: string): void {
   sendAction({ action: "rename_agent", agent: agentId, name: newName });
 }
 
+function onConnectToMesh(): void {
+  localStorage.setItem("agent-comms-connected", "true");
+  meshClient.connect();
+  if (isLocalServer) ws.connect();
+}
+
 // ---------------------------------------------------------------------------
-// Render loop
+// Root — subscribes to state and keeps the URL in sync
 // ---------------------------------------------------------------------------
 
-function rerender(): void {
-  const s = state.get();
+function Root() {
+  const s = useClientState(state);
 
-  // Keep the URL in sync with the current view
-  syncUrl({ currentRoom: s.currentRoom, dmTarget: s.dmTarget });
+  useEffect(() => {
+    syncUrl({ currentRoom: s.currentRoom, dmTarget: s.dmTarget });
+  }, [s.currentRoom, s.dmTarget]);
 
-  render(
+  return (
     <App
       rooms={s.rooms}
       agents={s.agents}
@@ -255,28 +266,21 @@ function rerender(): void {
       onSendAction={handleSendAction}
       onCreateRoom={onCreateRoom}
       onJoinRoomInput={onJoinRoomInput}
-      onConnectToMesh={() => {
-        localStorage.setItem("agent-comms-connected", "true");
-        meshClient.connect();
-        if (isLocalServer) ws.connect();
-      }}
-    />,
-    rootEl,
+      onConnectToMesh={onConnectToMesh}
+    />
   );
 }
 
-state.subscribe(rerender);
+createRoot(rootEl).render(
+  <MantineProvider theme={theme} defaultColorScheme="dark">
+    <Root />
+  </MantineProvider>,
+);
 
-// Capture the deep link from the URL BEFORE the first render — syncUrl()
-// clears the query parameters via replaceState, which would make
-// location.search empty by the time parseDeepLink runs.
+// Capture the deep link from the URL BEFORE syncUrl's first run clears the query parameters via replaceState, which would make location.search empty by the time parseDeepLink runs.
 const deepLink = parseDeepLink(location.search);
 
-rerender();
-
-// Auto-connect when served from local server, or when the user has connected before.
-// First-time visitors to the standalone PWA see a connect prompt instead of
-// Chrome's unexpected "access device" permission prompt.
+// Auto-connect when served from local server, or when the user has connected before. First-time visitors to the standalone PWA see a connect prompt instead of Chrome's unexpected "access device" permission prompt.
 const previouslyConnected = hasConnectedBefore(localStorage);
 if (isLocalServer || previouslyConnected) {
   meshClient.connect();

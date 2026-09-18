@@ -1,8 +1,11 @@
 /**
  * Sidebar — project tree, manual rooms, create/join room controls.
+ *
+ * Rendered inside AppShell.Navbar by App.
  */
 
-import { useState } from "preact/hooks";
+import { ActionIcon, Button, Group, ScrollArea, Text } from "@mantine/core";
+import { useState } from "react";
 import type { Agent, Room } from "../types.js";
 import { buildProjectTree } from "../project-tree.js";
 import { CreateRoomForm } from "./CreateRoomForm.js";
@@ -13,7 +16,6 @@ interface SidebarProps {
   rooms: readonly Room[];
   agents: readonly Agent[];
   currentRoom: string | undefined;
-  collapsed: boolean;
   onJoinRoom: (roomId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onRenameAgent: (agentId: string, newName: string) => void;
@@ -29,7 +31,6 @@ export function Sidebar({
   rooms,
   agents,
   currentRoom,
-  collapsed,
   onJoinRoom,
   onSelectAgent,
   onRenameAgent,
@@ -45,21 +46,24 @@ export function Sidebar({
   const tree = buildProjectTree(visibleAgents, rooms);
 
   return (
-    <div id="sidebar" class={collapsed ? "sidebar-collapsed" : ""}>
-      <h2>
-        Agent Comms
-        <button
-          id="toggle-offline-btn"
-          class={`icon-btn${showOffline ? " active" : ""}`}
+    <>
+      <Group justify="space-between" px="md" py="sm">
+        <Text size="sm" fw={600} c="accent">
+          Agent Comms
+        </Text>
+        <ActionIcon
+          variant={showOffline ? "filled" : "default"}
+          size="sm"
+          aria-label={`${showOffline ? "Hide" : "Show"} offline agents`}
           title={`${showOffline ? "Hide" : "Show"} offline agents`}
           onClick={() => {
             setShowOffline((v) => !v);
           }}
         >
           {showOffline ? "◉" : "◎"}
-        </button>
-      </h2>
-      <div class="sidebar-section">
+        </ActionIcon>
+      </Group>
+      <ScrollArea flex={1} px="xs">
         <ProjectTree
           tree={tree}
           onJoinRoom={onJoinRoom}
@@ -67,19 +71,22 @@ export function Sidebar({
           onRenameAgent={onRenameAgent}
           currentRoom={currentRoom}
         />
-        <div class="section-heading">
-          <h3>Create</h3>
-          <button
-            id="create-room-toggle"
-            class="icon-btn"
+        <Group justify="space-between" px="xs" py={4}>
+          <Text size="xs" c="dimmed" fw={700} tt="uppercase">
+            Create
+          </Text>
+          <ActionIcon
+            variant="default"
+            size="sm"
+            aria-label="Create room"
             title="Create room"
             onClick={() => {
               setCreateFormVisible((v) => !v);
             }}
           >
             +
-          </button>
-        </div>
+          </ActionIcon>
+        </Group>
         <CreateRoomForm
           visible={createFormVisible}
           onSubmit={(name, type, desc) => {
@@ -90,15 +97,16 @@ export function Sidebar({
             setCreateFormVisible(false);
           }}
         />
-        <button
-          id="join-toggle-btn"
-          class="join-toggle-btn"
+        <Button
+          fullWidth
+          size="xs"
+          variant="outline"
           onClick={() => {
             setJoinFormVisible((v) => !v);
           }}
         >
           + Join Room
-        </button>
+        </Button>
         <JoinForm
           visible={joinFormVisible}
           onSubmit={(name) => {
@@ -109,7 +117,7 @@ export function Sidebar({
             setJoinFormVisible(false);
           }}
         />
-      </div>
-    </div>
+      </ScrollArea>
+    </>
   );
 }

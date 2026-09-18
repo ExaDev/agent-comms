@@ -1,11 +1,11 @@
 /**
- * App — root Preact component.
+ * App — root React component.
  *
- * Renders sidebar + chat area. Receives state and action callbacks
- * from the imperative shell in main.tsx.
+ * Renders sidebar + chat area inside an AppShell. Receives state and action callbacks from the imperative shell in main.tsx.
  */
 
-import { useState } from "preact/hooks";
+import { AppShell } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
 import type { Agent, DisplayMessage, Room } from "../types.js";
 import { ChatArea } from "./ChatArea.js";
 import { Sidebar } from "./Sidebar.js";
@@ -32,40 +32,41 @@ export interface AppProps {
 }
 
 export function App(props: AppProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [navOpened, { toggle: toggleNav }] = useDisclosure(true);
 
   return (
-    <>
-      <button
-        id="sidebar-toggle"
-        class="sidebar-toggle-btn"
-        title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        onClick={() => {
-          setSidebarCollapsed((v) => !v);
-        }}
-      >
-        {sidebarCollapsed ? "☰" : "✕"}
-      </button>
-      <Sidebar
-        rooms={props.rooms}
-        agents={props.agents}
-        currentRoom={props.currentRoom}
-        collapsed={sidebarCollapsed}
-        onJoinRoom={props.onJoinRoom}
-        onSelectAgent={props.onSelectAgent}
-        onRenameAgent={props.onRenameAgent}
-        onCreateRoom={props.onCreateRoom}
-        onJoinRoomInput={props.onJoinRoomInput}
-      />
-      <ChatArea
-        messages={props.messages}
-        currentRoom={props.currentRoom}
-        dmTarget={props.dmTarget}
-        connected={props.connected}
-        onSendAction={props.onSendAction}
-        onLeaveRoom={props.onLeaveRoom}
-        onConnectToMesh={props.onConnectToMesh}
-      />
-    </>
+    <AppShell
+      navbar={{
+        width: 260,
+        breakpoint: "sm",
+        collapsed: { desktop: !navOpened, mobile: !navOpened },
+      }}
+    >
+      <AppShell.Navbar>
+        <Sidebar
+          rooms={props.rooms}
+          agents={props.agents}
+          currentRoom={props.currentRoom}
+          onJoinRoom={props.onJoinRoom}
+          onSelectAgent={props.onSelectAgent}
+          onRenameAgent={props.onRenameAgent}
+          onCreateRoom={props.onCreateRoom}
+          onJoinRoomInput={props.onJoinRoomInput}
+        />
+      </AppShell.Navbar>
+      <AppShell.Main h="100vh">
+        <ChatArea
+          messages={props.messages}
+          currentRoom={props.currentRoom}
+          dmTarget={props.dmTarget}
+          connected={props.connected}
+          sidebarOpened={navOpened}
+          onToggleSidebar={toggleNav}
+          onSendAction={props.onSendAction}
+          onLeaveRoom={props.onLeaveRoom}
+          onConnectToMesh={props.onConnectToMesh}
+        />
+      </AppShell.Main>
+    </AppShell>
   );
 }

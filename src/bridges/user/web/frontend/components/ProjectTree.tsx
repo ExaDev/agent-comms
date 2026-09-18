@@ -1,18 +1,17 @@
 /**
  * ProjectTree — recursive tree view of agents grouped by working directory.
  *
- * Shows directories as expandable/collapsible nodes with agents nested inside.
- * Manual rooms appear in a separate flat list below the tree.
+ * Shows directories as expandable/collapsible nodes with agents nested inside. Manual rooms appear in a separate flat list below the tree.
  */
 
-import { useState } from "preact/hooks";
+import { Box, NavLink, Text, TextInput } from "@mantine/core";
+import { useEffect, useRef, useState } from "react";
 import type {
   AgentNode,
   DirectoryNode,
   ProjectTree as ProjectTreeData,
   TreeNode,
 } from "../types.js";
-import { inputFromEvent } from "../dom.js";
 
 interface ProjectTreeProps {
   tree: ProjectTreeData;
@@ -20,6 +19,26 @@ interface ProjectTreeProps {
   onSelectAgent: (agentId: string) => void;
   onRenameAgent: (agentId: string, newName: string) => void;
   currentRoom: string | undefined;
+}
+
+const STATUS_DOT_COLORS: Record<AgentNode["status"], string> = {
+  active: "green",
+  idle: "yellow",
+  busy: "red",
+  offline: "gray",
+};
+
+function StatusDot({ status }: { status: AgentNode["status"] }) {
+  return (
+    <Box
+      w={8}
+      h={8}
+      style={{
+        borderRadius: "50%",
+        backgroundColor: `var(--mantine-color-${STATUS_DOT_COLORS[status]}-6)`,
+      }}
+    />
+  );
 }
 
 export function ProjectTree({
@@ -30,9 +49,10 @@ export function ProjectTree({
   currentRoom,
 }: ProjectTreeProps) {
   return (
-    <div id="room-list" class="project-tree">
+    <Box mb="xs">
       {tree.roots.map((node) => (
         <TreeNodeView
+          key={node.type === "agent" ? node.agentId : node.path}
           node={node}
           onJoinRoom={onJoinRoom}
           onSelectAgent={onSelectAgent}
@@ -41,23 +61,23 @@ export function ProjectTree({
         />
       ))}
       {tree.manualRooms.length > 0 && (
-        <div class="tree-section">
-          <h3 class="tree-section-heading">Rooms</h3>
+        <Box py={4}>
+          <Text size="xs" c="dimmed" fw={700} tt="uppercase" px="xs" py={4}>
+            Rooms
+          </Text>
           {tree.manualRooms.map((room) => (
-            <div
+            <NavLink
               key={room.id}
-              class={"room-item" + (currentRoom === room.id ? " active" : "")}
+              label={`${room.name} (${String(room.members.length)})`}
+              active={currentRoom === room.id}
               onClick={() => {
                 onJoinRoom(room.id);
               }}
-            >
-              <span>{room.name}</span>
-              <span>({String(room.members.length)})</span>
-            </div>
+            />
           ))}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -120,48 +140,36 @@ function DirectoryView({
   onRenameAgent,
   currentRoom,
 }: DirectoryViewProps) {
-  const [expanded, setExpanded] = useState(true);
-
-  const hasRoom = node.roomId !== undefined;
-  const isCurrentRoom = currentRoom === node.roomId;
+  const roomId = node.roomId;
+  const isCurrentRoom = currentRoom === roomId;
+  const clickProps =
+    roomId === undefined
+      ? {}
+      : {
+          onClick: () => {
+            onJoinRoom(roomId);
+          },
+        };
 
   return (
-    <div class="tree-directory">
-      <div class="tree-directory-name">
-        <span
-          class="tree-folder-toggle"
-          title="Expand/collapse"
-          onClick={(e) => {
-            e.stopPropagation();
-            setExpanded(!expanded);
-          }}
-        >
-          <span class="tree-folder-icon">{expanded ? "📂" : "📁"}</span>
-        </span>
-        <span
-          class={`tree-directory-label${isCurrentRoom ? " active" : ""}${hasRoom ? " clickable" : ""}`}
-          onClick={() => {
-            if (node.roomId !== undefined) onJoinRoom(node.roomId);
-          }}
-        >
-          {node.name}
-        </span>
-      </div>
-      {expanded && (
-        <div class="tree-children">
-          {node.children.map((child) => (
-            <TreeNodeView
-              key={child.type === "agent" ? child.agentId : child.path}
-              node={child}
-              onJoinRoom={onJoinRoom}
-              onSelectAgent={onSelectAgent}
-              onRenameAgent={onRenameAgent}
-              currentRoom={currentRoom}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+    <NavLink
+      label={node.name}
+      leftSection={<span aria-hidden="true">📁</span>}
+      defaultOpened
+      active={isCurrentRoom}
+      {...clickProps}
+    >
+      {node.children.map((child) => (
+        <TreeNodeView
+          key={child.type === "agent" ? child.agentId : child.path}
+          node={child}
+          onJoinRoom={onJoinRoom}
+          onSelectAgent={onSelectAgent}
+          onRenameAgent={onRenameAgent}
+          currentRoom={currentRoom}
+        />
+      ))}
+    </NavLink>
   );
 }
 
@@ -178,6 +186,11 @@ interface AgentViewProps {
 function AgentView({ node, onSelectAgent, onRenameAgent }: AgentViewProps) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) renameInputRef.current?.focus();
+  }, [editing]);
 
   const handleDoubleClick = () => {
     setEditName(node.name);
@@ -192,40 +205,36 @@ function AgentView({ node, onSelectAgent, onRenameAgent }: AgentViewProps) {
     setEditing(false);
   };
 
-  const handleKeyDown = (e: KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") handleSubmit();
     if (e.key === "Escape") setEditing(false);
   };
 
   if (editing) {
     return (
-      <div class="tree-agent agent-item editing">
-        <span class={`status-dot ${node.status}`} />
-        <input
-          class="agent-rename-input"
-          type="text"
-          value={editName}
-          autofocus
-          onInput={(e) => {
-            setEditName(inputFromEvent(e).value);
-          }}
-          onKeyDown={handleKeyDown}
-          onBlur={handleSubmit}
-        />
-      </div>
+      <TextInput
+        ref={renameInputRef}
+        size="xs"
+        ml="md"
+        aria-label={`Rename ${node.name}`}
+        value={editName}
+        onChange={(e) => {
+          setEditName(e.target.value);
+        }}
+        onKeyDown={handleKeyDown}
+        onBlur={handleSubmit}
+      />
     );
   }
 
   return (
-    <div
-      class="tree-agent agent-item"
+    <NavLink
+      label={node.name}
+      leftSection={<StatusDot status={node.status} />}
       onClick={() => {
         onSelectAgent(node.agentId);
       }}
-      onDblClick={handleDoubleClick}
-    >
-      <span class={`status-dot ${node.status}`} />
-      <span>{node.name}</span>
-    </div>
+      onDoubleClick={handleDoubleClick}
+    />
   );
 }
