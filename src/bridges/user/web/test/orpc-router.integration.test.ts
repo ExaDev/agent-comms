@@ -92,6 +92,8 @@ async function nextMeshEvent(
   return result.done === true ? undefined : result.value;
 }
 
+/** A device-id is a hex-encoded SHA-256 hash: 32 bytes, 64 hex characters. */
+const DEVICE_ID_HEX_LENGTH = 64;
 const DRAIN_IDLE_MS = 300;
 /** Generous upper bound on events to poll through before giving up on finding a specific expected event -- each attempt blocks on a real event arriving, so this bounds worst-case test runtime, not a count tied to any specific number of patches a given action produces. */
 const MAX_POLL_ATTEMPTS = 20;
@@ -248,5 +250,37 @@ describe("oRPC router over /ws/mesh", () => {
     // Proves genuine offset-based resume, not "replay the whole buffer": the room created before disconnecting was already consumed by the original iterator, so it must not come through again here.
     expect(replayedRoomNames).not.toContain("before-disconnect-room");
     await resumed.return?.(undefined);
+  });
+
+  it("getRoomMessages returns a sent message's structured history, not an ActionResult", async () => {
+    const { client } = await setup();
+    const created = await client.createRoom({
+      name: "get-room-messages-room",
+      type: "public",
+    });
+    expect(created.isError).toBe(false);
+    const roomId = extractRoomId(created.content);
+
+    const sent = await client.send({ target: roomId, content: "hello there" });
+    expect(sent.isError).toBe(false);
+
+    const messages = await client.getRoomMessages({ room: roomId });
+    expect(messages.some((m) => m.content === "hello there")).toBe(true);
+  });
+
+  it("getMeshGraph returns structured nodes/edges", async () => {
+    const { client } = await setup();
+    const graph = await client.getMeshGraph({});
+    expect(Array.isArray(graph.nodes)).toBe(true);
+    expect(Array.isArray(graph.edges)).toBe(true);
+  });
+
+  it("getMeshTrace returns a structured not_connected outcome for an unreachable target", async () => {
+    const { client } = await setup();
+    const result = await client.getMeshTrace({
+      target: "0".repeat(DEVICE_ID_HEX_LENGTH),
+    });
+    expect(result.outcome.result).toBe("error");
+    expect(result.outcome.code).toBe("not_connected");
   });
 });

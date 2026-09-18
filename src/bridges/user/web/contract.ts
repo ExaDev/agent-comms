@@ -30,6 +30,36 @@ const RoomTypeSchema = z.union([
 ]);
 
 // ---------------------------------------------------------------------------
+// Mesh graph and path trace -- mirrors core/transport.ts's MeshGraph/MeshTraceResult shape, the same "mirror, don't import" precedent as MeshStatePatchSchema above (core's own interfaces aren't Zod-backed, and don't need to be for their many non-browser callers). MeshTraceResult.outcome is wire-mesh-core's own ManageOutcome, an external union this contract has no reason to model in full -- only the two fields the UI actually reads (result, code) are validated; everything else on the outcome object passes through unchecked.
+// ---------------------------------------------------------------------------
+
+const MeshGraphEdgeSchema = z.object({
+  kind: z.union([z.literal("direct"), z.literal("relay")]),
+  from: z.string(),
+  to: z.string(),
+  via: z.string().optional(),
+});
+
+const MeshGraphSchema = z.object({
+  nodes: z.array(z.string()),
+  edges: z.array(MeshGraphEdgeSchema),
+});
+
+const MeshTraceSideSchema = z.object({
+  relayed: z.boolean(),
+  hubAddress: z.string().optional(),
+});
+
+const MeshTraceResultSchema = z.object({
+  rttMs: z.number(),
+  local: MeshTraceSideSchema,
+  remote: MeshTraceSideSchema.optional(),
+  outcome: z
+    .object({ result: z.string(), code: z.string().optional() })
+    .loose(),
+});
+
+// ---------------------------------------------------------------------------
 // Mesh state patch -- mirrors core/wire-protocol.ts's MeshStatePatch exactly (7 variants; no "message_read", which room.read/P3.5 already replaced).
 // ---------------------------------------------------------------------------
 
@@ -153,12 +183,28 @@ export const meshContract = {
   subscribeEvents: oc
     .input(z.object({ lastEventId: z.string().optional() }))
     .output(eventIterator(MeshEventSchema)),
+
+  // -------------------------------------------------------------------------
+  // Structured one-shot reads (agent-comms#206) -- genuinely request/response data with no real-time channel of its own, unlike agents/rooms (already fully covered by subscribeEvents' state_sync/state_patch above, so deliberately not duplicated here as a read procedure). Distinct from listRooms/listAgents/readRoom above, which are the legacy CLI-text-command equivalents (ActionResult output, for chat-style /list and /read commands) -- these return real structured JSON, the same shape the REST endpoints they share an implementation with already return.
+  // -------------------------------------------------------------------------
+
+  getRoomMessages: oc
+    .input(z.object({ room: z.string(), since: z.string().optional() }))
+    .output(z.array(RoomMessageSchema)),
+
+  getMeshGraph: oc.input(z.object({})).output(MeshGraphSchema),
+
+  getMeshTrace: oc
+    .input(z.object({ target: z.string(), timeoutMs: z.number().optional() }))
+    .output(MeshTraceResultSchema),
 };
 
 export type MeshEvent = z.infer<typeof MeshEventSchema>;
 export type MeshStatePatch = z.infer<typeof MeshStatePatchSchema>;
 export type SerialisedState = z.infer<typeof SerialisedStateSchema>;
 export type ActionResult = z.infer<typeof ActionResultSchema>;
+export type MeshGraph = z.infer<typeof MeshGraphSchema>;
+export type MeshTraceResult = z.infer<typeof MeshTraceResultSchema>;
 
 /** Type-only handle onto the contract's shape for building a typed client (`ContractRouterClient<MeshContract>`) without importing the contract's own runtime value -- browser code that only needs the type (mesh-worker.ts, mesh-client.ts) can `import type` this and never bundle Zod/core's schemas at all, since a type-only import is erased entirely at build time. */
 export type MeshContract = typeof meshContract;

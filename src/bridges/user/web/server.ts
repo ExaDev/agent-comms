@@ -35,6 +35,11 @@ import {
   renameAgentAction,
   sendAction,
 } from "./actions.js";
+import {
+  getMeshGraphRead,
+  getMeshTraceRead,
+  getRoomMessagesRead,
+} from "./reads.js";
 import { MeshEventPublisher } from "./event-publisher.js";
 import { meshRouter } from "./router.js";
 import type { DeliveryEvent } from "../../../core/types.js";
@@ -407,7 +412,10 @@ function handleRequest(
         return;
       }
       const since = url.searchParams.get("since") ?? undefined;
-      const messages = await controller.getRoomMessages(roomId, since);
+      const messages = await getRoomMessagesRead(controller, {
+        room: roomId,
+        since,
+      });
       json(res, messages);
     })();
     return;
@@ -415,7 +423,7 @@ function handleRequest(
 
   if (url.pathname === "/api/mesh/graph" && req.method === "GET") {
     try {
-      json(res, controller.meshStore.meshGraph());
+      json(res, getMeshGraphRead(controller));
     } catch (err) {
       jsonError(
         res,
@@ -437,7 +445,10 @@ function handleRequest(
       const timeoutMs =
         timeoutMsParam !== null ? Number(timeoutMsParam) : undefined;
       try {
-        const result = await controller.meshStore.meshTrace(target, timeoutMs);
+        const result = await getMeshTraceRead(controller, {
+          target,
+          timeoutMs,
+        });
         json(res, result);
       } catch (err) {
         jsonError(
