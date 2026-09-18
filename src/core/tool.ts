@@ -22,6 +22,12 @@ import type { CommsStore } from "./comms-store.js";
 import type { DiscoveryManager } from "./discovery.js";
 import { CommsError } from "./store.js";
 import { getOwnPackageVersion } from "./package-version.js";
+import {
+  formatListedAgentVersions,
+  formatSelfVersionLines,
+  formatSelfVersionSuffix,
+  handleQueryVersion,
+} from "./version-report-actions.js";
 import type {
   GenerateConnectionCodeOptions,
   RedeemConnectionCodeOptions,
@@ -138,10 +144,22 @@ export interface MeshOnlyFeatures {
   addTrustedGatewayPrincipal?: (deviceHex: string) => void;
   removeTrustedGatewayPrincipal?: (deviceHex: string) => void;
   listTrustedGatewayPrincipals?: () => string[];
+  /** deviceId's own gossiped agent-comms package version, cached from whatever it last advertised -- undefined for a device this side has never heard gossip from, or one running a version that predates agent-comms#198. */
+  getPeerAgentCommsVersion?: (deviceId: string) => string | undefined;
+  /** deviceId's own gossiped cc-peer package version, present only while that device is actually fronting a cc-peer session or running the one-shot `bridge cc-peer` command. */
+  getPeerCcPeerVersion?: (deviceId: string) => string | undefined;
+  /** deviceId's own gossiped wire-mesh-core version, self-advertised automatically by wire-mesh-core itself since wire-mesh#179. */
+  getPeerWireMeshCoreVersion?: (deviceId: string) => string | undefined;
+  /** This process's own currently-running cc-peer package version, when it is actually fronting a cc-peer session or running the one-shot `bridge cc-peer` command -- undefined for every other bridge, which never loads the cc-peer package at all. Assignable post-construction on the concrete MeshStore (mirroring its own onDelivery/onCoordinatorRoleChanged hooks); front-runtime.ts/bridges/cc-peer/run.ts are the only two call sites that ever set it. Typed as `(() => string | undefined) | undefined` rather than plain optional (`?:`) because MeshStore's own field is a required property whose value happens to be undefined by default, not an absent key -- exactOptionalPropertyTypes distinguishes the two. */
+  getCcPeerVersion?: (() => string | undefined) | undefined;
+  /** Asks deviceId for its own, currently-running wire-mesh-core version live, right now, rather than trusting whatever it last gossiped (agent-comms#198's own query_version action). */
+  queryVersion?: (
+    deviceId: string,
+  ) => Promise<{ version: string } | { error: string }>;
 }
 
 /** Uniform "this bridge isn't backed by a mesh transport" result for a MeshOnlyFeatures method that isn't present on the current store. */
-function notMeshBacked(action: string): CommsResult {
+export function notMeshBacked(action: string): CommsResult {
   return {
     isError: true,
     content: `${action} requires a mesh-backed store (this session is running on FileStore)`,
@@ -287,6 +305,8 @@ export class CommsTool {
             action,
             this.fetchPgpPublicKeyByFingerprintImpl,
           );
+        case "query_version":
+          return await handleQueryVersion(this.store, action);
         default:
           return {
             content: `Unknown action: ${JSON.stringify(action).slice(0, UNKNOWN_ACTION_PREVIEW_LENGTH)}`,
@@ -338,7 +358,7 @@ export class CommsTool {
     if (action.tags !== undefined) patch.tags = action.tags;
     const agent = await this.store.updateAgent(ctx.agentId, patch);
     const lines = [
-      `Updated: name=${agent.name}, visibility=${agent.visibility}, status=${agent.status}, version=${getOwnPackageVersion()}`,
+      `Updated: name=${agent.name}, visibility=${agent.visibility}, status=${agent.status}, version=${getOwnPackageVersion()}${formatSelfVersionSuffix(this.store.getCcPeerVersion)}`,
     ];
     const updateAvailable = this.formatUpdateAvailableLine();
     if (updateAvailable !== undefined) lines.push(updateAvailable);
@@ -358,6 +378,7 @@ export class CommsTool {
       `Visibility: ${agent.visibility}`,
       `Status: ${agent.status}`,
       `Version: ${getOwnPackageVersion()}`,
+      ...formatSelfVersionLines(this.store.getCcPeerVersion),
       `Tags: ${agent.tags.join(", ") || "(none)"}`,
       `Rooms: ${agent.subscribedRooms.join(", ") || "(none)"}`,
     ];
@@ -483,11 +504,18 @@ export class CommsTool {
         : cwd;
 
     const lines = agents.map((a: AgentIdentity) => {
-      const self = a.id === ctx.agentId ? " (you)" : "";
+      const isSelf = a.id === ctx.agentId;
+      const self = isSelf ? " (you)" : "";
       const cwd = abbreviateCwd(a.cwd);
       const rooms =
         a.subscribedRooms.length > 0 ? a.subscribedRooms.join(", ") : "none";
-      return `${a.id}  ${a.name.padEnd(AGENT_NAME_COLUMN_WIDTH)} ${a.harness.padEnd(AGENT_HARNESS_COLUMN_WIDTH)} ${a.status.padEnd(AGENT_STATUS_COLUMN_WIDTH)} ${a.visibility.padEnd(AGENT_VISIBILITY_COLUMN_WIDTH)} ${cwd}${self}\n        Rooms: ${rooms}`;
+      const versions = formatListedAgentVersions(
+        this.store,
+        a.id,
+        isSelf,
+        this.store.getCcPeerVersion,
+      );
+      return `${a.id}  ${a.name.padEnd(AGENT_NAME_COLUMN_WIDTH)} ${a.harness.padEnd(AGENT_HARNESS_COLUMN_WIDTH)} ${a.status.padEnd(AGENT_STATUS_COLUMN_WIDTH)} ${a.visibility.padEnd(AGENT_VISIBILITY_COLUMN_WIDTH)} ${cwd}${self}\n        Rooms: ${rooms}\n        Versions: ${versions}`;
     });
     return {
       content: `Agents:\n  ID      Name                      Harness      Status  Visibility  CWD\n${lines.map((l) => `  ${l}`).join("\n")}`,

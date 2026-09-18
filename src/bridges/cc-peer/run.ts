@@ -6,7 +6,7 @@
  * Constructs the real CcPeer and MeshStore, then hands both to wireCcPeerBridge for the actual relay wiring (see bridge.ts).
  */
 
-import { CcPeer } from "cc-peer";
+import { CcPeer, CC_PEER_VERSION } from "cc-peer";
 import {
   createBridgeMesh,
   ensureRegistered,
@@ -45,6 +45,7 @@ export async function run(): Promise<void> {
 
   const identitySlot: IdentitySlot = { harness: "cc-peer", cwd: process.cwd() };
   const { store, tool } = await createBridgeMesh(identitySlot);
+  store.getCcPeerVersion = () => CC_PEER_VERSION;
   store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
 
   const reg = await ensureRegistered({

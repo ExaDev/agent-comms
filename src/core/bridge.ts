@@ -73,6 +73,7 @@ export const MCP_TOOL_PARAMS = z.object({
     "gateway_list_trusted",
     "gateway_generate_connection_code",
     "gateway_redeem_connection_code",
+    "query_version",
   ]),
   name: z.string().optional(),
   visibility: VisibilityEnum.optional(),
@@ -446,6 +447,10 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
         ...(p.publicKey !== undefined && { publicKey: p.publicKey }),
         ...(p.fingerprint !== undefined && { fingerprint: p.fingerprint }),
       };
+    case "query_version":
+      if (p.device === undefined)
+        throw new BuildActionError("query_version", "device");
+      return { action: "query_version", device: p.device };
     default:
       return p.action satisfies never;
   }
