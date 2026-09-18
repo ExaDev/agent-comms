@@ -159,4 +159,52 @@ describe("createRoomRouter", () => {
 
     expect(responses).toEqual([{ result: "error", code: "unsupported_verb" }]);
   });
+
+  it("passes the given origin through to the registered handler (agent-comms#216)", async () => {
+    const events = fakeEvents();
+    const receivedOrigins: unknown[] = [];
+    const router = createRoomRouter({
+      events,
+      handlers: {
+        "room.send": async (_request, _handle, origin) => {
+          receivedOrigins.push(origin);
+          return { result: "ok" };
+        },
+      },
+    });
+    const { request } = fakeRequest({
+      verb: "room:member",
+      params: { verb: "room.send", text: "hi" },
+    });
+
+    await router.handleRequest(request, TEST_HANDLE, {
+      relayHubAddress: "wss://hub.example/",
+    });
+
+    expect(receivedOrigins).toEqual([
+      { relayHubAddress: "wss://hub.example/" },
+    ]);
+  });
+
+  it("defaults origin to an empty object when the caller supplies none (agent-comms#216)", async () => {
+    const events = fakeEvents();
+    const receivedOrigins: unknown[] = [];
+    const router = createRoomRouter({
+      events,
+      handlers: {
+        "room.send": async (_request, _handle, origin) => {
+          receivedOrigins.push(origin);
+          return { result: "ok" };
+        },
+      },
+    });
+    const { request } = fakeRequest({
+      verb: "room:member",
+      params: { verb: "room.send", text: "hi" },
+    });
+
+    await router.handleRequest(request, TEST_HANDLE);
+
+    expect(receivedOrigins).toEqual([{}]);
+  });
 });
