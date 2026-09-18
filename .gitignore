@@ -11,6 +11,7 @@ test-results/
 .worktrees/
 .stryker-tmp/
 reports/
+.turbo/
 
 # Override global gitignore (AGENTS.md) — this is a slash command, not an instructions file
 !commands/agents.md
