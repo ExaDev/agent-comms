@@ -1,3 +1,32 @@
+## [3.20.0](https://github.com/ExaDev/agent-comms/compare/v3.19.0...v3.20.0) (2026-09-18)
+
+### Features
+
+* **bridge:** replace the esbuild frontend build with Vite and vite-plugin-pwa ([24358b8](https://github.com/ExaDev/agent-comms/commit/24358b8c3cf3b7f880d762218d43398ddbde9781))
+* **bridge:** rewrite the web frontend UI in React and Mantine ([11c143b](https://github.com/ExaDev/agent-comms/commit/11c143b85a57d4df4d315d4ad5e12fb3773fa3d8))
+
+### Bug Fixes
+
+* **bridge:** destructure the server e2e fixture's first parameter ([2253fcb](https://github.com/ExaDev/agent-comms/commit/2253fcbcb4714bb030396e8a224e4b4689d61e48))
+* **bridge:** pin the eslint-plugin-react React version ([b306cef](https://github.com/ExaDev/agent-comms/commit/b306cefbf0a05fcc0544929948d05cda9d3d40d4))
+* **bridge:** serve index.html at its own literal path ([3ad7744](https://github.com/ExaDev/agent-comms/commit/3ad774465d2b5a25aa818aaffa3740e1954b01f9))
+* **build:** update turbo's build:frontend:run inputs for the Vite config ([0a6e6c8](https://github.com/ExaDev/agent-comms/commit/0a6e6c81e6ba60548bade2292683408d7493f250))
+
+### Refactoring
+
+* **bridge:** give ChatArea a header landmark and disambiguate ARIA labels ([838b1dc](https://github.com/ExaDev/agent-comms/commit/838b1dccfa8ca58a9770fc3c6820eb877fabcaba))
+* **bridge:** retire dom.ts, styles.css, and css.d.ts ([6465177](https://github.com/ExaDev/agent-comms/commit/6465177b412d05f777f40caa824ad5d9aa3a0518))
+
+### Tests
+
+* **bridge:** rewrite e2e specs for React and Mantine's rendered markup ([87c2549](https://github.com/ExaDev/agent-comms/commit/87c254938f06f1d41caa7bca10682e15f6a40a98)), references [#sidebar](https://github.com/ExaDev/agent-comms/issues/sidebar) [#header](https://github.com/ExaDev/agent-comms/issues/header) [#input](https://github.com/ExaDev/agent-comms/issues/input)
+* **bridge:** rewrite frontend component tests for React and Testing Library ([1991e23](https://github.com/ExaDev/agent-comms/commit/1991e23e214ab3eded37d8c7f9eca58186862cc6))
+
+### Chores
+
+* **bridge:** remove dead escapeHtml, generated-html.ts and unused relay CSS ([0dcfb12](https://github.com/ExaDev/agent-comms/commit/0dcfb12b1d76d867d38f82c3399ef47479519867))
+* **bridge:** swap Preact for React 19 and Mantine ([6bdbc4b](https://github.com/ExaDev/agent-comms/commit/6bdbc4b31b364f129e329a8b01919877e053b577))
+
 ## [3.19.0](https://github.com/ExaDev/agent-comms/compare/v3.18.0...v3.19.0) (2026-09-18)
 
 ### Features
