@@ -2,7 +2,8 @@
  * MessageList — scrollable message area with auto-scroll.
  */
 
-import { useRef, useEffect } from "preact/hooks";
+import { ScrollArea, Stack } from "@mantine/core";
+import { useEffect, useRef } from "react";
 import type { DisplayMessage } from "../types.js";
 import { Message } from "./Message.js";
 
@@ -11,19 +12,22 @@ export function MessageList({
 }: {
   messages: readonly DisplayMessage[];
 }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (ref.current) {
-      ref.current.scrollTop = ref.current.scrollHeight;
+    const viewport = viewportRef.current;
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
     }
   }, [messages.length]);
 
   return (
-    <div id="messages" ref={ref}>
-      {messages.map((msg, i) => (
-        <Message key={i} message={msg} />
-      ))}
-    </div>
+    <ScrollArea flex={1} p="md" viewportRef={viewportRef} aria-label="Messages">
+      <Stack gap={4}>
+        {messages.map((msg, i) => (
+          <Message key={i} message={msg} />
+        ))}
+      </Stack>
+    </ScrollArea>
   );
 }

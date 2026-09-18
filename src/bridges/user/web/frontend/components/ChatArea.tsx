@@ -2,9 +2,9 @@
  * ChatArea — main chat panel with header, messages, and input.
  */
 
-import { useState } from "preact/hooks";
+import { Burger, Button, Group, Stack, Text, TextInput } from "@mantine/core";
+import { useState } from "react";
 import type { DisplayMessage } from "../types.js";
-import { inputFromEvent } from "../dom.js";
 import { parseInput } from "../input.js";
 import { MessageList } from "./MessageList.js";
 
@@ -13,6 +13,8 @@ interface ChatAreaProps {
   currentRoom: string | undefined;
   dmTarget: string | undefined;
   connected: boolean;
+  sidebarOpened: boolean;
+  onToggleSidebar: () => void;
   onSendAction: (text: string) => void;
   onLeaveRoom: () => void;
   onConnectToMesh: () => void;
@@ -23,6 +25,8 @@ export function ChatArea({
   currentRoom,
   dmTarget,
   connected,
+  sidebarOpened,
+  onToggleSidebar,
   onSendAction,
   onLeaveRoom,
   onConnectToMesh,
@@ -51,45 +55,53 @@ export function ChatArea({
     setInputText("");
   };
 
-  const handleKeyDown = (e: KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") handleSend();
   };
 
   return (
-    <div id="main">
-      <div id="header">
-        {headerText}
+    <Stack h="100%" gap={0}>
+      <Group justify="space-between" px="md" py="sm" bg="dark.6">
+        <Group gap="sm">
+          <Burger
+            opened={sidebarOpened}
+            onClick={onToggleSidebar}
+            size="sm"
+            aria-label="Toggle sidebar"
+          />
+          <Text fw={600}>{headerText}</Text>
+        </Group>
         {currentRoom !== undefined && (
-          <button class="leave-btn" onClick={onLeaveRoom}>
+          <Button size="xs" variant="subtle" onClick={onLeaveRoom}>
             Leave
-          </button>
+          </Button>
         )}
-      </div>
+      </Group>
       <MessageList messages={messages} />
       {!connected && messages.length === 0 && (
-        <div class="connect-prompt">
-          <p>Connect to a local mesh to discover agents and rooms.</p>
-          <button class="connect-btn" onClick={onConnectToMesh}>
+        <Stack align="center" justify="center" gap="md" p="xl">
+          <Text c="dimmed">
+            Connect to a local mesh to discover agents and rooms.
+          </Text>
+          <Button variant="outline" onClick={onConnectToMesh}>
             Connect to local mesh
-          </button>
-        </div>
+          </Button>
+        </Stack>
       )}
-      <div id="input-bar">
-        <input
-          id="input"
-          type="text"
+      <Group px="md" py="sm" gap="xs" bg="dark.6">
+        <TextInput
+          flex={1}
           placeholder="Type a message or /command..."
-          autocomplete="off"
+          aria-label="Message"
+          autoComplete="off"
           value={inputText}
-          onInput={(e) => {
-            setInputText(inputFromEvent(e).value);
+          onChange={(e) => {
+            setInputText(e.target.value);
           }}
           onKeyDown={handleKeyDown}
         />
-        <button id="send-btn" onClick={handleSend}>
-          Send
-        </button>
-      </div>
-    </div>
+        <Button onClick={handleSend}>Send</Button>
+      </Group>
+    </Stack>
   );
 }

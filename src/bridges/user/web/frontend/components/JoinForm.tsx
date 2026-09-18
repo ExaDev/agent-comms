@@ -2,8 +2,8 @@
  * JoinForm — inline form for joining a room by name.
  */
 
-import { useState } from "preact/hooks";
-import { inputFromEvent } from "../dom.js";
+import { Button, Group, TextInput } from "@mantine/core";
+import { useState } from "react";
 
 interface JoinFormProps {
   visible: boolean;
@@ -14,7 +14,7 @@ interface JoinFormProps {
 export function JoinForm({ visible, onSubmit, onCancel }: JoinFormProps) {
   const [roomName, setRoomName] = useState("");
 
-  if (!visible) return <div id="join-form" class="join-form hidden" />;
+  if (!visible) return null;
 
   const handleSubmit = () => {
     const trimmed = roomName.trim();
@@ -24,27 +24,28 @@ export function JoinForm({ visible, onSubmit, onCancel }: JoinFormProps) {
     }
   };
 
-  const handleKeyDown = (e: KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") handleSubmit();
     if (e.key === "Escape") onCancel();
   };
 
   return (
-    <div id="join-form" class="join-form">
-      <input
-        class="join-input"
-        type="text"
+    <Group gap="xs" py={4}>
+      <TextInput
+        flex={1}
+        size="xs"
         placeholder="Room name..."
-        autocomplete="off"
+        aria-label="Room name"
+        autoComplete="off"
         value={roomName}
-        onInput={(e) => {
-          setRoomName(inputFromEvent(e).value);
+        onChange={(e) => {
+          setRoomName(e.target.value);
         }}
         onKeyDown={handleKeyDown}
       />
-      <button class="join-submit" onClick={handleSubmit}>
+      <Button size="xs" onClick={handleSubmit}>
         Join
-      </button>
-    </div>
+      </Button>
+    </Group>
   );
 }

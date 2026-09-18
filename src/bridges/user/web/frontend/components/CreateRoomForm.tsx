@@ -2,8 +2,8 @@
  * CreateRoomForm — inline form for creating a new room.
  */
 
-import { useState } from "preact/hooks";
-import { inputFromEvent } from "../dom.js";
+import { Button, Group, Select, Stack, TextInput } from "@mantine/core";
+import { useState } from "react";
 
 interface CreateRoomFormProps {
   visible: boolean;
@@ -13,6 +13,18 @@ interface CreateRoomFormProps {
     description: string,
   ) => void;
   onCancel: () => void;
+}
+
+const ROOM_TYPE_OPTIONS = [
+  { value: "public", label: "Public" },
+  { value: "private", label: "Private" },
+  { value: "secret", label: "Secret" },
+];
+
+function isRoomType(
+  value: string | null,
+): value is "public" | "private" | "secret" {
+  return value === "public" || value === "private" || value === "secret";
 }
 
 export function CreateRoomForm({
@@ -28,7 +40,7 @@ export function CreateRoomForm({
 
   if (!visible) return null;
 
-  const handleSubmit = (e: Event) => {
+  const handleSubmit = (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!name.trim()) return;
     onSubmit(name.trim(), roomType, description.trim());
@@ -38,59 +50,55 @@ export function CreateRoomForm({
   };
 
   return (
-    <div id="create-room-form" class="visible">
-      <form class="create-room-form" onSubmit={handleSubmit}>
-        <label>
-          Room name
-          <input
-            type="text"
-            name="room-name"
-            required
-            placeholder="e.g. project-alpha"
-            value={name}
-            onInput={(e) => {
-              setName(inputFromEvent(e).value);
-            }}
-          />
-        </label>
-        <label>
-          Type
-          <select
-            name="room-type"
-            value={roomType}
-            onChange={(e) => {
-              const val = inputFromEvent(e).value;
-              if (val === "public" || val === "private" || val === "secret") {
-                setRoomType(val);
-              }
-            }}
-          >
-            <option value="public">Public</option>
-            <option value="private">Private</option>
-            <option value="secret">Secret</option>
-          </select>
-        </label>
-        <label>
-          Description (optional)
-          <input
-            type="text"
-            name="room-description"
-            placeholder="What is this room about?"
-            value={description}
-            onInput={(e) => {
-              setDescription(inputFromEvent(e).value);
-            }}
-          />
-        </label>
-        <div class="create-room-btns">
-          <button type="submit" class="create-room-submit">
+    <form onSubmit={handleSubmit}>
+      <Stack gap="xs" p="xs">
+        <TextInput
+          label="Room name"
+          name="room-name"
+          required
+          placeholder="e.g. project-alpha"
+          size="xs"
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+          }}
+        />
+        <Select
+          label="Type"
+          name="room-type"
+          size="xs"
+          data={ROOM_TYPE_OPTIONS}
+          value={roomType}
+          allowDeselect={false}
+          onChange={(value) => {
+            if (isRoomType(value)) setRoomType(value);
+          }}
+        />
+        <TextInput
+          label="Description (optional)"
+          name="room-description"
+          placeholder="What is this room about?"
+          size="xs"
+          value={description}
+          onChange={(e) => {
+            setDescription(e.target.value);
+          }}
+        />
+        <Group gap="xs">
+          <Button type="submit" size="xs" flex={1}>
             Create
-          </button>
-          <button type="button" class="create-room-cancel" onClick={onCancel}>
+          </Button>
+          <Button
+            type="button"
+            size="xs"
+            flex={1}
+            variant="default"
+            onClick={onCancel}
+          >
             Cancel
-          </button>
-        </div>
-      </form>
-    </div>
+          </Button>
+        </Group>
+      </Stack>
+    </form>
   );
 }
