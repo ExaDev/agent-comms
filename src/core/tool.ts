@@ -67,6 +67,12 @@ export interface CommsContext {
   pid: number;
 }
 
+/** The calling bridge's own web UI address, as reported by the web_url action -- mirrors comms-url's own three-way distinction between a server that was never started, one whose OS-assigned port hasn't come back yet, and one that's actually reachable. */
+export type WebUrlStatus =
+  | { kind: "not_running" }
+  | { kind: "pending" }
+  | { kind: "ready"; url: string };
+
 export interface CommsResult {
   content: string;
   /** If true, the result is an error. */
@@ -170,6 +176,9 @@ function trySyncAction(verb: string, action: () => string): CommsResult {
 }
 
 export class CommsTool {
+  /** Reports this bridge's own web UI address for the web_url action. Assignable post-construction, mirroring MeshStore's own onDelivery/onCoordinatorRoleChanged hooks, because the underlying web server handle isn't known until after this bridge's own tryStartWebServer() call -- which every real bridge makes after building its CommsTool, not before. Undefined (the default) means this bridge never wires web UI reporting. */
+  getWebUrlStatus?: () => WebUrlStatus;
+
   constructor(
     private readonly store: CommsStore & MeshOnlyFeatures,
     private readonly discovery?: DiscoveryManager,
@@ -200,6 +209,8 @@ export class CommsTool {
           return await this.update(ctx, action);
         case "whoami":
           return await this.whoami(ctx);
+        case "web_url":
+          return this.webUrl();
         case "create_room":
           return await this.createRoom(ctx, action);
         case "list_rooms":
@@ -356,6 +367,20 @@ export class CommsTool {
       content: lines.join("\n"),
       isError: false,
     };
+  }
+
+  private webUrl(): CommsResult {
+    const status = this.getWebUrlStatus?.() ?? { kind: "not_running" };
+    switch (status.kind) {
+      case "not_running":
+        return { content: "Web UI is not running.", isError: true };
+      case "pending":
+        return { content: "Web UI port not yet assigned.", isError: true };
+      case "ready":
+        return { content: status.url, isError: false };
+      default:
+        return status satisfies never;
+    }
   }
 
   private async createRoom(

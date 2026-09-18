@@ -36,6 +36,7 @@ export const MCP_TOOL_PARAMS = z.object({
     "register",
     "update",
     "whoami",
+    "web_url",
     "create_room",
     "list_rooms",
     "join_room",
@@ -166,6 +167,8 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
     }
     case "whoami":
       return { action: "whoami" };
+    case "web_url":
+      return { action: "web_url" };
     case "create_room":
       if (p.room === undefined)
         throw new BuildActionError("create_room", "room");

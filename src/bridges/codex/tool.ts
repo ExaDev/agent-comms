@@ -20,7 +20,7 @@ import {
 } from "../../core/index.js";
 import type { IdentitySlot } from "../../core/identity-store.js";
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
-import { tryStartWebServer } from "../user/web/server.js";
+import { tryStartWebServer, getWebUrlStatus } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -51,7 +51,7 @@ export async function run(): Promise<void> {
     {
       description: [
         "Cross-harness agent communication mesh. Actions:",
-        "register, update, whoami, create_room, list_rooms, join_room, leave_room,",
+        "register, update, whoami, web_url, create_room, list_rooms, join_room, leave_room,",
         "send, dm, list_agents, read_room, invite, decline_invite, kick, destroy_room.",
         "Pending incoming messages are included in every response.",
       ].join(" "),
@@ -102,7 +102,8 @@ export async function run(): Promise<void> {
   // -----------------------------------------------------------------------
 
   await store.init();
-  await tryStartWebServer();
+  const webHandle = await tryStartWebServer();
+  tool.getWebUrlStatus = () => getWebUrlStatus(webHandle);
   await mcp.connect(new StdioServerTransport());
 
   const reg = await ensureRegistered({
