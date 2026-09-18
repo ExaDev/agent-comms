@@ -264,8 +264,16 @@ function handleRequest(
     return;
   }
 
-  // Frontend HTML
-  if (url.pathname === "/" && req.method === "GET") {
+  // Frontend HTML -- also served at the literal /index.html path (not just
+  // /) because vite-plugin-pwa's injectManifest precache list references
+  // the build output's own filename, index.html, and precaches it by
+  // fetching that exact URL: a 404 there fails cache.addAll's whole batch,
+  // which fails the service worker's install step, so the browser discards
+  // the registration entirely.
+  if (
+    (url.pathname === "/" || url.pathname === "/index.html") &&
+    req.method === "GET"
+  ) {
     res.writeHead(HTTP_OK, { "Content-Type": "text/html; charset=utf-8" });
     res.end(INDEX_HTML);
     return;
