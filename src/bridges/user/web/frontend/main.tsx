@@ -7,14 +7,9 @@
 import mantineStyles from "@mantine/core/styles.css?inline";
 import { createRoot } from "react-dom/client";
 import { MantineProvider } from "@mantine/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { App } from "./components/App.js";
-import {
-  fetchAgents,
-  fetchMeshGraph,
-  fetchRoomMessages,
-  fetchRooms,
-} from "./api.js";
 import { parseInput, routeAction } from "./input.js";
 import { State } from "./state.js";
 import { useClientState } from "./use-client-state.js";
@@ -48,6 +43,9 @@ if (rootEl === null) {
 
 const state = new State();
 
+/** Backs the three structured one-shot reads (agent-comms#206) -- getRoomMessages/getMeshGraph/getMeshTrace, via meshClient.queryUtils. */
+const queryClient = new QueryClient();
+
 // ---------------------------------------------------------------------------
 // Mesh client — real-time state via SharedWorker
 // ---------------------------------------------------------------------------
@@ -57,7 +55,7 @@ const meshClient = new MeshClient();
 let wasConnected = false;
 
 meshClient.subscribe((meshState) => {
-  // Apply real-time mesh state updates on top of the REST-fetched baseline. The MeshClient delivers authoritative state from the mesh worker, which maintains a local copy of all agents and rooms.
+  // agents/rooms are already fully real-time via subscribeEvents' state_sync/state_patch stream (agent-comms#206) -- no REST re-fetch needed on top of this.
   if (meshState.agents.length > 0) {
     state.setAgents(meshState.agents);
   }
@@ -87,7 +85,7 @@ meshClient.onDelivery((event) => {
     event.type === "member_status" ||
     event.type === "name_changed"
   ) {
-    void refreshState();
+    void invalidateMeshGraph();
   }
 });
 
@@ -112,25 +110,15 @@ async function sendAction(action: Action): Promise<void> {
     text: result.isError ? `Error: ${result.content}` : result.content,
   });
   if (!result.isError) {
-    void refreshState();
+    void invalidateMeshGraph();
   }
 }
 
-async function refreshState(): Promise<void> {
-  if (!isLocalServer) return;
-  const [agents, rooms] = await Promise.all([fetchAgents(), fetchRooms()]);
-  state.setAgents(agents);
-  state.setRooms(rooms);
-  await refreshMeshGraph();
-}
-
-/** Refreshes the mesh's connection graph on the same triggers refreshState already reacts to (agent-comms#201) -- a failure here (most commonly this bridge running on a FileStore rather than a real mesh transport, so mesh_graph simply isn't supported) leaves state.meshGraph as it was rather than breaking the agents/rooms refresh it rides alongside. */
-async function refreshMeshGraph(): Promise<void> {
-  try {
-    state.setMeshGraph(await fetchMeshGraph());
-  } catch {
-    // Not mesh-backed, or the transport doesn't support mesh_graph -- leave meshGraph unset.
-  }
+/** Invalidates the mesh graph query on the same triggers a REST refresh used to run on (agent-comms#201/#206) -- a failure here (most commonly this bridge running on a FileStore rather than a real mesh transport, so mesh_graph simply isn't supported) is left to whatever's already subscribed to the query to surface, the same way any other failed refetch would. */
+async function invalidateMeshGraph(): Promise<void> {
+  await queryClient.invalidateQueries({
+    queryKey: meshClient.queryUtils.getMeshGraph.key(),
+  });
 }
 
 async function onJoinRoom(roomId: string): Promise<void> {
@@ -140,11 +128,13 @@ async function onJoinRoom(roomId: string): Promise<void> {
 
   void sendAction({ action: "join_room", room: roomId });
 
-  // Load history (skip REST fetch on standalone PWA — no server)
-  if (isLocalServer) {
-    const messages = await fetchRoomMessages(roomId);
-    state.setMessages(messages.map(roomMessageToDisplay));
-  }
+  // Room history now goes through the same tab-worker-server oRPC channel every other read does (agent-comms#206), so it works uniformly whether this is served from the local server or probing for one as a standalone PWA -- unlike the REST fetch it replaces, which only ever worked in the local-server case.
+  const messages = await queryClient.query(
+    meshClient.queryUtils.getRoomMessages.queryOptions({
+      input: { room: roomId },
+    }),
+  );
+  state.setMessages(messages.map(roomMessageToDisplay));
   addMessage({ type: "system", text: `Joined ${roomId}` });
 }
 
@@ -243,7 +233,7 @@ function Root() {
       dmTarget={s.dmTarget}
       messages={s.messages}
       connected={s.connected}
-      meshGraph={s.meshGraph}
+      queryUtils={meshClient.queryUtils}
       onJoinRoom={(roomId) => {
         void onJoinRoom(roomId);
       }}
@@ -259,9 +249,11 @@ function Root() {
 }
 
 createRoot(rootEl).render(
-  <MantineProvider theme={theme} defaultColorScheme="dark">
-    <Root />
-  </MantineProvider>,
+  <QueryClientProvider client={queryClient}>
+    <MantineProvider theme={theme} defaultColorScheme="dark">
+      <Root />
+    </MantineProvider>
+  </QueryClientProvider>,
 );
 
 // Capture the deep link from the URL BEFORE syncUrl's first run clears the query parameters via replaceState, which would make location.search empty by the time parseDeepLink runs.
@@ -273,19 +265,21 @@ if (isLocalServer || previouslyConnected) {
   meshClient.connect();
 }
 
-// Initial state fetch, then resolve any deep link from the URL
-void refreshState().then(() => {
-  if (!deepLink) return;
-  const s = state.get();
-  const resolved = resolveDeepLink(deepLink, s.rooms);
-  if (!resolved) return;
+// Resolve any deep link from the URL once the real-time room list first arrives (agent-comms#206 -- agents/rooms are already fully covered by the live subscribeEvents stream, so this no longer waits on a separate REST fetch the way it used to). A one-shot subscriber, unsubscribing itself the moment it has a non-empty room list to resolve against.
+if (deepLink) {
+  const unsubscribeDeepLink = meshClient.subscribe((meshState) => {
+    if (meshState.rooms.length === 0) return;
+    unsubscribeDeepLink();
+    const resolved = resolveDeepLink(deepLink, meshState.rooms);
+    if (!resolved) return;
 
-  switch (resolved.kind) {
-    case "room":
-      void onJoinRoom(resolved.targetId);
-      break;
-    case "dm":
-      onSelectAgent(resolved.targetId);
-      break;
-  }
-});
+    switch (resolved.kind) {
+      case "room":
+        void onJoinRoom(resolved.targetId);
+        break;
+      case "dm":
+        onSelectAgent(resolved.targetId);
+        break;
+    }
+  });
+}

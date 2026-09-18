@@ -7,7 +7,8 @@
 import { AppShell, SegmentedControl } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useState } from "react";
-import type { Agent, DisplayMessage, MeshGraph, Room } from "../types.js";
+import type { Agent, DisplayMessage, Room } from "../types.js";
+import type { MeshClient } from "../mesh-client.js";
 import { ChatArea } from "./ChatArea.js";
 import { MeshPanel } from "./MeshPanel.js";
 import { Sidebar } from "./Sidebar.js";
@@ -21,7 +22,7 @@ export interface AppProps {
   dmTarget: string | undefined;
   messages: readonly DisplayMessage[];
   connected: boolean;
-  meshGraph: MeshGraph | undefined;
+  queryUtils: MeshClient["queryUtils"];
   onJoinRoom: (roomId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onRenameAgent: (agentId: string, newName: string) => void;
@@ -86,7 +87,7 @@ export function App(props: AppProps) {
             onConnectToMesh={props.onConnectToMesh}
           />
         ) : (
-          <MeshPanel graph={props.meshGraph} />
+          <MeshPanel queryUtils={props.queryUtils} />
         )}
       </AppShell.Main>
     </AppShell>

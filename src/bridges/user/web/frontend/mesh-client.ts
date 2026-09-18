@@ -12,8 +12,18 @@
 
 import { createORPCClient, getEventMeta } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
+import { createTanstackQueryUtils } from "@orpc/tanstack-query";
+import type { RouterUtils } from "@orpc/tanstack-query";
 import type { ContractRouterClient } from "@orpc/contract";
-import type { Agent, ActionResult, DeliveryEvent, Room } from "./types.js";
+import type {
+  Agent,
+  ActionResult,
+  DeliveryEvent,
+  MeshGraph,
+  MeshTraceResult,
+  Room,
+  RoomMessage,
+} from "./types.js";
 import type { TabContract } from "./tab-contract.js";
 import type { MeshEvent } from "../contract.js";
 import { dispatchAction } from "./dispatch-action.js";
@@ -57,6 +67,24 @@ export interface MeshClientState {
   connected: boolean;
 }
 
+/**
+ * Builds the structural client createTanstackQueryUtils derives RouterUtils from -- one delegating async function per structured read, matching oRPC's own `Client<TClientContext, TInput, TOutput, TError>` callable-with-input shape. A factory function returning an inline-inferred object literal, rather than a separately named interface, because AnyNestedClient's own index-signature constraint only structurally matches a fresh object literal type, not a named interface with the identical shape -- a real TypeScript quirk confirmed directly against this exact code (a named `interface ReadsClient` here failed with "index signature for type 'string' is missing").
+ */
+function buildReadsClient(requireClient: () => TabClient) {
+  return {
+    getRoomMessages: async (
+      input: Readonly<{ room: string; since?: string }>,
+    ): Promise<RoomMessage[]> => requireClient().getRoomMessages(input),
+    getMeshGraph: async (): Promise<MeshGraph> =>
+      requireClient().getMeshGraph({}),
+    getMeshTrace: async (
+      input: Readonly<{ target: string; timeoutMs?: number }>,
+    ): Promise<MeshTraceResult> => requireClient().getMeshTrace(input),
+  };
+}
+
+type ReadsClient = ReturnType<typeof buildReadsClient>;
+
 /** The web server's default port when standalone (coordinator default 19876 + 1), the base port `probeLocalMesh` starts walking up from. */
 const DEFAULT_WEB_SERVER_PORT = 19877;
 /** How many ports above `DEFAULT_WEB_SERVER_PORT` to probe before giving up, matching the server's own port-discovery walk-up range. */
@@ -78,6 +106,16 @@ export class MeshClient {
   private readonly deliveryListeners = new Set<MeshDeliveryListener>();
   private eventPumpGeneration = 0;
 
+  /** Delegates each structured read to `this.client` fresh on every call, throwing "Not connected" the same way a real network failure would if called before connect() -- a stable object createTanstackQueryUtils below can be built from once, since the real tab client doesn't exist until connect() is called but these utils need a stable reference for the lifetime of the app. */
+  private readonly readsClient: ReadsClient = buildReadsClient(() =>
+    this.requireClient(),
+  );
+
+  /** TanStack Query utils for the three structured one-shot reads (agent-comms#206) -- getRoomMessages/getMeshGraph/getMeshTrace, genuinely request/response data with no real-time channel of their own, unlike agents/rooms (already fully covered by subscribeEvents' state_sync/state_patch, so deliberately not exposed here as queries at all). */
+  readonly queryUtils: RouterUtils<ReadsClient> = createTanstackQueryUtils(
+    this.readsClient,
+  );
+
   constructor() {
     if (typeof window !== "undefined") {
       // A browser MessagePort never fires its own "close" event, so nothing tells the worker a tab is gone unless the tab says so itself. pagehide (never beforeunload, which kills the bfcache and is unreliable on mobile) is the last reliable point at which this can still run.
@@ -85,6 +123,11 @@ export class MeshClient {
         this.disconnect();
       });
     }
+  }
+
+  private requireClient(): TabClient {
+    if (!this.client) throw new Error("Not connected to mesh yet");
+    return this.client;
   }
 
   /** Connect to the mesh SharedWorker. Idempotent. */

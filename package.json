@@ -122,6 +122,8 @@
     "@orpc/client": "2.0.0-beta.35",
     "@orpc/contract": "2.0.0-beta.35",
     "@orpc/server": "2.0.0-beta.35",
+    "@orpc/tanstack-query": "2.0.0-beta.35",
+    "@tanstack/react-query": "5.102.8",
     "cbor2": "2.3.0",
     "cc-peer": "1.5.0",
     "d3-force": "3.0.0",

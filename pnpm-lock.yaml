@@ -197,9 +197,15 @@ importers:
       '@orpc/server':
         specifier: 2.0.0-beta.35
         version: 2.0.0-beta.35
+      '@orpc/tanstack-query':
+        specifier: 2.0.0-beta.35
+        version: 2.0.0-beta.35(@tanstack/query-core@5.102.8)
       '@sinclair/typebox':
         specifier: '*'
         version: 0.34.49
+      '@tanstack/react-query':
+        specifier: 5.102.8
+        version: 5.102.8(react@19.3.0)
       cbor2:
         specifier: 2.3.0
         version: 2.3.0
@@ -1956,6 +1962,12 @@ packages:
   '@octokit/types@16.0.0':
     resolution: {integrity: sha512-sKq+9r1Mm4efXW1FCk7hFSeJo4QKreL/tTbR0rz/qx/r1Oa2VV83LTA/H/MuCOX7uCIJmQVRKBcbmWoySjAnSg==}
 
+  '@openapi-spec/downgrader@0.1.0':
+    resolution: {integrity: sha512-za2h8wGa4BFy2+AiKJHutt8BS2ua7Fw7vgNMmAtLyFbreozWHkXRVBRVA86sczyLY1ZN9Gw4rITygs90ehztQg==}
+
+  '@openapi-spec/types@0.1.0':
+    resolution: {integrity: sha512-5m9GUj5ekwmJ5uXH0yctarqLGckGc8X7pX65dirukZDUAGmrUx5lKovvWA7YvEBKd480Q7R2oG3nE5C+SoVgNw==}
+
   '@opentelemetry/semantic-conventions@1.43.0':
     resolution: {integrity: sha512-eSYWTm620tTk45EKSedaUL8MFYI8hW164hIXsgIHyxu3VobUB3fFCu5t0hQby6OoWRPsG1KkKUG2M5UadiLiVg==}
     engines: {node: '>=14'}
@@ -1965,6 +1977,23 @@ packages:
 
   '@orpc/contract@2.0.0-beta.35':
     resolution: {integrity: sha512-NjuzRNQAhIeozt3alkOVXrXlTTzgpUo9XDAdt/FPcmSEsUyv4BgJfY19WcIpclqSWv6yO7Wp/i5f4CGmUiGG8A==}
+
+  '@orpc/json-schema@2.0.0-beta.35':
+    resolution: {integrity: sha512-1d1Jlr3aIQ5NPJOj+6j3Zd7XoZRkFp03SnVU7xs5g3x9bxJyppwjdjdXmkNY5g9UTsinrDJLgkH6FjBdEVwYcw==}
+
+  '@orpc/openapi@2.0.0-beta.35':
+    resolution: {integrity: sha512-+EMm40VTa+pxuLD0k6v7Xlp94CcfPR6SBq3rGngl9YiIGCnGuwg2Gb6gFIqI2Inz+zY+hztV2Zux8H7BNXpb2g==}
+    peerDependencies:
+      '@scalar/api-reference': '>=1.57.2'
+      '@types/swagger-ui': '>=5.32.0'
+      swagger-ui: '>=5.32.6'
+    peerDependenciesMeta:
+      '@scalar/api-reference':
+        optional: true
+      '@types/swagger-ui':
+        optional: true
+      swagger-ui:
+        optional: true
 
   '@orpc/server@2.0.0-beta.35':
     resolution: {integrity: sha512-q4I6f8eOxZ+7TwBv+wHbRZeTSmPCLEGcU7K1m2EZ7jEdl/VgzRp9wHOhT4ODkneDLhd6PJZxF81uL9q/QGOiHg==}
@@ -1979,6 +2008,11 @@ packages:
 
   '@orpc/shared@2.0.0-beta.35':
     resolution: {integrity: sha512-b3CN1oHnkkC9IDN1ByTbes3PdgBdOgo7wfsyqkLgk3hgUbjZ1lwb6TiqzuKjrfSljYiEZX2TlND/sZN6YR4tFA==}
+
+  '@orpc/tanstack-query@2.0.0-beta.35':
+    resolution: {integrity: sha512-K60C+1//q0fehGQQvues5qF7m57dIVZPI4wOTTm0xLQiLIpAsWtJVs9FOfuWojAf6rwW1eAQzEPAZoSAEKipzA==}
+    peerDependencies:
+      '@tanstack/query-core': '>=5.80.2'
 
   '@oxc-project/types@0.148.0':
     resolution: {integrity: sha512-Nm4s/jB+4FpFsPhWGEC4h7rzksesmtnMXomo6rCMcg/b8zLQuOziRgkCS1fxDCXOlJB/6Q8oABOZ/OP6RIPj9A==}
@@ -2478,6 +2512,14 @@ packages:
 
   '@stryker-mutator/util@10.0.0':
     resolution: {integrity: sha512-LzOpHiJaCp2ABQgnPMlrQQcsK43bd5Vo/2FGL78aN62yDoeRQ+4j3tzeuXxK5OAHdC3fUz6TDoy4IsoAuLAd3w==}
+
+  '@tanstack/query-core@5.102.8':
+    resolution: {integrity: sha512-ZNjkJ33CqvPNec/6lZBnHqLc3EVGPZ9ySLhYahU9TcuRFdmwXewuj0c4hwSWcGHqEUwcSrKeZ+oGcvPBqXcQcg==}
+
+  '@tanstack/react-query@5.102.8':
+    resolution: {integrity: sha512-TYBea4OuXWD7MhaSHq069TWbFe7rcwWN6kzT7JF0OKi1K6c1gTv2IzD6A6ExJsCMozdkqBWeuIUZmu4KQg0O5A==}
+    peerDependencies:
+      react: ^18 || ^19
 
   '@testing-library/dom@10.4.2':
     resolution: {integrity: sha512-yzr2S9HyAIdhz2/6qHgbs665Q7PKVcDF05vsOlHPxG1mo36gKVesdYVeDLnXgfjJ03CrKRk08knc6+E/9m8v2Q==}
@@ -5558,6 +5600,9 @@ packages:
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
 
+  rou3@0.9.2:
+    resolution: {integrity: sha512-3SOzvaAg8rkHrXtRjpCvCvbyO5to9oOO27Z/XqHEYXfMRVSw/qMIVdmaOk9W2lcRLtR6dlqTjo9hDeJk70QBYQ==}
+
   router@2.2.0:
     resolution: {integrity: sha512-nLTrUKm2UyiL7rlhapu/Zl45FwNgkZGaCpZbIHajDYgwlJCOzLSk+cIPAnsEqV955GjILJnKbdQC1nVPz+gAYQ==}
     engines: {node: '>= 18'}
@@ -8407,6 +8452,12 @@ snapshots:
     dependencies:
       '@octokit/openapi-types': 27.0.0
 
+  '@openapi-spec/downgrader@0.1.0':
+    dependencies:
+      '@openapi-spec/types': 0.1.0
+
+  '@openapi-spec/types@0.1.0': {}
+
   '@opentelemetry/semantic-conventions@1.43.0': {}
 
   '@orpc/client@2.0.0-beta.35':
@@ -8421,6 +8472,34 @@ snapshots:
       '@orpc/client': 2.0.0-beta.35
       '@orpc/shared': 2.0.0-beta.35
       '@standard-schema/spec': 1.1.0
+
+  '@orpc/json-schema@2.0.0-beta.35':
+    dependencies:
+      '@openapi-spec/types': 0.1.0
+      '@orpc/client': 2.0.0-beta.35
+      '@orpc/contract': 2.0.0-beta.35
+      '@orpc/server': 2.0.0-beta.35
+      '@orpc/shared': 2.0.0-beta.35
+      '@standard-schema/spec': 1.1.0
+    transitivePeerDependencies:
+      - crossws
+      - fastify
+
+  '@orpc/openapi@2.0.0-beta.35':
+    dependencies:
+      '@openapi-spec/downgrader': 0.1.0
+      '@openapi-spec/types': 0.1.0
+      '@orpc/client': 2.0.0-beta.35
+      '@orpc/contract': 2.0.0-beta.35
+      '@orpc/json-schema': 2.0.0-beta.35
+      '@orpc/server': 2.0.0-beta.35
+      '@orpc/shared': 2.0.0-beta.35
+      '@standard-server/core': 0.9.1
+      '@standard-server/fetch': 0.9.1
+      rou3: 0.9.2
+    transitivePeerDependencies:
+      - crossws
+      - fastify
 
   '@orpc/server@2.0.0-beta.35':
     dependencies:
@@ -8440,6 +8519,20 @@ snapshots:
       '@standard-server/shared': 0.9.1
       radash: 12.1.1
       type-fest: 5.8.0
+
+  '@orpc/tanstack-query@2.0.0-beta.35(@tanstack/query-core@5.102.8)':
+    dependencies:
+      '@orpc/client': 2.0.0-beta.35
+      '@orpc/contract': 2.0.0-beta.35
+      '@orpc/openapi': 2.0.0-beta.35
+      '@orpc/shared': 2.0.0-beta.35
+      '@tanstack/query-core': 5.102.8
+    transitivePeerDependencies:
+      - '@scalar/api-reference'
+      - '@types/swagger-ui'
+      - crossws
+      - fastify
+      - swagger-ui
 
   '@oxc-project/types@0.148.0': {}
 
@@ -8910,6 +9003,13 @@ snapshots:
       typescript: 6.0.3
 
   '@stryker-mutator/util@10.0.0': {}
+
+  '@tanstack/query-core@5.102.8': {}
+
+  '@tanstack/react-query@5.102.8(react@19.3.0)':
+    dependencies:
+      '@tanstack/query-core': 5.102.8
+      react: 19.3.0
 
   '@testing-library/dom@10.4.2':
     dependencies:
@@ -12350,6 +12450,8 @@ snapshots:
       '@rollup/rollup-win32-x64-gnu': 4.63.3
       '@rollup/rollup-win32-x64-msvc': 4.63.3
       fsevents: 2.3.3
+
+  rou3@0.9.2: {}
 
   router@2.2.0(supports-color@7.2.0):
     dependencies:
