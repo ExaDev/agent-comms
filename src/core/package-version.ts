@@ -8,7 +8,10 @@ import * as path from "node:path";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
-function isVersionedPackageJson(value: unknown): value is { version: string } {
+/** Narrows a parsed package.json into the shape every caller here needs -- shared by getOwnPackageVersion and wire-mesh-core-version.ts's getWireMeshCoreVersion, which reads a dependency's installed package.json the identical way. */
+export function isVersionedPackageJson(
+  value: unknown,
+): value is { version: string } {
   if (typeof value !== "object" || value === null) return false;
   if (!("version" in value)) return false;
   return typeof value.version === "string";
