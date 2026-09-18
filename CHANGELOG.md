@@ -1,3 +1,27 @@
+## [3.21.0](https://github.com/ExaDev/agent-comms/compare/v3.20.0...v3.21.0) (2026-09-18)
+
+### Features
+
+* **core:** gossip and read back mesh-wide package versions ([042e1fd](https://github.com/ExaDev/agent-comms/commit/042e1fdffb49487f090c63a98bc760ee82a5802b))
+* **core:** read this process's own installed wire-mesh-core version ([d4d27c0](https://github.com/ExaDev/agent-comms/commit/d4d27c0444e0723e91bab173e1b8be158ac51cf5))
+* **core:** surface package versions in whoami, update, and list_agents ([bfad1e1](https://github.com/ExaDev/agent-comms/commit/bfad1e187f4799bce41910dbaccf26712b86e1fa))
+* **web:** add oRPC contract for the browser mesh protocol ([783d6b1](https://github.com/ExaDev/agent-comms/commit/783d6b1befc114297e70f30acfa0e2a43385f2df))
+
+### Bug Fixes
+
+* **bridge:** show a room's plain name instead of its owner-qualified id in the web UI ([b770724](https://github.com/ExaDev/agent-comms/commit/b770724901254caaeb02f867f797e2a5559d72c9))
+* **core:** resolve a room's plain local name to its real id before every local room lookup ([79c7f3c](https://github.com/ExaDev/agent-comms/commit/79c7f3c39f3e7208a95a113653f36ff3aa83349b))
+
+### Tests
+
+* **bridge:** account for the owner-qualified room id in ChatArea and deep-link fixtures ([73c7056](https://github.com/ExaDev/agent-comms/commit/73c70563bf735592d7b72d71bc0fcce6e61b4006))
+* **core:** cover version gossip, query_version, and formatting ([dda70ae](https://github.com/ExaDev/agent-comms/commit/dda70aef6ccfc796a2427bf971c3a2067e121234))
+* **core:** reproduce ROOM_NOT_FOUND when addressing a room by its plain local name ([a601d25](https://github.com/ExaDev/agent-comms/commit/a601d25522ed830ed8a225c471648c6ad0211d4f))
+
+### Chores
+
+* **deps:** bump wire-mesh-core and cc-peer ([2d570cc](https://github.com/ExaDev/agent-comms/commit/2d570cc247f3c6f18a3e531fe5d9b8e8085f36f2))
+
 ## [3.20.0](https://github.com/ExaDev/agent-comms/compare/v3.19.0...v3.20.0) (2026-09-18)
 
 ### Features
