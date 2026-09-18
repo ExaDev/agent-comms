@@ -40,6 +40,7 @@ import {
   saveIssuedDmGrant,
 } from "./user-identity.js";
 import { randomId } from "./random-id.js";
+import { resolveRoomId } from "./room-lookup.js";
 import { CommsError } from "./store.js";
 import {
   DM_SEND_GRANT_LIFETIME_MS,
@@ -395,7 +396,8 @@ export class RoomLifecycle {
   /**
    * Joins a room. For this store's own identity, "already known locally" is not the right gate for skipping real admission: the legacy full-state-sync replicates a room's metadata to every mesh-connected peer the moment it's created, well before that peer has ever been admitted, so a room already present in this.rooms says nothing about whether this store actually holds a valid room:member token for it. The real gate is that token's presence -- absent, this always goes through joinRemoteRoom's real wire-level admission regardless of what this.rooms already knows, so a peer that merely heard about a room never mistakes hearing about it for having joined it. Joining on behalf of a DIFFERENT agentId (this store's own convergence/admin bookkeeping, exercised directly by state-sync-convergence.test.ts) is untouched -- that's a pure local CRDT mutation with no admission concept at all.
    */
-  async joinRoom(roomId: string, agentId: string): Promise<Room> {
+  async joinRoom(roomIdOrName: string, agentId: string): Promise<Room> {
+    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
     const peerId = this.deps.getPeerId();
     if (agentId === peerId) {
       const { slot } = this.deps.requireIdentity();
@@ -478,7 +480,8 @@ export class RoomLifecycle {
   /**
    * Leaves a room. For this store's own identity leaving a room it does not itself own, the local Room object is only ever this store's own static snapshot from when it joined or was invited (P3.6/P3.8) -- mutating it directly, as the legacy branch below does, would tell nobody but this store itself. The real effect needs a wire round trip to the room's own owner instead, so this always defers to leaveRemoteRoom in that case. Leaving on behalf of a DIFFERENT agentId, or the owner leaving their own room (this store's own authoritative copy), is untouched -- that is the legacy CRDT mutation state-sync-convergence.test.ts exercises directly.
    */
-  async leaveRoom(roomId: string, agentId: string): Promise<void> {
+  async leaveRoom(roomIdOrName: string, agentId: string): Promise<void> {
+    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
     const room = this.deps.rooms.get(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
@@ -563,10 +566,11 @@ export class RoomLifecycle {
    * Invites targetId to roomId, over a real, wire-authenticated room.invite (P3.8): mints a fresh room:member grant for the target, records its own token-id the same way admitRoomJoin does (kickFromRoom can revoke an invited member's own grant exactly as it can a joined one), and pushes the grant to the target directly in the invite request itself -- room.invite is deliberately ungated (the room's own owner needs no capability to invite, per core/room's design), so the target's own verification of the embedded token is what proves this invite is genuine, not anything about the connection it arrived on. Retains the local CRDT invited-list bookkeeping (still this store's own record of who it has invited) but no longer broadcasts it: the target learns of the invite from the real request, not a mesh-wide patch.
    */
   async inviteToRoom(
-    roomId: string,
+    roomIdOrName: string,
     targetId: string,
     inviterId: string,
   ): Promise<void> {
+    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
     const room = this.deps.rooms.get(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
@@ -676,10 +680,11 @@ export class RoomLifecycle {
    * Kicks targetId from roomId. Beyond the legacy CRDT membership removal (retired in P3.8 along with every other non-message broadcastPatch caller), this revokes the member's own room:member grant for real: mints a revocation-entry for the token-id this identity recorded when it admitted them (admitRoomJoin's own saveIssuedRoomGrant), records it in this store's own RevocationView immediately (so this identity's own future verifications see the kick without waiting on its own gossip), and announces it to every connected peer so each one's independent verification of the target's token -- not just this room's owner -- also starts failing as "revoked" from here on. Silently skips the revocation step (kick still happens; only the token-side enforcement doesn't) when no issued-grant record exists for this member, e.g. a grant predating this bookkeeping.
    */
   async kickFromRoom(
-    roomId: string,
+    roomIdOrName: string,
     targetId: string,
     kickerId: string,
   ): Promise<void> {
+    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
     const room = this.deps.rooms.get(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
@@ -702,7 +707,8 @@ export class RoomLifecycle {
   /**
    * Destroys roomId, revoking every member's own room:member grant for real first (P3.8) -- the same revocation machinery kickFromRoom already uses, since destroying a room out from under its members is exactly as much a membership revocation as kicking them individually would be, just for all of them at once. Room-existence notification (agent_upsert/room_delete) stays on the legacy broadcastPatch for now: replacing it needs the same broader informational-events redesign the rest of P3.8 already tracks as separate, larger work, not something this specific fix should improvise alone.
    */
-  async destroyRoom(roomId: string, agentId: string): Promise<void> {
+  async destroyRoom(roomIdOrName: string, agentId: string): Promise<void> {
+    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
     const room = this.deps.rooms.get(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");

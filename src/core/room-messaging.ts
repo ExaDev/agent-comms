@@ -6,6 +6,7 @@ import { bytesFromHex, bytesToHex } from "wire-mesh-core/domain/device-id";
 import { dmRoomPath } from "./room-path.js";
 import { loadRoomTokens } from "./identity-store.js";
 import { randomId } from "./random-id.js";
+import { resolveRoomId } from "./room-lookup.js";
 import { recordRoomSendNotice } from "./room-notice-log.js";
 import { CommsError } from "./store.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
@@ -37,13 +38,14 @@ export class RoomMessaging {
    * durable, when true, additionally records this same message as a room-notice in the sender's own oplog via recordRoomSendNotice (P5, agent-comms#50) -- deliberately opt-in per call, not automatic: matching this codebase's own design principle that delivery and durable catch-up are the same artifact only when a caller actually opts a message into it. A caller that wants an offline member to be able to catch up on this specific message later passes true; every other send stays exactly as before.
    */
   async sendRoomMessage(
-    roomId: string,
+    roomIdOrName: string,
     from: string,
     content: string,
     replyTo?: string,
     streamingBehavior?: StreamingBehavior,
     durable?: boolean,
   ): Promise<RoomMessage> {
+    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
     const room = this.deps.rooms.get(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
@@ -113,10 +115,11 @@ export class RoomMessaging {
   }
 
   async readRoomMessages(
-    roomId: string,
+    roomIdOrName: string,
     since?: string,
   ): Promise<RoomMessage[]> {
     await Promise.resolve();
+    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
     const arr = this.deps.messages.get(roomId) ?? [];
     if (since === undefined || since === "") return [...arr];
     return arr.filter((m) => m.timestamp > since);
