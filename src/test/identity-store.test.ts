@@ -14,12 +14,14 @@ import { generateIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import {
   deleteGroupToken,
+  loadGatewayTrust,
   loadGroupTokens,
   loadOrCreateIdentity,
   loadIdentityForFront,
   probeSlotOwner,
   oplogDirFor,
   releaseIdentityLock,
+  saveGatewayTrust,
   saveGroupToken,
   type IdentitySlot,
 } from "../core/identity-store.js";
@@ -315,4 +317,72 @@ test("deleteGroupToken is a no-op when nothing was saved for that group path", (
   }).not.toThrow();
   expect(loadGroupTokens(slot)).toEqual({});
   releaseIdentityLock(slot);
+});
+
+test("loadGatewayTrust is empty for a slot that has never saved a trusted set", () => {
+  const { slot } = tempSlot("pi");
+  expect(loadGatewayTrust(slot)).toEqual([]);
+});
+
+test("loadGatewayTrust does not require an identity to have been created first, unlike loadRoomTokens/loadGroupTokens", () => {
+  const { slot } = tempSlot("pi");
+  expect(() => {
+    saveGatewayTrust(slot, ["aabbcc"]);
+  }).not.toThrow();
+  expect(loadGatewayTrust(slot)).toEqual(["aabbcc"]);
+});
+
+test("saveGatewayTrust persists the trusted set, loadGatewayTrust reloads the same list", () => {
+  const { slot } = tempSlot("pi");
+  saveGatewayTrust(slot, ["aabbcc", "ddeeff"]);
+  expect(loadGatewayTrust(slot)).toEqual(["aabbcc", "ddeeff"]);
+});
+
+test("saveGatewayTrust overwrites the previously saved set rather than merging with it", () => {
+  const { slot } = tempSlot("pi");
+  saveGatewayTrust(slot, ["aabbcc", "ddeeff"]);
+  saveGatewayTrust(slot, ["112233"]);
+  expect(loadGatewayTrust(slot)).toEqual(["112233"]);
+});
+
+test("saveGatewayTrust persists an empty set, clearing whatever was saved before", () => {
+  const { slot } = tempSlot("pi");
+  saveGatewayTrust(slot, ["aabbcc"]);
+  saveGatewayTrust(slot, []);
+  expect(loadGatewayTrust(slot)).toEqual([]);
+});
+
+test("the gateway trust file is written with owner-only permissions", () => {
+  const { slot, dir } = tempSlot("pi");
+  saveGatewayTrust(slot, ["aabbcc"]);
+  const file = fs
+    .readdirSync(dir)
+    .find((f) => f.startsWith("gateway-trust-") && f.endsWith(".json"));
+  expect(file, `expected a gateway-trust-*.json file in ${dir}`).toBeDefined();
+  if (file === undefined) throw new Error("expected a gateway-trust file");
+  const mode = fs.statSync(path.join(dir, file)).mode & PERMISSION_BITS_MASK;
+  expect(mode).toBe(OWNER_ONLY_RW_PERMISSIONS);
+});
+
+test("the gateway trust file is a sibling of the identity file, distinct per (harness, cwd)", () => {
+  const { slot, dir } = tempSlot("pi");
+  saveGatewayTrust(slot, ["aabbcc"]);
+  const file = fs
+    .readdirSync(dir)
+    .find((f) => f.startsWith("gateway-trust-") && f.endsWith(".json"));
+  expect(file).toBeDefined();
+  if (file === undefined) throw new Error("expected a gateway-trust file");
+  expect(path.dirname(path.join(dir, file))).toBe(dir);
+  expect(file).toContain("pi");
+});
+
+test("loadGatewayTrust returns empty for a slot whose gateway trust file is corrupt", () => {
+  const { slot, dir } = tempSlot("pi");
+  saveGatewayTrust(slot, ["aabbcc"]);
+  const file = fs
+    .readdirSync(dir)
+    .find((f) => f.startsWith("gateway-trust-") && f.endsWith(".json"));
+  if (file === undefined) throw new Error("expected a gateway-trust file");
+  fs.writeFileSync(path.join(dir, file), "not valid json{{{");
+  expect(loadGatewayTrust(slot)).toEqual([]);
 });

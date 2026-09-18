@@ -1,5 +1,5 @@
 /**
- * Persistent bridge identity: load-or-create the TLS key material for a (harness, cwd) slot so the device-id -- and therefore the peer and agent ID -- survives restarts. Also persists a per-room capability token set in the same slot, so a room membership grant survives a restart the same way the identity it was minted against does.
+ * Persistent bridge identity: load-or-create the TLS key material for a (harness, cwd) slot so the device-id -- and therefore the peer and agent ID -- survives restarts. Also persists a per-room capability token set in the same slot, so a room membership grant survives a restart the same way the identity it was minted against does. Also persists a slot's own trusted-gateway device-id set (agent-comms#186) in a sibling JSON file, so GatewayTrust's allowlist survives a restart the same way; unlike the room/group tokens above, this doesn't require an identity to already exist for the slot, since the trusted set has no dependency on this slot's own key material.
  *
  * Mesh state stays in memory and on the wire; the only thing on disk is this local credential (plus, now, the tokens minted against it), the same trust model as an SSH key. A lock file holding a PID keeps two live bridges in one slot from sharing an identity, which would put duplicate peer IDs on the mesh; the second bridge runs with an ephemeral identity (the behaviour before persistence) instead. Bridges without a graceful shutdown hook can skip releasing the lock: a stale lock is detected by probing the recorded PID, the same way the coordinator probes for stale agents.
  *
@@ -500,4 +500,41 @@ export function deleteIssuedRoomGrant(
     Object.entries(stored.issuedGrants).filter(([k]) => k !== key),
   );
   writeStoredIdentity(identityFile, { ...stored, issuedGrants });
+}
+
+/** A slot's own trusted-gateway allowlist (agent-comms#186) lives in its own sibling JSON file rather than inside the identity file: the trusted set has no dependency on this slot's own key material, so it doesn't share loadRoomTokens/saveRoomToken's "call loadOrCreateIdentity first" requirement, and GatewayTrust can be constructed against a slot before or independently of that slot's identity ever being loaded. */
+function gatewayTrustFilePath(slot: Readonly<IdentitySlot>): string {
+  const { dir } = slotPaths(slot);
+  const base = `gateway-trust-${slot.harness}--${slugifyCwd(slot.cwd)}`;
+  return path.join(dir, `${base}.json`);
+}
+
+/**
+ * Every remote device-id this slot's gateway currently trusts, lowercase hex, in insertion order. Empty if the slot has never saved a trusted set, or its gateway trust file is missing or unparseable.
+ */
+export function loadGatewayTrust(slot: Readonly<IdentitySlot>): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(gatewayTrustFilePath(slot), "utf-8"));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((entry): entry is string => typeof entry === "string");
+}
+
+/**
+ * Persists a slot's complete trusted-gateway device-id set, surviving a restart the same way the identity it gates alongside does. Overwrites whatever was saved before in full: GatewayTrust always calls this with its own current list() after every add/remove, so there is no per-device partial update to preserve here the way saveRoomToken preserves other rooms' tokens.
+ */
+export function saveGatewayTrust(
+  slot: Readonly<IdentitySlot>,
+  trusted: readonly string[],
+): void {
+  const { dir } = slotPaths(slot);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(
+    gatewayTrustFilePath(slot),
+    `${JSON.stringify(trusted, null, 2)}\n`,
+    { encoding: "utf-8", mode: 0o600 },
+  );
 }
