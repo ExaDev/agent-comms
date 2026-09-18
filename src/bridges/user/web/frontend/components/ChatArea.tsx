@@ -4,12 +4,13 @@
 
 import { Burger, Button, Group, Stack, Text, TextInput } from "@mantine/core";
 import { useState } from "react";
-import type { DisplayMessage } from "../types.js";
+import type { DisplayMessage, Room } from "../types.js";
 import { parseInput } from "../input.js";
 import { MessageList } from "./MessageList.js";
 
 interface ChatAreaProps {
   messages: readonly DisplayMessage[];
+  rooms: readonly Room[];
   currentRoom: string | undefined;
   dmTarget: string | undefined;
   connected: boolean;
@@ -22,6 +23,7 @@ interface ChatAreaProps {
 
 export function ChatArea({
   messages,
+  rooms,
   currentRoom,
   dmTarget,
   connected,
@@ -33,8 +35,14 @@ export function ChatArea({
 }: ChatAreaProps) {
   const [inputText, setInputText] = useState("");
 
+  // currentRoom is the room's real owner-qualified id (`<owner-hex>/<local-name>`), not something meant for display -- resolve it back to the plain name the room was created with, the same name the sidebar list already shows, rather than surfacing the internal id verbatim.
+  const currentRoomName =
+    currentRoom === undefined
+      ? undefined
+      : (rooms.find((room) => room.id === currentRoom)?.name ?? currentRoom);
+
   const headerText =
-    currentRoom ??
+    currentRoomName ??
     (dmTarget !== undefined ? `DM with ${dmTarget}` : "Select a room");
 
   const handleSend = () => {

@@ -57,6 +57,7 @@ export function App(props: AppProps) {
       <AppShell.Main h="100vh">
         <ChatArea
           messages={props.messages}
+          rooms={props.rooms}
           currentRoom={props.currentRoom}
           dmTarget={props.dmTarget}
           connected={props.connected}
