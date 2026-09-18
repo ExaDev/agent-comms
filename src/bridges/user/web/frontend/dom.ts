@@ -1,8 +1,7 @@
 /**
  * DOM utilities for the web UI.
  *
- * escapeHtml and formatTime are used by message rendering.
- * requireElement is used by the entry point to grab the root mount point.
+ * formatTime is used by message rendering. requireElement is used by the entry point to grab the root mount point.
  */
 
 /**
@@ -28,19 +27,6 @@ export function requireElement(
     );
   }
   return el;
-}
-
-/**
- * HTML-escape a string for safe insertion.
- * With Preact JSX, text content is auto-escaped — this is only needed
- * when constructing raw HTML strings.
- */
-export function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 /**
