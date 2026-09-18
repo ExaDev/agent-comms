@@ -110,10 +110,17 @@ function resolveHandle(
   };
 }
 
-/** Handles one already-verified-and-approved incoming request, given its authenticated connection handle. Registered per params.verb (room.send, room.join, ...), never per command.verb (the shared room:member capability every ordinary membership verb rides under) -- see this file's own header comment. */
+/** Extra facts about a request's own transport-level origin that a room-verb handler may need beyond its resolved ConnectionHandle -- currently just the hub-relay address, since RoomVerbHandler's own (request, handle) shape has no way to reach "which raw session/connection this arrived on" (agent-comms#216). Every field is optional, and every call site with nothing to report supplies an empty object rather than omitting origin altogether -- only the hub-relayed dispatch path (dispatchHubRequest, hub-session.ts) has ever anything to report here. */
+export interface RoomRequestOrigin {
+  /** This side's own dialled address for the hub this request was relayed through, when relayed and known -- the answering side's equivalent of wire-mesh-core's own TracePathOptions.localHubAddress/PathTraceLocal.hubAddress on the sending side. Read directly off HubSession's own currently-dialled URL by dispatchHubRequest's caller (HubSession.consume), the one place that both receives the raw hub session and knows this fact -- never rederived here. */
+  relayHubAddress?: string;
+}
+
+/** Handles one already-verified-and-approved incoming request, given its authenticated connection handle and this request's own transport-level origin. Registered per params.verb (room.send, room.join, ...), never per command.verb (the shared room:member capability every ordinary membership verb rides under) -- see this file's own header comment. origin is optional here (mirroring handleRequest's own optionality below) rather than required, since most existing handlers never look at it and a good number of tests call a handler value straight out of roomVerbHandlers with just (request, handle) -- only path.trace's own handler (mesh-graph.ts) actually reads it, and does so via an optional-chained read rather than assuming it is always supplied. */
 export type RoomVerbHandler = (
   request: IncomingManageRequest,
   handle: Readonly<ConnectionHandle>,
+  origin?: Readonly<RoomRequestOrigin>,
 ) => Promise<ManageOutcome>;
 
 export interface RoomRouterOptions {
@@ -124,10 +131,11 @@ export interface RoomRouterOptions {
 }
 
 export interface RoomRouter {
-  /** Handles one already-received request. Exported for direct unit testing; drainSession below is the thin per-session loop wrapper real callers use. */
+  /** Handles one already-received request. Exported for direct unit testing; drainSession below is the thin per-session loop wrapper real callers use. origin defaults to an empty object (nothing to report) when omitted -- an ordinary local peer session's own call sites (drainSession, WireMeshTransport's consumeQuarantined) never have anything to supply here; only the hub-relayed dispatch path (hub-session.ts's dispatchHubRequest, which calls this directly as its own handleRoomRequest dep) ever passes a real one. */
   handleRequest: (
     request: IncomingManageRequest,
     handle: Readonly<ConnectionHandle>,
+    origin?: Readonly<RoomRequestOrigin>,
   ) => Promise<void>;
   /** Consumes one session's incomingManageRequests until it ends, dispatching each request via handleRequest. Becomes the single consumer of that iterable from this point on -- the caller must not also iterate the same session's incomingManageRequests itself once this is called. allowOnBehalfOf (default false) permits resolveHandle's own "on-behalf-of" substitution for every request on this session -- wire-mesh-transport.ts's consumeIncoming passes true only when this session's peer identity matches this side's own recorded coordinator device (see resolveHandle's own doc comment for why identity, not call site, is what's checked). */
   drainSession: (
@@ -141,6 +149,7 @@ export function createRoomRouter(options: RoomRouterOptions): RoomRouter {
   async function handleRequest(
     request: IncomingManageRequest,
     handle: Readonly<ConnectionHandle>,
+    origin: Readonly<RoomRequestOrigin> = {},
   ): Promise<void> {
     if (request.command.verb === FRAME_VERB) {
       const message = extractMessage(request.command);
@@ -159,7 +168,7 @@ export function createRoomRouter(options: RoomRouterOptions): RoomRouter {
         .catch(() => undefined);
       return;
     }
-    const outcome = await handler(request, handle);
+    const outcome = await handler(request, handle, origin);
     await request.respond(outcome).catch(() => undefined);
   }
 
