@@ -1,24 +1,45 @@
 /**
  * GatewayTrust -- the cross-machine trust boundary (agent-comms#156, agent-comms#153's third leg): an allowlist of remote device-ids this machine's gateway will advertise its local agents to, accept forwarded hub traffic from, and route outbound hub requests to. Deny-all by default: empty until an operator explicitly trusts at least one remote device, the same no-CA pin-the-key model ordinary peer connections already use.
  *
- * In-memory only, deliberately mirroring the precedent set by v1's own FederationManager.trustedFingerprints (retired with federation.ts, commit 4232b08) -- neither persists to disk, so trust is re-established each run rather than carried across restarts. This isn't a gap being deferred: v1 never persisted its own equivalent allowlist either, so no existing behaviour is being narrowed by keeping this one in memory too.
+ * Persisted per bridge slot when constructed with one (agent-comms#186), mirroring identity-store.ts's own per-slot room-token/issued-grant persistence: the trusted set is loaded from that slot's own sibling JSON file (identity-store.ts's loadGatewayTrust) on construction, and written back in full (saveGatewayTrust) after every add/remove, so trust survives a gateway restart instead of needing to be re-established every run. The in-memory Set below remains the live source of truth for isTrusted/hasAny at all times; persistence is purely load-on-construct and save-on-mutate. Constructed with no slot, this class keeps the original v1 FederationManager.trustedFingerprints precedent (retired with federation.ts, commit 4232b08): in-memory only, never touching disk. Every pre-#186 construction site (most tests, and any caller with no bridge identity slot to hand) falls into this no-slot case unchanged.
  *
  * Keyed by individual device-id, not by "one entry per remote machine": wire-mesh-core's relay-hub protocol (relay-hub.ts, gossip-frame, relay-data-frame) carries no field identifying which remote gateway connection a given directory entry or relayed request actually originated from -- only the entry/request's own device-id, which may be an ordinary local peer forwarded on a remote machine's behalf rather than that machine's own coordinator. Gating per individual device-id is therefore the finest-grained, and only wire-protocol-honest, trust boundary actually implementable without a wire-mesh-core protocol change (deliberately out of scope here, matching agent-comms#156's own "gating the hub itself is out of scope" framing) -- confirmed as the intended granularity by hub-session.ts's own pre-existing isStateMutatingMessage doc comment, which already named this exact gap as "agent-comms#156's own future deliverable" of "per-peer" admission control. An operator who wants every local peer on a remote machine reachable trusts each of that machine's device-ids individually, not just its coordinator's.
  */
+import type { IdentitySlot } from "./identity-store.js";
+import { loadGatewayTrust, saveGatewayTrust } from "./identity-store.js";
+
 /** The read-only slice of GatewayTrust every consumer of the trust boundary actually needs (WireMeshTransport, HubSession, hub-forwarding.ts) -- named so call sites that only ever read trust decisions, never mutate them, don't repeat the same `Pick<GatewayTrust, "isTrusted" | "hasAny">` inline at every field/parameter that takes one. */
 export type GatewayTrustReader = Pick<GatewayTrust, "isTrusted" | "hasAny">;
 
 export class GatewayTrust {
   private readonly trusted = new Set<string>();
+  private readonly slot: Readonly<IdentitySlot> | undefined;
 
-  /** Marks a remote device-id (hex, case-insensitive) as trusted: this side will merge its gossiped directory entries, dispatch its relayed requests, and route outbound hub requests to it. Idempotent. */
-  add(deviceHex: string): void {
-    this.trusted.add(deviceHex.toLowerCase());
+  /** Constructs the trust boundary, optionally bound to a bridge identity slot for persistence (agent-comms#186); see this class's own doc comment for what a slot does and doesn't change. Given a slot, immediately loads whatever device-ids were trusted before the last restart into the initial in-memory set. */
+  constructor(slot?: Readonly<IdentitySlot>) {
+    this.slot = slot;
+    if (slot !== undefined) {
+      for (const deviceHex of loadGatewayTrust(slot)) {
+        this.trusted.add(deviceHex);
+      }
+    }
   }
 
-  /** Withdraws a previously trusted device-id (hex, case-insensitive). A no-op if it was never trusted. Mirrors FederationManager.removeTrustedFingerprint's own precedent: already-merged directory entries and in-flight requests are unaffected -- this governs future traffic only. */
+  /** Marks a remote device-id (hex, case-insensitive) as trusted: this side will merge its gossiped directory entries, dispatch its relayed requests, and route outbound hub requests to it. Idempotent. Persists the updated set when this instance was constructed with a slot. */
+  add(deviceHex: string): void {
+    this.trusted.add(deviceHex.toLowerCase());
+    this.persist();
+  }
+
+  /** Withdraws a previously trusted device-id (hex, case-insensitive). A no-op if it was never trusted. Mirrors FederationManager.removeTrustedFingerprint's own precedent: already-merged directory entries and in-flight requests are unaffected -- this governs future traffic only. Persists the updated set when this instance was constructed with a slot. */
   remove(deviceHex: string): void {
     this.trusted.delete(deviceHex.toLowerCase());
+    this.persist();
+  }
+
+  /** Writes the complete current trusted set back to this instance's own slot, if it was constructed with one. A no-op for the in-memory-only (no slot) case. */
+  private persist(): void {
+    if (this.slot !== undefined) saveGatewayTrust(this.slot, this.list());
   }
 
   /** Every currently trusted device-id, lowercase hex, in insertion order. */
