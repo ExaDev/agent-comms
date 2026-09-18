@@ -1,5 +1,5 @@
 /**
- * Unit tests for computeMeshGraph (agent-comms#199/#201).
+ * Unit tests for computeMeshGraph (agent-comms#199/#201) and handlePathTraceRequest (agent-comms#199/#216).
  */
 
 import { describe, expect, it } from "vitest";
@@ -7,8 +7,16 @@ import {
   deviceIdFromHex,
   deviceIdToHex,
 } from "wire-mesh-core/domain/device-id";
+import type {
+  IncomingManageRequest,
+  ManageOutcome,
+} from "wire-mesh-core/domain/mesh-session";
 import type { PeerAdvert } from "wire-mesh-core/generated/protocol";
-import { computeMeshGraph } from "../core/mesh-graph.js";
+import {
+  computeMeshGraph,
+  handlePathTraceRequest,
+} from "../core/mesh-graph.js";
+import type { ConnectionHandle } from "../core/transport.js";
 
 /** A device-id is a hex-encoded SHA-256 hash: 32 bytes, 64 hex characters. */
 const DEVICE_ID_HEX_LENGTH = 64;
@@ -109,5 +117,66 @@ describe("computeMeshGraph", () => {
     for (const node of graph.nodes) {
       expect(deviceIdToHex(deviceIdFromHex(node))).toBe(node);
     }
+  });
+});
+
+const TEST_HANDLE: ConnectionHandle = { id: DEVICE_A_HEX };
+
+function fakeIncomingRequest(
+  fromDeviceHex?: string,
+): Readonly<IncomingManageRequest> {
+  return {
+    requestId: 1,
+    command: { verb: "path:trace", params: {} },
+    scope: { kind: "room" },
+    ...(fromDeviceHex !== undefined
+      ? { fromDevice: deviceIdFromHex(fromDeviceHex) }
+      : {}),
+    respond: async (): Promise<void> => undefined,
+  };
+}
+
+describe("handlePathTraceRequest", () => {
+  it("reports relayHubAddress from origin as the response's own hub-address extension, for a relayed request", async () => {
+    const outcome = await handlePathTraceRequest(
+      fakeIncomingRequest(DEVICE_B_HEX),
+      TEST_HANDLE,
+      { relayHubAddress: "wss://hub.example/" },
+    );
+
+    expect(outcome).toEqual({
+      result: "ok",
+      relayed: true,
+      "hub-address": "wss://hub.example/",
+    });
+  });
+
+  it("omits hub-address when origin carries no relayHubAddress, even for a relayed request", async () => {
+    const outcome: ManageOutcome = await handlePathTraceRequest(
+      fakeIncomingRequest(DEVICE_B_HEX),
+      TEST_HANDLE,
+      {},
+    );
+
+    expect(outcome).toEqual({ result: "ok", relayed: true });
+  });
+
+  it("omits hub-address when the caller supplies no origin at all", async () => {
+    const outcome = await handlePathTraceRequest(
+      fakeIncomingRequest(DEVICE_B_HEX),
+      TEST_HANDLE,
+    );
+
+    expect(outcome).toEqual({ result: "ok", relayed: true });
+  });
+
+  it("omits hub-address for a direct (non-relayed) request even when origin carries relayHubAddress", async () => {
+    const outcome = await handlePathTraceRequest(
+      fakeIncomingRequest(),
+      TEST_HANDLE,
+      { relayHubAddress: "wss://hub.example/" },
+    );
+
+    expect(outcome).toEqual({ result: "ok", relayed: false });
   });
 });
