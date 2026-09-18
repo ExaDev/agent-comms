@@ -17,7 +17,7 @@ import type {
   Room,
   RoomMessage,
 } from "./types.js";
-import type { ListenerInfo } from "./transport.js";
+import type { ListenerInfo, MeshGraph, MeshTraceResult } from "./transport.js";
 import type { CommsStore } from "./comms-store.js";
 import type { DiscoveryManager } from "./discovery.js";
 import { CommsError } from "./store.js";
@@ -43,6 +43,7 @@ import {
   gatewayUntrust,
   gatewayListTrusted,
 } from "./gateway-trust-actions.js";
+import { meshGraphAction, meshTraceAction } from "./mesh-graph-trace-tool.js";
 
 /** Table column widths for the plain-text listing helpers below, chosen to line up with the existing aligned output. */
 const ROOM_TYPE_COLUMN_WIDTH = 7;
@@ -156,6 +157,8 @@ export interface MeshOnlyFeatures {
   queryVersion?: (
     deviceId: string,
   ) => Promise<{ version: string } | { error: string }>;
+  meshGraph?: () => MeshGraph;
+  meshTrace?: (target: string, timeoutMs?: number) => Promise<MeshTraceResult>;
 }
 
 /** Uniform "this bridge isn't backed by a mesh transport" result for a MeshOnlyFeatures method that isn't present on the current store. */
@@ -291,6 +294,10 @@ export class CommsTool {
           return await this.meshSetVisibility(action);
         case "mesh_get_visibility":
           return this.meshGetVisibility(action);
+        case "mesh_graph":
+          return meshGraphAction(this.store);
+        case "mesh_trace":
+          return await meshTraceAction(this.store, action);
         case "gateway_trust":
           return gatewayTrust(this.store, action);
         case "gateway_untrust":
