@@ -842,6 +842,21 @@ export class MeshStore implements CommsStore {
     return this.gatewayTrust.list();
   }
 
+  /** Trusts a remote user-principal device-id (hex, agent-comms#187): a peer presenting a token whose delegation chain roots at this principal is trusted via GatewayTrust.isTrustedFor, without its own bare device-id ever needing individual trust. Entirely independent of the bare-device allowlist addTrustedGateway manages. */
+  addTrustedGatewayPrincipal(deviceHex: string): void {
+    this.gatewayTrust.addPrincipal(deviceHex);
+  }
+
+  /** Withdraws trust from a remote user-principal device-id (hex). A no-op if it was never trusted. */
+  removeTrustedGatewayPrincipal(deviceHex: string): void {
+    this.gatewayTrust.removePrincipal(deviceHex);
+  }
+
+  /** Every currently trusted remote user-principal device-id (hex). */
+  listTrustedGatewayPrincipals(): string[] {
+    return this.gatewayTrust.listPrincipals();
+  }
+
   // -----------------------------------------------------------------------
   // Connection codes (agent-comms#188) -- bootstrapping gateway trust with no existing mesh connection between the two devices
   // -----------------------------------------------------------------------

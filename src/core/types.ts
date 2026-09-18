@@ -444,10 +444,14 @@ export const CommsActionSchema = defineSchema(
     z.object({
       action: z.literal("gateway_trust"),
       device: z.string(),
+      /** When true, `device` is trusted as a user principal (GatewayTrust.addPrincipal, agent-comms#187) rather than a bare remote device-id (agent-comms#193). Omitted or false keeps the original bare-device behaviour. */
+      principal: z.boolean().optional(),
     }),
     z.object({
       action: z.literal("gateway_untrust"),
       device: z.string(),
+      /** When true, `device` is withdrawn from the principal allowlist (GatewayTrust.removePrincipal, agent-comms#187) rather than the bare-device one (agent-comms#193). Omitted or false keeps the original bare-device behaviour. */
+      principal: z.boolean().optional(),
     }),
     z.object({ action: z.literal("gateway_list_trusted") }),
     z.object({

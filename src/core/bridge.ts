@@ -116,6 +116,8 @@ export const MCP_TOOL_PARAMS = z.object({
   /** The redeemed code's own signature field (gateway_redeem_connection_code), or a PGP fingerprint the caller already independently trusts, used either to pin a supplied publicKey or to fetch one from a keyserver when publicKey is omitted. */
   signature: z.string().optional(),
   fingerprint: z.string().optional(),
+  /** For gateway_trust/gateway_untrust: when true, `device` names a user principal (agent-comms#187) rather than a bare remote device-id (agent-comms#193). */
+  principal: z.boolean().optional(),
 });
 
 export type ToolParams = z.infer<typeof MCP_TOOL_PARAMS>;
@@ -400,11 +402,19 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
     case "gateway_trust":
       if (p.device === undefined)
         throw new BuildActionError("gateway_trust", "device");
-      return { action: "gateway_trust", device: p.device };
+      return {
+        action: "gateway_trust",
+        device: p.device,
+        ...(p.principal !== undefined && { principal: p.principal }),
+      };
     case "gateway_untrust":
       if (p.device === undefined)
         throw new BuildActionError("gateway_untrust", "device");
-      return { action: "gateway_untrust", device: p.device };
+      return {
+        action: "gateway_untrust",
+        device: p.device,
+        ...(p.principal !== undefined && { principal: p.principal }),
+      };
     case "gateway_list_trusted":
       return { action: "gateway_list_trusted" };
     case "gateway_generate_connection_code":
