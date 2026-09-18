@@ -1,3 +1,14 @@
+## [3.17.0](https://github.com/ExaDev/agent-comms/compare/v3.16.0...v3.17.0) (2026-09-18)
+
+### Features
+
+* **core:** accept a principal flag on gateway_trust/gateway_untrust ([95f3b91](https://github.com/ExaDev/agent-comms/commit/95f3b9113020e1e1fdf5d3466a8372ae4ef71dd9)), references [agent-comms#187](https://github.com/agent-comms/issues/187)
+* **core:** route gateway_trust/gateway_untrust to principal trust ([4fe7469](https://github.com/ExaDev/agent-comms/commit/4fe746953e2c8528933c1f4ed8a6a26756b2e0b6)), closes [#193](https://github.com/ExaDev/agent-comms/issues/193), references [agent-comms#187](https://github.com/agent-comms/issues/187)
+
+### Refactoring
+
+* **core:** split gateway-trust action handlers out of tool.ts ([8e1d3c6](https://github.com/ExaDev/agent-comms/commit/8e1d3c6e988cd671efdd4f5786fba45ecde635c1))
+
 ## [3.16.0](https://github.com/ExaDev/agent-comms/compare/v3.15.0...v3.16.0) (2026-09-18)
 
 ### Features
