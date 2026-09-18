@@ -188,6 +188,15 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
         version: 1.30.0(supports-color@7.2.0)(zod@4.4.3)
+      '@orpc/client':
+        specifier: 2.0.0-beta.35
+        version: 2.0.0-beta.35
+      '@orpc/contract':
+        specifier: 2.0.0-beta.35
+        version: 2.0.0-beta.35
+      '@orpc/server':
+        specifier: 2.0.0-beta.35
+        version: 2.0.0-beta.35
       '@sinclair/typebox':
         specifier: '*'
         version: 0.34.49
@@ -1945,6 +1954,26 @@ packages:
     resolution: {integrity: sha512-eSYWTm620tTk45EKSedaUL8MFYI8hW164hIXsgIHyxu3VobUB3fFCu5t0hQby6OoWRPsG1KkKUG2M5UadiLiVg==}
     engines: {node: '>=14'}
 
+  '@orpc/client@2.0.0-beta.35':
+    resolution: {integrity: sha512-r/8CNzT2+uFefA+auufc2UCX2esA6Q8WnNMUXv916kVAr4vkR4M9/dFHkOyZUW1NhI9yj6SqSdURlFrv6N+3eA==}
+
+  '@orpc/contract@2.0.0-beta.35':
+    resolution: {integrity: sha512-NjuzRNQAhIeozt3alkOVXrXlTTzgpUo9XDAdt/FPcmSEsUyv4BgJfY19WcIpclqSWv6yO7Wp/i5f4CGmUiGG8A==}
+
+  '@orpc/server@2.0.0-beta.35':
+    resolution: {integrity: sha512-q4I6f8eOxZ+7TwBv+wHbRZeTSmPCLEGcU7K1m2EZ7jEdl/VgzRp9wHOhT4ODkneDLhd6PJZxF81uL9q/QGOiHg==}
+    peerDependencies:
+      crossws: '>=0.3.4'
+      fastify: '>=5.6.1'
+    peerDependenciesMeta:
+      crossws:
+        optional: true
+      fastify:
+        optional: true
+
+  '@orpc/shared@2.0.0-beta.35':
+    resolution: {integrity: sha512-b3CN1oHnkkC9IDN1ByTbes3PdgBdOgo7wfsyqkLgk3hgUbjZ1lwb6TiqzuKjrfSljYiEZX2TlND/sZN6YR4tFA==}
+
   '@oxc-project/types@0.148.0':
     resolution: {integrity: sha512-Nm4s/jB+4FpFsPhWGEC4h7rzksesmtnMXomo6rCMcg/b8zLQuOziRgkCS1fxDCXOlJB/6Q8oABOZ/OP6RIPj9A==}
 
@@ -2391,6 +2420,35 @@ packages:
 
   '@stablelib/base64@1.0.1':
     resolution: {integrity: sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ==}
+
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  '@standard-server/aws-lambda@0.9.1':
+    resolution: {integrity: sha512-tuxRWy9usi7tcu0eWgPrC094eHTCXqD9dTYbVXbUXCcOzeipw90djj0WbHhFm+OasCXJK9qYX/+cUoT1UmE1Cw==}
+
+  '@standard-server/core@0.9.1':
+    resolution: {integrity: sha512-wdCAdCH3M/GxNqEnDW/YQnzNz1T5hWuALzjh7lVyWwIZ2i9OBsOp4PFqFDhkAO2erfhOT1zVSrnJn9t8v6LbkQ==}
+
+  '@standard-server/fastify@0.9.1':
+    resolution: {integrity: sha512-O5+CfuRh7S+1HB8OpGTQoMVpSz1RASsrSQmD//VNgW6C6JVs0POZ5y+th1FVtPVoWAkAgQOzsp1k5mWcbb0TJQ==}
+    peerDependencies:
+      fastify: '>=5.6.1'
+    peerDependenciesMeta:
+      fastify:
+        optional: true
+
+  '@standard-server/fetch@0.9.1':
+    resolution: {integrity: sha512-5bLvjTFXkx2BLZIhTll6orEZcmSmgcz9W2YCm+9UsvQ/DvxCtsWNW+myIyVSOMiTXxs3JpahLUu5vtNTo+5keg==}
+
+  '@standard-server/node@0.9.1':
+    resolution: {integrity: sha512-BfDf/U1UITHTOIeSkAJaXmaOY7uT+9tHPLwNrfm223oruL3O2VTeps7uNK8xYDK9QDB3BIIrm6caL5gSGeBj7g==}
+
+  '@standard-server/peer@0.9.1':
+    resolution: {integrity: sha512-YH/Nfp5WKACs4ohB5rcB/NsD8CvkYJeycx6cHDhYufoLRxtae404j7ttlvmCTPMspnqmC/G2ZizgqYe5U6LelA==}
+
+  '@standard-server/shared@0.9.1':
+    resolution: {integrity: sha512-RVldmIg9j6a0o3IF/LZWc677ukSeBJWmhBr3pvgRq7bO4HymRlf5h7OjEL5rrT/BGTptjLYvw/SEWsiZht4rjA==}
 
   '@stryker-mutator/api@10.0.0':
     resolution: {integrity: sha512-ZtAJ0ZT3MVRCWJTBE2h90XB/6E+4lifHYtcTyNG6nU2nLekPgTo4gD5esjX6Okxo1b/JB4jJzyxYB54fwKAoJw==}
@@ -3198,6 +3256,10 @@ packages:
   cookie@0.7.2:
     resolution: {integrity: sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w==}
     engines: {node: '>= 0.6'}
+
+  cookie@2.0.1:
+    resolution: {integrity: sha512-yuToqVvRrj6pfDXREyQAAv8SkAEk/8GS3jQRTiUMm66TVtBYmqQeoEjL2Lmq8Rpo6271vH76InTChTitEAm65w==}
+    engines: {node: '>=22'}
 
   core-js-compat@3.50.0:
     resolution: {integrity: sha512-XGpFGbMLHwSt74YLTKho7Ib242qi6O8MSX+sRokV4oz7iKXvQWGYZthjIhjRGMxjzVkAubBO512dKGYcefmX3Q==}
@@ -5295,6 +5357,10 @@ packages:
   qs@6.16.0:
     resolution: {integrity: sha512-h6fhOIaRrID2CbEY2fqs+7t+UXZo+MLAnU5gRIq85uFtdiUPCdsApMlHhXogKVM4HM2DVbIjGNTTYH2OcmP1vA==}
     engines: {node: '>=0.6'}
+
+  radash@12.1.1:
+    resolution: {integrity: sha512-h36JMxKRqrAxVD8201FrCpyeNuUY9Y5zZwujr20fFO77tpUtGa6EZzfKw/3WaiBX95fq7+MpsuMLNdSnORAwSA==}
+    engines: {node: '>=14.18.0'}
 
   range-parser@1.3.0:
     resolution: {integrity: sha512-hek2mFQpPuI4E1BBKrSto+BU3e3x4xuarsbiwr3+lf7p44juvFMV0XFWQAP3xUyqXA4RrXLIoaSUGbSt056ZMw==}
@@ -8318,6 +8384,38 @@ snapshots:
 
   '@opentelemetry/semantic-conventions@1.43.0': {}
 
+  '@orpc/client@2.0.0-beta.35':
+    dependencies:
+      '@orpc/shared': 2.0.0-beta.35
+      '@standard-server/core': 0.9.1
+      '@standard-server/fetch': 0.9.1
+      '@standard-server/peer': 0.9.1
+
+  '@orpc/contract@2.0.0-beta.35':
+    dependencies:
+      '@orpc/client': 2.0.0-beta.35
+      '@orpc/shared': 2.0.0-beta.35
+      '@standard-schema/spec': 1.1.0
+
+  '@orpc/server@2.0.0-beta.35':
+    dependencies:
+      '@orpc/client': 2.0.0-beta.35
+      '@orpc/contract': 2.0.0-beta.35
+      '@orpc/shared': 2.0.0-beta.35
+      '@standard-server/aws-lambda': 0.9.1
+      '@standard-server/core': 0.9.1
+      '@standard-server/fastify': 0.9.1
+      '@standard-server/fetch': 0.9.1
+      '@standard-server/node': 0.9.1
+      '@standard-server/peer': 0.9.1
+      cookie: 2.0.1
+
+  '@orpc/shared@2.0.0-beta.35':
+    dependencies:
+      '@standard-server/shared': 0.9.1
+      radash: 12.1.1
+      type-fest: 5.8.0
+
   '@oxc-project/types@0.148.0': {}
 
   '@pkgr/core@0.3.6': {}
@@ -8686,6 +8784,42 @@ snapshots:
       tslib: 2.8.1
 
   '@stablelib/base64@1.0.1': {}
+
+  '@standard-schema/spec@1.1.0': {}
+
+  '@standard-server/aws-lambda@0.9.1':
+    dependencies:
+      '@standard-server/core': 0.9.1
+      '@standard-server/fetch': 0.9.1
+      '@standard-server/node': 0.9.1
+      '@standard-server/shared': 0.9.1
+
+  '@standard-server/core@0.9.1':
+    dependencies:
+      '@standard-server/shared': 0.9.1
+
+  '@standard-server/fastify@0.9.1':
+    dependencies:
+      '@standard-server/core': 0.9.1
+      '@standard-server/node': 0.9.1
+
+  '@standard-server/fetch@0.9.1':
+    dependencies:
+      '@standard-server/core': 0.9.1
+      '@standard-server/shared': 0.9.1
+
+  '@standard-server/node@0.9.1':
+    dependencies:
+      '@standard-server/core': 0.9.1
+      '@standard-server/fetch': 0.9.1
+      '@standard-server/shared': 0.9.1
+
+  '@standard-server/peer@0.9.1':
+    dependencies:
+      '@standard-server/core': 0.9.1
+      '@standard-server/shared': 0.9.1
+
+  '@standard-server/shared@0.9.1': {}
 
   '@stryker-mutator/api@10.0.0':
     dependencies:
@@ -9368,7 +9502,7 @@ snapshots:
 
   buffer-image-size@0.6.4:
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 26.5.1
     optional: true
 
   bun-types@1.3.14:
@@ -9562,6 +9696,8 @@ snapshots:
   cookie-signature@1.2.2: {}
 
   cookie@0.7.2: {}
+
+  cookie@2.0.1: {}
 
   core-js-compat@3.50.0:
     dependencies:
@@ -10501,7 +10637,7 @@ snapshots:
 
   happy-dom@20.10.6:
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 26.5.1
       '@types/whatwg-mimetype': 3.0.2
       '@types/ws': 8.18.1
       buffer-image-size: 0.6.4
@@ -11936,6 +12072,8 @@ snapshots:
     dependencies:
       es-define-property: 1.0.1
       side-channel: 1.1.1
+
+  radash@12.1.1: {}
 
   range-parser@1.3.0: {}
 
