@@ -4,11 +4,15 @@
  * Renders sidebar + chat area inside an AppShell. Receives state and action callbacks from the imperative shell in main.tsx.
  */
 
-import { AppShell } from "@mantine/core";
+import { AppShell, SegmentedControl } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import type { Agent, DisplayMessage, Room } from "../types.js";
+import { useState } from "react";
+import type { Agent, DisplayMessage, MeshGraph, Room } from "../types.js";
 import { ChatArea } from "./ChatArea.js";
+import { MeshPanel } from "./MeshPanel.js";
 import { Sidebar } from "./Sidebar.js";
+
+type MainView = "chat" | "mesh";
 
 export interface AppProps {
   rooms: readonly Room[];
@@ -17,6 +21,7 @@ export interface AppProps {
   dmTarget: string | undefined;
   messages: readonly DisplayMessage[];
   connected: boolean;
+  meshGraph: MeshGraph | undefined;
   onJoinRoom: (roomId: string) => void;
   onSelectAgent: (agentId: string) => void;
   onRenameAgent: (agentId: string, newName: string) => void;
@@ -33,6 +38,7 @@ export interface AppProps {
 
 export function App(props: AppProps) {
   const [navOpened, { toggle: toggleNav }] = useDisclosure(true);
+  const [mainView, setMainView] = useState<MainView>("chat");
 
   return (
     <AppShell
@@ -53,20 +59,35 @@ export function App(props: AppProps) {
           onCreateRoom={props.onCreateRoom}
           onJoinRoomInput={props.onJoinRoomInput}
         />
+        <SegmentedControl
+          m="xs"
+          size="xs"
+          fullWidth
+          value={mainView}
+          onChange={setMainView}
+          data={[
+            { label: "Chat", value: "chat" },
+            { label: "Mesh", value: "mesh" },
+          ]}
+        />
       </AppShell.Navbar>
       <AppShell.Main h="100vh">
-        <ChatArea
-          messages={props.messages}
-          rooms={props.rooms}
-          currentRoom={props.currentRoom}
-          dmTarget={props.dmTarget}
-          connected={props.connected}
-          sidebarOpened={navOpened}
-          onToggleSidebar={toggleNav}
-          onSendAction={props.onSendAction}
-          onLeaveRoom={props.onLeaveRoom}
-          onConnectToMesh={props.onConnectToMesh}
-        />
+        {mainView === "chat" ? (
+          <ChatArea
+            messages={props.messages}
+            rooms={props.rooms}
+            currentRoom={props.currentRoom}
+            dmTarget={props.dmTarget}
+            connected={props.connected}
+            sidebarOpened={navOpened}
+            onToggleSidebar={toggleNav}
+            onSendAction={props.onSendAction}
+            onLeaveRoom={props.onLeaveRoom}
+            onConnectToMesh={props.onConnectToMesh}
+          />
+        ) : (
+          <MeshPanel graph={props.meshGraph} />
+        )}
       </AppShell.Main>
     </AppShell>
   );

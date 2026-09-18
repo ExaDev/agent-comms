@@ -5,7 +5,7 @@
  * Consumers subscribe to changes and re-render as needed.
  */
 
-import type { Agent, DisplayMessage, Room } from "./types.js";
+import type { Agent, DisplayMessage, MeshGraph, Room } from "./types.js";
 
 export type StateChangeListener = (state: Readonly<ClientState>) => void;
 
@@ -16,6 +16,8 @@ export interface ClientState {
   rooms: readonly Room[];
   messages: readonly DisplayMessage[];
   connected: boolean;
+  /** The mesh's connection graph (agent-comms#199/#201), refreshed on the same WS-driven triggers as agents/rooms. Undefined until the first successful fetch, or when this bridge isn't mesh-backed. */
+  meshGraph: MeshGraph | undefined;
 }
 
 const INITIAL_STATE: ClientState = {
@@ -25,6 +27,7 @@ const INITIAL_STATE: ClientState = {
   rooms: [],
   messages: [],
   connected: false,
+  meshGraph: undefined,
 };
 
 export class State {
@@ -70,6 +73,11 @@ export class State {
 
   setConnected(connected: boolean): void {
     this.state = { ...this.state, connected };
+    this.notify();
+  }
+
+  setMeshGraph(meshGraph: MeshGraph): void {
+    this.state = { ...this.state, meshGraph };
     this.notify();
   }
 
