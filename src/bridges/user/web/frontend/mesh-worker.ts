@@ -238,11 +238,14 @@ export function connect(url: string): void {
     },
     reconnect: {
       enabled: true,
+      // attempt === 1 is the very first connection, never a retry -- oRPC's own documented default for this option (`info => info.attempt === 1 ? 0 : 2_000`) special-cases it to 0 for exactly this reason. Missing that case here meant every single connection, including the first, waited out a real ~2s delay before ever attempting to connect -- confirmed directly: e2e specs that create a room or send a message went from ~300ms to ~2.6s each once this landed, and dropped straight back down once fixed.
       delay: (info) =>
-        Math.min(
-          RECONNECT_BASE_DELAY_MS * 2 ** info.attempt,
-          RECONNECT_MAX_DELAY_MS,
-        ),
+        info.attempt === 1
+          ? 0
+          : Math.min(
+              RECONNECT_BASE_DELAY_MS * 2 ** info.attempt,
+              RECONNECT_MAX_DELAY_MS,
+            ),
     },
     plugins: [new RetryLinkPlugin()],
   });
@@ -284,7 +287,7 @@ async function pumpEvents(
             broadcastToPorts({ type: "patch", patch: event.patch });
             break;
           case "delivery":
-            // Not yet part of the worker's LEGACY tab-facing protocol -- delivery events still flow to tabs over the separate legacy chat socket (main.tsx's CommsWs) until that cutover lands. The new oRPC tab-contract.ts subscribeEvents above already carries it via localPublisher.
+            // Not part of the legacy postMessage protocol's own WorkerOutbound union -- delivery events reach tabs exclusively through the oRPC tab-contract.ts subscribeEvents stream, via localPublisher.publish(event) above (applied uniformly to every event kind, not just this one).
             break;
         }
       }

@@ -10,7 +10,6 @@ import { MantineProvider } from "@mantine/core";
 import { useEffect } from "react";
 import { App } from "./components/App.js";
 import {
-  CommsWs,
   fetchAgents,
   fetchMeshGraph,
   fetchRoomMessages,
@@ -21,7 +20,7 @@ import { State } from "./state.js";
 import { useClientState } from "./use-client-state.js";
 import { MeshClient } from "./mesh-client.js";
 import { theme } from "./theme.js";
-import type { Action, DisplayMessage, WsFrame } from "./types.js";
+import type { Action, DisplayMessage } from "./types.js";
 
 import { isLocalHost, hasConnectedBefore } from "./boot-logic.js";
 
@@ -55,6 +54,8 @@ const state = new State();
 
 const meshClient = new MeshClient();
 
+let wasConnected = false;
+
 meshClient.subscribe((meshState) => {
   // Apply real-time mesh state updates on top of the REST-fetched baseline. The MeshClient delivers authoritative state from the mesh worker, which maintains a local copy of all agents and rooms.
   if (meshState.agents.length > 0) {
@@ -64,6 +65,30 @@ meshClient.subscribe((meshState) => {
     state.setRooms(meshState.rooms);
   }
   state.setConnected(meshState.connected);
+
+  if (meshState.connected !== wasConnected) {
+    wasConnected = meshState.connected;
+    addMessage({
+      type: "system",
+      text: meshState.connected
+        ? "Connected to mesh"
+        : "Disconnected — reconnecting...",
+    });
+  }
+});
+
+meshClient.onDelivery((event) => {
+  const msg = deliveryEventToMessage(event, state.get().currentRoom);
+  if (msg) addMessage(msg);
+
+  if (
+    event.type === "member_joined" ||
+    event.type === "member_left" ||
+    event.type === "member_status" ||
+    event.type === "name_changed"
+  ) {
+    void refreshState();
+  }
 });
 
 // Don't auto-connect the MeshClient on first load. The user must explicitly connect to avoid Chrome's "access device" prompt appearing before the user understands the UI. meshClient.connect() is called from onConnectToMesh().
@@ -77,76 +102,18 @@ function addMessage(msg: DisplayMessage): void {
 }
 
 // ---------------------------------------------------------------------------
-// WebSocket
-// ---------------------------------------------------------------------------
-
-let pendingAction: Action | undefined;
-
-const ws = new CommsWs({
-  onOpen: () => {
-    state.setConnected(true);
-    addMessage({ type: "system", text: "Connected to mesh" });
-  },
-  onClose: () => {
-    state.setConnected(false);
-    addMessage({ type: "system", text: "Disconnected — reconnecting..." });
-  },
-  onFrame: handleFrame,
-});
-
-function handleFrame(frame: WsFrame): void {
-  const s = state.get();
-
-  switch (frame.type) {
-    case "delivery": {
-      const msg = deliveryEventToMessage(frame.event, s.currentRoom);
-      if (msg) addMessage(msg);
-
-      if (
-        frame.event.type === "member_joined" ||
-        frame.event.type === "member_left" ||
-        frame.event.type === "member_status" ||
-        frame.event.type === "name_changed"
-      ) {
-        void refreshState();
-      }
-      break;
-    }
-
-    case "result":
-      addMessage({ type: "system", text: frame.result.content });
-      if (!frame.result.isError) {
-        if (
-          pendingAction?.action === "join_room" &&
-          (state.get().currentRoom === undefined ||
-            state.get().currentRoom === "")
-        ) {
-          const roomId = pendingAction.room;
-          state.setDmTarget(undefined);
-          state.setCurrentRoom(roomId);
-        }
-        void refreshState();
-      }
-      pendingAction = undefined;
-      break;
-
-    case "error":
-      addMessage({ type: "status", text: `Error: ${frame.message}` });
-      break;
-
-    case "state":
-      state.applyState(frame.agents, frame.rooms);
-      break;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
 
-function sendAction(action: Action): void {
-  pendingAction = action;
-  ws.sendAction(action);
+async function sendAction(action: Action): Promise<void> {
+  const result = await meshClient.sendAction(action);
+  addMessage({
+    type: result.isError ? "status" : "system",
+    text: result.isError ? `Error: ${result.content}` : result.content,
+  });
+  if (!result.isError) {
+    void refreshState();
+  }
 }
 
 async function refreshState(): Promise<void> {
@@ -171,7 +138,7 @@ async function onJoinRoom(roomId: string): Promise<void> {
   state.setCurrentRoom(roomId);
   state.clearMessages();
 
-  sendAction({ action: "join_room", room: roomId });
+  void sendAction({ action: "join_room", room: roomId });
 
   // Load history (skip REST fetch on standalone PWA — no server)
   if (isLocalServer) {
@@ -194,7 +161,7 @@ function onLeaveRoom(): void {
     // currentRoom is the room's real owner-qualified id -- resolve it back to the plain name it was created with for the confirmation message, the same way ChatArea's own header resolves it for display.
     const roomName =
       s.rooms.find((room) => room.id === currentRoom)?.name ?? currentRoom;
-    sendAction({ action: "leave_room", room: currentRoom });
+    void sendAction({ action: "leave_room", room: currentRoom });
     state.setCurrentRoom(undefined);
     state.clearMessages();
     addMessage({ type: "system", text: `Left room "${roomName}"` });
@@ -220,7 +187,7 @@ function handleSendAction(text: string): void {
 
   switch (result.kind) {
     case "action":
-      sendAction(result.action);
+      void sendAction(result.action);
       break;
     case "local":
       addMessage({ type: "system", text: result.result.text });
@@ -241,7 +208,7 @@ function onCreateRoom(
     type,
     ...(description ? { description } : {}),
   };
-  sendAction(action);
+  void sendAction(action);
 }
 
 function onJoinRoomInput(roomName: string): void {
@@ -249,13 +216,12 @@ function onJoinRoomInput(roomName: string): void {
 }
 
 function onRenameAgent(agentId: string, newName: string): void {
-  sendAction({ action: "rename_agent", agent: agentId, name: newName });
+  void sendAction({ action: "rename_agent", agent: agentId, name: newName });
 }
 
 function onConnectToMesh(): void {
   localStorage.setItem("agent-comms-connected", "true");
   meshClient.connect();
-  if (isLocalServer) ws.connect();
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +271,6 @@ const deepLink = parseDeepLink(location.search);
 const previouslyConnected = hasConnectedBefore(localStorage);
 if (isLocalServer || previouslyConnected) {
   meshClient.connect();
-  if (isLocalServer) ws.connect();
 }
 
 // Initial state fetch, then resolve any deep link from the URL
