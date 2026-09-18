@@ -22,7 +22,24 @@ export type ActionDispatchClient = Pick<
   | "declineInvite"
   | "kick"
   | "renameAgent"
+  | "pushSubscribe"
+  | "pushUnsubscribe"
 >;
+
+/** The exact subscription shape meshContract's pushSubscribe procedure requires -- mirrors actions.ts's own server-side isPushSubscription guard, since a flat action object's `subscription` field arrives as unknown here too. */
+function isPushSubscriptionLike(
+  value: unknown,
+): value is { endpoint: string; keys: { p256dh: string; auth: string } } {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("endpoint" in value) || typeof value.endpoint !== "string")
+    return false;
+  if (!("keys" in value)) return false;
+  const keys = value.keys;
+  if (typeof keys !== "object" || keys === null) return false;
+  if (!("p256dh" in keys) || typeof keys.p256dh !== "string") return false;
+  if (!("auth" in keys) || typeof keys.auth !== "string") return false;
+  return true;
+}
 
 export async function dispatchAction(
   client: Readonly<ActionDispatchClient>,
@@ -77,6 +94,15 @@ export async function dispatchAction(
       return client.kick({ room: str("room"), agent: str("agent") });
     case "rename_agent":
       return client.renameAgent({ agent: str("agent"), name: str("name") });
+    case "push_subscribe": {
+      const subscription = action.subscription;
+      if (!isPushSubscriptionLike(subscription)) {
+        return { content: "Invalid push subscription", isError: true };
+      }
+      return client.pushSubscribe({ subscription, agentId: optStr("agentId") });
+    }
+    case "push_unsubscribe":
+      return client.pushUnsubscribe({ agentId: optStr("agentId") });
     default:
       return {
         content: `Unknown action: ${String(action.action)}`,
