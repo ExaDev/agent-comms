@@ -41,10 +41,11 @@ import {
 } from "wire-mesh-core/domain/mesh-session";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import {
-  handleDataEntries,
-  handleDataHave,
-  handleDataRequest,
-} from "wire-mesh-core/domain/data-sync";
+  computeMeshGraph,
+  handlePathTraceRequest,
+  traceMeshPath,
+} from "./mesh-graph.js";
+import { routeDataFrame } from "./data-frame-routing.js";
 import type {
   CapabilityScope,
   CapabilityToken,
@@ -66,7 +67,9 @@ import type {
   ConnectionHandle,
   ListenerInfo,
   ListenerPolicy,
+  MeshGraph,
   MeshTransport,
+  MeshTraceResult,
   TransportEvents,
 } from "./transport.js";
 import type { PeerIdentity } from "./identity.js";
@@ -125,9 +128,6 @@ export interface AgentSelfAdvert {
   tags: string[];
   subscribedRooms: string[];
 }
-
-/** Upper bound on the number of oplog entries handleDataRequest returns in a single data-entries response -- generous for the small, chat-sized messages this domain carries today, while still bounding one peer's worst-case memory/frame size when answering a request for a large catch-up gap. A requester short of this still gets everything up to its own current head; anything beyond it needs a follow-up data-request, exactly the same incremental-catch-up shape a data-have/data-request/data-entries cycle already has. */
-const DATA_ENTRIES_RESPONSE_LIMIT = 100;
 
 /** This project's own namespaced domain (registrant "exadev.io", local name "agent-comms-v1"), matching namespaced-domain-id's "<registrant>/<local-name>" shape -- registry/core-domains.md's own recommended pattern for a third party. Exported for test use only: a security test simulating a hostile client that skips connect_request needs to construct a well-formed frame under the same domain/verb/scope this transport itself listens on, rather than duplicating these as separately-maintained magic strings that could silently drift from the real values. */
 export const DOMAIN = "exadev.io/agent-comms-v1";
@@ -223,6 +223,24 @@ export class WireMeshTransport implements MeshTransport {
     }));
   }
 
+  /** Assembles this side's own best-effort view of the mesh's connection graph (agent-comms#199) -- see mesh-graph.ts's own computeMeshGraph for the actual implementation, kept out of this already-large file. */
+  meshGraph(): MeshGraph {
+    return computeMeshGraph(this.knownDevices);
+  }
+
+  /** Sends path.trace to targetDeviceHex (agent-comms#199) -- see mesh-graph.ts's own traceMeshPath for the actual direct-or-hub fallback, kept out of this already-large file. */
+  async meshTrace(
+    targetDeviceHex: string,
+    timeoutMs?: number,
+  ): Promise<MeshTraceResult> {
+    return traceMeshPath(
+      this.peerSessions,
+      this.hub,
+      targetDeviceHex,
+      timeoutMs,
+    );
+  }
+
   /** Registers a session in both peerSessions (addressing -- last one in for a given peer wins) and allSessions (shutdown -- every session, always). */
   private trackSession(key: string, session: AcceptedMeshSession): void {
     this.peerSessions.set(key, session);
@@ -283,10 +301,10 @@ export class WireMeshTransport implements MeshTransport {
     });
     this.identityReady = toIdentityPort(identity);
     this.gatewayTrust = gatewayTrust;
-    // Built before this.hub below (roomRouter has no dependency on it) so the hub can be wired with a direct this.roomRouter.handleRequest reference rather than a lazy closure.
+    // Built before this.hub below (roomRouter has no dependency on it) so the hub can be wired with a direct this.roomRouter.handleRequest reference rather than a lazy closure. path.trace (agent-comms#199) is always registered here, ahead of any caller-supplied roomVerbHandlers, since every real construction site wants it answered identically regardless of which room verbs it registers.
     this.roomRouter = createRoomRouter({
       events,
-      ...(roomVerbHandlers !== undefined ? { handlers: roomVerbHandlers } : {}),
+      handlers: { "path.trace": handlePathTraceRequest, ...roomVerbHandlers },
     });
     this.hub = new HubSession({
       identityReady: this.identityReady,
@@ -340,35 +358,21 @@ export class WireMeshTransport implements MeshTransport {
   }
 
   /** Registers (or refreshes) the raw connection a frame arrived on, then answers a data-have/data-request/data-entries frame in place, sending any resulting response frame back over the same connection -- every other frame type is ignored here (applyFrame's own dispatch already owns those). Trust-gated on peerSessions already tracking this device: a connection still in quarantine (pre-approval) gets its own frames observed here too (registration is unconditional, since a later approved sendDataFrame call still needs to find it), but never acted on until trackSession has actually run for it. A response or storage failure is reported via onError and otherwise dropped -- the peer's own next data-have/retry is what recovers, the same as any other best-effort gossip-driven exchange in this file. */
+  /** Routes one core/data frame -- see data-frame-routing.ts's own routeDataFrame for the actual dispatch, kept out of this already-large file. */
   private async handleDataFrame(
     connection: Readonly<Connection>,
     frame: Frame,
   ): Promise<void> {
-    const peerDeviceId = connection.peerDeviceId;
-    if (peerDeviceId === undefined) return;
-    const deviceIdHex = deviceIdToHex(peerDeviceId);
-    this.connectionsByPeer.set(deviceIdHex, connection);
-    if (this.dataStorage === undefined) return;
-    if (!this.peerSessions.has(deviceIdHex)) return;
-    try {
-      if (frame.type === "data-have") {
-        const request = await handleDataHave(this.dataStorage, frame);
-        if (request !== null) await connection.send(request);
-      } else if (frame.type === "data-request") {
-        const entries = await handleDataRequest(
-          this.dataStorage,
-          frame,
-          DATA_ENTRIES_RESPONSE_LIMIT,
-        );
-        if (entries !== null) await connection.send(entries);
-      } else if (frame.type === "data-entries") {
-        await handleDataEntries(this.dataStorage, frame);
-      }
-    } catch (error: unknown) {
-      this.events.onError?.(
-        error instanceof Error ? error : new Error(String(error)),
-      );
-    }
+    await routeDataFrame(
+      {
+        connectionsByPeer: this.connectionsByPeer,
+        dataStorage: this.dataStorage,
+        peerSessions: this.peerSessions,
+        onError: this.events.onError,
+      },
+      connection,
+      frame,
+    );
   }
 
   // -- Public getters --
