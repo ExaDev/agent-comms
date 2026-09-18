@@ -32,6 +32,11 @@ const RENEWAL_MARGIN_FRACTION = 12;
 /** Renew during the final twelfth of the certificate's validity. */
 const RENEWAL_MARGIN_MS = CERTIFICATE_VALIDITY_MS / RENEWAL_MARGIN_FRACTION;
 
+/** A persisted identity/token/trust/ledger file holds real key material or capability tokens, so it is written owner-only. */
+const OWNER_ONLY_RW_PERMISSIONS = 0o600;
+/** One Int32 element's worth of bytes -- sleepSync's own shared buffer needs no more than a single slot for Atomics.wait to block on. */
+const INT32_BYTE_LENGTH = 4;
+
 /** A CapabilityToken (COSE_Sign1: [protected header bytes, unprotected header map, payload bytes or null, signature bytes]) with every byte-string field base64-encoded for JSON storage. Only the two named unprotected-header fields (alg, kid) are round-tripped -- every token minted by wire-mesh-core today leaves the unprotected header empty (alg/kid live in the protected header instead), so the schema's own open catchall for arbitrary extra keys is left unhandled until a real caller actually needs one preserved. */
 type SerializedCapabilityToken = [
   string,
@@ -192,8 +197,55 @@ function readLockPid(lockFile: string): number | undefined {
   return Number.isInteger(pid) ? pid : undefined;
 }
 
-function writeLock(lockFile: string): void {
-  fs.writeFileSync(lockFile, `${String(process.pid)}\n`, "utf-8");
+function isEexist(err: unknown): boolean {
+  if (!(err instanceof Error) || !("code" in err)) return false;
+  return err.code === "EEXIST";
+}
+
+/**
+ * Writes content to filePath atomically: the full content is written to a temporary sibling file first, then renamed into place. rename() on the same filesystem is atomic, so a concurrent reader of filePath always sees either the complete previous content or the complete new content, never a truncated or partially-written file -- unlike a bare writeFileSync, whose own open(O_TRUNC)-then-write leaves a real window where a concurrent reader can observe an empty or partial file.
+ */
+function writeFileAtomic(
+  filePath: string,
+  content: string,
+  mode: number,
+): void {
+  const tmpFile = `${filePath}.${String(process.pid)}.${String(Math.random()).slice(2)}.tmp`;
+  fs.writeFileSync(tmpFile, content, { encoding: "utf-8", mode });
+  fs.renameSync(tmpFile, filePath);
+}
+
+/**
+ * Attempts to atomically claim lockFile for this process via write-temp-then-hardlink: link() is POSIX-guaranteed atomic and exclusive (it fails with EEXIST if the target name already exists), and because the temp file's content is fully written before the link is created, the lock file's content can never be observed incomplete the instant its name exists -- unlike a bare open(O_CREAT|O_EXCL) followed by a separate write(), which leaves a real window where the file exists with zero bytes. Returns the current holder when someone else already holds it (a live different PID blocks the claim; a stale one is taken over here, racing a concurrent taker-over the same way a live holder would -- whichever wins the exclusive link claims it, the loser simply reports the winner's PID once it re-reads the lock).
+ */
+function tryAcquireLock(
+  lockFile: string,
+): { acquired: true } | { acquired: false; heldBy: number | undefined } {
+  const claim = (): boolean => {
+    const tmpFile = `${lockFile}.${String(process.pid)}.tmp`;
+    fs.writeFileSync(tmpFile, `${String(process.pid)}\n`, "utf-8");
+    try {
+      fs.linkSync(tmpFile, lockFile);
+      return true;
+    } catch (err) {
+      if (!isEexist(err)) throw err;
+      return false;
+    } finally {
+      fs.rmSync(tmpFile, { force: true });
+    }
+  };
+
+  if (claim()) return { acquired: true };
+
+  const heldBy = readLockPid(lockFile);
+  if (heldBy !== undefined && heldBy !== process.pid && isPidAlive(heldBy)) {
+    return { acquired: false, heldBy };
+  }
+
+  // The existing lock is stale (a dead PID, or unreadable) -- take it over.
+  fs.rmSync(lockFile, { force: true });
+  if (claim()) return { acquired: true };
+  return { acquired: false, heldBy: readLockPid(lockFile) };
 }
 
 function persistIdentity(identityFile: string, identity: PeerIdentity): void {
@@ -202,10 +254,11 @@ function persistIdentity(identityFile: string, identity: PeerIdentity): void {
     certificate: identity.certificate,
     expiresAt: new Date(Date.now() + CERTIFICATE_VALIDITY_MS).toISOString(),
   };
-  fs.writeFileSync(identityFile, `${JSON.stringify(stored, null, 2)}\n`, {
-    encoding: "utf-8",
-    mode: 0o600,
-  });
+  writeFileAtomic(
+    identityFile,
+    `${JSON.stringify(stored, null, 2)}\n`,
+    OWNER_ONLY_RW_PERMISSIONS,
+  );
 }
 
 /**
@@ -217,18 +270,15 @@ export function loadOrCreateIdentity(
   const { dir, identityFile, lockFile } = slotPaths(slot);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 
-  const heldBy = readLockPid(lockFile);
-  if (heldBy !== undefined && heldBy !== process.pid && isPidAlive(heldBy)) {
+  const claim = tryAcquireLock(lockFile);
+  if (!claim.acquired) {
     console.error(
-      `agent-comms: identity slot ${slot.harness} (${slot.cwd}) is held by live pid ${String(heldBy)}; running with an ephemeral identity`,
+      `agent-comms: identity slot ${slot.harness} (${slot.cwd}) is held by live pid ${String(claim.heldBy)}; running with an ephemeral identity`,
     );
     return generateIdentity();
   }
 
-  const identity =
-    loadStoredIdentity(identityFile) ?? createIdentity(identityFile);
-  writeLock(lockFile);
-  return identity;
+  return loadStoredIdentity(identityFile) ?? createIdentity(identityFile);
 }
 
 /**
@@ -327,10 +377,42 @@ function writeStoredIdentity(
   identityFile: string,
   stored: StoredIdentity,
 ): void {
-  fs.writeFileSync(identityFile, `${JSON.stringify(stored, null, 2)}\n`, {
-    encoding: "utf-8",
-    mode: 0o600,
-  });
+  writeFileAtomic(
+    identityFile,
+    `${JSON.stringify(stored, null, 2)}\n`,
+    OWNER_ONLY_RW_PERMISSIONS,
+  );
+}
+
+// Total time to wait for a concurrent lock holder to finish creating the slot's identity file before giving up. loadOrCreateIdentity always finishes creating the file before any other process can observe its lock as taken (tryAcquireLock is the very first thing it does), so a caller that lost that race and is left holding an ephemeral identity may still reach here before the winner's own createIdentity call (a keygen plus one atomic write) has completed -- 2s is generously above that real cost even on a loaded machine, while still bounded so a holder that crashed mid-creation doesn't wedge this call forever.
+const CONCURRENT_CREATE_WAIT_MS = 2000;
+// Poll interval while waiting -- deliberately short, since the wait is expected to resolve in low single-digit milliseconds in the overwhelmingly common case.
+const CONCURRENT_CREATE_POLL_MS = 10;
+
+function sleepSync(ms: number): void {
+  const view = new Int32Array(new SharedArrayBuffer(INT32_BYTE_LENGTH));
+  Atomics.wait(view, 0, 0, ms);
+}
+
+/**
+ * Reads the slot's stored identity, waiting briefly for it to appear if it doesn't exist yet but a different live process currently holds the slot's lock -- that process is, by construction, in the middle of creating it (see loadOrCreateIdentity/tryAcquireLock), so a caller racing as this slot's own ephemeral loser should wait for the real winner to finish rather than fail outright. Falls through to the ordinary "missing" result (undefined) once the lock is no longer held by a different live process, or the wait budget runs out -- both signal there is genuinely nothing to wait for.
+ */
+function readStoredIdentityWaitingForConcurrentCreate(
+  identityFile: string,
+  lockFile: string,
+): StoredIdentity | undefined {
+  const deadline = Date.now() + CONCURRENT_CREATE_WAIT_MS;
+  for (;;) {
+    const stored = readStoredIdentity(identityFile);
+    if (stored !== undefined) return stored;
+
+    const heldBy = readLockPid(lockFile);
+    const heldByDifferentLiveProcess =
+      heldBy !== undefined && heldBy !== process.pid && isPidAlive(heldBy);
+    if (!heldByDifferentLiveProcess || Date.now() >= deadline) return undefined;
+
+    sleepSync(CONCURRENT_CREATE_POLL_MS);
+  }
 }
 
 /**
@@ -357,8 +439,11 @@ export function saveRoomToken(
   roomPath: string,
   token: CapabilityToken,
 ): void {
-  const { identityFile } = slotPaths(slot);
-  const stored = readStoredIdentity(identityFile);
+  const { identityFile, lockFile } = slotPaths(slot);
+  const stored = readStoredIdentityWaitingForConcurrentCreate(
+    identityFile,
+    lockFile,
+  );
   if (stored === undefined) {
     throw new Error(
       `no identity persisted for this slot yet -- call loadOrCreateIdentity first (${identityFile})`,
@@ -411,8 +496,11 @@ export function saveGroupToken(
   groupPath: string,
   token: CapabilityToken,
 ): void {
-  const { identityFile } = slotPaths(slot);
-  const stored = readStoredIdentity(identityFile);
+  const { identityFile, lockFile } = slotPaths(slot);
+  const stored = readStoredIdentityWaitingForConcurrentCreate(
+    identityFile,
+    lockFile,
+  );
   if (stored === undefined) {
     throw new Error(
       `no identity persisted for this slot yet -- call loadOrCreateIdentity first (${identityFile})`,
@@ -471,8 +559,11 @@ export function saveIssuedRoomGrant(
   memberDeviceHex: string,
   tokenId: Uint8Array,
 ): void {
-  const { identityFile } = slotPaths(slot);
-  const stored = readStoredIdentity(identityFile);
+  const { identityFile, lockFile } = slotPaths(slot);
+  const stored = readStoredIdentityWaitingForConcurrentCreate(
+    identityFile,
+    lockFile,
+  );
   if (stored === undefined) {
     throw new Error(
       `no identity persisted for this slot yet -- call loadOrCreateIdentity first (${identityFile})`,
@@ -560,10 +651,10 @@ export function saveGatewayTrust(
     devices: [...devices],
     principals: [...principals],
   };
-  fs.writeFileSync(
+  writeFileAtomic(
     gatewayTrustFilePath(slot),
     `${JSON.stringify(stored, null, 2)}\n`,
-    { encoding: "utf-8", mode: 0o600 },
+    OWNER_ONLY_RW_PERMISSIONS,
   );
 }
 
@@ -644,9 +735,9 @@ export function saveConnectionCodeLedger(
 ): void {
   const { dir } = slotPaths(slot);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(
+  writeFileAtomic(
     connectionCodesFilePath(slot),
     `${JSON.stringify(ledger, null, 2)}\n`,
-    { encoding: "utf-8", mode: 0o600 },
+    OWNER_ONLY_RW_PERMISSIONS,
   );
 }
