@@ -1,3 +1,15 @@
+## [3.17.1](https://github.com/ExaDev/agent-comms/compare/v3.17.0...v3.17.1) (2026-09-18)
+
+### Bug Fixes
+
+* **core:** stop gating hub-relayed room-domain verbs behind bare-device trust ([e06c1c1](https://github.com/ExaDev/agent-comms/commit/e06c1c15c6056e59d82d39a643c8eadd518e1d3d)), references [#187](https://github.com/ExaDev/agent-comms/issues/187)
+
+### Tests
+
+* **bridge:** move port-discovery fixture ports out of the OS ephemeral port range ([ef7ee17](https://github.com/ExaDev/agent-comms/commit/ef7ee17d0952f07eead0f0c67bf0465cb9fc8191)), closes [#196](https://github.com/ExaDev/agent-comms/issues/196)
+* **core:** prove a hub-relayed room.join reaches human approval untrusted ([ccc8616](https://github.com/ExaDev/agent-comms/commit/ccc86160e79a31263f3f9b60574930b03ab87c64))
+* **core:** prove gossip directory-merge accepts a principal-only trust ([bbbdaf6](https://github.com/ExaDev/agent-comms/commit/bbbdaf6a6ac60226b99e036df32db4d3bf82ae0b))
+
 ## [3.17.0](https://github.com/ExaDev/agent-comms/compare/v3.16.0...v3.17.0) (2026-09-18)
 
 ### Features
