@@ -17,8 +17,12 @@ import WS from "ws";
 
 /** HTTP 200 OK. */
 const HTTP_OK = 200;
+/** HTTP 400 Bad Request. */
+const HTTP_BAD_REQUEST = 400;
 /** HTTP 404 Not Found. */
 const HTTP_NOT_FOUND = 404;
+/** A device-id is a hex-encoded SHA-256 hash: 32 bytes, 64 hex characters. */
+const DEVICE_ID_HEX_LENGTH = 64;
 
 /** Find a free port on localhost by binding to port 0, matching the pattern used by the mesh core's own integration tests -- an isolated coordinator port keeps this suite from colliding with a real agent-comms mesh already running on the developer's machine (the default coordinator port, 19876, is a well-known constant every real bridge instance binds). */
 async function findFreePort(): Promise<number> {
@@ -222,6 +226,55 @@ describe("Web server integration", () => {
       ).toBeTruthy();
       const typed = frame as { type: string };
       expect(typed.type).toBe("state");
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("returns the mesh graph via GET /api/mesh/graph", async () => {
+    const { port, cleanup } = await setup();
+    try {
+      const { status, body } = await fetchJson(port, "/api/mesh/graph");
+      expect(status).toBe(HTTP_OK);
+      expect(
+        typeof body === "object" &&
+          body !== null &&
+          Array.isArray((body as { nodes?: unknown }).nodes) &&
+          Array.isArray((body as { edges?: unknown }).edges),
+        "should return a {nodes, edges} graph",
+      ).toBeTruthy();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("returns 400 from GET /api/mesh/trace with no target", async () => {
+    const { port, cleanup } = await setup();
+    try {
+      const { status, body } = await fetchJson(port, "/api/mesh/trace");
+      expect(status).toBe(HTTP_BAD_REQUEST);
+      expect(
+        typeof body === "object" && body !== null && "error" in body,
+        "should return an error body",
+      ).toBeTruthy();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("returns a not_connected trace result for an unreachable target via GET /api/mesh/trace", async () => {
+    const { port, cleanup } = await setup();
+    try {
+      const { status, body } = await fetchJson(
+        port,
+        `/api/mesh/trace?target=${"0".repeat(DEVICE_ID_HEX_LENGTH)}`,
+      );
+      expect(status).toBe(HTTP_OK);
+      const typed = body as {
+        outcome?: { result?: string; code?: string };
+      };
+      expect(typed.outcome?.result).toBe("error");
+      expect(typed.outcome?.code).toBe("not_connected");
     } finally {
       await cleanup();
     }

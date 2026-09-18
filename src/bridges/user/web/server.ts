@@ -10,6 +10,8 @@
  *   GET  /api/rooms  → list rooms
  *   GET  /api/rooms/:id/messages → read room messages
  *   POST /api/action → execute any CommsAction
+ *   GET  /api/mesh/graph → the mesh's connection graph (agent-comms#199/#201)
+ *   GET  /api/mesh/trace?target=<deviceHex>&timeoutMs=<n> → live path trace to a device
  *
  * When AGENT_COMMS_WEB_CONSOLE_DIST points at a built wire-mesh web-console
  * (see web-console-static.ts), GET /web-console/* also serves that as an
@@ -30,6 +32,7 @@ import { PushManager } from "../../../core/push-manager.js";
 import type { PushSubscription } from "../../../core/web-push.js";
 import { ChatController } from "../controller.js";
 import type { MeshStore } from "../../../core/mesh-store.js";
+import { CommsError } from "../../../core/store.js";
 import type {
   MeshMessage,
   MeshStatePatch,
@@ -64,6 +67,8 @@ const HTTP_NO_CONTENT = 204;
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_NOT_FOUND = 404;
+const HTTP_INTERNAL_SERVER_ERROR = 500;
+const HTTP_NOT_IMPLEMENTED = 501;
 
 // ---------------------------------------------------------------------------
 // Static assets — loaded into memory at module load
@@ -444,6 +449,43 @@ function handleRequest(
     return;
   }
 
+  if (url.pathname === "/api/mesh/graph" && req.method === "GET") {
+    try {
+      json(res, controller.meshStore.meshGraph());
+    } catch (err) {
+      jsonError(
+        res,
+        meshErrorMessage(err),
+        meshErrorStatus(err, HTTP_INTERNAL_SERVER_ERROR),
+      );
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/mesh/trace" && req.method === "GET") {
+    void (async () => {
+      const target = url.searchParams.get("target");
+      if (target === null || target === "") {
+        jsonError(res, "target query parameter required", HTTP_BAD_REQUEST);
+        return;
+      }
+      const timeoutMsParam = url.searchParams.get("timeoutMs");
+      const timeoutMs =
+        timeoutMsParam !== null ? Number(timeoutMsParam) : undefined;
+      try {
+        const result = await controller.meshStore.meshTrace(target, timeoutMs);
+        json(res, result);
+      } catch (err) {
+        jsonError(
+          res,
+          meshErrorMessage(err),
+          meshErrorStatus(err, HTTP_BAD_REQUEST),
+        );
+      }
+    })();
+    return;
+  }
+
   if (url.pathname === "/api/action" && req.method === "POST") {
     void (async () => {
       const body = await readBody(req);
@@ -784,6 +826,19 @@ function jsonError(
 ): void {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ error: message }));
+}
+
+/** Extracts a reportable message from whatever meshGraph()/meshTrace() threw -- a CommsError has a real message, anything else is reported generically rather than leaking an unexpected error shape to the client. */
+function meshErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Unknown error";
+}
+
+/** A transport that doesn't support mesh_graph/mesh_trace (CommsError code NOT_SUPPORTED, e.g. this bridge is running on FileStore rather than a real mesh) is a client-visible "this endpoint isn't available here" rather than a server fault. Any other error falls back to `otherwise` -- HTTP_BAD_REQUEST for mesh_trace, since its only other realistic failure is a malformed client-supplied target; HTTP_INTERNAL_SERVER_ERROR for mesh_graph, which takes no client input at all. */
+function meshErrorStatus(err: unknown, otherwise: number): number {
+  if (err instanceof CommsError && err.code === "NOT_SUPPORTED") {
+    return HTTP_NOT_IMPLEMENTED;
+  }
+  return otherwise;
 }
 
 async function readBody(req: http.IncomingMessage): Promise<string> {
