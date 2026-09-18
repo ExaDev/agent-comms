@@ -556,7 +556,10 @@ export function saveGatewayTrust(
 ): void {
   const { dir } = slotPaths(slot);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const stored: LoadedGatewayTrust = { devices: [...devices], principals: [...principals] };
+  const stored: LoadedGatewayTrust = {
+    devices: [...devices],
+    principals: [...principals],
+  };
   fs.writeFileSync(
     gatewayTrustFilePath(slot),
     `${JSON.stringify(stored, null, 2)}\n`,
