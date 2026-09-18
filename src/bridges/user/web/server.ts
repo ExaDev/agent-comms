@@ -21,6 +21,7 @@ import * as http from "node:http";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
+import { RPCHandler } from "@orpc/server/websocket";
 import { PushManager } from "../../../core/push-manager.js";
 import type { PushSubscription } from "../../../core/web-push.js";
 import { ChatController } from "../controller.js";
@@ -30,6 +31,24 @@ import type {
   MeshStatePatch,
 } from "../../../core/wire-protocol.js";
 import type { WebUrlStatus } from "../../../core/tool.js";
+import {
+  createRoomAction,
+  declineInviteAction,
+  destroyRoomAction,
+  dmAction,
+  inviteAction,
+  joinRoomAction,
+  kickAction,
+  leaveRoomAction,
+  listAgentsAction,
+  listRoomsAction,
+  readRoomAction,
+  renameAgentAction,
+  sendAction,
+} from "./actions.js";
+import { MeshEventPublisher } from "./event-publisher.js";
+import { meshRouter } from "./router.js";
+import type { DeliveryEvent } from "../../../core/types.js";
 
 const WEB_HOST = "127.0.0.1";
 
@@ -99,6 +118,7 @@ export interface WebServerHandle {
   controller: ChatController;
   wss: WebSocketServer;
   pushManager: PushManager;
+  publisher: MeshEventPublisher;
 }
 
 /** Resolve the listening port from a running web server handle, or undefined if the OS hasn't assigned one yet. */
@@ -164,13 +184,24 @@ export async function createWebServer(
   });
 
   const pushManager = new PushManager();
+  const publisher = new MeshEventPublisher();
+  ensurePatchListener(controller.meshStore, publisher);
+  controller.on("message", (event: DeliveryEvent) => {
+    publisher.publish({ kind: "delivery", event });
+  });
 
-  // Separate WS servers for chat and mesh bridge endpoints
+  // Separate WS servers for chat, legacy mesh bridge, and the new oRPC mesh endpoints -- /ws/mesh-orpc is a dark-launched addition, kept fully side-by-side with the other two until PR7 retires them.
   const wss = new WebSocketServer({ noServer: true });
   const meshWss = new WebSocketServer({ noServer: true });
+  const orpcWss = new WebSocketServer({ noServer: true });
+  const rpcHandler = new RPCHandler(meshRouter);
 
   server.on("upgrade", (req, socket, head) => {
-    if (req.url === "/ws/mesh") {
+    if (req.url === "/ws/mesh-orpc") {
+      orpcWss.handleUpgrade(req, socket, head, (ws) => {
+        orpcWss.emit("connection", ws, req);
+      });
+    } else if (req.url === "/ws/mesh") {
       meshWss.handleUpgrade(req, socket, head, (ws) => {
         meshWss.emit("connection", ws, req);
       });
@@ -189,13 +220,29 @@ export async function createWebServer(
     handleMeshWebSocket(ws, controller);
   });
 
+  orpcWss.on("connection", (ws) => {
+    // RPCHandler.upgrade() wants a DOM-shaped WebSocket (addEventListener's overload set), which "ws"'s own type declarations don't structurally satisfy (its addEventListener options param is narrower than DOM's) -- .message()/.close() accept the looser { send } shape "ws" does satisfy, and are the documented manual equivalent to .upgrade().
+    const context = { controller, publisher, pushManager };
+    ws.on("message", (data, isBinary) => {
+      // "ws" types incoming data as Buffer | ArrayBuffer | Buffer[] regardless of frame type; normalise to a real Buffer first so both branches below have a type they can trust rather than calling .toString()/Uint8Array.from() on a union that could be an ArrayBuffer.
+      const raw = Array.isArray(data) ? Buffer.concat(data) : data;
+      const bytes = raw instanceof ArrayBuffer ? Buffer.from(raw) : raw;
+      // Buffer's .buffer is typed ArrayBufferLike (Buffer can wrap a SharedArrayBuffer); RPCHandler.message() wants the narrower Uint8Array<ArrayBuffer> -- a fresh Uint8Array.from() copy is always backed by a plain ArrayBuffer, satisfying that exactly.
+      const payload = isBinary ? Uint8Array.from(bytes) : bytes.toString();
+      void rpcHandler.message(ws, payload, { context });
+    });
+    ws.on("close", () => {
+      void rpcHandler.close(ws);
+    });
+  });
+
   server.listen(port, WEB_HOST, () => {
     const addr = server.address();
     const actualPort = typeof addr === "object" && addr ? addr.port : port;
     console.log(`Agent Comms web UI: http://${WEB_HOST}:${String(actualPort)}`);
   });
 
-  return { server, controller, wss, pushManager };
+  return { server, controller, wss, pushManager, publisher };
 }
 
 class HandleRef {
@@ -510,16 +557,20 @@ function handleWebSocket(
 /** Active mesh WS connections — shared across handler invocations. */
 const meshPeers = new Set<WebSocket>();
 
-/** Whether the global onPatch listener has been wired. */
-let meshPatchListenerActive = false;
+/**
+ * Stores this wiring has already been applied to. A WeakSet (not a single boolean) because a process can run multiple concurrent WebServerHandle instances, each with its own MeshStore (multiple bridges each starting their own web UI) -- a single once-ever flag would silently wire only the first store any handle in the process ever created, leaving every later handle's store.onPatch never set and its publisher never fed. Confirmed directly: this was the original bug behind the single boolean this replaces (frontend/mesh-worker.ts's own module-level meshPatchListenerActive), caught by a multi-test-in-one-process run where only the first test's server ever received state_patch events.
+ */
+const patchListenerWiredStores = new WeakSet<MeshStore>();
 
 /**
- * Ensures the global MeshStore.onPatch forwards patches to all mesh peers.
- * Called once on first connection; subsequent calls are no-ops.
+ * Wires the given store's single MeshStore.onPatch callback to do two things on every patch: forward it to legacy mesh peers (unchanged behaviour) and publish it as a state_patch MeshEvent on the new oRPC event stream. Called once per WebServerHandle at server-start time (createWebServer), rather than lazily on first /ws/mesh connection as before -- store.onPatch is a single overwritable field, so both consumers have to share one registration or the second one silently clobbers the first. Idempotent per store, not per process.
  */
-function ensurePatchListener(store: MeshStore): void {
-  if (meshPatchListenerActive) return;
-  meshPatchListenerActive = true;
+function ensurePatchListener(
+  store: MeshStore,
+  publisher: MeshEventPublisher,
+): void {
+  if (patchListenerWiredStores.has(store)) return;
+  patchListenerWiredStores.add(store);
   store.onPatch = (patch: MeshStatePatch): void => {
     const msg: MeshMessage = {
       method: "state_update",
@@ -531,21 +582,19 @@ function ensurePatchListener(store: MeshStore): void {
         peer.send(data);
       }
     }
+    publisher.publish({ kind: "state_patch", patch });
   };
 }
 
 /**
  * Handles a WebSocket connection on /ws/mesh.
  *
- * Sends the current mesh state as a state_sync message on connect,
- * then forwards all mesh state patches in real-time. Browser peers
- * send action objects which are executed through the ChatController.
+ * Sends the current mesh state as a state_sync message on connect, then forwards all mesh state patches in real-time. Browser peers send action objects which are executed through the ChatController.
  */
 function handleMeshWebSocket(ws: WebSocket, controller: ChatController): void {
   const store = controller.meshStore;
 
   meshPeers.add(ws);
-  ensurePatchListener(store);
 
   // Send initial state_sync
   const state = store.serialise();
@@ -602,120 +651,58 @@ async function executeAction(
   const action = params.action;
 
   switch (action) {
-    case "send": {
-      const target = getString(params, "target");
-      const content = getString(params, "content");
-      if (
-        target === undefined ||
-        target === "" ||
-        content === undefined ||
-        content === ""
-      ) {
-        return { content: "Missing target or content", isError: true };
-      }
-      return controller.send(target, content);
-    }
-    case "dm": {
-      const target = getString(params, "target");
-      const content = getString(params, "content");
-      if (
-        target === undefined ||
-        target === "" ||
-        content === undefined ||
-        content === ""
-      ) {
-        return { content: "Missing target or content", isError: true };
-      }
-      return controller.dm(target, content);
-    }
-    case "join_room": {
-      const room = getString(params, "room");
-      if (room === undefined || room === "")
-        return { content: "Missing room", isError: true };
-      const result = await controller.switchRoom(room);
-      if (!result.isError) {
-        const msgs = await controller.readRoom();
-        return {
-          content: `${result.content}\n${msgs.content}`,
-          isError: false,
-        };
-      }
-      return result;
-    }
-    case "leave_room": {
-      const room = getString(params, "room");
-      return controller.leaveRoom(room);
-    }
-    case "create_room": {
-      const name = getString(params, "name");
-      const type = getRoomType(params, "type") ?? "public";
-      const description = getString(params, "description") ?? "";
-      if (name === undefined || name === "")
-        return { content: "Missing name", isError: true };
-      return controller.createRoom(name, type, description);
-    }
+    case "send":
+      return sendAction(controller, {
+        target: getString(params, "target") ?? "",
+        content: getString(params, "content") ?? "",
+      });
+    case "dm":
+      return dmAction(controller, {
+        target: getString(params, "target") ?? "",
+        content: getString(params, "content") ?? "",
+      });
+    case "join_room":
+      return joinRoomAction(controller, {
+        room: getString(params, "room") ?? "",
+      });
+    case "leave_room":
+      return leaveRoomAction(controller, { room: getString(params, "room") });
+    case "create_room":
+      return createRoomAction(controller, {
+        name: getString(params, "name") ?? "",
+        type: getRoomType(params, "type") ?? "public",
+        description: getString(params, "description"),
+      });
     case "list_rooms":
-      return controller.listRooms();
+      return listRoomsAction(controller);
     case "list_agents":
-      return controller.listAgents();
-    case "read_room": {
-      const room = getString(params, "room");
-      return controller.readRoom(room);
-    }
-    case "destroy_room": {
-      const room = getString(params, "room");
-      if (room === undefined || room === "")
-        return { content: "Missing room", isError: true };
-      return controller.destroyRoom(room);
-    }
-    case "invite": {
-      const room = getString(params, "room");
-      const agent = getString(params, "agent");
-      if (
-        room === undefined ||
-        room === "" ||
-        agent === undefined ||
-        agent === ""
-      )
-        return { content: "Missing room or agent", isError: true };
-      return controller.invite(room, agent);
-    }
-    case "decline_invite": {
-      const room = getString(params, "room");
-      const reason = getString(params, "reason");
-      if (
-        room === undefined ||
-        room === "" ||
-        reason === undefined ||
-        reason === ""
-      )
-        return { content: "Missing room or reason", isError: true };
-      return controller.declineInvite(room, reason);
-    }
-    case "kick": {
-      const room = getString(params, "room");
-      const agent = getString(params, "agent");
-      if (
-        room === undefined ||
-        room === "" ||
-        agent === undefined ||
-        agent === ""
-      )
-        return { content: "Missing room or agent", isError: true };
-      return controller.kick(room, agent);
-    }
-    case "rename_agent": {
-      const agent = getString(params, "agent");
-      const name = getString(params, "name");
-      if (
-        agent === undefined ||
-        agent === "" ||
-        name === undefined ||
-        name === ""
-      )
-        return { content: "Missing agent or name", isError: true };
-      return controller.renameAgent(agent, name);
-    }
+      return listAgentsAction(controller);
+    case "read_room":
+      return readRoomAction(controller, { room: getString(params, "room") });
+    case "destroy_room":
+      return destroyRoomAction(controller, {
+        room: getString(params, "room") ?? "",
+      });
+    case "invite":
+      return inviteAction(controller, {
+        room: getString(params, "room") ?? "",
+        agent: getString(params, "agent") ?? "",
+      });
+    case "decline_invite":
+      return declineInviteAction(controller, {
+        room: getString(params, "room") ?? "",
+        reason: getString(params, "reason") ?? "",
+      });
+    case "kick":
+      return kickAction(controller, {
+        room: getString(params, "room") ?? "",
+        agent: getString(params, "agent") ?? "",
+      });
+    case "rename_agent":
+      return renameAgentAction(controller, {
+        agent: getString(params, "agent") ?? "",
+        name: getString(params, "name") ?? "",
+      });
     default:
       return { content: `Unknown action: ${String(action)}`, isError: true };
   }
