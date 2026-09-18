@@ -2,8 +2,8 @@
  * ChatArea — main chat panel with header, messages, and input.
  */
 
-import { Burger, Button, Group, Stack, Text, TextInput } from "@mantine/core";
-import { useState } from "react";
+import { Burger, Button, Group, Stack, Text } from "@mantine/core";
+import { SubmitRow } from "web-ui-primitives";
 import type { DisplayMessage, Room } from "../types.js";
 import { parseInput } from "../input.js";
 import { MessageList } from "./MessageList.js";
@@ -33,8 +33,6 @@ export function ChatArea({
   onLeaveRoom,
   onConnectToMesh,
 }: ChatAreaProps) {
-  const [inputText, setInputText] = useState("");
-
   // currentRoom is the room's real owner-qualified id (`<owner-hex>/<local-name>`), not something meant for display -- resolve it back to the plain name the room was created with, the same name the sidebar list already shows, rather than surfacing the internal id verbatim.
   const currentRoomName =
     currentRoom === undefined
@@ -45,9 +43,7 @@ export function ChatArea({
     currentRoomName ??
     (dmTarget !== undefined ? `DM with ${dmTarget}` : "Select a room");
 
-  const handleSend = () => {
-    const trimmed = inputText.trim();
-    if (!trimmed) return;
+  const handleSend = (trimmed: string): void => {
     const result = parseInput(trimmed, currentRoom, dmTarget);
     switch (result.kind) {
       case "action":
@@ -60,11 +56,6 @@ export function ChatArea({
       case "ignored":
         break;
     }
-    setInputText("");
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") handleSend();
   };
 
   return (
@@ -102,19 +93,13 @@ export function ChatArea({
           </Button>
         </Stack>
       )}
-      <Group px="md" py="sm" gap="xs" bg="dark.6">
-        <TextInput
-          flex={1}
+      <Group px="md" py="sm" bg="dark.6">
+        <SubmitRow
+          ariaLabel="Message"
           placeholder="Type a message or /command..."
-          aria-label="Message"
-          autoComplete="off"
-          value={inputText}
-          onChange={(e) => {
-            setInputText(e.target.value);
-          }}
-          onKeyDown={handleKeyDown}
+          submitLabel="Send"
+          onSubmit={handleSend}
         />
-        <Button onClick={handleSend}>Send</Button>
       </Group>
     </Stack>
   );
