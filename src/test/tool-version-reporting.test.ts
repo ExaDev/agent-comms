@@ -7,6 +7,7 @@ import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
 import { getOwnPackageVersion } from "../core/package-version.js";
+import { getWireMeshCoreVersion } from "../core/wire-mesh-core-version.js";
 import { wireTestTransport } from "./test-transport.js";
 
 async function registeredContext(
@@ -57,6 +58,42 @@ describe("whoami reports this bridge's own version", () => {
 
     expect(result.content).toContain("Update available: 99.0.0");
   });
+
+  it("includes a Wire-mesh-core line matching the installed dependency's own version", async () => {
+    const store = new MeshStore();
+    await wireTestTransport(store);
+    const ctx = await registeredContext(store);
+    const tool = new CommsTool(store);
+
+    const result = await tool.handle(ctx, buildAction({ action: "whoami" }));
+
+    expect(result.content).toContain(
+      `Wire-mesh-core: ${getWireMeshCoreVersion()}`,
+    );
+  });
+
+  it("does not mention a Cc-peer version when this store never wired one", async () => {
+    const store = new MeshStore();
+    await wireTestTransport(store);
+    const ctx = await registeredContext(store);
+    const tool = new CommsTool(store);
+
+    const result = await tool.handle(ctx, buildAction({ action: "whoami" }));
+
+    expect(result.content).not.toContain("Cc-peer:");
+  });
+
+  it("mentions the Cc-peer version once the store's own getter is set, as though fronting/bridging cc-peer", async () => {
+    const store = new MeshStore();
+    await wireTestTransport(store);
+    const ctx = await registeredContext(store);
+    const tool = new CommsTool(store);
+    store.getCcPeerVersion = () => "9.9.9";
+
+    const result = await tool.handle(ctx, buildAction({ action: "whoami" }));
+
+    expect(result.content).toContain("Cc-peer: 9.9.9");
+  });
 });
 
 describe("update reports this bridge's own version", () => {
@@ -87,5 +124,28 @@ describe("update reports this bridge's own version", () => {
     );
 
     expect(result.content).toContain("Update available: 99.0.0");
+  });
+
+  it("includes the installed wire-mesh-core version, and cc-peer's once wired", async () => {
+    const store = new MeshStore();
+    await wireTestTransport(store);
+    const ctx = await registeredContext(store);
+    const tool = new CommsTool(store);
+
+    const before = await tool.handle(
+      ctx,
+      buildAction({ action: "update", status: "busy" }),
+    );
+    expect(before.content).toContain(
+      `wireMeshCore=${getWireMeshCoreVersion()}`,
+    );
+    expect(before.content).not.toContain("ccPeer=");
+
+    store.getCcPeerVersion = () => "9.9.9";
+    const after = await tool.handle(
+      ctx,
+      buildAction({ action: "update", status: "idle" }),
+    );
+    expect(after.content).toContain("ccPeer=9.9.9");
   });
 });
