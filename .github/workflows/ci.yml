@@ -24,6 +24,13 @@ jobs:
         with:
           node-version-file: .tool-versions
       - run: pnpm install --frozen-lockfile
+      # No remote cache configured (would need a TURBO_TOKEN/TURBO_TEAM), so actions/cache is the fallback: it persists turbo's own per-task content hashes across runs so an unchanged task can still skip re-execution here, not just on a developer's machine.
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ github.job }}-
       - run: pnpm run lint
 
   typecheck:
@@ -36,6 +43,12 @@ jobs:
         with:
           node-version-file: .tool-versions
       - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ github.job }}-
       - run: pnpm run typecheck
 
   test:
@@ -49,6 +62,12 @@ jobs:
         with:
           node-version-file: .tool-versions
       - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ github.job }}-
       - run: pnpm run build
       - run: pnpm test
       - run: pnpm test:smoke
