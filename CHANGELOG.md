@@ -1,3 +1,9 @@
+## [3.30.0](https://github.com/ExaDev/agent-comms/compare/v3.29.3...v3.30.0) (2026-09-18)
+
+### Features
+
+* **bridge:** add structured one-shot read procedures to the mesh contract ([8ea1c66](https://github.com/ExaDev/agent-comms/commit/8ea1c66e0ba58820c18690ce749945387062a058))
+
 ## [3.29.3](https://github.com/ExaDev/agent-comms/compare/v3.29.2...v3.29.3) (2026-09-18)
 
 ### Documentation
