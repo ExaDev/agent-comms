@@ -1,3 +1,13 @@
+## [3.24.0](https://github.com/ExaDev/agent-comms/compare/v3.23.0...v3.24.0) (2026-09-18)
+
+### Features
+
+* **bridge:** serve wire-mesh web-console as an opt-in alternate UI ([feb7971](https://github.com/ExaDev/agent-comms/commit/feb797197f117a94010312584913637234b14859))
+
+### Documentation
+
+* **bridge:** document AGENT_COMMS_WEB_CONSOLE_DIST ([2ad972f](https://github.com/ExaDev/agent-comms/commit/2ad972f99a356db7ca0c06f3350c315686014502))
+
 ## [3.23.0](https://github.com/ExaDev/agent-comms/compare/v3.22.0...v3.23.0) (2026-09-18)
 
 ### Features
