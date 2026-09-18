@@ -18,7 +18,11 @@ import type { PeerAdvert } from "wire-mesh-core/generated/protocol";
 import type { HubSession } from "./hub-session.js";
 import type { MeshGraph, MeshTraceResult } from "./transport.js";
 
-/** Assembles this side's own best-effort view of the mesh's connection graph out of knownDevices (WireMeshTransport's own mesh-wide gossip aggregation, the identical map listKnownDevices already reads), converted to DirectoryEntry[] the same way hub-forwarding.ts's own pushHubCatchUp already does for its unrelated purpose. Device-ids are hex-encoded, never raw wire-mesh-core DeviceId bytes, matching listKnownDevices' own precedent. */
+/**
+ * Assembles this side's own best-effort view of the mesh's connection graph out of knownDevices (WireMeshTransport's own mesh-wide gossip aggregation, the identical map listKnownDevices already reads), converted to DirectoryEntry[] the same way hub-forwarding.ts's own pushHubCatchUp already does for its unrelated purpose. Device-ids are hex-encoded, never raw wire-mesh-core DeviceId bytes, matching listKnownDevices' own precedent.
+ *
+ * assembleTopologyGraph's own nodes list is only devices this side holds a directory entry (gossip advert) for -- its edges are deliberately "unreconciled by design" (see its own doc comment) and can name a `to`/`via` endpoint reported by another device's advert that this side has never itself gossiped with directly, so that endpoint never gets its own directory entry and is absent from nodes. A MeshGraph whose edges reference an undeclared node isn't well-formed for any consumer (a force-directed layout, a table, anything), so every edge endpoint is unioned into the returned nodes list here, not left for each consumer to work around individually.
+ */
 export function computeMeshGraph(
   knownDevices: ReadonlyMap<string, Readonly<PeerAdvert>>,
 ): MeshGraph {
@@ -26,17 +30,21 @@ export function computeMeshGraph(
     (advert) => ({ device: advert.device, advert }),
   );
   const graph = assembleTopologyGraph(directory);
-  return {
-    nodes: graph.nodes.map(deviceIdToHex),
-    edges: graph.edges.map((edge) => ({
-      kind: edge.kind,
-      from: deviceIdToHex(edge.from),
-      to: deviceIdToHex(edge.to),
-      ...(edge.kind === "relay" && edge.via !== undefined
-        ? { via: deviceIdToHex(edge.via) }
-        : {}),
-    })),
-  };
+  const edges = graph.edges.map((edge) => ({
+    kind: edge.kind,
+    from: deviceIdToHex(edge.from),
+    to: deviceIdToHex(edge.to),
+    ...(edge.kind === "relay" && edge.via !== undefined
+      ? { via: deviceIdToHex(edge.via) }
+      : {}),
+  }));
+  const nodes = new Set(graph.nodes.map(deviceIdToHex));
+  for (const edge of edges) {
+    nodes.add(edge.from);
+    nodes.add(edge.to);
+    if (edge.via !== undefined) nodes.add(edge.via);
+  }
+  return { nodes: [...nodes], edges };
 }
 
 /** Sends path.trace to targetDeviceHex, direct if a local peer session exists for it (peerSessions, WireMeshTransport's own addressing map), else via the hub's own relay pairing when connected to one, else resolving an ordinary not_connected outcome rather than throwing -- WireMeshTransport.sendRoomRequest's own identical direct-or-hub fallback, just for path.trace instead of a room-domain verb. Delegates the actual send/RTT-measurement/response-parsing to wire-mesh-core's own tracePath in the direct branch, and to HubSession.tracePath (which does the identical delegation on the hub's own session) in the relayed branch, so neither this function nor either of those duplicates that logic. */
