@@ -1,3 +1,16 @@
+## [3.29.0](https://github.com/ExaDev/agent-comms/compare/v3.28.0...v3.29.0) (2026-09-18)
+
+### Features
+
+* **bridge:** retire the legacy chat/mesh sockets, oRPC now owns /ws/mesh ([d80c92a](https://github.com/ExaDev/agent-comms/commit/d80c92aaf5bd30efc71826f40c975fd200d60016))
+* **core:** carry this side's own dialled hub address into hub-relayed dispatch ([f788958](https://github.com/ExaDev/agent-comms/commit/f788958159547418afc2980552c98332dc9dbb12))
+* **core:** thread a request's own transport origin through RoomVerbHandler dispatch ([c1b3496](https://github.com/ExaDev/agent-comms/commit/c1b34960c8cb530364d9e1c220e5401d984df9b2))
+
+### Bug Fixes
+
+* **bridge:** wire push_subscribe/push_unsubscribe through dispatchAction ([1366efc](https://github.com/ExaDev/agent-comms/commit/1366efc205cf16cbf0bd98b195a1bd00e30520c4))
+* **core:** report hubAddress on an incoming hub-relayed path.trace ([07fee03](https://github.com/ExaDev/agent-comms/commit/07fee0367ebdef1f330d9b7e91d43ea68ad71ca3))
+
 ## [3.28.0](https://github.com/ExaDev/agent-comms/compare/v3.27.0...v3.28.0) (2026-09-18)
 
 ### Features

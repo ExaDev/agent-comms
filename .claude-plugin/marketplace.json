@@ -15,7 +15,7 @@
         "url": "https://github.com/ExaDev/agent-comms.git"
       },
       "description": "Cross-harness LLM agent communication mesh — rooms, DMs, and presence",
-      "version": "3.28.0"
+      "version": "3.29.0"
     }
   ]
 }
