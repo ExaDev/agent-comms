@@ -9,8 +9,18 @@
 import { createORPCClient, getEventMeta } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import { RetryLinkPlugin } from "@orpc/client/plugins";
+import { implement } from "@orpc/server";
+import { RPCHandler } from "@orpc/server/message-port";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { MeshContract } from "../contract.js";
+import { MeshEventPublisher } from "../event-publisher.js";
+import { tabContract } from "./tab-contract.js";
+import type {
+  AgentIdentity as CoreAgentIdentity,
+  Room as CoreRoom,
+  RoomMessage as CoreRoomMessage,
+  DmMessage as CoreDmMessage,
+} from "../../../../core/types.js";
 
 // ---------------------------------------------------------------------------
 // SharedWorker environment types
@@ -33,51 +43,13 @@ interface MessagePortLike {
 declare const self: SharedWorkerGlobalScope;
 
 // ---------------------------------------------------------------------------
-// Wire protocol types (inlined — mirrors core/wire-protocol.ts)
+// Wire protocol types -- aliases onto core/types.ts's real, single-source-of-truth entity types (type-only imports, so nothing from core's Zod schemas is actually bundled into the worker; these names existed as hand-written, narrower local interfaces before the oRPC migration, but this file's own tab-facing subscribeEvents (below) needs the real shape -- including version/memberJoins/etc -- back to construct a contract-conformant state_sync, and duplicating a third, narrower copy just to avoid that is exactly the kind of drift PR1 of this migration already found and fixed once (frontend/types.ts's own DeliveryEvent union, mesh-worker.ts's own former MeshStatePatch carrying a dead "message_read" variant).
 // ---------------------------------------------------------------------------
 
-export interface AgentIdentity {
-  id: string;
-  name: string;
-  harness: string;
-  cwd: string;
-  pid: number;
-  startedAt: string;
-  visibility: "visible" | "hidden" | "ghost";
-  status: "active" | "idle" | "busy" | "offline";
-  tags: string[];
-  subscribedRooms: string[];
-}
-
-export interface Room {
-  id: string;
-  name: string;
-  type: "public" | "private" | "secret";
-  owner: string;
-  createdAt: string;
-  description: string;
-  members: string[];
-  invited: string[];
-}
-
-interface RoomMessage {
-  id: string;
-  from: string;
-  room: string;
-  content: string;
-  timestamp: string;
-  replyTo?: string | undefined;
-  readBy: string[];
-}
-
-interface DmMessage {
-  id: string;
-  from: string;
-  to: string;
-  content: string;
-  timestamp: string;
-  readBy: string[];
-}
+export type AgentIdentity = CoreAgentIdentity;
+export type Room = CoreRoom;
+type RoomMessage = CoreRoomMessage;
+type DmMessage = CoreDmMessage;
 
 interface DeliveryEvent {
   type: string;
@@ -228,6 +200,9 @@ type MeshOrpcClient = ContractRouterClient<MeshContract>;
 let orpcClient: MeshOrpcClient | undefined;
 let eventPumpGeneration = 0;
 
+/** Republishes every event this worker receives from the real server to any tab subscribed via the worker's own oRPC downstream (tab-contract.ts's subscribeEvents). Resumable the same way the server's own publisher is -- a tab's oRPC client can reconnect to this worker (a new MessagePort, or the same one after a drop) and resume from its own lastEventId. */
+export const localPublisher = new MeshEventPublisher();
+
 function toOrpcUrl(legacyMeshUrl: string): string {
   return legacyMeshUrl.replace(/\/ws\/mesh$/, "/ws/mesh-orpc");
 }
@@ -296,6 +271,8 @@ async function pumpEvents(
         if (generation !== eventPumpGeneration) return;
         const meta = getEventMeta(event);
         if (meta?.id !== undefined) lastEventId = meta.id;
+        // Republish to the worker's own downstream (tab-contract.ts's subscribeEvents) with a fresh, worker-assigned id -- a separate resumability domain from the server's own, since a tab resumes against this worker, not against the server directly.
+        localPublisher.publish(event);
         switch (event.kind) {
           case "state_sync":
             applyStateSync(event.state);
@@ -306,7 +283,7 @@ async function pumpEvents(
             broadcastToPorts({ type: "patch", patch: event.patch });
             break;
           case "delivery":
-            // Not yet part of the worker's tab-facing protocol -- delivery events still flow to tabs over the separate legacy chat socket (main.tsx's CommsWs) until that cutover lands.
+            // Not yet part of the worker's LEGACY tab-facing protocol -- delivery events still flow to tabs over the separate legacy chat socket (main.tsx's CommsWs) until that cutover lands. The new oRPC tab-contract.ts subscribeEvents above already carries it via localPublisher.
             break;
         }
       }
@@ -435,8 +412,133 @@ function isWorkerInbound(value: unknown): value is WorkerInbound {
 }
 
 // ---------------------------------------------------------------------------
+// Tab-facing oRPC downstream -- the worker as a server. Dark: nothing in mesh-client.ts connects via oRPC to this yet (that's a later PR's cutover), but it's fully wired and independently testable via a real MessagePort pair, side by side with the legacy postMessage protocol above, which stays completely untouched on the same port.
+// ---------------------------------------------------------------------------
+
+interface TabRouterContext {
+  port: MessagePort;
+}
+
+/** The worker's own merged state, in the same SerialisedState shape the server's state_sync carries -- built from all four local Maps, not just the narrower "agents, rooms" StateSnapshot broadcastToPorts uses for the legacy protocol. */
+function buildSerialisedState(): SerialisedState {
+  return {
+    agents: Object.fromEntries(agents),
+    rooms: Object.fromEntries(rooms),
+    messages: Object.fromEntries(messages),
+    dms: Object.fromEntries(dms),
+  };
+}
+
+async function upstream(
+  input: Record<string, unknown>,
+): Promise<{ content: string; isError: boolean }> {
+  if (!orpcClient) {
+    return { content: "Not connected to mesh yet", isError: true };
+  }
+  return dispatchAction(orpcClient, input);
+}
+
+const tabImpl = implement(tabContract).$context<TabRouterContext>();
+
+// Declared ahead of tabRouter (its .current assigned after it, below) so disconnect's own handler -- itself a value inside tabRouter -- can close over this ref; the closure only reads it once a real call arrives, well after the assignment below has run.
+const tabRpcHandlerRef: { current?: RPCHandler<TabRouterContext> } = {};
+
+const tabRouter = {
+  send: tabImpl.send.handler(async ({ input }) =>
+    upstream({ action: "send", ...input }),
+  ),
+  dm: tabImpl.dm.handler(async ({ input }) =>
+    upstream({ action: "dm", ...input }),
+  ),
+  joinRoom: tabImpl.joinRoom.handler(async ({ input }) =>
+    upstream({ action: "join_room", room: input.room }),
+  ),
+  leaveRoom: tabImpl.leaveRoom.handler(async ({ input }) =>
+    upstream({ action: "leave_room", room: input.room }),
+  ),
+  createRoom: tabImpl.createRoom.handler(async ({ input }) =>
+    upstream({
+      action: "create_room",
+      name: input.name,
+      type: input.type,
+      description: input.description,
+    }),
+  ),
+  listRooms: tabImpl.listRooms.handler(async () =>
+    upstream({ action: "list_rooms" }),
+  ),
+  listAgents: tabImpl.listAgents.handler(async () =>
+    upstream({ action: "list_agents" }),
+  ),
+  readRoom: tabImpl.readRoom.handler(async ({ input }) =>
+    upstream({ action: "read_room", room: input.room }),
+  ),
+  destroyRoom: tabImpl.destroyRoom.handler(async ({ input }) =>
+    upstream({ action: "destroy_room", room: input.room }),
+  ),
+  invite: tabImpl.invite.handler(async ({ input }) =>
+    upstream({ action: "invite", room: input.room, agent: input.agent }),
+  ),
+  declineInvite: tabImpl.declineInvite.handler(async ({ input }) =>
+    upstream({
+      action: "decline_invite",
+      room: input.room,
+      reason: input.reason,
+    }),
+  ),
+  kick: tabImpl.kick.handler(async ({ input }) =>
+    upstream({ action: "kick", room: input.room, agent: input.agent }),
+  ),
+  renameAgent: tabImpl.renameAgent.handler(async ({ input }) =>
+    upstream({ action: "rename_agent", agent: input.agent, name: input.name }),
+  ),
+  pushSubscribe: tabImpl.pushSubscribe.handler(async ({ input }) =>
+    upstream({
+      action: "push_subscribe",
+      subscription: input.subscription,
+      agentId: input.agentId,
+    }),
+  ),
+  pushUnsubscribe: tabImpl.pushUnsubscribe.handler(async ({ input }) =>
+    upstream({ action: "push_unsubscribe", agentId: input.agentId }),
+  ),
+
+  subscribeEvents: tabImpl.subscribeEvents.handler(async function* ({
+    input,
+    signal,
+  }) {
+    if (input.lastEventId === undefined) {
+      yield { kind: "state_sync" as const, state: buildSerialisedState() };
+    }
+    yield* localPublisher.subscribe({
+      ...(signal ? { signal } : {}),
+      ...(input.lastEventId !== undefined
+        ? { lastEventId: input.lastEventId }
+        : {}),
+    });
+  }),
+
+  disconnect: tabImpl.disconnect.handler(async ({ context }) => {
+    // Closing the peer synchronously, before this handler returns, tears down the same port the RPC response itself still needs to go out over -- confirmed empirically (a real hang, not assumed): awaiting close() here means the client's disconnect() call never resolves at all. A microtask defer wasn't enough separation either (still hung) -- a macrotask (setTimeout) is what actually lets the response finish being posted before the port closes.
+    setTimeout(() => {
+      void tabRpcHandlerRef.current?.close(context.port);
+    }, 0);
+    return {};
+  }),
+};
+
+tabRpcHandlerRef.current = new RPCHandler(tabRouter);
+
+// ---------------------------------------------------------------------------
 // Entry point — listen for SharedWorker connections
 // ---------------------------------------------------------------------------
+
+/**
+ * Wires the new oRPC tab-contract.ts downstream onto a port -- dark, nothing in mesh-client.ts speaks it yet, but it's real and independently reachable. Exported (read-only: never assigns any of the port's own properties, unlike the legacy protocol's onmessage wiring below) so a test can drive it directly against a real MessagePort pair without simulating a real SharedWorker "connect" event.
+ */
+export function upgradeTabRpcPort(port: Readonly<MessagePort>): void {
+  tabRpcHandlerRef.current?.upgrade(port, { context: { port } });
+}
 
 /** Registers the real SharedWorker entry point. Guarded on `self` actually existing as a SharedWorkerGlobalScope: this module is imported directly (not just bundled) by unit tests exercising the pure reducer functions above, and a plain Node test environment has no global `self` at all. */
 if (typeof self !== "undefined") {
@@ -466,5 +568,8 @@ if (typeof self !== "undefined") {
         handlePortMessage(parsed);
       }
     };
+
+    // The new oRPC downstream, dark: wired via addEventListener (confirmed against the installed adapter's own source, not assumed), which coexists safely alongside the legacy onmessage assignment above on the same port -- both fire independently, and each side's own message-shape check ignores frames meant for the other.
+    upgradeTabRpcPort(rawPort);
   });
 }
