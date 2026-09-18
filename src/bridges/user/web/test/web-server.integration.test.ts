@@ -7,7 +7,12 @@
 import { describe, it, expect } from "vitest";
 import http from "node:http";
 import net from "node:net";
-import { createWebServer, type WebServerHandle } from "../server.js";
+import {
+  createWebServer,
+  getWebPort,
+  getWebUrlStatus,
+  type WebServerHandle,
+} from "../server.js";
 import WS from "ws";
 
 /** HTTP 200 OK. */
@@ -230,5 +235,23 @@ describe("Web server integration", () => {
     } finally {
       await cleanup();
     }
+  });
+
+  it("getWebUrlStatus reports ready with the actual listening port once the server is up", async () => {
+    const { port, cleanup } = await setup();
+    try {
+      if (!handle) throw new Error("setup() did not assign handle");
+      expect(getWebPort(handle)).toBe(port);
+      expect(getWebUrlStatus(handle)).toEqual({
+        kind: "ready",
+        url: `http://127.0.0.1:${String(port)}`,
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it("getWebUrlStatus reports not_running for an undefined handle", () => {
+    expect(getWebUrlStatus(undefined)).toEqual({ kind: "not_running" });
   });
 });

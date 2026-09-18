@@ -314,6 +314,7 @@ export const CommsActionSchema = defineSchema(
       tags: z.array(z.string()).optional(),
     }),
     z.object({ action: z.literal("whoami") }),
+    z.object({ action: z.literal("web_url") }),
     z.object({
       action: z.literal("create_room"),
       name: z.string(),

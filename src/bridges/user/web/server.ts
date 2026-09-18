@@ -29,6 +29,7 @@ import type {
   MeshMessage,
   MeshStatePatch,
 } from "../../../core/wire-protocol.js";
+import type { WebUrlStatus } from "../../../core/tool.js";
 
 const WEB_HOST = "127.0.0.1";
 
@@ -98,6 +99,22 @@ export interface WebServerHandle {
   controller: ChatController;
   wss: WebSocketServer;
   pushManager: PushManager;
+}
+
+/** Resolve the listening port from a running web server handle, or undefined if the OS hasn't assigned one yet. */
+export function getWebPort(handle: WebServerHandle): number | undefined {
+  const addr = handle.server.address();
+  return typeof addr === "object" && addr ? addr.port : undefined;
+}
+
+/** Resolve a bridge's own web UI address for the CommsTool web_url action, given whatever handle (if any) that bridge's own tryStartWebServer() call produced. The single place this three-way distinction is computed, shared by every bridge's `tool.getWebUrlStatus` wiring instead of each bridge re-deriving it from a raw WebServerHandle. */
+export function getWebUrlStatus(
+  handle: WebServerHandle | undefined,
+): WebUrlStatus {
+  if (!handle) return { kind: "not_running" };
+  const port = getWebPort(handle);
+  if (port === undefined || port === 0) return { kind: "pending" };
+  return { kind: "ready", url: `http://${WEB_HOST}:${String(port)}` };
 }
 
 // ---------------------------------------------------------------------------
