@@ -172,12 +172,16 @@ function onSelectAgent(agentId: string): void {
 }
 
 function onLeaveRoom(): void {
-  const currentRoom = state.get().currentRoom;
+  const s = state.get();
+  const currentRoom = s.currentRoom;
   if (currentRoom !== undefined && currentRoom !== "") {
+    // currentRoom is the room's real owner-qualified id -- resolve it back to the plain name it was created with for the confirmation message, the same way ChatArea's own header resolves it for display.
+    const roomName =
+      s.rooms.find((room) => room.id === currentRoom)?.name ?? currentRoom;
     sendAction({ action: "leave_room", room: currentRoom });
     state.setCurrentRoom(undefined);
     state.clearMessages();
-    addMessage({ type: "system", text: `Left room "${currentRoom}"` });
+    addMessage({ type: "system", text: `Left room "${roomName}"` });
   }
 }
 
