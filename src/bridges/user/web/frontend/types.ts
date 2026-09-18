@@ -153,6 +153,44 @@ export type DisplayMessage =
   | { type: "status"; text: string };
 
 // ---------------------------------------------------------------------------
+// Mesh connection graph & path trace (agent-comms#199/#201)
+// ---------------------------------------------------------------------------
+
+export interface MeshGraphEdge {
+  kind: "direct" | "relay";
+  from: string;
+  to: string;
+  via?: string;
+}
+
+export interface MeshGraph {
+  nodes: string[];
+  edges: MeshGraphEdge[];
+}
+
+export interface MeshTraceLocal {
+  relayed: boolean;
+  hubAddress?: string;
+}
+
+export interface MeshTraceRemote {
+  relayed: boolean;
+  hubAddress?: string;
+}
+
+export interface MeshTraceOutcome {
+  result: "ok" | "error";
+  code?: string;
+}
+
+export interface MeshTraceResult {
+  rttMs: number;
+  local: MeshTraceLocal;
+  remote?: MeshTraceRemote;
+  outcome: MeshTraceOutcome;
+}
+
+// ---------------------------------------------------------------------------
 // REST API responses
 // ---------------------------------------------------------------------------
 
