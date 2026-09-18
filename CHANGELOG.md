@@ -1,3 +1,9 @@
+## [3.29.2](https://github.com/ExaDev/agent-comms/compare/v3.29.1...v3.29.2) (2026-09-18)
+
+### Documentation
+
+* **bridge:** confirm the test suite's own wire-facing parts are current ([f1c5d5f](https://github.com/ExaDev/agent-comms/commit/f1c5d5fe1195076bafcee892b56e4edd10f69e40))
+
 ## [3.29.1](https://github.com/ExaDev/agent-comms/compare/v3.29.0...v3.29.1) (2026-09-18)
 
 ### Bug Fixes
