@@ -1,3 +1,9 @@
+## [3.32.1](https://github.com/ExaDev/agent-comms/compare/v3.32.0...v3.32.1) (2026-09-18)
+
+### Documentation
+
+* **bridge:** document the web UI's TanStack Query layer ([a91bbc2](https://github.com/ExaDev/agent-comms/commit/a91bbc20dca901a4f7827cd214c6c43f53e73b5e))
+
 ## [3.32.0](https://github.com/ExaDev/agent-comms/compare/v3.31.0...v3.32.0) (2026-09-18)
 
 ### Features
