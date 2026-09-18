@@ -1,3 +1,17 @@
+## [3.19.0](https://github.com/ExaDev/agent-comms/compare/v3.18.0...v3.19.0) (2026-09-18)
+
+### Features
+
+* **build:** wire build/test/typecheck/lint through turbo for content-hash caching ([2d9603d](https://github.com/ExaDev/agent-comms/commit/2d9603d9c3c7d2cc936e22e8724cf843d284f4ba))
+
+### Bug Fixes
+
+* **lint:** lint turbo.json as JSONC instead of strict JSON ([3ce8528](https://github.com/ExaDev/agent-comms/commit/3ce8528a37a3ad41b930134ab17dcc68ae62a476))
+
+### CI
+
+* persist turbo's cache directory across CI runs ([4878bb9](https://github.com/ExaDev/agent-comms/commit/4878bb938f3c9490dda3318cf53e82fa65d66fe5))
+
 ## [3.18.0](https://github.com/ExaDev/agent-comms/compare/v3.17.1...v3.18.0) (2026-09-18)
 
 ### Features
