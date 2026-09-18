@@ -258,7 +258,7 @@ export class WireMeshTransport implements MeshTransport {
   /** Every peer this side has ever received a frame from, keyed by device-id hex, tracking the raw wire-mesh-core Connection each frame arrived on -- what sendDataFrame needs, since neither AcceptedMeshSession nor MeshSession exposes a generic "send an arbitrary frame" method the way the raw Connection itself does. Registered eagerly on the very first frame from a connection (including one still in quarantine, e.g. before connect_request approval) so a later sendDataFrame call can reach it -- handleDataFrame's own trust gate (peerSessions.has) is what actually decides whether to act on anything received this way, not this map. */
   private readonly connectionsByPeer = new Map<string, Connection>();
 
-  /** The cross-machine trust boundary (agent-comms#156): gates outbound gossip advertisement (hasAny), inbound directory merge/request dispatch, and outbound targeted hub requests (both isTrusted) -- see GatewayTrust's own class doc. Defaults to a fresh, empty (deny-all) instance when no caller wires one in, matching every existing construction site that predates this feature. */
+  /** The cross-machine trust boundary (agent-comms#156): gates outbound gossip advertisement (hasAny), inbound directory merge (isTrusted or isTrustedPrincipal, wired into HubSession as isTrustedForDirectory since agent-comms#192), the legacy per-device frame path (isTrusted), and outbound targeted hub requests (isTrusted); see GatewayTrust's own class doc. A real room-domain manage-request relayed through the hub is never gated on this at all since agent-comms#192: hub-session.ts's own dispatchHubRequest relies purely on that verb's own capability-token verification instead. Defaults to a fresh, empty (deny-all) instance when no caller wires one in, matching every existing construction site that predates this feature. */
   private readonly gatewayTrust: GatewayTrustReader;
 
   constructor(
@@ -299,6 +299,9 @@ export class WireMeshTransport implements MeshTransport {
       },
       handleRoomRequest: this.roomRouter.handleRequest,
       isTrusted: (deviceHex) => this.gatewayTrust.isTrusted(deviceHex),
+      isTrustedForDirectory: (deviceHex) =>
+        this.gatewayTrust.isTrusted(deviceHex) ||
+        this.gatewayTrust.isTrustedPrincipal(deviceHex),
       forwardToLocalPeer: sendToLocalPeer.bind(null, this.peerSessions),
     });
     this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;
