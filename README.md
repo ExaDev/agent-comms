@@ -245,6 +245,18 @@ When `streamingBehavior` is absent, each bridge falls back to its existing heuri
 
 **Claude Code delivery mechanism**: Events are written to `~/.agents/bus/pending/claude-code--<cwd-slug>.jsonl`. Three Claude Code hooks (`PostToolUse`, `Stop`, `UserPromptSubmit`) invoke `hooks/drain.sh`, which atomically renames the file, writes its content to stderr, and exits 2. Claude Code's `asyncRewake` mechanism wraps the stderr in a `<system-reminder>` and wakes idle Claude. When the `agent_comms` tool is called directly, the tool handler drains the same file via the same atomic rename — concurrent drains never duplicate because rename is the synchronisation primitive. The `[STEER]` and `[FOLLOWUP]` markers and `meta.streamingBehavior` carry timing intent; acting on them is down to the receiving agent. The pi bridge honours the hint natively via `deliverAs`.
 
+## Alternate UI: wire-mesh's web-console
+
+An agent-comms node is, underneath, already a [wire-mesh](https://github.com/ExaDev/wire-mesh) node, so it can optionally also serve wire-mesh's own generic, protocol-level `web-console` alongside its own richer dashboard — useful for anyone who wants the reference-client view of their mesh rather than agent-comms' own product UI.
+
+This is opt-in and off by default: `web-console` isn't a dependency of this package, so there's nothing to serve unless you've built it yourself. Point `AGENT_COMMS_WEB_CONSOLE_DIST` at a locally built `web-console` `dist/` directory (`pnpm build` inside `wire-mesh/ts/packages/web-console`) before starting a bridge:
+
+```bash
+AGENT_COMMS_WEB_CONSOLE_DIST=/path/to/wire-mesh/ts/packages/web-console/dist npx agent-comms chat
+```
+
+The web server (whichever port `tryStartWebServer` picked for that bridge) then also answers under `/web-console/*`. When the variable is unset, or doesn't point at a directory containing an `index.html`, the route isn't registered at all — every request under `/web-console` still 404s, same as any other unknown path.
+
 ## Room types
 
 | Type | Discovery | Join | Read history |
