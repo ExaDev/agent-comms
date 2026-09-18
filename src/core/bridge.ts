@@ -74,6 +74,8 @@ export const MCP_TOOL_PARAMS = z.object({
     "gateway_generate_connection_code",
     "gateway_redeem_connection_code",
     "query_version",
+    "mesh_graph",
+    "mesh_trace",
   ]),
   name: z.string().optional(),
   visibility: VisibilityEnum.optional(),
@@ -120,6 +122,8 @@ export const MCP_TOOL_PARAMS = z.object({
   fingerprint: z.string().optional(),
   /** For gateway_trust/gateway_untrust: when true, `device` names a user principal (agent-comms#187) rather than a bare remote device-id (agent-comms#193). */
   principal: z.boolean().optional(),
+  /** How long mesh_trace waits for a path.trace response before giving up (agent-comms#199). */
+  timeoutMs: z.number().optional(),
 });
 
 export type ToolParams = z.infer<typeof MCP_TOOL_PARAMS>;
@@ -451,6 +455,16 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       if (p.device === undefined)
         throw new BuildActionError("query_version", "device");
       return { action: "query_version", device: p.device };
+    case "mesh_graph":
+      return { action: "mesh_graph" };
+    case "mesh_trace":
+      if (p.target === undefined)
+        throw new BuildActionError("mesh_trace", "target");
+      return {
+        action: "mesh_trace",
+        target: p.target,
+        ...(p.timeoutMs !== undefined && { timeoutMs: p.timeoutMs }),
+      };
     default:
       return p.action satisfies never;
   }

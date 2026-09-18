@@ -474,6 +474,12 @@ export const CommsActionSchema = defineSchema(
       action: z.literal("query_version"),
       device: z.string(),
     }),
+    z.object({ action: z.literal("mesh_graph") }),
+    z.object({
+      action: z.literal("mesh_trace"),
+      target: z.string(),
+      timeoutMs: z.number().optional(),
+    }),
   ]),
 );
 export type CommsAction = z.infer<typeof CommsActionSchema>;
