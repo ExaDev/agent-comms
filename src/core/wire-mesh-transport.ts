@@ -24,6 +24,7 @@ import {
 } from "./listener-registry.js";
 import {
   findPresenceAdvert,
+  listKnownDevicesEntries,
   mergeKnownDevices,
   startGossipInterval,
 } from "./gossip-directory.js";
@@ -212,15 +213,12 @@ export class WireMeshTransport implements MeshTransport {
   // -- Every device-id this side has ever heard gossip from, across every session's own directory, keyed by device-id hex -- the mesh-wide aggregation P3.8's own room-discovery design and the eventual agent register/update/offline retirement both need and don't otherwise have (agent-comms#48's own 2026-09-14 investigation confirmed no such aggregation existed anywhere in this file). Merged, never cleared on disconnect: a device's last-known advert (including its own presence/status, or any future gossiped extension) stays queryable even while its session is momentarily down, the same way the legacy agents Map keeps a record after setAgentOffline rather than deleting it outright.
   private readonly knownDevices = new Map<string, PeerAdvert>();
 
-  /** Every device this side has ever heard gossip from, mesh-wide -- not just its own directly-connected peers -- with each one's own latest full advert (addresses, snapshot-seconds, and every open-extension field such as presence/status). */
+  /** Every device this side has ever heard gossip from, mesh-wide -- not just its own directly-connected peers -- with each one's own latest full advert (addresses, snapshot-seconds, and every open-extension field such as presence/status). See gossip-directory.ts's own listKnownDevicesEntries for the actual implementation, kept out of this already-large file. */
   listKnownDevices(): readonly {
     deviceId: string;
     advert: Readonly<PeerAdvert>;
   }[] {
-    return Array.from(this.knownDevices, ([deviceId, advert]) => ({
-      deviceId,
-      advert,
-    }));
+    return listKnownDevicesEntries(this.knownDevices);
   }
 
   /** Assembles this side's own best-effort view of the mesh's connection graph (agent-comms#199) -- see mesh-graph.ts's own computeMeshGraph for the actual implementation, kept out of this already-large file. */
