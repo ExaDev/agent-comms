@@ -32,6 +32,11 @@ import {
   handleGatewayGenerateConnectionCode,
   handleGatewayRedeemConnectionCode,
 } from "./connection-code-tool.js";
+import {
+  gatewayTrust,
+  gatewayUntrust,
+  gatewayListTrusted,
+} from "./gateway-trust-actions.js";
 
 /** Table column widths for the plain-text listing helpers below, chosen to line up with the existing aligned output. */
 const ROOM_TYPE_COLUMN_WIDTH = 7;
@@ -255,11 +260,11 @@ export class CommsTool {
         case "mesh_get_visibility":
           return this.meshGetVisibility(action);
         case "gateway_trust":
-          return this.gatewayTrust(action);
+          return gatewayTrust(this.store, action);
         case "gateway_untrust":
-          return this.gatewayUntrust(action);
+          return gatewayUntrust(this.store, action);
         case "gateway_list_trusted":
-          return this.gatewayListTrusted();
+          return gatewayListTrusted(this.store);
         case "gateway_generate_connection_code":
           return await handleGatewayGenerateConnectionCode(this.store, action);
         case "gateway_redeem_connection_code":
@@ -674,58 +679,6 @@ export class CommsTool {
     const visibility = this.store.getVisibility();
     return {
       content: `Mesh visibility: ${visibility}`,
-      isError: false,
-    };
-  }
-
-  private gatewayTrust(
-    action: CommsAction & { action: "gateway_trust" },
-  ): CommsResult {
-    if (!this.store.addTrustedGateway) {
-      return {
-        content: "Gateway trust is not available on this store.",
-        isError: true,
-      };
-    }
-    this.store.addTrustedGateway(action.device);
-    return {
-      content: `Trusted remote gateway device ${action.device}.`,
-      isError: false,
-    };
-  }
-
-  private gatewayUntrust(
-    action: CommsAction & { action: "gateway_untrust" },
-  ): CommsResult {
-    if (!this.store.removeTrustedGateway) {
-      return {
-        content: "Gateway trust is not available on this store.",
-        isError: true,
-      };
-    }
-    this.store.removeTrustedGateway(action.device);
-    return {
-      content: `Untrusted remote gateway device ${action.device}.`,
-      isError: false,
-    };
-  }
-
-  private gatewayListTrusted(): CommsResult {
-    if (!this.store.listTrustedGateways) {
-      return {
-        content: "Gateway trust is not available on this store.",
-        isError: true,
-      };
-    }
-    const trusted = this.store.listTrustedGateways();
-    if (trusted.length === 0) {
-      return {
-        content: "No remote gateway devices are trusted.",
-        isError: false,
-      };
-    }
-    return {
-      content: `Trusted remote gateway devices:\n${trusted.map((device) => `  ${device}`).join("\n")}`,
       isError: false,
     };
   }
