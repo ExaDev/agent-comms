@@ -4,12 +4,13 @@ export default defineConfig({
   oxc: false,
   esbuild: {
     jsx: "automatic",
-    jsxImportSource: "preact",
+    jsxImportSource: "react",
   },
   test: {
     environment: "node",
     fileParallelism: false,
     testTimeout: 30_000,
+    setupFiles: ["src/bridges/user/web/frontend/test/vitest-setup.ts"],
     exclude: [
       ...defaultExclude,
       // Compiled output of the *.test.ts sources vitest already runs -- vitest 5's defaultExclude no longer excludes dist/ on its own.
