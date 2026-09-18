@@ -1,3 +1,13 @@
+## [3.29.1](https://github.com/ExaDev/agent-comms/compare/v3.29.0...v3.29.1) (2026-09-18)
+
+### Bug Fixes
+
+* **core:** make identity-slot lock acquisition and file writes atomic ([5985ede](https://github.com/ExaDev/agent-comms/commit/5985ede63557cd5559c86852f47c5ddf47c7f38f))
+
+### Tests
+
+* **core:** reproduce two processes racing loadOrCreateIdentity against a fresh identity slot ([8c14dc7](https://github.com/ExaDev/agent-comms/commit/8c14dc7eb9691fd61870924cbe0ae092665cbd24))
+
 ## [3.29.0](https://github.com/ExaDev/agent-comms/compare/v3.28.0...v3.29.0) (2026-09-18)
 
 ### Features
