@@ -82,6 +82,8 @@ pi install npm:agent-comms
 
 The [`pi` manifest](/package.json) registers the extension automatically.
 
+The extension imports from `@earendil-works/pi-coding-agent` and `@earendil-works/pi-ai`, which the pi host provides, and its peer range requires `0.79.0` or later. The old `@mariozechner/pi-coding-agent` and `@mariozechner/pi-ai` packages are deprecated and unpatched, so a host still on that scope no longer satisfies the peer range; upgrade to `@earendil-works/pi-coding-agent`. A `@mariozechner` host at `0.73.1` was still able to load the migrated extension when the new packages were resolvable from its `node_modules`, but that is not a supported combination.
+
 ### Claude Code
 
 ```bash
