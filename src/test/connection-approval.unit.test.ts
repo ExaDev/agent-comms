@@ -175,14 +175,14 @@ describe("ConnectionApproval — connectToRemote", () => {
 
     await h.approval.connectToRemote(REMOTE_HOST, REMOTE_PORT);
 
-    expect(h.transport.connectToRemote).toHaveBeenCalledWith(
-      REMOTE_HOST,
-      REMOTE_PORT,
-      OWNER_ID,
-      LOCAL_DATA_PORT,
-      "real-name",
-      "",
-    );
+    expect(h.transport.connectToRemote).toHaveBeenCalledWith({
+      host: REMOTE_HOST,
+      port: REMOTE_PORT,
+      peerId: OWNER_ID,
+      dataPort: LOCAL_DATA_PORT,
+      name: "real-name",
+      fingerprint: "",
+    });
   });
 
   it("falls back to an empty name (not a placeholder) when the local agent isn't registered yet", async () => {
@@ -190,14 +190,14 @@ describe("ConnectionApproval — connectToRemote", () => {
 
     await h.approval.connectToRemote(REMOTE_HOST, REMOTE_PORT);
 
-    expect(h.transport.connectToRemote).toHaveBeenCalledWith(
-      REMOTE_HOST,
-      REMOTE_PORT,
-      OWNER_ID,
-      LOCAL_DATA_PORT,
-      "",
-      "",
-    );
+    expect(h.transport.connectToRemote).toHaveBeenCalledWith({
+      host: REMOTE_HOST,
+      port: REMOTE_PORT,
+      peerId: OWNER_ID,
+      dataPort: LOCAL_DATA_PORT,
+      name: "",
+      fingerprint: "",
+    });
   });
 
   it("does not reject the returned promise when the transport's own connect attempt is rejected", async () => {
