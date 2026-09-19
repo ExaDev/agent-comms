@@ -177,13 +177,21 @@ jobs:
   release:
     name: Release
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: [lint, typecheck, test]
+    needs: [lint, typecheck, test, e2e]
     runs-on: ubuntu-latest
     steps:
+      # The release commit is a direct push to main, and main's ruleset requires status checks on every change unless the actor is a bypass actor. The default GITHUB_TOKEN is not one, so the push authenticates as the org-wide "exadev" GitHub App instead, which is an Integration bypass actor on this repository's ruleset. GITHUB_TOKEN stays in the semantic-release env below for creating the GitHub release and commenting on issues and pull requests.
+      - name: Generate a token for the release push
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+      # The token is left persisted in the checkout's git config: semantic-release first tries the repository URL as it stands and only falls back to token-derived URLs when that push is refused, so persisted App credentials are what its push to main authenticates with.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          persist-credentials: false
+          token: ${{ steps.app-token.outputs.token }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
