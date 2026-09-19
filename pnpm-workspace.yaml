@@ -12,6 +12,7 @@ minimumReleaseAgeExclude:
   - wire-mesh-core
   - cc-peer@1.4.1 || 1.5.0
   - web-ui-primitives@1.0.0 || 1.0.1
+  - trilean@1.6.2
 overrides:
   "@anthropic-ai/sdk": ">=0.91.1"
   basic-ftp: ">=6.0.1"
