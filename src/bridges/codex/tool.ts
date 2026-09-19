@@ -13,6 +13,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import {
   createBridgeMesh,
+  createMeshErrorReporter,
   buildAction,
   ensureRegistered,
   drainAndFormat,
@@ -34,6 +35,7 @@ export async function run(): Promise<void> {
   // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us. The stdio server has no graceful shutdown hook; a stale lock self-heals via the pid probe.
   const identitySlot: IdentitySlot = { harness: "codex", cwd: process.cwd() };
   const { store, tool } = await createBridgeMesh(identitySlot);
+  store.onError = createMeshErrorReporter();
   store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
   let agentId: string | undefined;
 

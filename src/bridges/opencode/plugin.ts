@@ -10,6 +10,7 @@
 
 import {
   createBridgeMesh,
+  createMeshErrorReporter,
   ensureRegistered,
   formatDeliveryEvent,
 } from "../../core/index.js";
@@ -61,6 +62,7 @@ export const AgentCommsPlugin = async (opts: {
   const client = opts.client;
 
   const { store } = await createBridgeMesh(identitySlot);
+  store.onError = createMeshErrorReporter();
   store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
   await store.init();
   await tryStartWebServer();

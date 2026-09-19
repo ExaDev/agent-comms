@@ -12,6 +12,7 @@ import {
   createBridgeMesh,
   ensureRegistered,
   formatDeliveryEvent,
+  formatMeshError,
 } from "../../core/index.js";
 import {
   releaseIdentityLock,
@@ -96,6 +97,14 @@ export class ChatController extends EventEmitter {
     });
     this.store = store;
     this.tool = tool;
+    this.store.onError = (error) => {
+      // The TUI listens for "error". A host with no listener (the web-only server) would have an emitted "error" event throw out of the store's callback, so those get stderr instead.
+      if (this.listenerCount("error") > 0) {
+        this.emit("error", error);
+        return;
+      }
+      process.stderr.write(formatMeshError(error));
+    };
     this.store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(this.store, {
       coordinatorPort: this.coordinatorPort,
       hubUrl: this.hubUrl,

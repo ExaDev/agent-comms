@@ -22,6 +22,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import {
   createBridgeMesh,
+  createMeshErrorReporter,
   buildAction,
   ensureRegistered,
   extractStreamingBehavior,
@@ -165,6 +166,7 @@ export async function run(): Promise<void> {
     cwd: process.cwd(),
   };
   const { store, tool } = await createBridgeMesh(identitySlot);
+  store.onError = createMeshErrorReporter();
   store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
   let agentId: string | undefined;
 

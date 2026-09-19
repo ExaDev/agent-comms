@@ -9,6 +9,7 @@ export type { CommsStore } from "./comms-store.js";
 export { FileStore, CommsError } from "./store.js";
 export { MeshStore } from "./mesh-store.js";
 export { CommsTool } from "./tool.js";
+export { createMeshErrorReporter, formatMeshError } from "./error-reporting.js";
 export {
   createBridgeMesh,
   createBridgeMeshSync,
