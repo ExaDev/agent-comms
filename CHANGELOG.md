@@ -1,3 +1,9 @@
+## [4.3.0](https://github.com/ExaDev/agent-comms/compare/v4.2.0...v4.3.0) (2026-09-19)
+
+### Features
+
+* **tool:** add dm_admit, dm_use_grant and dm_revoke for pre-authorised DMs ([f0fe369](https://github.com/ExaDev/agent-comms/commit/f0fe369c63db527e615bd4948d954c4affda3475)), references [agent-comms#162](https://github.com/agent-comms/issues/162)
+
 ## [4.2.0](https://github.com/ExaDev/agent-comms/compare/v4.1.10...v4.2.0) (2026-09-19)
 
 ### Features
