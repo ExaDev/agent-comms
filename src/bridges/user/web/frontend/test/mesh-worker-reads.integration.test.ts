@@ -15,6 +15,7 @@ import {
   rooms,
 } from "../mesh-worker.js";
 import type { TabContract } from "../tab-contract.js";
+import { unreachableHubUrl } from "../../../../../test/hub-helpers.js";
 
 type TabClient = ContractRouterClient<TabContract>;
 
@@ -36,7 +37,8 @@ let handle: WebServerHandle | undefined;
 
 async function startServer(): Promise<number> {
   const coordinatorPort = await findFreePort();
-  handle = await createWebServer(0, undefined, coordinatorPort);
+  const hubUrl = await unreachableHubUrl();
+  handle = await createWebServer(0, undefined, coordinatorPort, hubUrl);
   await new Promise<void>((resolve) => {
     if (handle?.server.listening === true) {
       resolve();

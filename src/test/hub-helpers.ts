@@ -1,6 +1,7 @@
 // Shared helpers for hub-mode integration tests: a real wire-mesh relay hub (createRelayHub -- the same domain logic the production mesh.exadev.io Durable Object runs) served over local WebSockets, canonical-CBOR framing for the ws bridge, and a condition-polling helper for the async discovery/gossip timing these tests exercise.
 
 import { createServer, type Server } from "node:http";
+import net from "node:net";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
 import { cdeDecodeOptions, cdeEncodeOptions, decode, encode } from "cbor2";
 import { frameSchema } from "wire-mesh-core/generated/protocol";
@@ -127,6 +128,26 @@ export async function realHubOverWs(): Promise<{
         setTimeout(resolve, SHUTDOWN_GRACE_MS);
       }),
   };
+}
+
+/** A ws:// URL nothing is listening on, for a test that needs its own coordinator's automatic on-takeover hub dial (CoordinatorGateway.onBecameCoordinator, wired unconditionally onto every mesh coordinator, agent-comms#154) to fail fast and leave hub.isConnected false -- rather than either genuinely dialling the real production mesh.exadev.io (DEFAULT_HUB_URL, ChatController/createBridgeMesh's own fallback when no hubUrl is given) or connecting to a real local relayHubOverWs, which would itself succeed and put the store in the connected-but-target-unreachable state, not the not-connected-at-all state a "no path exists" test wants. Binds an ephemeral TCP port and closes it immediately, so the returned URL names a real, momentarily-free port with nothing behind it -- connectWsUrl's own "error" handler fires on the resulting ECONNREFUSED near-instantly, well under its own 10s CONNECT_TIMEOUT_MS, rather than genuinely waiting out a black-holed address. */
+export async function unreachableHubUrl(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address();
+      if (address === null || typeof address === "string") {
+        probe.close();
+        reject(new Error("expected a TCP listen address"));
+        return;
+      }
+      const port = address.port;
+      probe.close(() => {
+        resolve(`ws://127.0.0.1:${String(port)}/`);
+      });
+    });
+    probe.on("error", reject);
+  });
 }
 
 /** Polls `condition` until it's true or `timeoutMs` elapses, rejecting on timeout -- the shared shape every hub integration test uses to wait out real async gossip/discovery/close propagation rather than asserting immediately after firing an action. */

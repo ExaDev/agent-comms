@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import net from "node:net";
 import { createWebServer, type WebServerHandle } from "../../server.js";
 import { connect, ports, agents, rooms } from "../mesh-worker.js";
+import { unreachableHubUrl } from "../../../../../test/hub-helpers.js";
 
 async function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -26,7 +27,8 @@ let handle: WebServerHandle | undefined;
 
 async function startServer(): Promise<number> {
   const coordinatorPort = await findFreePort();
-  handle = await createWebServer(0, undefined, coordinatorPort);
+  const hubUrl = await unreachableHubUrl();
+  handle = await createWebServer(0, undefined, coordinatorPort, hubUrl);
   await new Promise<void>((resolve) => {
     if (handle?.server.listening === true) {
       resolve();
