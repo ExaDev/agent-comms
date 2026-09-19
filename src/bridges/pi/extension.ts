@@ -13,10 +13,10 @@
 import type {
   ExtensionAPI,
   ExtensionUIContext,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import * as path from "node:path";
 import { Type } from "typebox";
-import { StringEnum } from "@mariozechner/pi-ai";
+import { StringEnum } from "@earendil-works/pi-ai";
 
 import {
   createBridgeMeshSync,

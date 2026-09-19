@@ -31,11 +31,11 @@
     "@commitlint/cli": "21.2.1",
     "@commitlint/config-conventional": "21.2.0",
     "@commitlint/types": "21.2.0",
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
     "@eslint/json": "2.1.0",
     "@eslint/markdown": "8.0.3",
     "@exadev/eslint-config": "2.20.1",
-    "@mariozechner/pi-ai": "0.73.1",
-    "@mariozechner/pi-coding-agent": "0.73.1",
     "@playwright/test": "1.61.1",
     "@semantic-release/changelog": "6.0.3",
     "@semantic-release/commit-analyzer": "13.0.1",
@@ -106,9 +106,8 @@
   "mcpName": "io.github.ExaDev/agent-comms",
   "packageManager": "pnpm@12.4.1+sha512.2e81e399d73fe8390dab25e06aa788ab7a5908248d2f5a370f82b481147a6a7a367bf8048f9a6fdb6460f21a66f0542dedb8b94ca2c8723596741920b1656d4c",
   "peerDependencies": {
-    "@mariozechner/pi-ai": "*",
-    "@mariozechner/pi-coding-agent": "*",
-    "@sinclair/typebox": "*"
+    "@earendil-works/pi-ai": ">=0.79.0",
+    "@earendil-works/pi-coding-agent": ">=0.79.0"
   },
   "pi": {
     "extensions": [
