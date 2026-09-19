@@ -50,6 +50,8 @@ export const test = base.extend<Fixtures>({
     await use(handle);
 
     // wss.close()/server.close() are asynchronous -- neither actually releases its port until its optional callback fires. Awaiting that here keeps a later test's allocFreePort() from being handed a port this handle hasn't genuinely released yet.
+    // wss.close() does not close existing connections and only calls back once every client has disconnected, so a page still holding its WebSocket open would stall this teardown until the test timeout. Terminate the clients first.
+    for (const client of handle.wss.clients) client.terminate();
     await new Promise<void>((resolve) => {
       handle.wss.close(() => {
         resolve();
