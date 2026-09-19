@@ -136,13 +136,9 @@ describe("WireMeshTransport shutdown -- direct mechanism assertions", () => {
     const identity = generateIdentity();
     const clearIntervalSpy = vi.spyOn(global, "clearInterval");
     try {
-      const transport = new WireMeshTransport(
-        noopEvents(),
-        identity,
-        undefined,
-        undefined,
-        () => "active",
-      );
+      const transport = new WireMeshTransport(noopEvents(), identity, {
+        getCurrentPresence: () => "active",
+      });
       clearIntervalSpy.mockClear();
       await transport.shutdown();
       expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
@@ -170,12 +166,9 @@ describe("WireMeshTransport shutdown -- direct mechanism assertions", () => {
     const idB = await peerId(await toIdentityPort(identityB));
     const SHORT_TIMEOUT_MS = 150;
 
-    const transportA = new WireMeshTransport(
-      noopEvents(),
-      identityA,
-      undefined,
-      SHORT_TIMEOUT_MS,
-    );
+    const transportA = new WireMeshTransport(noopEvents(), identityA, {
+      pendingConnectionTimeoutMs: SHORT_TIMEOUT_MS,
+    });
     const transportB = new WireMeshTransport(noopEvents(), identityB);
     try {
       await transportA.becomeCoordinator("127.0.0.1", 0);

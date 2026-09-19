@@ -106,14 +106,14 @@ describe("connectToRemote with a ws:// URL", () => {
     const identity = generateIdentity();
     const transport = new WireMeshTransport(inertEvents(), identity);
 
-    await transport.connectToRemote(
-      hub.url,
-      GARBAGE_PORT,
-      "peer-id",
-      0,
-      "test-agent",
-      "",
-    );
+    await transport.connectToRemote({
+      host: hub.url,
+      port: GARBAGE_PORT,
+      peerId: "peer-id",
+      dataPort: 0,
+      name: "test-agent",
+      fingerprint: "",
+    });
 
     // The fake hub saw the full flow the TLS branch also drives: this side's handshake, then the connect_request manage-request.
     const sawHandshake = hub.received.some((f) => f.type === "handshake");
@@ -130,14 +130,14 @@ describe("connectToRemote with a ws:// URL", () => {
     const identity = generateIdentity();
     const transport = new WireMeshTransport(inertEvents(), identity);
     await expect(
-      transport.connectToRemote(
-        "ftp://example.com/",
-        GARBAGE_PORT,
-        "peer-id",
-        0,
-        "test-agent",
-        "",
-      ),
+      transport.connectToRemote({
+        host: "ftp://example.com/",
+        port: GARBAGE_PORT,
+        peerId: "peer-id",
+        dataPort: 0,
+        name: "test-agent",
+        fingerprint: "",
+      }),
     ).rejects.toThrow(/hostname or a ws:\/\/ \/ wss:\/\//);
     await transport.shutdown();
   });

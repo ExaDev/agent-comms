@@ -5,7 +5,7 @@
 import { CommsError } from "./store.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { MeshTransport } from "./transport.js";
-import type { AgentSelfAdvert } from "./wire-mesh-transport.js";
+import type { AgentSelfAdvert } from "./gossip-extensions.js";
 import { AgentStatus } from "./types.js";
 import type { AgentIdentity, Visibility } from "./types.js";
 

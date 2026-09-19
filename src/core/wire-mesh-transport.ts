@@ -31,8 +31,8 @@ import {
 import {
   connectHubGateway,
   forwardAdvertsToHub,
+  makeSendToLocalPeer,
   routeRoomRequestViaHub,
-  sendToLocalPeer,
 } from "./hub-forwarding.js";
 import {
   acceptMeshSession,
@@ -76,12 +76,14 @@ import type {
 import type { PeerIdentity } from "./identity.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
 import { nanoid } from "./nanoid.js";
-import type { AgentStatus } from "./types.js";
+import type {
+  ConnectToRemoteOptions,
+  WireMeshTransportOptions,
+} from "./wire-mesh-transport-options.js";
 import {
   createRoomRouter,
   extractMessage,
   type RoomRouter,
-  type RoomVerbHandler,
 } from "./room-router.js";
 
 // ---------------------------------------------------------------------------
@@ -101,34 +103,6 @@ const DEFAULT_PENDING_CONNECTION_TIMEOUT_MS =
 const PRESENCE_READVERTISE_INTERVAL_SECONDS = 20;
 const PRESENCE_READVERTISE_INTERVAL_MS =
   PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND;
-
-/** The domain-qualified gossip extension key this transport reads/writes presence under, per wire-mesh's own gossip-extension-namespacing convention (spec/CONVENTIONS.md): `<domain>/<field>`, never a bare name a second application's own extension could collide with. */
-export const PRESENCE_GOSSIP_KEY = "presence/status";
-
-/** The domain-qualified gossip extension key this transport writes this side's own currently-hosted public/private rooms under -- the write half of P3.8's room-discovery replacement for createRoom's own broadcastPatch (agent-comms#48). Same namespacing convention as PRESENCE_GOSSIP_KEY. */
-export const HOSTED_ROOMS_GOSSIP_KEY = "room/hosted";
-
-/** The lightweight, gossip-safe shape a room advertises itself under: enough for a peer to display "this device hosts a discoverable room here" without exposing anything membership- or grant-related. Deliberately excludes secret rooms (never worth advertising at all) and every CRDT membership field a real Room carries -- a gossip-discovered entry is a hint pointing at a room to join, not a substitute for the real Room object join/admission still produces. */
-export interface HostedRoomAdvert {
-  path: string;
-  name: string;
-  type: "public" | "private";
-  description: string;
-}
-
-/** The domain-qualified gossip extension key this transport writes this side's own agent identity facts under -- the write half of P3.8's eventual agent register/update/offline retirement (agent-comms#48). Same namespacing convention as PRESENCE_GOSSIP_KEY/HOSTED_ROOMS_GOSSIP_KEY. */
-export const AGENT_SELF_GOSSIP_KEY = "agent/self";
-
-/** The lightweight, gossip-safe shape an agent advertises itself under: enough for a peer with no prior local record of this device to construct a real AgentIdentity-shaped discovery entry. Deliberately excludes status (already carried separately under presence/status, no need to duplicate it here) and visibility (this field is only ever populated for a "visible" agent in the first place -- see MeshStore's own selfAgentAdvert getter -- so a discovered entry's visibility is always exactly "visible" by construction, never something this advert needs to assert itself). */
-export interface AgentSelfAdvert {
-  name: string;
-  harness: string;
-  cwd: string;
-  pid: number;
-  startedAt: string;
-  tags: string[];
-  subscribedRooms: string[];
-}
 
 /** This project's own namespaced domain (registrant "exadev.io", local name "agent-comms-v1"), matching namespaced-domain-id's "<registrant>/<local-name>" shape -- registry/core-domains.md's own recommended pattern for a third party. Exported for test use only: a security test simulating a hostile client that skips connect_request needs to construct a well-formed frame under the same domain/verb/scope this transport itself listens on, rather than duplicating these as separately-maintained magic strings that could silently drift from the real values. */
 export const DOMAIN = "exadev.io/agent-comms-v1";
@@ -257,19 +231,16 @@ export class WireMeshTransport implements MeshTransport {
   private readonly pendingConnectionTimeoutMs: number;
 
   /** Reads this side's own current AgentStatus for the next gossip re-advertisement tick -- a pull, not a push, so MeshStore never needs to reach into this transport's internals on every status change (see updateAgent/setAgentOffline, which patch MeshStore's own agents map and let the next tick pick it up). undefined when no presence source was wired in (every existing construction site that predates this feature). */
-  private readonly getCurrentPresence:
-    (() => AgentStatus | undefined) | undefined;
+  private readonly getCurrentPresence: WireMeshTransportOptions["getCurrentPresence"];
   /** Reads this side's own currently-hosted public/private rooms for the next gossip re-advertisement tick, the same pull-not-push shape getCurrentPresence already established -- createRoom/destroyRoom patch MeshStore's own rooms map and let the next tick pick it up, rather than pushing an update here on every mutation. undefined when no hosted-rooms source was wired in. */
-  private readonly getHostedRooms:
-    (() => readonly HostedRoomAdvert[]) | undefined;
+  private readonly getHostedRooms: WireMeshTransportOptions["getHostedRooms"];
   private gossipInterval: ReturnType<typeof setInterval> | undefined;
 
   /** Backs this side's own responder for an incoming data-have/data-request/data-entries frame (agent-comms#50's P5 integration) -- undefined for every existing construction site that predates this feature, in which case handleDataFrame is a no-op. Deciding when to proactively call sendDataFrame at all (the catch-up policy: which peers' logs to track, when to send an initial data-have) stays entirely the caller's own business; this field only ever backs the mechanical parts (answering a have/request, storing entries). */
   private readonly dataStorage: KeyValueStorage | undefined;
 
   /** Reads this side's own gossip-safe agent-identity advert for the next gossip re-advertisement tick, the same pull-not-push shape getCurrentPresence/getHostedRooms already established. undefined when no agent-identity source was wired in, or when MeshStore's own getter decides this agent shouldn't advertise itself this way right now (e.g. not "visible", or no self-agent record yet). */
-  private readonly getSelfAgentAdvert:
-    (() => AgentSelfAdvert | undefined) | undefined;
+  private readonly getSelfAgentAdvert: WireMeshTransportOptions["getSelfAgentAdvert"];
 
   /** Reads this side's own currently-running cc-peer package version for the next gossip re-advertisement tick (agent-comms#198). Unlike getCurrentPresence/getHostedRooms/getSelfAgentAdvert (constructor-injected, since MeshStore already has a real value for each at construction time), this is a plain mutable field set post-construction -- bridge-mesh.ts assigns it right after building this transport, mirroring MeshStore's own onDelivery/onError/onCoordinatorRoleChanged convention, so this transport doesn't need its own constructor parameter for a fact only two of many bridges ever have. undefined for every bridge that never loads cc-peer at all. */
   getCcPeerVersion: (() => string | undefined) | undefined;
@@ -280,18 +251,22 @@ export class WireMeshTransport implements MeshTransport {
   /** The cross-machine trust boundary (agent-comms#156): gates outbound gossip advertisement (hasAny), inbound directory merge (isTrusted or isTrustedPrincipal, wired into HubSession as isTrustedForDirectory since agent-comms#192), the legacy per-device frame path (isTrusted), and outbound targeted hub requests (isTrusted); see GatewayTrust's own class doc. A real room-domain manage-request relayed through the hub is never gated on this at all since agent-comms#192: hub-session.ts's own dispatchHubRequest relies purely on that verb's own capability-token verification instead. Defaults to a fresh, empty (deny-all) instance when no caller wires one in, matching every existing construction site that predates this feature. */
   private readonly gatewayTrust: GatewayTrustReader;
 
+  /** See WireMeshTransportOptions's own doc comment -- all eight fields are optional and bundled into one `options` parameter, so a caller needing only gatewayTrust no longer has to pass `undefined` for every one before it. */
   constructor(
     events: Readonly<TransportEvents>,
     identity: Readonly<PeerIdentity>,
-    roomVerbHandlers?: Partial<Record<string, RoomVerbHandler>>,
-    pendingConnectionTimeoutMs: number = DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
-    getCurrentPresence?: () => AgentStatus | undefined,
-    presenceReadvertiseIntervalMs: number = PRESENCE_READVERTISE_INTERVAL_MS,
-    getHostedRooms?: () => readonly HostedRoomAdvert[],
-    dataStorage?: KeyValueStorage,
-    getSelfAgentAdvert?: () => AgentSelfAdvert | undefined,
-    gatewayTrust: Readonly<GatewayTrustReader> = new GatewayTrust(),
+    options?: WireMeshTransportOptions,
   ) {
+    const {
+      roomVerbHandlers,
+      pendingConnectionTimeoutMs = DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
+      getCurrentPresence,
+      presenceReadvertiseIntervalMs = PRESENCE_READVERTISE_INTERVAL_MS,
+      getHostedRooms,
+      dataStorage,
+      getSelfAgentAdvert,
+      gatewayTrust = new GatewayTrust(),
+    } = options ?? {};
     this.events = events;
     this.wireTransport = createTlsTransport({
       certificatePem: identity.certificate,
@@ -321,24 +296,24 @@ export class WireMeshTransport implements MeshTransport {
       isTrustedForDirectory: (deviceHex) =>
         this.gatewayTrust.isTrusted(deviceHex) ||
         this.gatewayTrust.isTrustedPrincipal(deviceHex),
-      forwardToLocalPeer: sendToLocalPeer.bind(null, this.peerSessions),
+      forwardToLocalPeer: makeSendToLocalPeer(this.peerSessions),
     });
     this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;
     this.getCurrentPresence = getCurrentPresence;
     this.getHostedRooms = getHostedRooms;
     this.dataStorage = dataStorage;
     this.getSelfAgentAdvert = getSelfAgentAdvert;
-    this.gossipInterval = startGossipInterval(
-      this.allSessions,
-      this.hub,
-      () => this.gatewayTrust.hasAny(),
-      this.events.onError,
+    this.gossipInterval = startGossipInterval({
+      allSessions: this.allSessions,
+      hub: this.hub,
+      hasAnyTrustedGateway: () => this.gatewayTrust.hasAny(),
+      onError: this.events.onError,
       getCurrentPresence,
       getHostedRooms,
       getSelfAgentAdvert,
-      () => this.getCcPeerVersion?.(),
-      presenceReadvertiseIntervalMs,
-    );
+      getCcPeerVersion: () => this.getCcPeerVersion?.(),
+      intervalMs: presenceReadvertiseIntervalMs,
+    });
   }
 
   /** Sends one data-have or data-request frame directly to an already-connected peer -- the mechanical send primitive a future catch-up policy calls once it decides to (see the dataStorage field comment). Throws if this side has never received any frame from that peer yet (there is no connection to send on), matching sendManageRequest's own "no reachable session" failure mode for an unknown peer. */
@@ -795,7 +770,13 @@ export class WireMeshTransport implements MeshTransport {
     if (!this.gatewayTrust.isTrusted(memberId)) {
       return { result: "error", code: "unauthorized" };
     }
-    return routeRoomRequestViaHub(this.hub, memberId, command, scope, token);
+    return routeRoomRequestViaHub({
+      hub: this.hub,
+      memberId,
+      command,
+      scope,
+      token,
+    });
   }
 
   /** Asks deviceId for its own, currently-running wire-mesh-core version, live, right now (agent-comms#198's own query_version action) -- rides sendRoomRequest's own routing (a direct peerSessions session when one exists, else a trusted hub relay, else "unauthorized") against wire-mesh-core's deliberately-ungated core/version domain (spec/version.cddl): "version:get" on the outer manage-command only exists to satisfy manage-command.verb's own capability-verb grammar, and the scope below (kind "node") is arbitrary -- the receiving side never actually inspects either for this verb. */
@@ -812,13 +793,9 @@ export class WireMeshTransport implements MeshTransport {
   // -----------------------------------------------------------------------
 
   async connectToRemote(
-    host: string,
-    port: number,
-    peerId: string,
-    dataPort: number,
-    name: string,
-    fingerprint: string,
+    options: Readonly<ConnectToRemoteOptions>,
   ): Promise<void> {
+    const { host, port, peerId, dataPort, name, fingerprint } = options;
     // A ws:// or wss:// URL in the host position dials a WebSocket-served
     // hub (e.g. the mesh.exadev.io cloudflare-hub) instead of raw TLS --
     // the port is meaningless in URL form, so callers pass 0. Any other URL
@@ -915,16 +892,16 @@ export class WireMeshTransport implements MeshTransport {
     port: number,
     policy: ListenerPolicy,
   ): Promise<string> {
-    return registerListener(
-      this.wireTransport,
-      this.coordinatorListeners,
+    return registerListener({
+      wireTransport: this.wireTransport,
+      coordinatorListeners: this.coordinatorListeners,
       host,
       port,
       policy,
-      (connection) => {
+      onAccepted: (connection) => {
         void this.handleAcceptedConnection(connection, policy, false, true);
       },
-    );
+    });
   }
 
   async removeListener(id: string): Promise<void> {
@@ -949,13 +926,13 @@ export class WireMeshTransport implements MeshTransport {
   // -----------------------------------------------------------------------
 
   async connectHub(url: string): Promise<void> {
-    await connectHubGateway(
-      this.hub,
+    await connectHubGateway({
+      hub: this.hub,
       url,
-      this.knownDevices,
-      this.events.onError,
-      () => this.gatewayTrust.hasAny(),
-    );
+      knownDevices: this.knownDevices,
+      onError: this.events.onError,
+      hasAnyTrustedGateway: () => this.gatewayTrust.hasAny(),
+    });
   }
 
   async disconnectHub(): Promise<void> {

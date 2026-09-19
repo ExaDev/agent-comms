@@ -102,14 +102,10 @@ describe("WireMeshTransport presence-interval construction", () => {
       .spyOn(global, "setInterval")
       .mockReturnValue(fakeTimer);
     try {
-      new WireMeshTransport(
-        noopEvents(),
-        identity,
-        undefined,
-        undefined,
-        () => "active",
-        // Deliberately omitted: relying on the constructor's own default presenceReadvertiseIntervalMs argument is the point of this test -- it proves PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND actually computes 20_000, not merely that *some* interval gets scheduled.
-      );
+      // presenceReadvertiseIntervalMs deliberately omitted: relying on the constructor's own default is the point of this test -- it proves PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND actually computes 20_000, not merely that *some* interval gets scheduled.
+      new WireMeshTransport(noopEvents(), identity, {
+        getCurrentPresence: () => "active",
+      });
       // Mirrors WireMeshTransport's own default cadence (PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND).
       const READVERTISE_MS = 20_000;
       expect(setIntervalSpy).toHaveBeenCalledTimes(1);
@@ -258,10 +254,24 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
       if (listener === undefined) throw new Error("expected a bound listener");
 
       void transportB
-        .connectToRemote("127.0.0.1", listener.port, idB, 0, "b", "")
+        .connectToRemote({
+          host: "127.0.0.1",
+          port: listener.port,
+          peerId: idB,
+          dataPort: 0,
+          name: "b",
+          fingerprint: "",
+        })
         .catch(() => undefined);
       void transportC
-        .connectToRemote("127.0.0.1", listener.port, idC, 0, "c", "")
+        .connectToRemote({
+          host: "127.0.0.1",
+          port: listener.port,
+          peerId: idC,
+          dataPort: 0,
+          name: "c",
+          fingerprint: "",
+        })
         .catch(() => undefined);
 
       await waitFor(
@@ -313,14 +323,14 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
       const [listener] = transportA.listListeners();
       if (listener === undefined) throw new Error("expected a bound listener");
 
-      const connectPromise = transportB.connectToRemote(
-        "127.0.0.1",
-        listener.port,
-        idB,
-        0,
-        "b",
-        "",
-      );
+      const connectPromise = transportB.connectToRemote({
+        host: "127.0.0.1",
+        port: listener.port,
+        peerId: idB,
+        dataPort: 0,
+        name: "b",
+        fingerprint: "",
+      });
 
       await waitFor(
         () => requests.some((h) => h.id === idB),
@@ -371,14 +381,14 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
       const [listener] = transportA.listListeners();
       if (listener === undefined) throw new Error("expected a bound listener");
 
-      const connectPromise = transportB.connectToRemote(
-        "127.0.0.1",
-        listener.port,
-        idB,
-        0,
-        "b",
-        "",
-      );
+      const connectPromise = transportB.connectToRemote({
+        host: "127.0.0.1",
+        port: listener.port,
+        peerId: idB,
+        dataPort: 0,
+        name: "b",
+        fingerprint: "",
+      });
 
       await waitFor(
         () => requests.some((h) => h.id === idB),
@@ -554,9 +564,7 @@ describe("WireMeshTransport shutdown", () => {
     const transportA = new WireMeshTransport(
       noopEvents({ onConnectionRequest: (h) => void requests.push(h) }),
       identityA,
-      undefined,
-      undefined,
-      () => "active",
+      { getCurrentPresence: () => "active" },
     );
     const clearIntervalSpy = vi.spyOn(global, "clearInterval");
     const transportB = new WireMeshTransport(noopEvents(), identityB);
@@ -566,7 +574,14 @@ describe("WireMeshTransport shutdown", () => {
       if (listener === undefined) throw new Error("expected a bound listener");
 
       const connectPromise = transportB
-        .connectToRemote("127.0.0.1", listener.port, idB, 0, "b", "")
+        .connectToRemote({
+          host: "127.0.0.1",
+          port: listener.port,
+          peerId: idB,
+          dataPort: 0,
+          name: "b",
+          fingerprint: "",
+        })
         .catch((e: unknown) => e);
 
       await waitFor(
@@ -661,7 +676,14 @@ describe("WireMeshTransport listener policy propagation into quarantine", () => 
         throw new Error("expected the added listener");
 
       void transportB
-        .connectToRemote("127.0.0.1", listener.port, idB, 0, "b", "")
+        .connectToRemote({
+          host: "127.0.0.1",
+          port: listener.port,
+          peerId: idB,
+          dataPort: 0,
+          name: "b",
+          fingerprint: "",
+        })
         .catch(() => undefined);
 
       await waitFor(
@@ -694,14 +716,10 @@ describe("WireMeshTransport readvertisePresence body", () => {
     const presenceSeenByB: AgentStatus[] = [];
     let currentStatus: AgentStatus | undefined;
     const SHORT_INTERVAL_MS = 40;
-    const transportA = new WireMeshTransport(
-      noopEvents(),
-      identityA,
-      undefined,
-      undefined,
-      () => currentStatus,
-      SHORT_INTERVAL_MS,
-    );
+    const transportA = new WireMeshTransport(noopEvents(), identityA, {
+      getCurrentPresence: () => currentStatus,
+      presenceReadvertiseIntervalMs: SHORT_INTERVAL_MS,
+    });
     const transportB = new WireMeshTransport(
       noopEvents({
         onPresenceAdvert: (_h, status) => void presenceSeenByB.push(status),
@@ -767,26 +785,23 @@ describe("WireMeshTransport pending-connection expiry", () => {
     const idB = await peerId(await toIdentityPort(identityB));
     const SHORT_TIMEOUT_MS = 150;
 
-    const transportA = new WireMeshTransport(
-      noopEvents(),
-      identityA,
-      undefined,
-      SHORT_TIMEOUT_MS,
-    );
+    const transportA = new WireMeshTransport(noopEvents(), identityA, {
+      pendingConnectionTimeoutMs: SHORT_TIMEOUT_MS,
+    });
     const transportB = new WireMeshTransport(noopEvents(), identityB);
     try {
       await transportA.becomeCoordinator("127.0.0.1", 0);
       const [listener] = transportA.listListeners();
       if (listener === undefined) throw new Error("expected a bound listener");
 
-      const connectPromise = transportB.connectToRemote(
-        "127.0.0.1",
-        listener.port,
-        idB,
-        0,
-        "b",
-        "",
-      );
+      const connectPromise = transportB.connectToRemote({
+        host: "127.0.0.1",
+        port: listener.port,
+        peerId: idB,
+        dataPort: 0,
+        name: "b",
+        fingerprint: "",
+      });
 
       await expect(connectPromise).rejects.toThrow(
         "no human decision within the pending-connection timeout",

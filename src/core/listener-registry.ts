@@ -28,14 +28,22 @@ export function listenerPort(listener: Readonly<Listener>): number {
 }
 
 /** Registers a new listener at host:port under the given policy, tracking it in coordinatorListeners (mutated in place) and dispatching every accepted connection to onAccepted -- WireMeshTransport.addListener's own body, unchanged in behaviour. */
-export async function registerListener(
-  wireTransport: Readonly<Pick<Transport, "listen">>,
-  coordinatorListeners: Map<string, TrackedListener>,
-  host: string,
-  port: number,
-  policy: ListenerPolicy,
-  onAccepted: (connection: Readonly<Connection>) => void,
-): Promise<string> {
+export async function registerListener(options: {
+  wireTransport: Readonly<Pick<Transport, "listen">>;
+  coordinatorListeners: Map<string, TrackedListener>;
+  host: string;
+  port: number;
+  policy: ListenerPolicy;
+  onAccepted: (connection: Readonly<Connection>) => void;
+}): Promise<string> {
+  const {
+    wireTransport,
+    coordinatorListeners,
+    host,
+    port,
+    policy,
+    onAccepted,
+  } = options;
   const id = nanoid(LISTENER_ID_LENGTH);
   const listener = await wireTransport.listen(
     `${host}:${String(port)}`,

@@ -105,14 +105,14 @@ export class ConnectionApproval {
     // Fire-and-forget: don't await the full approval handshake. The coordinator will either accept (triggering normal introduction flow) or reject (closing the socket). Handle rejection to avoid unhandled rejection.
     this.deps
       .requireTransport()
-      .connectToRemote(
+      .connectToRemote({
         host,
         port,
         peerId,
-        this.deps.requireTransport().dataPort,
-        agent?.name ?? "",
-        "",
-      )
+        dataPort: this.deps.requireTransport().dataPort,
+        name: agent?.name ?? "",
+        fingerprint: "",
+      })
       .catch(() => {
         // Rejection is expected when the coordinator denies the connection. Log silently — the calling tool already returned success.
       });

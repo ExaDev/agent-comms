@@ -60,30 +60,12 @@ describe("connectToHub", () => {
     gatewayTrustA.add(deviceB);
     const gatewayTrustB = new GatewayTrust();
     gatewayTrustB.add(deviceA);
-    const transportA = new WireMeshTransport(
-      eventsA,
-      identityA,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      gatewayTrustA,
-    );
-    const transportB = new WireMeshTransport(
-      eventsB,
-      identityB,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      gatewayTrustB,
-    );
+    const transportA = new WireMeshTransport(eventsA, identityA, {
+      gatewayTrust: gatewayTrustA,
+    });
+    const transportB = new WireMeshTransport(eventsB, identityB, {
+      gatewayTrust: gatewayTrustB,
+    });
     await transportA.hub.connect(hub.url);
     await transportB.hub.connect(hub.url);
 
@@ -127,30 +109,12 @@ describe("connectToHub", () => {
     const gatewayTrustA = new GatewayTrust();
     const gatewayTrustB = new GatewayTrust();
     gatewayTrustB.addPrincipal(deviceA);
-    const transportA = new WireMeshTransport(
-      eventsA,
-      identityA,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      gatewayTrustA,
-    );
-    const transportB = new WireMeshTransport(
-      eventsB,
-      identityB,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      gatewayTrustB,
-    );
+    const transportA = new WireMeshTransport(eventsA, identityA, {
+      gatewayTrust: gatewayTrustA,
+    });
+    const transportB = new WireMeshTransport(eventsB, identityB, {
+      gatewayTrust: gatewayTrustB,
+    });
     await transportA.hub.connect(hub.url);
     await transportB.hub.connect(hub.url);
 
@@ -176,30 +140,12 @@ describe("connectToHub", () => {
     gatewayTrustA.add(deviceB);
     const gatewayTrustB = new GatewayTrust();
     gatewayTrustB.add(deviceA);
-    const transportA = new WireMeshTransport(
-      eventsA,
-      identityA,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      gatewayTrustA,
-    );
-    const transportB = new WireMeshTransport(
-      eventsB,
-      identityB,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      gatewayTrustB,
-    );
+    const transportA = new WireMeshTransport(eventsA, identityA, {
+      gatewayTrust: gatewayTrustA,
+    });
+    const transportB = new WireMeshTransport(eventsB, identityB, {
+      gatewayTrust: gatewayTrustB,
+    });
     await transportA.hub.connect(hub.url);
     await transportB.hub.connect(hub.url);
 
@@ -259,30 +205,12 @@ describe("connectToHub", () => {
     gatewayTrustA.add(deviceB);
     const gatewayTrustB = new GatewayTrust();
     gatewayTrustB.add(deviceA);
-    const transportA = new WireMeshTransport(
-      eventsA,
-      identityA,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      gatewayTrustA,
-    );
-    const transportB = new WireMeshTransport(
-      eventsB,
-      identityB,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      gatewayTrustB,
-    );
+    const transportA = new WireMeshTransport(eventsA, identityA, {
+      gatewayTrust: gatewayTrustA,
+    });
+    const transportB = new WireMeshTransport(eventsB, identityB, {
+      gatewayTrust: gatewayTrustB,
+    });
     await transportA.hub.connect(hub.url);
     await transportB.hub.connect(hub.url);
 
