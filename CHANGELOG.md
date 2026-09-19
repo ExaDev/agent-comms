@@ -1,3 +1,9 @@
+## [4.1.6](https://github.com/ExaDev/agent-comms/compare/v4.1.5...v4.1.6) (2026-09-19)
+
+### Build
+
+* **bridge:** build the service worker as an iife to avoid a deprecated Rolldown option ([4e4eaff](https://github.com/ExaDev/agent-comms/commit/4e4eaffce2fb26c1bac81fa1b29aeccd39fc8ecb))
+
 ## [4.1.5](https://github.com/ExaDev/agent-comms/compare/v4.1.4...v4.1.5) (2026-09-19)
 
 ### CI
