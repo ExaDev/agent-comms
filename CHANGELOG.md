@@ -1,3 +1,10 @@
+## [4.1.4](https://github.com/ExaDev/agent-comms/compare/v4.1.3...v4.1.4) (2026-09-19)
+
+### Bug Fixes
+
+* **bridge:** report mesh store errors instead of dropping them ([2c42fca](https://github.com/ExaDev/agent-comms/commit/2c42fca39e11c5148c7860ffe4b572912f6c9977))
+* **bridge:** share one cc-peer peer between the bridge command and the default front ([1262f5d](https://github.com/ExaDev/agent-comms/commit/1262f5d72791e929807f8451bc0ec54f7435cc16))
+
 ## [4.1.3](https://github.com/ExaDev/agent-comms/compare/v4.1.2...v4.1.3) (2026-09-19)
 
 ### Bug Fixes
