@@ -109,11 +109,11 @@ export const meshRouter = {
     renameAgentAction(context.controller, input),
   ),
 
-  pushSubscribe: impl.pushSubscribe.handler(async ({ context, input }) =>
+  pushSubscribe: impl.pushSubscribe.handler(({ context, input }) =>
     pushSubscribeAction(context.controller, context.pushManager, input),
   ),
 
-  pushUnsubscribe: impl.pushUnsubscribe.handler(async ({ context, input }) =>
+  pushUnsubscribe: impl.pushUnsubscribe.handler(({ context, input }) =>
     pushUnsubscribeAction(context.controller, context.pushManager, input),
   ),
 
