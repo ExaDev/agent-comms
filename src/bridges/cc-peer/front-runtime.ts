@@ -49,6 +49,8 @@ export interface CreateDefaultCcPeerFrontOptions {
   onError?: ((error: Error) => void) | undefined;
   /** The cc-peer peer this process already owns, when it has one. cc-peer allows one peer per process, so a process that runs its own (the one-shot `bridge cc-peer` command) must lend it here rather than let the front try to create a second. The front only borrows it: it never stops it, and registers its inbound listener on it once. Without this the front creates and owns its own peer. */
   peer?: FrontCcPeer | undefined;
+  /** The name the shared peer is registered under, which fronted sessions are told to message to answer a join request. Defaults to the front's own peer name; a host process that lends its own peer names it here. */
+  peerName?: string | undefined;
   /** Sessions this process already relays by other means, which the front must therefore leave alone. */
   excludeSession?:
     ((entry: Readonly<CcPeerRosterEntryLike>) => boolean) | undefined;
@@ -66,6 +68,7 @@ export function createDefaultCcPeerFront(
   options: Readonly<CreateDefaultCcPeerFrontOptions> = {},
 ): Pick<CcPeerFront<FrontedRelayRecord>, "start" | "stop"> {
   const borrowedPeer = options.peer;
+  const peerName = options.peerName ?? FRONT_PEER_NAME;
   let aliasPool: AliasPool | undefined;
   const aliasDirectory = new ReplyAliasDirectory();
 
@@ -147,6 +150,7 @@ export function createDefaultCcPeerFront(
 
     return buildFrontedSessionRecord({
       entry,
+      peerName,
       agentId: reg.agentId,
       roomId,
       store,
