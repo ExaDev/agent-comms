@@ -1,3 +1,32 @@
+## [3.34.0](https://github.com/ExaDev/agent-comms/compare/v3.33.3...v3.34.0) (2026-09-19)
+
+### Features
+
+* **build:** recognise a component test kind for React component tests ([65b3683](https://github.com/ExaDev/agent-comms/commit/65b3683cbf1d4239e2bbceae9db68823e7402626))
+
+### Bug Fixes
+
+* **build:** stop this repo's own json/json override from reverting tsconfig.json back off jsonc ([4a3e1ee](https://github.com/ExaDev/agent-comms/commit/4a3e1eed3bc24c8ec70b528c6ebd04d07d09c00b))
+
+### Refactoring
+
+* **cli:** replace remaining trailing optional parameters with options objects ([2ac77ed](https://github.com/ExaDev/agent-comms/commit/2ac77ed87704dd3c7302ecb75cc7a085e9040d93))
+* **core:** pass dispatchHubRequest its inputs as an options object ([af17605](https://github.com/ExaDev/agent-comms/commit/af17605367f23fbc9532fdcf7b39036938487b23))
+* **core:** pass sendRoomMessage reply, timing and durability hints as an options object ([2ef1963](https://github.com/ExaDev/agent-comms/commit/2ef1963c6369bff42d19376db940f2c5e34df400))
+* **core:** take WireMeshTransport and its helpers' optional inputs as options objects ([0712569](https://github.com/ExaDev/agent-comms/commit/0712569c59ccb7da613a2f34a648b991c7ca85ed))
+* **mesh-store:** construct MeshStore and the bridge mesh from options objects ([0fe48aa](https://github.com/ExaDev/agent-comms/commit/0fe48aa84af0190074e0755e6e0c695f99be38a2))
+* **tool:** construct CommsTool from an options object ([ce03325](https://github.com/ExaDev/agent-comms/commit/ce03325186b54f380d93e7827cf58b378f197cd0))
+
+### Tests
+
+* **core:** assert connectToRemote is called with its options object ([3c4e2df](https://github.com/ExaDev/agent-comms/commit/3c4e2dfbf746ab3a9461f66283e84b5411224a1a))
+
+### Chores
+
+* **build:** apply RFC 8785 canonical JSON formatting ([b559047](https://github.com/ExaDev/agent-comms/commit/b5590476fea3684fa0337d11b0fb8170fa191d46))
+* **build:** declare a test kind for every test file exadev/test-file-kind flags ([e80cc0f](https://github.com/ExaDev/agent-comms/commit/e80cc0f9e9820b09029ba07fb19b9a1530476ccc))
+* **deps:** bump @exadev/eslint-config to 2.20.1 ([3849a34](https://github.com/ExaDev/agent-comms/commit/3849a34702f54f16b5a589f6f11b795cbc2591af))
+
 ## [3.33.3](https://github.com/ExaDev/agent-comms/compare/v3.33.2...v3.33.3) (2026-09-19)
 
 ### Bug Fixes
