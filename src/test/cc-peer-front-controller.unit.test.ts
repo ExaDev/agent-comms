@@ -236,6 +236,42 @@ describe("CcPeerFront — attach/detach diffing across ticks", () => {
     await h.front.stop();
   });
 
+  it("never fronts a session the excludeSession predicate names, while still fronting the rest", async () => {
+    const h = harness([
+      rosterEntry({ pid: 1, cwd: "/tmp/relayed-elsewhere" }),
+      rosterEntry({ pid: 2, cwd: "/tmp/other" }),
+    ]);
+    const front = new CcPeerFront({
+      ...h.deps,
+      excludeSession: (entry) => entry.pid === 1,
+    });
+
+    front.start();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+    expect(h.attach).toHaveBeenCalledTimes(1);
+    expect(h.attach).toHaveBeenCalledWith(expect.objectContaining({ pid: 2 }));
+    await front.stop();
+  });
+
+  it("detaches a fronted session once the excludeSession predicate starts naming it", async () => {
+    const h = harness([rosterEntry({ pid: 1, cwd: "/tmp/soon-relayed" })]);
+    const excludedPids = new Set<number>();
+    const front = new CcPeerFront({
+      ...h.deps,
+      excludeSession: (entry) => excludedPids.has(entry.pid),
+    });
+    front.start();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    expect(h.attach).toHaveBeenCalledTimes(1);
+
+    excludedPids.add(1);
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+    expect(h.detach).toHaveBeenCalledTimes(1);
+    await front.stop();
+  });
+
   it("routes an inbound message to the fronted session it came from", async () => {
     const h = harness([
       rosterEntry({ pid: 1, messagingSocketPath: "/tmp/sock-1" }),

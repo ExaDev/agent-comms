@@ -5,7 +5,6 @@
  */
 
 import { CcPeer, CC_PEER_VERSION } from "cc-peer";
-import type { InboundMessage as CcPeerInboundMessage } from "cc-peer";
 import { AliasPool } from "cc-peer/alias-pool";
 import type { AliasMessage } from "cc-peer/alias-pool";
 import {
@@ -20,21 +19,39 @@ import {
 import { CcPeerFront } from "./front-controller.js";
 import { computeFrontSlot } from "./front.js";
 import type { CcPeerRosterEntryLike } from "./front.js";
+import type { CcPeerInboundMessage } from "./bridge.js";
 import {
   buildFrontedSessionRecord,
   detachFrontedSession,
   type FrontedRelayRecord,
+  type FrontRelayPeer,
 } from "./front-relay.js";
 import { ReplyAliasDirectory } from "./reply-aliases.js";
+import { SharedPeer } from "./shared-peer.js";
 
 /** cc-peer's own registered display name for the front's shared peer -- distinct from any individual fronted session's own agent-comms display name (front-relay.ts's ensureRegistered call uses the session's own cc-peer name/pid for that). */
 const FRONT_PEER_NAME = "agent-comms-front";
+
+/** The slice of a cc-peer peer the front uses: reading the local roster, receiving messages, and sending to a fronted session. The real CcPeer satisfies it. */
+export interface FrontCcPeer extends FrontRelayPeer {
+  roster: () => Promise<readonly CcPeerRosterEntryLike[]>;
+  on: (
+    event: "message",
+    listener: (message: Readonly<CcPeerInboundMessage>) => void,
+  ) => unknown;
+  stop: () => Promise<void>;
+}
 
 export interface CreateDefaultCcPeerFrontOptions {
   coordinatorPort?: number | undefined;
   hubUrl?: string | undefined;
   pollIntervalMs?: number | undefined;
   onError?: ((error: Error) => void) | undefined;
+  /** The cc-peer peer this process already owns, when it has one. cc-peer allows one peer per process, so a process that runs its own (the one-shot `bridge cc-peer` command) must lend it here rather than let the front try to create a second. The front only borrows it: it never stops it, and registers its inbound listener on it once. Without this the front creates and owns its own peer. */
+  peer?: FrontCcPeer | undefined;
+  /** Sessions this process already relays by other means, which the front must therefore leave alone. */
+  excludeSession?:
+    ((entry: Readonly<CcPeerRosterEntryLike>) => boolean) | undefined;
 }
 
 /** Falls back to "claude-code-<pid>" when a session has never picked its own cc-peer display name -- ensureRegistered requires a defaultName, and an unnamed session is still worth fronting under something stable and identifiable. */
@@ -48,7 +65,7 @@ function defaultSessionName(entry: Readonly<CcPeerRosterEntryLike>): string {
 export function createDefaultCcPeerFront(
   options: Readonly<CreateDefaultCcPeerFrontOptions> = {},
 ): Pick<CcPeerFront<FrontedRelayRecord>, "start" | "stop"> {
-  let sharedPeerPromise: Promise<CcPeer> | undefined;
+  const borrowedPeer = options.peer;
   let aliasPool: AliasPool | undefined;
   const aliasDirectory = new ReplyAliasDirectory();
 
@@ -61,8 +78,22 @@ export function createDefaultCcPeerFront(
     attach: async (entry) => attachSession(entry, await ensureSharedPeer()),
     detach: detachFrontedSession,
     aliasDirectory,
+    excludeSession: options.excludeSession,
     pollIntervalMs: options.pollIntervalMs,
     onError: options.onError,
+  });
+
+  const sharedPeer = new SharedPeer<FrontCcPeer>(async () => {
+    if (borrowedPeer !== undefined) return borrowedPeer;
+    const peer = await CcPeer.create({ name: FRONT_PEER_NAME });
+    peer.on("message", (message: Readonly<CcPeerInboundMessage>) => {
+      front.handleInboundMessage(message);
+    });
+    return peer;
+  });
+  // A borrowed peer outlives the front's own start/stop cycles, so its listener is attached once here rather than on every (re)creation, which would relay each inbound message once per restart.
+  borrowedPeer?.on("message", (message: Readonly<CcPeerInboundMessage>) => {
+    front.handleInboundMessage(message);
   });
 
   return {
@@ -71,25 +102,12 @@ export function createDefaultCcPeerFront(
     },
     stop: async () => {
       await front.stop();
-      const peer = await sharedPeerPromise?.catch(() => undefined);
-      sharedPeerPromise = undefined;
-      await peer?.stop();
+      const peer = await sharedPeer.release();
+      if (borrowedPeer === undefined) await peer?.stop();
       await aliasPool?.stopAll();
       aliasPool = undefined;
     },
   };
-
-  async function ensureSharedPeer(): Promise<CcPeer> {
-    sharedPeerPromise ??= CcPeer.create({ name: FRONT_PEER_NAME }).then(
-      (peer) => {
-        peer.on("message", (message: Readonly<CcPeerInboundMessage>) => {
-          front.handleInboundMessage(message);
-        });
-        return peer;
-      },
-    );
-    return sharedPeerPromise;
-  }
 
   /** Materialises the front's own shared AliasPool on first use (mirroring ensureSharedPeer's own lazy-construction convention) and wires its "message" event -- every reply arriving on any fronted session's own correspondent aliases -- straight into the controller's handleAliasMessage, which resolves the sending session and the alias's own correspondent before routing it on. */
   function ensureAliasPool(): AliasPool {
@@ -102,9 +120,13 @@ export function createDefaultCcPeerFront(
     return pool;
   }
 
+  async function ensureSharedPeer(): Promise<FrontCcPeer> {
+    return sharedPeer.get();
+  }
+
   async function attachSession(
     entry: Readonly<CcPeerRosterEntryLike>,
-    peer: CcPeer,
+    peer: Readonly<FrontCcPeer>,
   ): Promise<FrontedRelayRecord> {
     const slot = computeFrontSlot(entry.cwd);
     const identity = loadIdentityForFront(slot);

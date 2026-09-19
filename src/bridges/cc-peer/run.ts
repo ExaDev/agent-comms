@@ -9,12 +9,18 @@
 import { CcPeer, CC_PEER_VERSION } from "cc-peer";
 import {
   createBridgeMesh,
+  createMeshErrorReporter,
   ensureRegistered,
   ensureProjectRoom,
 } from "../../core/index.js";
 import type { IdentitySlot } from "../../core/identity-store.js";
 import { releaseIdentityLock } from "../../core/identity-store.js";
-import { wireCcPeerBridge, type CcPeerRef } from "./bridge.js";
+import {
+  createTargetSenderMatcher,
+  targetMatchesEntry,
+  wireCcPeerBridge,
+  type CcPeerRef,
+} from "./bridge.js";
 import { wireDefaultCcPeerFront } from "./default-front.js";
 
 const PID_FLAG_PREFIX = "--pid=";
@@ -44,9 +50,15 @@ export async function run(): Promise<void> {
   const target = parseTarget(process.argv.slice(BRIDGE_ARGS_START_INDEX));
 
   const identitySlot: IdentitySlot = { harness: "cc-peer", cwd: process.cwd() };
+  // cc-peer allows one peer per process, so this is the only one: the default front borrows it below rather than creating its own, and the front leaves this bridge's own target alone since the relay below already covers it.
+  const peer = await CcPeer.create({ name: "agent-comms-bridge" });
   const { store, tool } = await createBridgeMesh(identitySlot);
+  store.onError = createMeshErrorReporter();
   store.getCcPeerVersion = () => CC_PEER_VERSION;
-  store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
+  store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store, {
+    peer,
+    excludeSession: (entry) => targetMatchesEntry(target, entry),
+  });
 
   const reg = await ensureRegistered({
     store,
@@ -56,8 +68,6 @@ export async function run(): Promise<void> {
   });
   const roomId = await ensureProjectRoom(store, reg.agentId, process.cwd());
 
-  const peer = await CcPeer.create({ name: "agent-comms-bridge" });
-
   wireCcPeerBridge({
     store,
     tool,
@@ -66,6 +76,7 @@ export async function run(): Promise<void> {
     roomId,
     target,
     cwd: process.cwd(),
+    isFromTarget: createTargetSenderMatcher(target, async () => peer.roster()),
   });
 
   await store.init();

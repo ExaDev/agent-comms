@@ -39,6 +39,41 @@ export interface CcPeerBridgeStore {
   onDelivery:
     | ((agentId: string, event: DeliveryEvent) => void | Promise<void>)
     | undefined;
+  /** Where a failure relaying an inbound message is reported, since the relay is fire-and-forget from the cc-peer event's own point of view. */
+  onError: ((error: Error) => void) | undefined;
+}
+
+/** The slice of a cc-peer roster entry needed to tell whether it is a given target. */
+export interface CcPeerTargetEntry {
+  pid: number;
+  name?: string | undefined;
+  messagingSocketPath: string;
+}
+
+/** Whether a roster entry is the session a target ref addresses. An address target names the session's own `uds:<socket path>` address. */
+export function targetMatchesEntry(
+  target: Readonly<CcPeerRef>,
+  entry: Readonly<CcPeerTargetEntry>,
+): boolean {
+  if ("pid" in target) return entry.pid === target.pid;
+  if ("name" in target) return entry.name === target.name;
+  return target.address === `uds:${entry.messagingSocketPath}`;
+}
+
+/** Builds the predicate that says whether an inbound message was sent by the target session. The sender is identified by its `uds:<socket path>` address, resolved against a fresh roster read for every message so a target addressed by name is still recognised after that session restarts under a new pid. */
+export function createTargetSenderMatcher(
+  target: Readonly<CcPeerRef>,
+  listRoster: () => Promise<readonly CcPeerTargetEntry[]>,
+): (message: Readonly<CcPeerInboundMessage>) => Promise<boolean> {
+  return async (message) => {
+    if (message.from === undefined) return false;
+    if ("address" in target) return message.from === target.address;
+    const roster = await listRoster();
+    const sender = roster.find(
+      (entry) => `uds:${entry.messagingSocketPath}` === message.from,
+    );
+    return sender !== undefined && targetMatchesEntry(target, sender);
+  };
 }
 
 export interface CcPeerBridgeDeps {
@@ -49,26 +84,35 @@ export interface CcPeerBridgeDeps {
   roomId: string;
   target: Readonly<CcPeerRef>;
   cwd: string;
+  /** Whether an inbound message was sent by the target session. Only those are posted into the project room: the peer may be shared with the default front, whose fronted sessions message it as well, and those belong to the front's own relay. */
+  isFromTarget: (message: Readonly<CcPeerInboundMessage>) => Promise<boolean>;
 }
 
 /** Wires the two directions of the relay. Never awaited by the caller -- both directions are genuinely fire-and-forget from this function's own point of view (a send failure surfaces through cc-peer's own receipt events / agent-comms' own delivery-status events, not a thrown error here). */
 export function wireCcPeerBridge(deps: Readonly<CcPeerBridgeDeps>): void {
   deps.peer.on("message", (m) => {
-    const sender = m.fromName ?? m.from ?? "unknown";
-    const action = buildAction({
-      action: "send",
-      room: deps.roomId,
-      content: `${sender}: ${m.body}`,
+    void (async () => {
+      if (!(await deps.isFromTarget(m))) return;
+      const sender = m.fromName ?? m.from ?? "unknown";
+      const action = buildAction({
+        action: "send",
+        room: deps.roomId,
+        content: `${sender}: ${m.body}`,
+      });
+      await deps.tool.handle(
+        {
+          agentId: deps.agentId,
+          harness: "cc-peer",
+          cwd: deps.cwd,
+          pid: process.pid,
+        },
+        action,
+      );
+    })().catch((error: unknown) => {
+      deps.store.onError?.(
+        error instanceof Error ? error : new Error(String(error)),
+      );
     });
-    void deps.tool.handle(
-      {
-        agentId: deps.agentId,
-        harness: "cc-peer",
-        cwd: deps.cwd,
-        pid: process.pid,
-      },
-      action,
-    );
   });
 
   deps.store.onDelivery = (_targetId, event) => {
