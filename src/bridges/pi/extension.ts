@@ -20,6 +20,7 @@ import { StringEnum } from "@earendil-works/pi-ai";
 
 import {
   createBridgeMeshSync,
+  formatMeshError,
   buildAction,
   ensureProjectRoom,
   ensureRegistered,
@@ -51,6 +52,10 @@ export default function (pi: ExtensionAPI) {
   let webHandle: WebServerHandle | undefined;
   tool.getWebUrlStatus = () => getWebUrlStatus(webHandle);
   let uiCtx: ExtensionUIContext | undefined;
+  // The extension runs inside pi's own terminal UI, so mesh errors surface as pi notifications rather than raw stderr writes that would corrupt its display.
+  store.onError = (error) => {
+    uiCtx?.notify(formatMeshError(error).trimEnd(), "error");
+  };
   let projectRoom: string | undefined;
   const informationalBuffer: string[] = [];
 
