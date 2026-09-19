@@ -57,6 +57,7 @@ async function wireTransportInternal(
   const dataStorage = createMemoryStorage();
   const transport = new WireMeshTransport(store.events, identity, {
     roomVerbHandlers: store.roomVerbHandlers,
+    roomJoinApprovalTimeoutMs: store.roomJoinApprovalTimeoutMs,
     pendingConnectionTimeoutMs,
     getCurrentPresence: () => store.selfStatus,
     presenceReadvertiseIntervalMs,

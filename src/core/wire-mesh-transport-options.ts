@@ -12,6 +12,8 @@ import type { AgentSelfAdvert, HostedRoomAdvert } from "./gossip-extensions.js";
 export interface WireMeshTransportOptions {
   roomVerbHandlers?: Partial<Record<string, RoomVerbHandler>>;
   pendingConnectionTimeoutMs?: number | undefined;
+  /** How long a room.join this transport sends may await a human decision at the receiving end. Defaults to ROOM_JOIN_APPROVAL_TIMEOUT_MS; a test shortens it. */
+  roomJoinApprovalTimeoutMs?: number | undefined;
   getCurrentPresence?: () => AgentStatus | undefined;
   presenceReadvertiseIntervalMs?: number | undefined;
   getHostedRooms?: () => readonly HostedRoomAdvert[];

@@ -44,9 +44,11 @@ export const DM_SEND_GRANT_LIFETIME_MS =
   SECONDS_PER_MINUTE *
   MS_PER_SECOND;
 
-/** A human's decision on a pending room.join request -- reject carries an optional reason, mirroring rejectConnection's own equivalent room-independent decision. */
+/** The outcome of a pending room.join request: a human's accept or reject (reject carries an optional reason, mirroring rejectConnection's own equivalent room-independent decision), or expiry when nobody decided within the approval window. */
 export type RoomJoinDecision =
-  { kind: "accept" } | { kind: "reject"; reason?: string };
+  | { kind: "accept" }
+  | { kind: "reject"; reason?: string }
+  | { kind: "expired" };
 
 /**
  * Bound on pending delivery events held per target agent. Events beyond the bound drop oldest-first: a long-offline agent's queue cannot grow without limit in memory or in synced snapshots (#28).
