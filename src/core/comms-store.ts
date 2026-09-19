@@ -19,6 +19,11 @@ import type {
   Visibility,
 } from "./types.js";
 
+export interface SendRoomMessageOptions {
+  replyTo?: string | undefined;
+  streamingBehavior?: StreamingBehavior | undefined;
+}
+
 export interface CommsStore {
   // -- Identity --
   readIdentity: (
@@ -83,8 +88,7 @@ export interface CommsStore {
     roomId: string,
     from: string,
     content: string,
-    replyTo?: string,
-    streamingBehavior?: StreamingBehavior,
+    options?: SendRoomMessageOptions,
   ) => Promise<RoomMessage>;
   readRoomMessages: (roomId: string, since?: string) => Promise<RoomMessage[]>;
 

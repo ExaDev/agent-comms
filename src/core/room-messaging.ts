@@ -18,6 +18,7 @@ import type {
   RoomMessage,
   StreamingBehavior,
 } from "./types.js";
+import type { SendRoomMessageOptions } from "./comms-store.js";
 
 /** The state and collaborators RoomMessaging needs from MeshStore. rooms/messages/dms are direct references into MeshStore's own fields; roomProtocol is the already-constructed instance (construction order: ... -\> roomProtocol -\> roomMessaging -\> ...), narrowed to what sending a message or DM ever needs; resolveAgent is AgentRegistry's own getAgent (deferred the same lazy-closure way DeliveryEngine's sendRoomRequestToMember closure is, since AgentRegistry doesn't exist yet at RoomMessaging's own construction point) rather than a bare `agents.get` lookup, so sendDm's own existence check also resolves a gossip-discovered agent (a remote, hub-learned one included, agent-comms#155) that will never appear in the agents map directly. */
 export interface RoomMessagingDeps {
@@ -27,6 +28,11 @@ export interface RoomMessagingDeps {
   requireIdentity: () => MeshStoreIdentity;
   roomProtocol: Pick<RoomProtocol, "sendRoomRequestToMember">;
   resolveAgent: (id: string) => Promise<AgentIdentity | undefined>;
+}
+
+/** RoomMessaging's own richer sendRoomMessage options, extending the public CommsStore-facing SendRoomMessageOptions with durable -- see sendRoomMessage's own doc comment for what durable means. */
+export interface RoomMessagingSendOptions extends SendRoomMessageOptions {
+  durable?: boolean;
 }
 
 export class RoomMessaging {
@@ -41,10 +47,9 @@ export class RoomMessaging {
     roomIdOrName: string,
     from: string,
     content: string,
-    replyTo?: string,
-    streamingBehavior?: StreamingBehavior,
-    durable?: boolean,
+    options?: RoomMessagingSendOptions,
   ): Promise<RoomMessage> {
+    const { replyTo, streamingBehavior, durable } = options ?? {};
     const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
     const room = this.deps.rooms.get(roomId);
     if (!room)

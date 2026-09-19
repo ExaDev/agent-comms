@@ -158,7 +158,7 @@ describe("RoomMessaging — sendRoomMessage", () => {
       "room-1",
       FROM_DEVICE_ID,
       "hi",
-      replyToId,
+      { replyTo: replyToId },
     );
     expect(withReply.replyTo).toBe(replyToId);
 
@@ -178,8 +178,7 @@ describe("RoomMessaging — sendRoomMessage", () => {
       "room-1",
       FROM_DEVICE_ID,
       "hi",
-      undefined,
-      "steer",
+      { streamingBehavior: "steer" },
     );
     expect(withBehavior.streamingBehavior).toBe("steer");
 
@@ -219,12 +218,9 @@ describe("RoomMessaging — sendRoomMessage", () => {
     h.deps.rooms.set("room-1", room({ members: [FROM_DEVICE_ID, "member-b"] }));
     const replyToId = "aa".repeat(MESSAGE_ID_BYTE_LENGTH);
 
-    await h.messaging.sendRoomMessage(
-      "room-1",
-      FROM_DEVICE_ID,
-      "hi",
-      replyToId,
-    );
+    await h.messaging.sendRoomMessage("room-1", FROM_DEVICE_ID, "hi", {
+      replyTo: replyToId,
+    });
 
     const params = h.sendRoomRequestToMember.mock.calls[0]?.[3] as Record<
       string,
@@ -252,13 +248,9 @@ describe("RoomMessaging — sendRoomMessage", () => {
     const h = makeHarness();
     h.deps.rooms.set("room-1", room({ members: [FROM_DEVICE_ID, "member-b"] }));
 
-    await h.messaging.sendRoomMessage(
-      "room-1",
-      FROM_DEVICE_ID,
-      "hi",
-      undefined,
-      "steer",
-    );
+    await h.messaging.sendRoomMessage("room-1", FROM_DEVICE_ID, "hi", {
+      streamingBehavior: "steer",
+    });
 
     const params = h.sendRoomRequestToMember.mock.calls[0]?.[3] as Record<
       string,
