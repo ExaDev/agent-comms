@@ -1,20 +1,20 @@
 {
-  "name": "agent-comms",
-  "owner": {
-    "name": "ExaDev"
-  },
   "metadata": {
     "description": "Cross-harness communication mesh for LLM agents",
     "homepage": "https://github.com/ExaDev/agent-comms#readme"
   },
+  "name": "agent-comms",
+  "owner": {
+    "name": "ExaDev"
+  },
   "plugins": [
     {
+      "description": "Cross-harness LLM agent communication mesh — rooms, DMs, and presence",
       "name": "agent-comms",
       "source": {
         "source": "url",
         "url": "https://github.com/ExaDev/agent-comms.git"
       },
-      "description": "Cross-harness LLM agent communication mesh — rooms, DMs, and presence",
       "version": "3.33.3"
     }
   ]

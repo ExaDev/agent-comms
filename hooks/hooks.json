@@ -1,39 +1,39 @@
 {
   "PostToolUse": [
     {
-      "matcher": "*",
       "hooks": [
         {
-          "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
-          "timeout": 5
+          "timeout": 5,
+          "type": "command"
         }
-      ]
+      ],
+      "matcher": "*"
     }
   ],
   "Stop": [
     {
-      "matcher": "*",
       "hooks": [
         {
-          "type": "command",
           "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
-          "timeout": 5
+          "timeout": 5,
+          "type": "command"
         }
-      ]
+      ],
+      "matcher": "*"
     }
   ],
   "UserPromptSubmit": [
     {
-      "matcher": "*",
       "hooks": [
         {
-          "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
           "asyncRewake": true,
-          "timeout": 5
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
+          "timeout": 5,
+          "type": "command"
         }
-      ]
+      ],
+      "matcher": "*"
     }
   ]
 }

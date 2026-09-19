@@ -1,26 +1,26 @@
 {
-  "name": "Agent Comms",
-  "short_name": "Comms",
-  "description": "Cross-harness LLM agent communication mesh",
-  "start_url": "./",
-  "display": "standalone",
   "background_color": "#1a1a2e",
-  "theme_color": "#16213e",
+  "description": "Cross-harness LLM agent communication mesh",
+  "display": "standalone",
   "icons": [
     {
-      "src": "./icons/icon-96x96.svg",
       "sizes": "96x96",
+      "src": "./icons/icon-96x96.svg",
       "type": "image/svg+xml"
     },
     {
-      "src": "./icons/icon-192x192.svg",
       "sizes": "192x192",
+      "src": "./icons/icon-192x192.svg",
       "type": "image/svg+xml"
     },
     {
-      "src": "./icons/icon-512x512.svg",
       "sizes": "512x512",
+      "src": "./icons/icon-512x512.svg",
       "type": "image/svg+xml"
     }
-  ]
+  ],
+  "name": "Agent Comms",
+  "short_name": "Comms",
+  "start_url": "./",
+  "theme_color": "#16213e"
 }
