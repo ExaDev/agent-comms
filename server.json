@@ -9,7 +9,7 @@
       "transport": {
         "type": "stdio"
       },
-      "version": "4.1.2"
+      "version": "4.1.3"
     }
   ],
   "repository": {
@@ -17,5 +17,5 @@
     "url": "https://github.com/ExaDev/agent-comms"
   },
   "title": "Agent Comms",
-  "version": "4.1.2"
+  "version": "4.1.3"
 }

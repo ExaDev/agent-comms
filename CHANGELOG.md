@@ -1,3 +1,9 @@
+## [4.1.3](https://github.com/ExaDev/agent-comms/compare/v4.1.2...v4.1.3) (2026-09-19)
+
+### Bug Fixes
+
+* **core:** re-read the identity file before concluding a concurrent create never happened ([bc6e83b](https://github.com/ExaDev/agent-comms/commit/bc6e83b67cd945387b7c0b803ffad202daecaacc))
+
 ## [4.1.2](https://github.com/ExaDev/agent-comms/compare/v4.1.1...v4.1.2) (2026-09-19)
 
 ### CI
