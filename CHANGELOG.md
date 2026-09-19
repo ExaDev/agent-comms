@@ -1,3 +1,9 @@
+## [4.1.5](https://github.com/ExaDev/agent-comms/compare/v4.1.4...v4.1.5) (2026-09-19)
+
+### CI
+
+* move actions/cache to v6, which runs on Node 24 ([91c9dd8](https://github.com/ExaDev/agent-comms/commit/91c9dd836dece3dd923d8ff75c36fc5cd1631628))
+
 ## [4.1.4](https://github.com/ExaDev/agent-comms/compare/v4.1.3...v4.1.4) (2026-09-19)
 
 ### Bug Fixes
