@@ -14,9 +14,9 @@ const COORDINATOR_PORT = 19876;
 
 function peerInfo(
   id: string,
-  port = 1,
-  startedAt = "2026-01-01T00:00:00.000Z",
+  options?: { port?: number; startedAt?: string },
 ): PeerInfo {
+  const { port = 1, startedAt = "2026-01-01T00:00:00.000Z" } = options ?? {};
   return { id, port, startedAt };
 }
 
@@ -265,11 +265,17 @@ describe("PeerLifecycle — sendCoordinatorHandover", () => {
     h.transport.isCoordinator = true;
     h.deps.peerInfo.set(
       OWNER_ID,
-      peerInfo(OWNER_ID, 1, "2026-01-03T00:00:00.000Z"),
+      peerInfo(OWNER_ID, { startedAt: "2026-01-03T00:00:00.000Z" }),
     );
-    const oldest = peerInfo("oldest", 1, "2026-01-01T00:00:00.000Z");
-    const middle = peerInfo("middle", 1, "2026-01-02T00:00:00.000Z");
-    const newest = peerInfo("newest", 1, "2026-01-04T00:00:00.000Z");
+    const oldest = peerInfo("oldest", {
+      startedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const middle = peerInfo("middle", {
+      startedAt: "2026-01-02T00:00:00.000Z",
+    });
+    const newest = peerInfo("newest", {
+      startedAt: "2026-01-04T00:00:00.000Z",
+    });
     h.deps.peerInfo.set(oldest.id, oldest);
     h.deps.peerInfo.set(middle.id, middle);
     h.deps.peerInfo.set(newest.id, newest);
