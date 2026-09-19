@@ -1,3 +1,11 @@
+## [3.33.3](https://github.com/ExaDev/agent-comms/compare/v3.33.2...v3.33.3) (2026-09-19)
+
+### Bug Fixes
+
+* **bridge:** await close callbacks and export disconnect() from mesh-worker ([625c8fc](https://github.com/ExaDev/agent-comms/commit/625c8fcfeec26315529fe8e6590f1ab72c96e371))
+* **build:** configure mutual gateway trust in the production hub smoke check ([d657950](https://github.com/ExaDev/agent-comms/commit/d65795031f0e0de08d414e5b2fb4f6cc7011feed))
+* **build:** route pre-push through a single turbo prepush task ([f5a7407](https://github.com/ExaDev/agent-comms/commit/f5a7407eb8523969e22e87093589401cc4bd0aeb))
+
 ## [3.33.2](https://github.com/ExaDev/agent-comms/compare/v3.33.1...v3.33.2) (2026-09-19)
 
 ### Chores
