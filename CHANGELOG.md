@@ -1,3 +1,9 @@
+## [4.1.10](https://github.com/ExaDev/agent-comms/compare/v4.1.9...v4.1.10) (2026-09-19)
+
+### Bug Fixes
+
+* **core:** resolve bare room names against gossip-discovered rooms ([406b2ec](https://github.com/ExaDev/agent-comms/commit/406b2ec64cbc2546f0514c58296f7545edfa2c9f))
+
 ## [4.1.9](https://github.com/ExaDev/agent-comms/compare/v4.1.8...v4.1.9) (2026-09-19)
 
 ### Bug Fixes
