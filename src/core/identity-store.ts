@@ -409,7 +409,10 @@ function readStoredIdentityWaitingForConcurrentCreate(
     const heldBy = readLockPid(lockFile);
     const heldByDifferentLiveProcess =
       heldBy !== undefined && heldBy !== process.pid && isPidAlive(heldBy);
-    if (!heldByDifferentLiveProcess || Date.now() >= deadline) return undefined;
+    // The holder can finish creating the file and exit between the read above and this lock check, so the file is read once more before concluding it was never created.
+    if (!heldByDifferentLiveProcess || Date.now() >= deadline) {
+      return readStoredIdentity(identityFile);
+    }
 
     sleepSync(CONCURRENT_CREATE_POLL_MS);
   }
