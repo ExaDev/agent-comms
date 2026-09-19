@@ -72,6 +72,35 @@ jobs:
       - run: pnpm test
       - run: pnpm test:smoke
 
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      # Browser binaries are versioned by Playwright itself, so the version is the whole cache key.
+      - uses: actions/cache@v4
+        id: playwright-browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright browser and system dependencies
+        if: steps.playwright-browsers.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      # The cache holds only the browser download; the OS libraries it needs live outside it and are not restored, so they are installed on every run.
+      - name: Install Playwright system dependencies
+        if: steps.playwright-browsers.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      - run: pnpm test:e2e
+
   mutation:
     name: Mutation Testing (${{ matrix.file }})
     if: github.event_name == 'workflow_dispatch'
