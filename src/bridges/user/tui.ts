@@ -291,6 +291,8 @@ function formatForTerminal(event: DeliveryEvent): string {
       return `${CYAN}🔗 Connection request from ${event.peerId} (${event.name})${RESET}`;
     case "capability_request":
       return `${CYAN}🔑 ${event.requesterDevice} is asking for "${event.capability}" (${event.requestId})${RESET}`;
+    case "room_join_request":
+      return `${CYAN}🚪 ${event.requesterId} is asking to join ${event.room}${RESET}`;
     default:
       return event satisfies never;
   }

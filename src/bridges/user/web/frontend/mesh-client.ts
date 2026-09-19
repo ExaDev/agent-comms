@@ -40,7 +40,7 @@ export type MeshStateListener = (state: MeshClientState) => void;
 export type MeshDeliveryListener = (event: DeliveryEvent) => void;
 
 /**
- * The delivery-event "type" values the web UI actually knows how to display (messages.ts's own deliveryEventToMessage, a closed, exhaustively-checked switch over types.ts's own DeliveryEvent union). The wire event carries two mesh-internal variants beyond that union -- connection_request/capability_request, part of the CLI/TUI's own connection-approval flows, never meant for this UI -- so this is a genuine filter, not a duplicate of the wider type.
+ * The delivery-event "type" values the web UI actually knows how to display (messages.ts's own deliveryEventToMessage, a closed, exhaustively-checked switch over types.ts's own DeliveryEvent union). The wire event carries three mesh-internal variants beyond that union -- connection_request/capability_request/room_join_request, part of the CLI/TUI's own approval flows, never meant for this UI -- so this is a genuine filter, not a duplicate of the wider type.
  */
 const DISPLAYABLE_DELIVERY_TYPES = new Set<string>([
   "room_message",
