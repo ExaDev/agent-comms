@@ -42,13 +42,14 @@ async function makeUser(): Promise<{
 }
 
 /** Alice's own root-level dm:send grant naming bearer as the admitted party -- the same shape room-lifecycle.ts's admitAgentForDm mints, built directly here so this file's own tests don't need a full MeshStore. Takes an explicit expires (rather than deriving one from clock.now() itself) so a caller can mint a child token sharing the identical expiry -- a real wall clock advances between two calls, and a child's own expires must never exceed its parent's. */
-async function mintRootGrant(
-  admitter: Awaited<ReturnType<typeof toIdentityPort>>,
-  bearer: Awaited<ReturnType<typeof toIdentityPort>>["deviceId"],
-  clock: Readonly<ReturnType<typeof createSystemClock>>,
-  delegationsRemaining: number,
-  expires: number,
-) {
+async function mintRootGrant(options: {
+  admitter: Awaited<ReturnType<typeof toIdentityPort>>;
+  bearer: Awaited<ReturnType<typeof toIdentityPort>>["deviceId"];
+  clock: Readonly<ReturnType<typeof createSystemClock>>;
+  delegationsRemaining: number;
+  expires: number;
+}) {
+  const { admitter, bearer, clock, delegationsRemaining, expires } = options;
   const verdict = await mintCapabilityToken({
     identity: admitter,
     clock,
@@ -71,13 +72,13 @@ describe("delegateDmSendToDevice", () => {
     const clock = createSystemClock();
     const expires = clock.now() + TOKEN_TTL_MS;
 
-    const grant = await mintRootGrant(
-      alice,
-      bobPrincipal.deviceId,
+    const grant = await mintRootGrant({
+      admitter: alice,
+      bearer: bobPrincipal.deviceId,
       clock,
-      ONE_HOP_DELEGABLE,
+      delegationsRemaining: ONE_HOP_DELEGABLE,
       expires,
-    );
+    });
 
     const verdict = await delegateDmSendToDevice({
       userIdentity: bobPrincipal,
@@ -114,13 +115,13 @@ describe("delegateDmSendToDevice", () => {
     const tokenId = randomId();
     const expires = clock.now() + TOKEN_TTL_MS;
 
-    const grant = await mintRootGrant(
-      alice,
-      bobPrincipal.deviceId,
+    const grant = await mintRootGrant({
+      admitter: alice,
+      bearer: bobPrincipal.deviceId,
       clock,
-      ONE_HOP_DELEGABLE,
+      delegationsRemaining: ONE_HOP_DELEGABLE,
       expires,
-    );
+    });
 
     const verdict = await delegateDmSendToDevice({
       userIdentity: bobPrincipal,
@@ -146,13 +147,13 @@ describe("delegateDmSendToDevice", () => {
     const expires = clock.now() + TOKEN_TTL_MS;
 
     // The original, non-delegable admission -- exactly what admitAgentForDm mints by default.
-    const grant = await mintRootGrant(
-      alice,
-      bobPrincipal.deviceId,
+    const grant = await mintRootGrant({
+      admitter: alice,
+      bearer: bobPrincipal.deviceId,
       clock,
-      NON_DELEGABLE,
+      delegationsRemaining: NON_DELEGABLE,
       expires,
-    );
+    });
 
     const verdict = await delegateDmSendToDevice({
       userIdentity: bobPrincipal,
@@ -179,13 +180,13 @@ describe("delegateDmSendToDevice", () => {
     const clock = createSystemClock();
     const expires = clock.now() + TOKEN_TTL_MS;
 
-    const grant = await mintRootGrant(
-      alice,
-      bobPrincipal.deviceId,
+    const grant = await mintRootGrant({
+      admitter: alice,
+      bearer: bobPrincipal.deviceId,
       clock,
-      ONE_HOP_DELEGABLE,
+      delegationsRemaining: ONE_HOP_DELEGABLE,
       expires,
-    );
+    });
 
     const verdict = await delegateDmSendToDevice({
       // someoneElse never received this grant -- only bobPrincipal (the parent's own bearer) may mint a delegation of it.
