@@ -1,3 +1,9 @@
+## [3.34.1](https://github.com/ExaDev/agent-comms/compare/v3.34.0...v3.34.1) (2026-09-19)
+
+### Tests
+
+* terminate web socket clients before closing the server fixture ([ed94832](https://github.com/ExaDev/agent-comms/commit/ed94832297073eab11f44df6370796bedf1fc2b0))
+
 ## [3.34.0](https://github.com/ExaDev/agent-comms/compare/v3.33.3...v3.34.0) (2026-09-19)
 
 ### Features
