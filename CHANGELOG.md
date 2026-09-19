@@ -1,3 +1,17 @@
+## [4.1.7](https://github.com/ExaDev/agent-comms/compare/v4.1.6...v4.1.7) (2026-09-19)
+
+### Bug Fixes
+
+* **core:** resolve ws-dial send once the frame is flushed and reject on failure ([c1d3ce5](https://github.com/ExaDev/agent-comms/commit/c1d3ce5a3c2dbd6ea312e585afe33b5848b13bc3))
+
+### Refactoring
+
+* **bridge:** drop async from handlers that never await or return a promise ([7505bd3](https://github.com/ExaDev/agent-comms/commit/7505bd39bce962dbdb30e3d723a85c23ebd3a021))
+
+### Tests
+
+* make the ws test connection's send and close reflect real socket completion ([e68a75a](https://github.com/ExaDev/agent-comms/commit/e68a75a14909831e0c5cf0652829f1387c6ef1e5))
+
 ## [4.1.6](https://github.com/ExaDev/agent-comms/compare/v4.1.5...v4.1.6) (2026-09-19)
 
 ### Build
