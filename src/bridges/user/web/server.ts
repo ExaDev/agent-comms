@@ -156,7 +156,7 @@ export function getWebUrlStatus(
 export async function tryStartWebServer(
   controller?: ChatController,
 ): Promise<WebServerHandle | undefined> {
-  return createWebServer(0, controller);
+  return createWebServer({ port: 0, existingController: controller });
 }
 
 /**
@@ -168,16 +168,22 @@ export async function tryStartWebServer(
  * When no controller is provided (standalone runWeb mode), a fresh
  * Dashboard controller is created.
  */
-export async function createWebServer(
-  port = 0,
-  existingController?: ChatController,
-  coordinatorPort?: number,
+export async function createWebServer(options?: {
+  port?: number;
+  existingController?: ChatController | undefined;
+  coordinatorPort?: number | undefined;
   /** Overrides the hub a fresh controller's own coordinator role dials on takeover -- ChatController's own hubUrl, ignored when existingController is supplied since that controller already made its own choice. See ChatController's own hubUrl doc comment. */
-  hubUrl?: string,
-): Promise<WebServerHandle> {
+  hubUrl?: string | undefined;
+}): Promise<WebServerHandle> {
+  const {
+    port = 0,
+    existingController,
+    coordinatorPort,
+    hubUrl,
+  } = options ?? {};
   const controller =
     existingController ??
-    new ChatController("Dashboard", coordinatorPort, hubUrl);
+    new ChatController("Dashboard", { coordinatorPort, hubUrl });
   if (!existingController) {
     await controller.init();
   }
@@ -249,7 +255,7 @@ class HandleRef {
 // ---------------------------------------------------------------------------
 
 export async function runWeb(userName: string, port = 0): Promise<void> {
-  const handle = await createWebServer(port);
+  const handle = await createWebServer({ port });
   // Keep handle alive for cleanup — variable is intentionally unused
   new HandleRef(handle);
 

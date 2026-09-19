@@ -43,14 +43,22 @@ export class ChatController extends EventEmitter {
   private tool!: CommsTool;
   private ctx!: CommsContext;
   private currentRoom: string | undefined;
+  private readonly userName: string;
+  private readonly coordinatorPort: number | undefined;
+  /** Overrides the hub this controller's own coordinator role dials on takeover (createBridgeMesh's own hubUrl, defaulting to DEFAULT_HUB_URL) -- every real bridge entry point wants the real public hub, but a test constructing a controller of its own wants a hermetic, deterministically-unreachable one instead of silently depending on live production infrastructure whenever its own fresh coordinator port makes it the mesh's coordinator (see hub-helpers.ts's own unreachableHubUrl). */
+  private readonly hubUrl: string | undefined;
 
   constructor(
-    private readonly userName: string,
-    private readonly coordinatorPort?: number,
-    /** Overrides the hub this controller's own coordinator role dials on takeover (createBridgeMesh's own hubUrl, defaulting to DEFAULT_HUB_URL) -- every real bridge entry point wants the real public hub, but a test constructing a controller of its own wants a hermetic, deterministically-unreachable one instead of silently depending on live production infrastructure whenever its own fresh coordinator port makes it the mesh's coordinator (see hub-helpers.ts's own unreachableHubUrl). */
-    private readonly hubUrl?: string,
+    userName: string,
+    options?: {
+      coordinatorPort?: number | undefined;
+      hubUrl?: string | undefined;
+    },
   ) {
     super();
+    this.userName = userName;
+    this.coordinatorPort = options?.coordinatorPort;
+    this.hubUrl = options?.hubUrl;
   }
 
   /**
@@ -67,7 +75,7 @@ export class ChatController extends EventEmitter {
     const ctrl = new ChatController("");
     // Replace the store with the existing one
     ctrl.store = store;
-    ctrl.tool = new CommsTool(store, store.discovery);
+    ctrl.tool = new CommsTool(store, { discovery: store.discovery });
     ctrl.ctx = ctx;
 
     // Push delivery events to UIs
@@ -82,11 +90,10 @@ export class ChatController extends EventEmitter {
     // Persistent identity for the web user's slot so the chat identity survives relaunches of the standalone web CLI
     const identitySlot: IdentitySlot = { harness: "user", cwd: process.cwd() };
     this.ownedIdentitySlot = identitySlot;
-    const { store, tool } = await createBridgeMesh(
-      identitySlot,
-      this.coordinatorPort,
-      this.hubUrl,
-    );
+    const { store, tool } = await createBridgeMesh(identitySlot, {
+      coordinatorPort: this.coordinatorPort,
+      hubUrl: this.hubUrl,
+    });
     this.store = store;
     this.tool = tool;
     this.store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(this.store, {
@@ -140,9 +147,12 @@ export class ChatController extends EventEmitter {
 
   async createRoom(
     name: string,
-    type: "public" | "private" | "secret" = "public",
-    description = "",
+    options?: {
+      type?: "public" | "private" | "secret";
+      description?: string;
+    },
   ): Promise<CommsResult> {
+    const { type = "public", description = "" } = options ?? {};
     const result = await this.tool.handle(this.ctx, {
       action: "create_room",
       name,
@@ -197,7 +207,11 @@ export class ChatController extends EventEmitter {
     });
   }
 
-  async readRoom(roomId?: string, since?: string): Promise<CommsResult> {
+  async readRoom(options?: {
+    roomId?: string | undefined;
+    since?: string | undefined;
+  }): Promise<CommsResult> {
+    const { roomId, since } = options ?? {};
     const target = roomId ?? this.currentRoom;
     if (target === undefined || target === "") {
       return { content: "No room to read. Join a room first.", isError: true };

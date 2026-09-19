@@ -61,7 +61,7 @@ let originalEnv: string | undefined;
 /** Starts a web server and resolves once it's actually listening, returning its port. */
 async function startAndGetPort(coordinatorPort: number): Promise<number> {
   const hubUrl = await unreachableHubUrl();
-  const started = await createWebServer(0, undefined, coordinatorPort, hubUrl);
+  const started = await createWebServer({ coordinatorPort, hubUrl });
   handle = started;
   await new Promise<void>((resolve) => {
     if (started.server.listening) {

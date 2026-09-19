@@ -36,7 +36,7 @@ export const test = base.extend<Fixtures>({
     // when the previous test's TLS transport hasn't released 19876 yet.
     const coordinatorPort = await allocFreePort();
     const hubUrl = await unreachableHubUrl();
-    const handle = await createWebServer(0, undefined, coordinatorPort, hubUrl);
+    const handle = await createWebServer({ coordinatorPort, hubUrl });
 
     // Wait for server to be listening
     await new Promise<void>((resolve) => {

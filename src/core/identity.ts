@@ -269,14 +269,22 @@ function buildCertificateDer(
  *
  * Structure (RFC 5280 §4.1.2): `version [0] EXPLICIT INTEGER (v3 = 2), serialNumber INTEGER, signature AlgorithmIdentifier, issuer Name, validity { notBefore, notAfter }, subject Name, subjectPublicKeyInfo SubjectPublicKeyInfo, extensions [3] EXPLICIT Extensions OPTIONAL`
  */
-function buildTbsCertificate(
-  serial: Buffer,
-  signatureAlgorithm: Buffer,
-  issuerSubject: Buffer,
-  validity: Buffer,
-  subjectPublicKeyInfoDer: Buffer,
-  extensions: Buffer,
-): Buffer {
+function buildTbsCertificate(options: {
+  serial: Buffer;
+  signatureAlgorithm: Buffer;
+  issuerSubject: Buffer;
+  validity: Buffer;
+  subjectPublicKeyInfoDer: Buffer;
+  extensions: Buffer;
+}): Buffer {
+  const {
+    serial,
+    signatureAlgorithm,
+    issuerSubject,
+    validity,
+    subjectPublicKeyInfoDer,
+    extensions,
+  } = options;
   // version: [0] EXPLICIT { INTEGER 2 } → a0 03 02 01 02
   const version = derWrap(
     CONTEXT_TAG_VERSION,
@@ -389,14 +397,14 @@ export function certifyKeyPair(privateKeyPem: string): PeerIdentity {
   const extensions = buildExtensions(publicKeyDer);
 
   // TBSCertificate
-  const tbsCert = buildTbsCertificate(
+  const tbsCert = buildTbsCertificate({
     serial,
-    sigAlgSeq,
-    subject,
+    signatureAlgorithm: sigAlgSeq,
+    issuerSubject: subject,
     validity,
-    publicKeyDer,
+    subjectPublicKeyInfoDer: publicKeyDer,
     extensions,
-  );
+  });
 
   // Sign the TBSCertificate
   const signer = createSign("SHA256");

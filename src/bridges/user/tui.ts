@@ -148,7 +148,7 @@ async function handleCommand(input: string, c: ChatController): Promise<void> {
       return;
     }
     case "read": {
-      const result = await c.readRoom(arg1);
+      const result = await c.readRoom({ roomId: arg1 });
       printResult(result);
       return;
     }
@@ -166,7 +166,10 @@ async function handleCommand(input: string, c: ChatController): Promise<void> {
         process.stdout.write(`${YELLOW}Usage: /create <name>${RESET}\n`);
         return;
       }
-      const result = await c.createRoom(arg1, "public", arg2);
+      const result = await c.createRoom(arg1, {
+        type: "public",
+        description: arg2,
+      });
       printResult(result);
       return;
     }

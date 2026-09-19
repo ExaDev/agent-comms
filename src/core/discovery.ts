@@ -264,10 +264,11 @@ export class DiscoveryManager {
    *
    * Respects visibility: returns empty results for backends that are "dark".
    */
-  async discover(
-    backendName?: string,
-    timeout?: number,
-  ): Promise<DiscoveredMesh[]> {
+  async discover(options?: {
+    backendName?: string | undefined;
+    timeout?: number | undefined;
+  }): Promise<DiscoveredMesh[]> {
+    const { backendName, timeout } = options ?? {};
     const targets =
       backendName !== undefined
         ? [this.backends.get(backendName)].filter(

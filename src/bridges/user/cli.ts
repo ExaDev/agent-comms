@@ -79,7 +79,7 @@ async function dispatch(
       }
       const sinceIdx = args.indexOf("--since");
       const since = sinceIdx !== -1 ? args[sinceIdx + 1] : undefined;
-      return controller.readRoom(room, since);
+      return controller.readRoom({ roomId: room, since });
     }
     default:
       return { content: `Unknown command: ${command}`, isError: true };

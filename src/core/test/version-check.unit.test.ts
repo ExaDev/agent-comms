@@ -62,10 +62,10 @@ describe("fetchLatestPublishedVersion", () => {
         new Response(JSON.stringify({ version: "9.9.9" }), { status: 200 }),
       ),
     );
-    const version = await fetchLatestPublishedVersion(
-      "https://example.invalid/agent-comms/latest",
-      fakeFetch,
-    );
+    const version = await fetchLatestPublishedVersion({
+      registryUrl: "https://example.invalid/agent-comms/latest",
+      fetchImpl: fakeFetch,
+    });
     expect(version).toBe("9.9.9");
   });
 
@@ -73,10 +73,10 @@ describe("fetchLatestPublishedVersion", () => {
     const fakeFetch: FetchLike = vi.fn(async () =>
       Promise.reject(new Error("network unreachable")),
     );
-    const version = await fetchLatestPublishedVersion(
-      "https://example.invalid/agent-comms/latest",
-      fakeFetch,
-    );
+    const version = await fetchLatestPublishedVersion({
+      registryUrl: "https://example.invalid/agent-comms/latest",
+      fetchImpl: fakeFetch,
+    });
     expect(version).toBeUndefined();
   });
 
@@ -84,10 +84,10 @@ describe("fetchLatestPublishedVersion", () => {
     const fakeFetch: FetchLike = vi.fn(async () =>
       Promise.resolve(new Response("not found", { status: 404 })),
     );
-    const version = await fetchLatestPublishedVersion(
-      "https://example.invalid/agent-comms/latest",
-      fakeFetch,
-    );
+    const version = await fetchLatestPublishedVersion({
+      registryUrl: "https://example.invalid/agent-comms/latest",
+      fetchImpl: fakeFetch,
+    });
     expect(version).toBeUndefined();
   });
 
@@ -97,10 +97,10 @@ describe("fetchLatestPublishedVersion", () => {
         new Response(JSON.stringify({ notVersion: "x" }), { status: 200 }),
       ),
     );
-    const version = await fetchLatestPublishedVersion(
-      "https://example.invalid/agent-comms/latest",
-      fakeFetch,
-    );
+    const version = await fetchLatestPublishedVersion({
+      registryUrl: "https://example.invalid/agent-comms/latest",
+      fetchImpl: fakeFetch,
+    });
     expect(version).toBeUndefined();
   });
 
@@ -108,10 +108,10 @@ describe("fetchLatestPublishedVersion", () => {
     const fakeFetch: FetchLike = vi.fn(async () =>
       Promise.resolve(new Response("not json", { status: 200 })),
     );
-    const version = await fetchLatestPublishedVersion(
-      "https://example.invalid/agent-comms/latest",
-      fakeFetch,
-    );
+    const version = await fetchLatestPublishedVersion({
+      registryUrl: "https://example.invalid/agent-comms/latest",
+      fetchImpl: fakeFetch,
+    });
     expect(version).toBeUndefined();
   });
 });
