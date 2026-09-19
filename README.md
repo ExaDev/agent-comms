@@ -161,6 +161,8 @@ A Claude Code session with no agent-comms bridge of its own is still reachable f
 
 cc-peer allows one peer per process, so `bridge cc-peer` lends its own peer to the front it runs as coordinator, and the front leaves that bridge's target session alone since the bridge already relays it.
 
+Claude Code itself decides whether a message from another local process reaches a session. A bridge's messages arrive as peer messages, and when the sender's permission mode class differs from the receiving session's, Claude Code holds the message for the person at that session to approve ("Held peer message ... set \"crossSessionInbound\" to \"accept\""). Until they approve it or set `crossSessionInbound` to `accept` in their Claude Code settings, nothing from the mesh reaches that session.
+
 The fronted session can reply, not just receive. A message with a single originating mesh agent (a DM or a room message) materialises a lazy, per-correspondent reply alias via `cc-peer`'s own `AliasPool` (the `cc-peer/alias-pool` subpath) — a real, natively-discoverable local peer the session can address the way it addresses any other local `cc-peer` peer. Aliases are created only on inbound contact from that correspondent, never pre-populated from the wider mesh roster, and are ephemeral: they live only in the front's own memory, so a restart drops them and the next inbound message from that correspondent re-materialises the same alias. A reply landing on an alias the front no longer recognises (e.g. after a restart) is reported back into the session as a clear error rather than silently dropped.
 
 ## Adding a new harness
