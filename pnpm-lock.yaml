@@ -231,8 +231,8 @@ importers:
         specifier: 1.0.1
         version: 1.0.1(@mantine/core@9.6.1(@mantine/hooks@9.6.1(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       wire-mesh-core:
-        specifier: 1.58.0
-        version: 1.58.0
+        specifier: 1.58.4
+        version: 1.58.4
       ws:
         specifier: 8.21.1
         version: 8.21.1
@@ -6030,8 +6030,8 @@ packages:
     resolution: {integrity: sha512-deLXc148CSfboWbNYjd3Vb3B+4SCF8+nSFoP7vdIuu66sep5qV4CkJeuesiZZJ4vCDDxSWpj+UiqZd9FQXgDfw==}
     engines: {node: '>=20'}
 
-  trilean@1.6.1:
-    resolution: {integrity: sha512-uJ370l00iRXha57+z1UEZm4VvhSF3bnEvtX65XkrB6z4pKtS2uhH2EJ4BSTukAfJbp9nKxL0h6Tmm4T2eRh3HA==}
+  trilean@1.6.2:
+    resolution: {integrity: sha512-TvjORUQkIxvMwpJqbKQ3nEbfCPNZ+ljPtxk7GeaTPsUisXFd0xusftPFSol7XhhiK1NqXEcK2ERw93PjJo/A3A==}
     engines: {node: '>=20'}
 
   ts-algebra@2.0.0:
@@ -6435,8 +6435,8 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
-  wire-mesh-core@1.58.0:
-    resolution: {integrity: sha512-cQ4vKNy4QMQB/cJqrF6NwObg65THIK1GfJvhooeixVTDyBmrGTfS3xGfjaBLTYEccuMiesymZ4I9OytrzjhQzw==}
+  wire-mesh-core@1.58.4:
+    resolution: {integrity: sha512-gH2OjW+2upxYTatB9ukCiBJDlqbkovLTYYOuJqM2rRf/y8oagAVnsiSqtn1g/dYeTKAqwwLZlbMDkT2/yodV7A==}
 
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
@@ -12977,7 +12977,7 @@ snapshots:
 
   trilean-regex@1.0.2: {}
 
-  trilean@1.6.1:
+  trilean@1.6.2:
     dependencies:
       trilean-regex: 1.0.2
       zod: 4.5.4
@@ -13343,11 +13343,11 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  wire-mesh-core@1.58.0:
+  wire-mesh-core@1.58.4:
     dependencies:
       cbor2: 2.3.0
       cddl.js: 1.0.1
-      trilean: 1.6.1
+      trilean: 1.6.2
       zod: 4.5.4
 
   word-wrap@1.2.5: {}
