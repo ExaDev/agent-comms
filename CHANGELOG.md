@@ -1,3 +1,9 @@
+## [3.33.2](https://github.com/ExaDev/agent-comms/compare/v3.33.1...v3.33.2) (2026-09-19)
+
+### Chores
+
+* exclude wire-mesh-core from the npm minimum-release-age gate ([7c19faa](https://github.com/ExaDev/agent-comms/commit/7c19faaf22926aea5fdf570f32357bb33632aaa8))
+
 ## [3.33.1](https://github.com/ExaDev/agent-comms/compare/v3.33.0...v3.33.1) (2026-09-19)
 
 ### Bug Fixes
