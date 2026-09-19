@@ -1,3 +1,19 @@
+## [4.0.0](https://github.com/ExaDev/agent-comms/compare/v3.34.1...v4.0.0) (2026-09-19)
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** the pi extension and its peerDependencies now name the
+  @earendil-works pi packages, so a pi host on the deprecated @mariozechner scope no
+  longer satisfies the peer range.
+
+### Documentation
+
+* describe the pi host scope and version the extension requires ([5290da3](https://github.com/ExaDev/agent-comms/commit/5290da3c7ebefec47e99b316497a44d84528e7f7))
+
+### Build
+
+* **deps:** import pi types and helpers from the [@earendil-works](https://github.com/earendil-works) scope ([822e8c5](https://github.com/ExaDev/agent-comms/commit/822e8c532ced3fd1b3eec47638f1cf75f250399e))
+
 ## [3.34.1](https://github.com/ExaDev/agent-comms/compare/v3.34.0...v3.34.1) (2026-09-19)
 
 ### Tests
