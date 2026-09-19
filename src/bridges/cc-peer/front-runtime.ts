@@ -108,12 +108,10 @@ export function createDefaultCcPeerFront(
   ): Promise<FrontedRelayRecord> {
     const slot = computeFrontSlot(entry.cwd);
     const identity = loadIdentityForFront(slot);
-    const { store, tool } = await createBridgeMeshFromIdentity(
-      identity,
-      slot,
-      options.coordinatorPort,
-      options.hubUrl,
-    );
+    const { store, tool } = await createBridgeMeshFromIdentity(identity, slot, {
+      coordinatorPort: options.coordinatorPort,
+      hubUrl: options.hubUrl,
+    });
     store.getCcPeerVersion = () => CC_PEER_VERSION;
 
     const reg = await ensureRegistered({

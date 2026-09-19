@@ -64,8 +64,8 @@ test("createBridgeMesh passes an explicit coordinatorPort through to MeshStore, 
   const port =
     TEST_COORDINATOR_PORT_BASE +
     Math.floor(Math.random() * TEST_COORDINATOR_PORT_RANGE);
-  const a = await createBridgeMesh(slotA, port);
-  const b = await createBridgeMesh(slotB, port);
+  const a = await createBridgeMesh(slotA, { coordinatorPort: port });
+  const b = await createBridgeMesh(slotB, { coordinatorPort: port });
   try {
     await a.store.init();
     await b.store.init();
@@ -112,7 +112,10 @@ test("createBridgeMesh passes an explicit hubUrl through to MeshStore, dialled o
   const port =
     TEST_COORDINATOR_PORT_BASE +
     Math.floor(Math.random() * TEST_COORDINATOR_PORT_RANGE);
-  const { store } = await createBridgeMesh(slot, port, hub.url);
+  const { store } = await createBridgeMesh(slot, {
+    coordinatorPort: port,
+    hubUrl: hub.url,
+  });
   try {
     await store.init();
     expect(store.connected).toBeTruthy();

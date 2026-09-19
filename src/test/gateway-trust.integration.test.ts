@@ -47,8 +47,10 @@ describe("gateway trust -- deny by default", () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
-    const a1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(a1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const a1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(a1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await a1.init();
     cleanups.push(async () => a1.shutdown());
     await a1.registerAgent({
@@ -60,13 +62,17 @@ describe("gateway trust -- deny by default", () => {
       tags: [],
     });
 
-    const b1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(b1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const b1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(b1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await b1.init();
     cleanups.push(async () => b1.shutdown());
 
-    const c1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(c1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const c1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(c1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await c1.init();
     cleanups.push(async () => c1.shutdown());
     await c1.registerAgent({
@@ -97,8 +103,10 @@ describe("gateway trust -- deny by default", () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
-    const a1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(a1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const a1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(a1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await a1.init();
     cleanups.push(async () => a1.shutdown());
     await a1.registerAgent({
@@ -111,14 +119,18 @@ describe("gateway trust -- deny by default", () => {
     });
     // a1 trusts nobody at all -- the outbound gate (hasAny) should withhold every advertisement.
 
-    const b1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(b1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const b1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(b1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await b1.init();
     cleanups.push(async () => b1.shutdown());
     b1.addTrustedGateway(a1.peerId);
 
-    const c1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(c1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const c1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(c1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await c1.init();
     cleanups.push(async () => c1.shutdown());
     await c1.registerAgent({
@@ -148,8 +160,10 @@ describe("gateway trust -- deny by default", () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
-    const a1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(a1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const a1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(a1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await a1.init();
     cleanups.push(async () => a1.shutdown());
     await a1.registerAgent({
@@ -161,8 +175,10 @@ describe("gateway trust -- deny by default", () => {
       tags: [],
     });
 
-    const b1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(b1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const b1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(b1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await b1.init();
     cleanups.push(async () => b1.shutdown());
     // b1 never trusts a1 -- requestDmAccess must be refused fast, not hang out sendRoomRequest's own hub timeout.

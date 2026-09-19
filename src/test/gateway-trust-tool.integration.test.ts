@@ -13,7 +13,7 @@ const PRINCIPAL_HEX = "eeff0011";
 
 describe("CommsTool gateway trust actions", () => {
   test("gateway_trust adds a device to the allowlist", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
     const agent = await store.registerAgent({
@@ -39,7 +39,7 @@ describe("CommsTool gateway trust actions", () => {
   });
 
   test("gateway_untrust removes a device from the allowlist", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
     const agent = await store.registerAgent({
@@ -65,7 +65,7 @@ describe("CommsTool gateway trust actions", () => {
   });
 
   test("gateway_trust with principal: true adds a principal, not a bare device", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
     const agent = await store.registerAgent({
@@ -92,7 +92,7 @@ describe("CommsTool gateway trust actions", () => {
   });
 
   test("gateway_untrust with principal: true removes a principal, not a bare device", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
     const agent = await store.registerAgent({
@@ -120,7 +120,7 @@ describe("CommsTool gateway trust actions", () => {
   });
 
   test("gateway_list_trusted lists every currently trusted device", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
     const agent = await store.registerAgent({
@@ -146,7 +146,7 @@ describe("CommsTool gateway trust actions", () => {
   });
 
   test("gateway_list_trusted reports both trusted devices and trusted principals", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
     const agent = await store.registerAgent({
@@ -174,7 +174,7 @@ describe("CommsTool gateway trust actions", () => {
   });
 
   test("gateway_list_trusted reports none trusted by default", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
     const agent = await store.registerAgent({

@@ -21,7 +21,7 @@ async function makeRegisteredStore(
   store: MeshStore;
   slot: Awaited<ReturnType<typeof wireTestTransport>>;
 }> {
-  const store = new MeshStore(port);
+  const store = new MeshStore({ coordinatorPort: port });
   const slot = await wireTestTransport(store);
   await store.init();
   await store.registerAgent({

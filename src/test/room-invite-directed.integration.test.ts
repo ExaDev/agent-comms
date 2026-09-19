@@ -19,7 +19,7 @@ async function makeConnectedPair(port: number): Promise<{
   target: MeshStore;
   targetSlot: Awaited<ReturnType<typeof wireTestTransport>>;
 }> {
-  const owner = new MeshStore(port);
+  const owner = new MeshStore({ coordinatorPort: port });
   await wireTestTransport(owner);
   await owner.init();
   await owner.registerAgent({
@@ -31,7 +31,7 @@ async function makeConnectedPair(port: number): Promise<{
     tags: [],
   });
 
-  const target = new MeshStore(port);
+  const target = new MeshStore({ coordinatorPort: port });
   const targetSlot = await wireTestTransport(target);
   await target.init();
   await target.registerAgent({
@@ -94,7 +94,7 @@ test("inviting a target delivers a real room_invite carrying the room's own name
 });
 
 test("inviting an unreachable target throws rather than silently dropping the invite", async () => {
-  const owner = new MeshStore(freshPort());
+  const owner = new MeshStore({ coordinatorPort: freshPort() });
   await wireTestTransport(owner);
   await owner.init();
   await owner.registerAgent({

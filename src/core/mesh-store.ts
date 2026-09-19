@@ -40,10 +40,7 @@ import type { DeviceId } from "wire-mesh-core/generated/protocol";
 import { StaleAgentChecker } from "./stale-agent-checker.js";
 import { PeerLifecycle } from "./peer-lifecycle.js";
 import type { RoomVerbHandler } from "./room-router.js";
-import type {
-  AgentSelfAdvert,
-  HostedRoomAdvert,
-} from "./wire-mesh-transport.js";
+import type { AgentSelfAdvert, HostedRoomAdvert } from "./gossip-extensions.js";
 import {
   getPeerAgentCommsVersions,
   getPeerWireMeshCoreVersion,
@@ -61,7 +58,7 @@ import type {
   MeshTransport,
   TransportEvents,
 } from "./transport.js";
-import type { CommsStore } from "./comms-store.js";
+import type { CommsStore, SendRoomMessageOptions } from "./comms-store.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type {
   AgentIdentity,
@@ -89,6 +86,16 @@ const PEER_ID_LENGTH = 8;
 // ---------------------------------------------------------------------------
 // MeshStore
 // ---------------------------------------------------------------------------
+
+/** Construction options for MeshStore. */
+export interface MeshStoreOptions {
+  /** Localhost TCP port the coordinator role is contested on. Defaults to DEFAULT_COORDINATOR_PORT. */
+  readonly coordinatorPort?: number | undefined;
+  /** Remote gateway hub this store dials whenever it holds the local coordinator role. Defaults to DEFAULT_HUB_URL. */
+  readonly hubUrl?: string | undefined;
+  /** Shared between gatewayTrust and connectionCodes -- both are per-slot persisted bootstrap state for the same trust boundary, so a single slot is this store's one notion of "which bridge instance's own disk state this is". */
+  readonly slot?: Readonly<IdentitySlot>;
+}
 
 export class MeshStore implements CommsStore {
   peerId: string;
@@ -208,12 +215,12 @@ export class MeshStore implements CommsStore {
     };
   }
 
-  constructor(
-    coordinatorPort: number = DEFAULT_COORDINATOR_PORT,
-    hubUrl: string = DEFAULT_HUB_URL,
-    /** Shared between gatewayTrust and connectionCodes below -- both are per-slot persisted bootstrap state for the same trust boundary, so a single slot is this store's one notion of "which bridge instance's own disk state this is". */
-    slot?: Readonly<IdentitySlot>,
-  ) {
+  constructor(options?: Readonly<MeshStoreOptions>) {
+    const {
+      coordinatorPort = DEFAULT_COORDINATOR_PORT,
+      hubUrl = DEFAULT_HUB_URL,
+      slot,
+    } = options ?? {};
     this.peerId = nanoid(PEER_ID_LENGTH);
     this.startedAt = new Date().toISOString();
     this.coordinatorPort = coordinatorPort;
@@ -646,16 +653,9 @@ export class MeshStore implements CommsStore {
     roomId: string,
     from: string,
     content: string,
-    replyTo?: string,
-    streamingBehavior?: StreamingBehavior,
+    options?: SendRoomMessageOptions,
   ): Promise<RoomMessage> {
-    return this.roomMessaging.sendRoomMessage(
-      roomId,
-      from,
-      content,
-      replyTo,
-      streamingBehavior,
-    );
+    return this.roomMessaging.sendRoomMessage(roomId, from, content, options);
   }
 
   async readRoomMessages(

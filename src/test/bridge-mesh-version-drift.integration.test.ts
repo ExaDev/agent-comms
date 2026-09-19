@@ -61,12 +61,10 @@ async function whoamiUntilContains(
 test("createBridgeMesh's tool reports an available update when the injected version checker finds a newer release", async () => {
   const slot = tempSlot("test-harness-drift");
   const newerVersion = "9999.0.0";
-  const { store, tool } = await createBridgeMesh(
-    slot,
-    testCoordinatorPort(),
-    undefined,
-    async () => Promise.resolve(newerVersion),
-  );
+  const { store, tool } = await createBridgeMesh(slot, {
+    coordinatorPort: testCoordinatorPort(),
+    fetchLatestVersion: async () => Promise.resolve(newerVersion),
+  });
   try {
     await store.init();
     const agent = await store.registerAgent({
@@ -95,12 +93,10 @@ test("createBridgeMesh's tool reports an available update when the injected vers
 
 test("createBridgeMesh's tool reports its own version with no update line when no newer release is known", async () => {
   const slot = tempSlot("test-harness-no-drift");
-  const { store, tool } = await createBridgeMesh(
-    slot,
-    testCoordinatorPort(),
-    undefined,
-    async () => Promise.resolve(undefined),
-  );
+  const { store, tool } = await createBridgeMesh(slot, {
+    coordinatorPort: testCoordinatorPort(),
+    fetchLatestVersion: async () => Promise.resolve(undefined),
+  });
   try {
     await store.init();
     const agent = await store.registerAgent({
