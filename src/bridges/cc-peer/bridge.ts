@@ -8,7 +8,11 @@
 
 import type { CommsTool } from "../../core/tool.js";
 import { buildAction } from "../../core/bridge.js";
-import { formatDeliveryEvent } from "../../core/bridge.js";
+import {
+  answerJoinRequest,
+  formatCcPeerDelivery,
+  parseApprovalCommand,
+} from "./approval-commands.js";
 import type { DeliveryEvent } from "../../core/types.js";
 
 /** How cc-peer addresses a target peer -- mirrors cc-peer's own PeerRef type without importing it, so this file has no direct dependency on the cc-peer package (only run.ts, which does the real construction, needs that). */
@@ -84,6 +88,8 @@ export interface CcPeerBridgeDeps {
   roomId: string;
   target: Readonly<CcPeerRef>;
   cwd: string;
+  /** The name this bridge's peer is registered under, which the target is told to message to answer a join request. */
+  peerName: string;
   /** Whether an inbound message was sent by the target session. Only those are posted into the project room: the peer may be shared with the default front, whose fronted sessions message it as well, and those belong to the front's own relay. */
   isFromTarget: (message: Readonly<CcPeerInboundMessage>) => Promise<boolean>;
 }
@@ -93,21 +99,29 @@ export function wireCcPeerBridge(deps: Readonly<CcPeerBridgeDeps>): void {
   deps.peer.on("message", (m) => {
     void (async () => {
       if (!(await deps.isFromTarget(m))) return;
+      const ctx = {
+        agentId: deps.agentId,
+        harness: "cc-peer",
+        cwd: deps.cwd,
+        pid: process.pid,
+      };
+      // A well-formed accept or reject is the target's decision on a waiting join request, not something to post into the project room.
+      const decision = parseApprovalCommand(m.body);
+      if (decision !== undefined) {
+        const text = await answerJoinRequest(
+          { tool: deps.tool, ctx },
+          decision,
+        );
+        await deps.peer.send(deps.target, text);
+        return;
+      }
       const sender = m.fromName ?? m.from ?? "unknown";
       const action = buildAction({
         action: "send",
         room: deps.roomId,
         content: `${sender}: ${m.body}`,
       });
-      await deps.tool.handle(
-        {
-          agentId: deps.agentId,
-          harness: "cc-peer",
-          cwd: deps.cwd,
-          pid: process.pid,
-        },
-        action,
-      );
+      await deps.tool.handle(ctx, action);
     })().catch((error: unknown) => {
       deps.store.onError?.(
         error instanceof Error ? error : new Error(String(error)),
@@ -116,6 +130,9 @@ export function wireCcPeerBridge(deps: Readonly<CcPeerBridgeDeps>): void {
   });
 
   deps.store.onDelivery = (_targetId, event) => {
-    void deps.peer.send(deps.target, formatDeliveryEvent(event));
+    void deps.peer.send(
+      deps.target,
+      formatCcPeerDelivery(event, deps.peerName),
+    );
   };
 }

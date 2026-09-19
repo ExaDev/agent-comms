@@ -4,7 +4,12 @@
  * Reuses CcPeerRef/CcPeerInboundMessage from bridge.ts rather than redeclaring them -- the wire shape a shared front-wide peer speaks is identical to the one-shot bridge command's own peer, just addressed by pid instead of a fixed target.
  */
 
-import { buildAction, formatDeliveryEvent } from "../../core/bridge.js";
+import { buildAction } from "../../core/bridge.js";
+import {
+  answerJoinRequest,
+  formatCcPeerDelivery,
+  parseApprovalCommand,
+} from "./approval-commands.js";
 import type { CommsTool } from "../../core/tool.js";
 import type { DeliveryEvent } from "../../core/types.js";
 import type { FrontedSessionRecord } from "./front-controller.js";
@@ -47,6 +52,8 @@ export interface FrontedRelayRecord extends FrontedSessionRecord {
 
 export interface BuildFrontedSessionRecordDeps {
   entry: Readonly<CcPeerRosterEntryLike>;
+  /** The name the shared peer is registered under, which a session is told to message to answer a join request. */
+  peerName: string;
   agentId: string;
   roomId: string;
   store: FrontRelayStore;
@@ -64,6 +71,7 @@ export function buildFrontedSessionRecord(
 ): FrontedRelayRecord {
   const {
     entry,
+    peerName,
     agentId,
     roomId,
     store,
@@ -74,7 +82,7 @@ export function buildFrontedSessionRecord(
   } = deps;
 
   store.onDelivery = async (_targetId, event) => {
-    const body = formatDeliveryEvent(event);
+    const body = formatCcPeerDelivery(event, peerName);
     const correspondentId = correspondentForEvent(event);
     if (correspondentId === undefined) {
       await peer.send({ pid: entry.pid }, body);
@@ -101,21 +109,27 @@ export function buildFrontedSessionRecord(
     roomId,
     store,
     handleInbound: (message: Readonly<CcPeerInboundMessage>) => {
+      const ctx = {
+        agentId,
+        harness: "claude-code",
+        cwd: entry.cwd,
+        pid: process.pid,
+      };
+      // A well-formed accept or reject is the session's decision on a waiting join request, not something to post into the project room.
+      const decision = parseApprovalCommand(message.body);
+      if (decision !== undefined) {
+        void answerJoinRequest({ tool, ctx }, decision).then(async (text) =>
+          peer.send({ pid: entry.pid }, text),
+        );
+        return;
+      }
       const sender = message.fromName ?? message.from ?? "unknown";
       const action = buildAction({
         action: "send",
         room: roomId,
         content: `${sender}: ${message.body}`,
       });
-      void tool.handle(
-        {
-          agentId,
-          harness: "claude-code",
-          cwd: entry.cwd,
-          pid: process.pid,
-        },
-        action,
-      );
+      void tool.handle(ctx, action);
     },
     handleAliasReply: (
       correspondentId: string,

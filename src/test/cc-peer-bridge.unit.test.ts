@@ -15,6 +15,13 @@ import type {
 import type { CommsTool } from "../core/tool.js";
 import type { DeliveryEvent, RoomMessage } from "../core/types.js";
 
+/** The name the bridge's peer is registered under; the target is told to message it to answer a join request. */
+const PEER_NAME = "agent-comms-bridge";
+/** A device-id is a 64-character lowercase hex digest. */
+const DEVICE_ID_HEX_LENGTH = 64;
+const REQUESTER_ID = "a".repeat(DEVICE_ID_HEX_LENGTH);
+const DM_ROOM = `${"b".repeat(DEVICE_ID_HEX_LENGTH)}+${REQUESTER_ID}`;
+
 function fakePeer(): CcPeerLike & {
   messageListener: ((m: Readonly<CcPeerInboundMessage>) => void) | undefined;
   sendCalls: { target: unknown; body: string }[];
@@ -79,6 +86,7 @@ describe("wireCcPeerBridge — inbound (cc-peer -> mesh)", () => {
       roomId: "owner/project",
       target: { name: "local-session" },
       cwd: "/tmp/project",
+      peerName: PEER_NAME,
       isFromTarget: async () => Promise.resolve(true),
     });
 
@@ -122,6 +130,7 @@ describe("wireCcPeerBridge — inbound (cc-peer -> mesh)", () => {
       roomId: "owner/project",
       target: { name: "local-session" },
       cwd: "/tmp/project",
+      peerName: PEER_NAME,
       isFromTarget: async () => Promise.resolve(true),
     });
 
@@ -152,6 +161,7 @@ describe("wireCcPeerBridge — outbound (mesh -> cc-peer)", () => {
       roomId: "owner/project",
       target: { name: "local-session" },
       cwd: "/tmp/project",
+      peerName: PEER_NAME,
       isFromTarget: async () => Promise.resolve(true),
     });
 
@@ -186,6 +196,7 @@ describe("wireCcPeerBridge — outbound (mesh -> cc-peer)", () => {
       roomId: "owner/project",
       target: { pid: 4242 },
       cwd: "/tmp/project",
+      peerName: PEER_NAME,
       isFromTarget: async () => Promise.resolve(true),
     });
 
@@ -212,6 +223,7 @@ describe("wireCcPeerBridge — inbound from anyone but the target", () => {
       roomId: "owner/project",
       target: { name: "local-session" },
       cwd: "/tmp/project",
+      peerName: PEER_NAME,
       isFromTarget,
     });
 
@@ -238,6 +250,7 @@ describe("wireCcPeerBridge — relay failures", () => {
       roomId: "owner/project",
       target: { name: "local-session" },
       cwd: "/tmp/project",
+      peerName: PEER_NAME,
       isFromTarget: async () => Promise.reject(new Error("roster unreadable")),
     });
 
@@ -338,5 +351,109 @@ describe("createTargetSenderMatcher", () => {
 
     expect(await matches({ from: "uds:/tmp/x.sock", body: "x" })).toBe(true);
     expect(listRoster).not.toHaveBeenCalled();
+  });
+});
+
+describe("wireCcPeerBridge — answering a join request", () => {
+  it("tells the target which peer to message and the exact commands when a join request is waiting", () => {
+    const peer = fakePeer();
+    const store: CcPeerBridgeStore = {
+      onDelivery: undefined,
+      onError: undefined,
+    };
+    wireCcPeerBridge({
+      store,
+      tool: fakeTool(),
+      peer,
+      agentId: "agent-1",
+      roomId: "owner/project",
+      target: { name: "local-session" },
+      cwd: "/tmp/project",
+      peerName: PEER_NAME,
+      isFromTarget: async () => Promise.resolve(true),
+    });
+
+    void store.onDelivery?.("agent-1", {
+      type: "room_join_request",
+      room: DM_ROOM,
+      requesterId: REQUESTER_ID,
+    });
+
+    const body = peer.sendCalls[0]?.body ?? "";
+    expect(body).toContain(`"${PEER_NAME}"`);
+    expect(body).toContain(`accept ${DM_ROOM} ${REQUESTER_ID}`);
+  });
+
+  it("runs room_accept for an accept message from the target and reports the result back to it, without posting it to the project room", async () => {
+    const peer = fakePeer();
+    const tool = fakeTool();
+    wireCcPeerBridge({
+      store: { onDelivery: undefined, onError: undefined },
+      tool,
+      peer,
+      agentId: "agent-1",
+      roomId: "owner/project",
+      target: { name: "local-session" },
+      cwd: "/tmp/project",
+      peerName: PEER_NAME,
+      isFromTarget: async () => Promise.resolve(true),
+    });
+
+    peer.messageListener?.({
+      from: "uds:/tmp/cc-socks/1.sock",
+      body: `accept ${DM_ROOM} ${REQUESTER_ID}`,
+    });
+
+    await vi.waitFor(() => {
+      expect(peer.sendCalls).toHaveLength(1);
+    });
+    expect(tool.handleCalls).toEqual([
+      {
+        ctx: {
+          agentId: "agent-1",
+          harness: "cc-peer",
+          cwd: "/tmp/project",
+          pid: process.pid,
+        },
+        action: {
+          action: "room_accept",
+          room: DM_ROOM,
+          requesterId: REQUESTER_ID,
+        },
+      },
+    ]);
+    expect(peer.sendCalls[0]).toEqual({
+      target: { name: "local-session" },
+      body: "ok",
+    });
+  });
+
+  it("ignores an accept that did not come from the target", async () => {
+    const peer = fakePeer();
+    const tool = fakeTool();
+    const isFromTarget = vi.fn(async () => Promise.resolve(false));
+    wireCcPeerBridge({
+      store: { onDelivery: undefined, onError: undefined },
+      tool,
+      peer,
+      agentId: "agent-1",
+      roomId: "owner/project",
+      target: { name: "local-session" },
+      cwd: "/tmp/project",
+      peerName: PEER_NAME,
+      isFromTarget,
+    });
+
+    peer.messageListener?.({
+      from: "uds:/tmp/cc-socks/other.sock",
+      body: `accept ${DM_ROOM} ${REQUESTER_ID}`,
+    });
+
+    await vi.waitFor(() => {
+      expect(isFromTarget).toHaveBeenCalledTimes(1);
+    });
+    await Promise.resolve();
+    expect(tool.handleCalls).toEqual([]);
+    expect(peer.sendCalls).toEqual([]);
   });
 });

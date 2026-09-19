@@ -26,6 +26,8 @@ import { wireDefaultCcPeerFront } from "./default-front.js";
 const PID_FLAG_PREFIX = "--pid=";
 /** argv layout for `node cli.js bridge cc-peer <target-arg>`: index 0/1 are the node binary and script path, 2 is "bridge", 3 is the bridge id ("cc-peer") itself -- this bridge's own args start one past that. */
 const BRIDGE_ARGS_START_INDEX = 4;
+/** The name this command registers its one cc-peer peer under, which the target session is told to message to answer a join request. */
+const BRIDGE_PEER_NAME = "agent-comms-bridge";
 
 function parseTarget(argv: readonly string[]): CcPeerRef {
   const arg = argv[0];
@@ -51,12 +53,13 @@ export async function run(): Promise<void> {
 
   const identitySlot: IdentitySlot = { harness: "cc-peer", cwd: process.cwd() };
   // cc-peer allows one peer per process, so this is the only one: the default front borrows it below rather than creating its own, and the front leaves this bridge's own target alone since the relay below already covers it.
-  const peer = await CcPeer.create({ name: "agent-comms-bridge" });
+  const peer = await CcPeer.create({ name: BRIDGE_PEER_NAME });
   const { store, tool } = await createBridgeMesh(identitySlot);
   store.onError = createMeshErrorReporter();
   store.getCcPeerVersion = () => CC_PEER_VERSION;
   store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store, {
     peer,
+    peerName: BRIDGE_PEER_NAME,
     excludeSession: (entry) => targetMatchesEntry(target, entry),
   });
 
@@ -76,6 +79,7 @@ export async function run(): Promise<void> {
     roomId,
     target,
     cwd: process.cwd(),
+    peerName: BRIDGE_PEER_NAME,
     isFromTarget: createTargetSenderMatcher(target, async () => peer.roster()),
   });
 
