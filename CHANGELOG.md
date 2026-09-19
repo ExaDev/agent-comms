@@ -1,3 +1,9 @@
+## [4.1.1](https://github.com/ExaDev/agent-comms/compare/v4.1.0...v4.1.1) (2026-09-19)
+
+### CI
+
+* push the release commit as the exadev GitHub App and gate release on e2e ([40b7817](https://github.com/ExaDev/agent-comms/commit/40b7817b7884aa6461e6ad5ee0f5ebba28fa647e))
+
 ## [4.1.0](https://github.com/ExaDev/agent-comms/compare/v4.0.1...v4.1.0) (2026-09-19)
 
 ### Features
