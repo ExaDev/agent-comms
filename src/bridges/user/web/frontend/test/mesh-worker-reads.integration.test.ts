@@ -9,6 +9,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { createWebServer, type WebServerHandle } from "../../server.js";
 import {
   connect,
+  disconnect,
   upgradeTabRpcPort,
   ports,
   agents,
@@ -67,9 +68,15 @@ afterEach(async () => {
   ports.clear();
   agents.clear();
   rooms.clear();
+  // disconnect() first, before closing the server's own wss/http listeners -- ws's WebSocketServer.close() callback only fires once every client connection it's still tracking has actually closed, and nothing closed connect()'s own upstream socket on the worker side until disconnect() was added specifically for this. Without it, wss.close() below waited forever for a client (this exact worker's own still-open connection) that was never going to disconnect on its own.
+  disconnect();
   if (handle) {
-    handle.wss.close();
-    handle.server.close();
+    await new Promise<void>((resolve) => {
+      handle?.wss.close(() => resolve());
+    });
+    await new Promise<void>((resolve) => {
+      handle?.server.close(() => resolve());
+    });
     await handle.controller.shutdown();
     handle = undefined;
   }

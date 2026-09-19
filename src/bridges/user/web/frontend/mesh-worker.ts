@@ -200,6 +200,8 @@ type MeshOrpcClient = ContractRouterClient<MeshContract>;
 
 let orpcClient: MeshOrpcClient | undefined;
 let eventPumpGeneration = 0;
+/** The current upstream WebSocket, tracked so disconnect() can close it deliberately -- reassigned every time RPCLink's own connect callback runs (the initial dial and every reconnect attempt), so it always names the actual live connection, never a stale one from an earlier attempt. */
+let currentSocket: WebSocket | undefined;
 
 /** Republishes every event this worker receives from the real server to any tab subscribed via the worker's own oRPC downstream (tab-contract.ts's subscribeEvents). Resumable the same way the server's own publisher is -- a tab's oRPC client can reconnect to this worker (a new MessagePort, or the same one after a drop) and resume from its own lastEventId. */
 export const localPublisher = new MeshEventPublisher();
@@ -213,6 +215,7 @@ export function connect(url: string): void {
   const link = new RPCLink({
     connect: async () => {
       const socket = new WebSocket(url);
+      currentSocket = socket;
       socket.addEventListener("open", () => {
         broadcastToPorts({ type: "connected" });
       });
@@ -247,6 +250,16 @@ export function connect(url: string): void {
   const client: MeshOrpcClient = createORPCClient(link);
   orpcClient = client;
   void pumpEvents(client, ++eventPumpGeneration);
+}
+
+/**
+ * Deliberately tears down the current upstream connection: abandons the event pump loop first (bumping eventPumpGeneration the same way a fresh connect() does, so pumpEvents' own generation check stops it from treating the socket closing next as something to reconnect and resume from), clears orpcClient so upstream()/requireOrpcClient() correctly report "not connected" for anything called afterward, then closes the actual socket. Never previously exported -- nothing closed this worker's own upstream connection on purpose, so a caller tearing down the server this worker was talking to (integration tests in particular) had no way to close its half of the connection first. That left the server's own WebSocketServer.close() waiting indefinitely for a client it was still tracking to disconnect, since ws's WebSocketServer.close() callback only fires once every currently-tracked client connection has actually closed.
+ */
+export function disconnect(): void {
+  ++eventPumpGeneration;
+  orpcClient = undefined;
+  currentSocket?.close();
+  currentSocket = undefined;
 }
 
 /**
