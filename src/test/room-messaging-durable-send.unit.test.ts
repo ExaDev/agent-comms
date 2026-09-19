@@ -89,6 +89,8 @@ async function makeHarness() {
       userIdentityOptions: {},
     }),
     roomProtocol: { sendRoomRequestToMember: async () => undefined },
+    // This harness only sends room messages, never DMs, so DM admission is never reached.
+    requestDmAccess: async () => undefined,
     resolveAgent: async () => undefined,
   };
 
