@@ -48,6 +48,9 @@ export interface CcPeerFrontDeps<TRecord extends FrontedSessionRecord> {
   detach: (record: TRecord) => Promise<void>;
   /** Resolves an inbound alias message's own alias name back to the correspondent it stands for -- reply-aliases.ts's ReplyAliasDirectory in production. */
   aliasDirectory: CcPeerFrontAliasDirectory;
+  /** Sessions this process already relays by other means and must not also front -- the one-shot `bridge cc-peer` command's own target, which shares this process's single cc-peer peer with the front. A session that becomes excluded while fronted is detached on the next tick, like one that yields to a live bridge. */
+  excludeSession?:
+    ((entry: Readonly<CcPeerRosterEntryLike>) => boolean) | undefined;
   pollIntervalMs?: number | undefined;
   onError?: ((error: Error) => void) | undefined;
 }
@@ -116,7 +119,10 @@ export class CcPeerFront<TRecord extends FrontedSessionRecord> {
       return;
     }
 
-    const selected = selectSessionsToFront(roster, this.deps.probeSlotOwner);
+    const selected = selectSessionsToFront(
+      roster,
+      this.deps.probeSlotOwner,
+    ).filter((entry) => this.deps.excludeSession?.(entry) !== true);
     const selectedPids = new Set(selected.map((entry) => entry.pid));
     const rosterPids = new Set(roster.map((entry) => entry.pid));
 

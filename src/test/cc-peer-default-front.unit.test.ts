@@ -73,6 +73,25 @@ describe("wireDefaultCcPeerFront", () => {
     );
   });
 
+  it("passes a lent peer and the excludeSession predicate through to the front builder", () => {
+    const peer: NonNullable<WireDefaultCcPeerFrontOptions["peer"]> = {
+      roster: async () => Promise.resolve([]),
+      on: () => undefined,
+      send: async () => Promise.resolve({ msgId: "m" }),
+      stop: async () => Promise.resolve(),
+    };
+    const excludeSession = vi.fn(() => false);
+    const createFront = vi.fn<
+      NonNullable<WireDefaultCcPeerFrontOptions["createFront"]>
+    >(() => fakeFront());
+
+    wireDefaultCcPeerFront(fakeStore(), { peer, excludeSession, createFront });
+
+    expect(createFront).toHaveBeenCalledWith(
+      expect.objectContaining({ peer, excludeSession }),
+    );
+  });
+
   it("forwards a front error to the store's own onError, when one is set", () => {
     const store = fakeStore();
     const onError = vi.fn<(error: Error) => void>();

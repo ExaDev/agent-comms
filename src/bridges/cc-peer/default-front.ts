@@ -15,6 +15,10 @@ import type { FrontedSessionRecord } from "./front-controller.js";
 export interface WireDefaultCcPeerFrontOptions {
   coordinatorPort?: number | undefined;
   hubUrl?: string | undefined;
+  /** The cc-peer peer this process already owns, lent to the front instead of it creating a second one -- see CreateDefaultCcPeerFrontOptions.peer. */
+  peer?: CreateDefaultCcPeerFrontOptions["peer"];
+  /** Sessions this process already relays by other means -- see CreateDefaultCcPeerFrontOptions.excludeSession. */
+  excludeSession?: CreateDefaultCcPeerFrontOptions["excludeSession"];
   /** Builds the front itself -- defaults to the real createDefaultCcPeerFront. Overridable so this function's own start/stop wiring against store.onCoordinatorRoleChanged is testable without a real CcPeer/local Claude Code session. */
   createFront?:
     | ((
@@ -34,6 +38,8 @@ export function wireDefaultCcPeerFront(
   const front = createFront({
     coordinatorPort: options.coordinatorPort,
     hubUrl: options.hubUrl,
+    peer: options.peer,
+    excludeSession: options.excludeSession,
     onError: (error) => {
       store.onError?.(error);
     },
