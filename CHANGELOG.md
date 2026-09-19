@@ -1,3 +1,13 @@
+## [3.33.1](https://github.com/ExaDev/agent-comms/compare/v3.33.0...v3.33.1) (2026-09-19)
+
+### Bug Fixes
+
+* **bridge:** let a test-constructed controller override its own hub dial ([9f44d1b](https://github.com/ExaDev/agent-comms/commit/9f44d1bbc242a3c4f9eb7aa26ef759673cae7e6a))
+
+### Tests
+
+* **bridge:** stop web bridge integration tests dialling the real production hub ([2ffdb63](https://github.com/ExaDev/agent-comms/commit/2ffdb633d2df9120bf2782525211279c9aa745c8)), references [agent-comms#154](https://github.com/agent-comms/issues/154)
+
 ## [3.33.0](https://github.com/ExaDev/agent-comms/compare/v3.32.1...v3.33.0) (2026-09-18)
 
 ### Features
