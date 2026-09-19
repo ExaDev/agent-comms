@@ -2,6 +2,7 @@
 
 import { generateIdentity } from "../src/core/identity.js";
 import { WireMeshTransport } from "../src/core/wire-mesh-transport.js";
+import { GatewayTrust } from "../src/core/gateway-trust.js";
 import type { TransportEvents } from "../src/core/transport.js";
 
 const HUB_URL = "wss://mesh.exadev.io/";
@@ -41,16 +42,44 @@ async function main(): Promise<void> {
     }
   });
 
-  const transportA = new WireMeshTransport(eventsA, generateIdentity());
-  const transportB = new WireMeshTransport(eventsB, generateIdentity());
+  const trustA = new GatewayTrust();
+  const trustB = new GatewayTrust();
+  const transportA = new WireMeshTransport(
+    eventsA,
+    generateIdentity(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    trustA,
+  );
+  const transportB = new WireMeshTransport(
+    eventsB,
+    generateIdentity(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    trustB,
+  );
+
+  // GatewayTrust defaults to deny-all when a caller wires none in (see WireMeshTransport's own constructor doc comment). Without mutual trust here, HubSession's directory-merge drops each side's gossiped entry from the other before either transport's peers() list ever reflects it, so discovery below would never succeed.
+  const deviceA = await transportA.hub.ownDeviceHex();
+  const deviceB = await transportB.hub.ownDeviceHex();
+  trustA.add(deviceB);
+  trustB.add(deviceA);
 
   console.log("connecting both agents to the production hub...");
   await transportA.hub.connect(HUB_URL);
   await transportB.hub.connect(HUB_URL);
   console.log("both connected; waiting for mutual gossip discovery...");
 
-  const deviceA = await transportA.hub.ownDeviceHex();
-  const deviceB = await transportB.hub.ownDeviceHex();
   const started = Date.now();
   while (Date.now() - started < DISCOVERY_TIMEOUT_MS) {
     if (
