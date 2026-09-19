@@ -1,1 +1,1 @@
-pnpm exec eslint . 2>&1 && pnpm exec tsc --noEmit 2>&1 && pnpm exec vitest run 2>&1
+pnpm run prepush 2>&1
