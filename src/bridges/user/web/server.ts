@@ -172,9 +172,12 @@ export async function createWebServer(
   port = 0,
   existingController?: ChatController,
   coordinatorPort?: number,
+  /** Overrides the hub a fresh controller's own coordinator role dials on takeover -- ChatController's own hubUrl, ignored when existingController is supplied since that controller already made its own choice. See ChatController's own hubUrl doc comment. */
+  hubUrl?: string,
 ): Promise<WebServerHandle> {
   const controller =
-    existingController ?? new ChatController("Dashboard", coordinatorPort);
+    existingController ??
+    new ChatController("Dashboard", coordinatorPort, hubUrl);
   if (!existingController) {
     await controller.init();
   }

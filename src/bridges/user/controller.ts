@@ -47,6 +47,8 @@ export class ChatController extends EventEmitter {
   constructor(
     private readonly userName: string,
     private readonly coordinatorPort?: number,
+    /** Overrides the hub this controller's own coordinator role dials on takeover (createBridgeMesh's own hubUrl, defaulting to DEFAULT_HUB_URL) -- every real bridge entry point wants the real public hub, but a test constructing a controller of its own wants a hermetic, deterministically-unreachable one instead of silently depending on live production infrastructure whenever its own fresh coordinator port makes it the mesh's coordinator (see hub-helpers.ts's own unreachableHubUrl). */
+    private readonly hubUrl?: string,
   ) {
     super();
   }
@@ -83,11 +85,13 @@ export class ChatController extends EventEmitter {
     const { store, tool } = await createBridgeMesh(
       identitySlot,
       this.coordinatorPort,
+      this.hubUrl,
     );
     this.store = store;
     this.tool = tool;
     this.store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(this.store, {
       coordinatorPort: this.coordinatorPort,
+      hubUrl: this.hubUrl,
     });
 
     // Push delivery events to UIs
