@@ -53,6 +53,8 @@ export default defineConfig({
       filename: "sw.ts",
       injectRegister: false,
       manifest: false,
+      // vite-plugin-pwa builds the service worker in its own nested build. For the default "es" format it hard-codes Rollup's inlineDynamicImports: true, which Rolldown (Vite 8) deprecates in favour of codeSplitting: false and warns about on every build. The "iife" format takes the plugin's library-mode path, which sets no such option. The service worker has no imports or exports, so the only change to sw.js is an immediately-invoked function wrapper around the same code.
+      injectManifest: { rollupFormat: "iife" },
     }),
   ],
   build: {
