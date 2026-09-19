@@ -1,12 +1,12 @@
 {
   "mcpServers": {
     "agent-comms": {
-      "command": "/Users/joe/.agents/extensions/agent-comms/node_modules/.bin/tsx",
       "args": [
         "/Users/joe/.agents/extensions/agent-comms/src/cli.ts",
         "bridge",
         "claude-code"
-      ]
+      ],
+      "command": "/Users/joe/.agents/extensions/agent-comms/node_modules/.bin/tsx"
     }
   }
 }
