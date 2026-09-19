@@ -114,7 +114,7 @@ export default defineConfig(
   },
   {
     files: ["**/*.json"],
-    ignores: ["turbo.json"],
+    ignores: ["turbo.json", "**/tsconfig*.json"],
     language: "json/json",
     plugins: { json },
     rules: {
