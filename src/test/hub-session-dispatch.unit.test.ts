@@ -110,7 +110,12 @@ describe("dispatchHubRequest", () => {
     const deps = fakeDeps();
     const onKnownPeer = fakeOnKnownPeer();
 
-    await dispatchHubRequest(request, OWN_HEX, deps, onKnownPeer);
+    await dispatchHubRequest({
+      request,
+      ownDeviceHex: OWN_HEX,
+      deps,
+      onKnownPeer: onKnownPeer,
+    });
 
     expect(responses).toEqual([{ result: "ok" }]);
     expect(deps.events.messages).toEqual([]);
@@ -122,7 +127,12 @@ describe("dispatchHubRequest", () => {
     const deps = fakeDeps();
     const onKnownPeer = fakeOnKnownPeer();
 
-    await dispatchHubRequest(request, OWN_HEX, deps, onKnownPeer);
+    await dispatchHubRequest({
+      request,
+      ownDeviceHex: OWN_HEX,
+      deps,
+      onKnownPeer: onKnownPeer,
+    });
 
     expect(responses).toEqual([{ result: "error", code: "unauthorized" }]);
     expect(deps.handleRoomRequest).not.toHaveBeenCalled();
@@ -137,7 +147,12 @@ describe("dispatchHubRequest", () => {
     const deps = fakeDeps({ isTrusted: () => false });
     const onKnownPeer = fakeOnKnownPeer();
 
-    await dispatchHubRequest(request, OWN_HEX, deps, onKnownPeer);
+    await dispatchHubRequest({
+      request,
+      ownDeviceHex: OWN_HEX,
+      deps,
+      onKnownPeer: onKnownPeer,
+    });
 
     expect(responses).toEqual([{ result: "ok" }]);
     expect(deps.events.messages).toEqual([]);
@@ -157,7 +172,12 @@ describe("dispatchHubRequest", () => {
     const deps = fakeDeps({ isTrusted: (hex) => hex === SENDER_HEX });
     const onKnownPeer = fakeOnKnownPeer();
 
-    await dispatchHubRequest(request, OWN_HEX, deps, onKnownPeer);
+    await dispatchHubRequest({
+      request,
+      ownDeviceHex: OWN_HEX,
+      deps,
+      onKnownPeer: onKnownPeer,
+    });
 
     expect(responses).toEqual([{ result: "ok" }]);
     expect(deps.events.messages).toEqual([message]);
@@ -177,7 +197,12 @@ describe("dispatchHubRequest", () => {
     };
     const deps = fakeDeps({ isTrusted: () => true });
 
-    await dispatchHubRequest(request, OWN_HEX, deps, fakeOnKnownPeer());
+    await dispatchHubRequest({
+      request,
+      ownDeviceHex: OWN_HEX,
+      deps,
+      onKnownPeer: fakeOnKnownPeer(),
+    });
 
     expect(responses).toEqual([{ result: "ok" }]);
     expect(deps.events.messages).toEqual([]);
@@ -196,7 +221,12 @@ describe("dispatchHubRequest", () => {
     const deps = fakeDeps({ isTrusted: () => false, handleRoomRequest });
     const onKnownPeer = fakeOnKnownPeer();
 
-    await dispatchHubRequest(request, OWN_HEX, deps, onKnownPeer);
+    await dispatchHubRequest({
+      request,
+      ownDeviceHex: OWN_HEX,
+      deps,
+      onKnownPeer: onKnownPeer,
+    });
 
     expect(handleRoomRequest).toHaveBeenCalledTimes(1);
     const [dispatchedRequest, dispatchedHandle] =
@@ -216,7 +246,12 @@ describe("dispatchHubRequest", () => {
     const deps = fakeDeps({ isTrusted: () => true });
     const onKnownPeer = fakeOnKnownPeer();
 
-    await dispatchHubRequest(request, OWN_HEX, deps, onKnownPeer);
+    await dispatchHubRequest({
+      request,
+      ownDeviceHex: OWN_HEX,
+      deps,
+      onKnownPeer: onKnownPeer,
+    });
 
     expect(onKnownPeer).toHaveBeenCalledWith(SENDER_HEX);
   });
@@ -239,7 +274,12 @@ describe("dispatchHubRequest", () => {
       handleRoomRequest,
     });
 
-    await dispatchHubRequest(request, OWN_HEX, deps, fakeOnKnownPeer());
+    await dispatchHubRequest({
+      request,
+      ownDeviceHex: OWN_HEX,
+      deps,
+      onKnownPeer: fakeOnKnownPeer(),
+    });
 
     expect(forwardToLocalPeer).toHaveBeenCalledTimes(1);
     const [toDeviceArg, commandArg] = forwardToLocalPeer.mock.calls[0] ?? [];
@@ -263,7 +303,12 @@ describe("dispatchHubRequest", () => {
       handleRoomRequest,
     });
 
-    await dispatchHubRequest(request, OWN_HEX, deps, fakeOnKnownPeer());
+    await dispatchHubRequest({
+      request,
+      ownDeviceHex: OWN_HEX,
+      deps,
+      onKnownPeer: fakeOnKnownPeer(),
+    });
 
     expect(handleRoomRequest).toHaveBeenCalledTimes(1);
   });
@@ -277,7 +322,12 @@ describe("dispatchHubRequest", () => {
     const handleRoomRequest = vi.fn().mockResolvedValue(undefined);
     const deps = fakeDeps({ isTrusted: () => true, handleRoomRequest });
 
-    await dispatchHubRequest(request, OWN_HEX, deps, fakeOnKnownPeer());
+    await dispatchHubRequest({
+      request,
+      ownDeviceHex: OWN_HEX,
+      deps,
+      onKnownPeer: fakeOnKnownPeer(),
+    });
 
     expect(handleRoomRequest).toHaveBeenCalledTimes(1);
     const [, handleArg] = handleRoomRequest.mock.calls[0] ?? [];
@@ -292,13 +342,13 @@ describe("dispatchHubRequest", () => {
     const handleRoomRequest = vi.fn().mockResolvedValue(undefined);
     const deps = fakeDeps({ isTrusted: () => false, handleRoomRequest });
 
-    await dispatchHubRequest(
+    await dispatchHubRequest({
       request,
-      OWN_HEX,
+      ownDeviceHex: OWN_HEX,
       deps,
-      fakeOnKnownPeer(),
-      "wss://hub.example/",
-    );
+      onKnownPeer: fakeOnKnownPeer(),
+      hubAddress: "wss://hub.example/",
+    });
 
     expect(handleRoomRequest).toHaveBeenCalledTimes(1);
     const [, , originArg] = handleRoomRequest.mock.calls[0] ?? [];
@@ -313,7 +363,12 @@ describe("dispatchHubRequest", () => {
     const handleRoomRequest = vi.fn().mockResolvedValue(undefined);
     const deps = fakeDeps({ isTrusted: () => false, handleRoomRequest });
 
-    await dispatchHubRequest(request, OWN_HEX, deps, fakeOnKnownPeer());
+    await dispatchHubRequest({
+      request,
+      ownDeviceHex: OWN_HEX,
+      deps,
+      onKnownPeer: fakeOnKnownPeer(),
+    });
 
     expect(handleRoomRequest).toHaveBeenCalledTimes(1);
     const [, , originArg] = handleRoomRequest.mock.calls[0] ?? [];
