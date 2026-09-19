@@ -52,7 +52,7 @@ describe("whoami reports this bridge's own version", () => {
     const store = new MeshStore();
     await wireTestTransport(store);
     const ctx = await registeredContext(store);
-    const tool = new CommsTool(store, undefined, () => "99.0.0");
+    const tool = new CommsTool(store, { getNewerVersionIfAny: () => "99.0.0" });
 
     const result = await tool.handle(ctx, buildAction({ action: "whoami" }));
 
@@ -116,7 +116,7 @@ describe("update reports this bridge's own version", () => {
     const store = new MeshStore();
     await wireTestTransport(store);
     const ctx = await registeredContext(store);
-    const tool = new CommsTool(store, undefined, () => "99.0.0");
+    const tool = new CommsTool(store, { getNewerVersionIfAny: () => "99.0.0" });
 
     const result = await tool.handle(
       ctx,

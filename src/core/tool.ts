@@ -199,20 +199,42 @@ function trySyncAction(verb: string, action: () => string): CommsResult {
   }
 }
 
+/** Construction options for CommsTool. */
+export interface CommsToolOptions {
+  /** Backs the mesh_discover / mesh_advertise / mesh_unadvertise actions. Undefined means this bridge wires no discovery. */
+  readonly discovery?: DiscoveryManager;
+  /** Returns the newest npm release known to be available, or undefined when none is known (no checker wired up, no successful check yet, or this bridge is already current). Wired at bridge construction time by a VersionDriftChecker (see version-check.ts) -- optional so every call site, and every test that has no interest in drift reporting, is unaffected. */
+  readonly getNewerVersionIfAny?: () => string | undefined;
+  /** Fetches a signer's armored PGP public key by fingerprint, used by gateway_redeem_connection_code when the caller supplies a fingerprint but not the key text itself. Defaults to the real keys.openpgp.org lookup (pgp-keyserver.ts); a test that would otherwise trigger real network I/O injects a fake resolver instead, the same reasoning bridge-mesh.ts's own fetchLatestVersion override already establishes for getNewerVersionIfAny above. */
+  readonly fetchPgpPublicKeyByFingerprintImpl?: (
+    fingerprint: string,
+  ) => Promise<string>;
+}
+
 export class CommsTool {
   /** Reports this bridge's own web UI address for the web_url action. Assignable post-construction, mirroring MeshStore's own onDelivery/onCoordinatorRoleChanged hooks, because the underlying web server handle isn't known until after this bridge's own tryStartWebServer() call -- which every real bridge makes after building its CommsTool, not before. Undefined (the default) means this bridge never wires web UI reporting. */
   getWebUrlStatus?: () => WebUrlStatus;
 
+  private readonly discovery: DiscoveryManager | undefined;
+  private readonly getNewerVersionIfAny: (() => string | undefined) | undefined;
+  private readonly fetchPgpPublicKeyByFingerprintImpl: (
+    fingerprint: string,
+  ) => Promise<string>;
+
   constructor(
     private readonly store: CommsStore & MeshOnlyFeatures,
-    private readonly discovery?: DiscoveryManager,
-    /** Returns the newest npm release known to be available, or undefined when none is known (no checker wired up, no successful check yet, or this bridge is already current). Wired at bridge construction time by a VersionDriftChecker (see version-check.ts) -- optional so every existing call site, and every test that has no interest in drift reporting, is unaffected. */
-    private readonly getNewerVersionIfAny?: () => string | undefined,
-    /** Fetches a signer's armored PGP public key by fingerprint, used by gateway_redeem_connection_code when the caller supplies a fingerprint but not the key text itself. Defaults to the real keys.openpgp.org lookup (pgp-keyserver.ts); a test that would otherwise trigger real network I/O injects a fake resolver instead, the same reasoning bridge-mesh.ts's own fetchLatestVersion override already establishes for getNewerVersionIfAny above. */
-    private readonly fetchPgpPublicKeyByFingerprintImpl: (
-      fingerprint: string,
-    ) => Promise<string> = fetchPgpPublicKeyByFingerprint,
-  ) {}
+    options?: Readonly<CommsToolOptions>,
+  ) {
+    const {
+      discovery,
+      getNewerVersionIfAny,
+      fetchPgpPublicKeyByFingerprintImpl = fetchPgpPublicKeyByFingerprint,
+    } = options ?? {};
+    this.discovery = discovery;
+    this.getNewerVersionIfAny = getNewerVersionIfAny;
+    this.fetchPgpPublicKeyByFingerprintImpl =
+      fetchPgpPublicKeyByFingerprintImpl;
+  }
 
   /** The "Update available: ..." line appended to whoami/update output when a newer release is known, or undefined when there's nothing to report. */
   private formatUpdateAvailableLine(): string | undefined {
@@ -476,8 +498,10 @@ export class CommsTool {
       roomId,
       ctx.agentId,
       action.content,
-      action.replyTo,
-      action.streamingBehavior,
+      {
+        replyTo: action.replyTo,
+        streamingBehavior: action.streamingBehavior,
+      },
     );
     return {
       content: `Sent to ${action.target}: ${msg.id}`,
