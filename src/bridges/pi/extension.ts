@@ -299,11 +299,11 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
 
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+    async execute(_toolCallId, params) {
       if (agentId === undefined) {
         return {
           content: [{ type: "text", text: "Error: not registered" }],
-          details: {},
+          details: { action: params.action },
           isError: true,
         };
       }

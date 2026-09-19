@@ -55,7 +55,7 @@ function connectMeshClient(port: number): MeshClient {
 async function setup(): Promise<{ client: MeshClient; port: number }> {
   const coordinatorPort = await findFreePort();
   const hubUrl = await unreachableHubUrl();
-  handle = await createWebServer(0, undefined, coordinatorPort, hubUrl);
+  handle = await createWebServer({ coordinatorPort, hubUrl });
   await new Promise<void>((resolve) => {
     if (handle?.server.listening === true) {
       resolve();

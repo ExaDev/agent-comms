@@ -58,7 +58,10 @@ export async function createRoomAction(
   }>,
 ): Promise<ActionResult> {
   if (input.name === "") return { content: "Missing name", isError: true };
-  return controller.createRoom(input.name, input.type, input.description ?? "");
+  return controller.createRoom(input.name, {
+    type: input.type,
+    description: input.description ?? "",
+  });
 }
 
 export async function listRoomsAction(
@@ -77,7 +80,7 @@ export async function readRoomAction(
   controller: ChatController,
   input: Readonly<{ room?: string | undefined }>,
 ): Promise<ActionResult> {
-  return controller.readRoom(input.room);
+  return controller.readRoom({ roomId: input.room });
 }
 
 export async function destroyRoomAction(

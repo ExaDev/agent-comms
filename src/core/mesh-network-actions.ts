@@ -28,7 +28,7 @@ export async function meshDiscoverAction(
       isError: true,
     };
   }
-  const meshes = await discovery.discover(action.method);
+  const meshes = await discovery.discover({ backendName: action.method });
   if (meshes.length === 0) {
     return { content: "No meshes discovered.", isError: false };
   }

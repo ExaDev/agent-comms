@@ -46,7 +46,7 @@ async function setup(): Promise<{
   const coordinatorPort = await findFreePort();
   const hubUrl = await unreachableHubUrl();
   // A local const each call owns and closes -- a shared module-level `let` would mean cleanup's closure reads whatever the module-level variable happens to hold when it actually runs, not the handle this specific setup() call created. Any interleaving between one test's async teardown and the next test's setup() could let one test's cleanup close a DIFFERENT test's server, leaking the first server's socket and tearing the second down mid-request. A per-call local eliminates the shared state entirely.
-  const handle = await createWebServer(0, undefined, coordinatorPort, hubUrl);
+  const handle = await createWebServer({ coordinatorPort, hubUrl });
 
   // Wait for the server to actually be listening
   await new Promise<void>((resolve) => {

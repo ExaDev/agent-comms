@@ -36,10 +36,12 @@ function isNpmRegistryLatestResponse(
 }
 
 /** Fetches the "latest" dist-tag version currently published to npm, or undefined on any failure (offline, timeout, non-2xx, malformed body) -- callers never need their own try/catch around this. */
-export async function fetchLatestPublishedVersion(
-  registryUrl: string = NPM_REGISTRY_LATEST_VERSION_URL,
-  fetchImpl: FetchLike = fetch,
-): Promise<string | undefined> {
+export async function fetchLatestPublishedVersion(options?: {
+  registryUrl?: string;
+  fetchImpl?: FetchLike;
+}): Promise<string | undefined> {
+  const { registryUrl = NPM_REGISTRY_LATEST_VERSION_URL, fetchImpl = fetch } =
+    options ?? {};
   try {
     const response = await fetchImpl(registryUrl, {
       signal: AbortSignal.timeout(REGISTRY_FETCH_TIMEOUT_MS),
