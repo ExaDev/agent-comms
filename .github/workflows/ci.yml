@@ -70,6 +70,7 @@ jobs:
             turbo-${{ runner.os }}-${{ github.job }}-
       - run: pnpm run build
       - run: pnpm test
+      - run: pnpm test:delivery
       - run: pnpm test:smoke
 
   e2e:
