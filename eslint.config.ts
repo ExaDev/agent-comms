@@ -31,6 +31,16 @@ export default defineConfig(
     files: ["**/*.{ts,tsx}"],
     settings: { react: { version: "19.3.0" } },
   },
+  // The frontend's own React component tests (rendering + user-interaction simulation via @testing-library/react) are a genuinely different kind of test from a plain unit test of a pure module -- deliberately named with their own '.component.test.tsx' suffix rather than folded into '.unit.', so exadev/test-file-kind's own default kinds list is extended here rather than relabelling that existing, meaningful distinction away.
+  {
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      "exadev/test-file-kind": [
+        "error",
+        { kinds: ["unit", "integration", "e2e", "component"] },
+      ],
+    },
+  },
   {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
