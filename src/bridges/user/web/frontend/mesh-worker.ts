@@ -484,7 +484,7 @@ const tabRouter = {
     });
   }),
 
-  disconnect: tabImpl.disconnect.handler(async ({ context }) => {
+  disconnect: tabImpl.disconnect.handler(({ context }) => {
     // Closing the peer synchronously, before this handler returns, tears down the same port the RPC response itself still needs to go out over -- confirmed empirically (a real hang, not assumed): awaiting close() here means the client's disconnect() call never resolves at all. A microtask defer wasn't enough separation either (still hung) -- a macrotask (setTimeout) is what actually lets the response finish being posted before the port closes.
     setTimeout(() => {
       void tabRpcHandlerRef.current?.close(context.port);
