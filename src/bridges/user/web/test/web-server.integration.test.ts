@@ -38,36 +38,39 @@ async function findFreePort(): Promise<number> {
   });
 }
 
-let handle: WebServerHandle | undefined;
-
 async function setup(): Promise<{
   port: number;
+  handle: WebServerHandle;
   cleanup: () => Promise<void>;
 }> {
   const coordinatorPort = await findFreePort();
   const hubUrl = await unreachableHubUrl();
-  handle = await createWebServer(0, undefined, coordinatorPort, hubUrl);
+  // A local const each call owns and closes -- a shared module-level `let` would mean cleanup's closure reads whatever the module-level variable happens to hold when it actually runs, not the handle this specific setup() call created. Any interleaving between one test's async teardown and the next test's setup() could let one test's cleanup close a DIFFERENT test's server, leaking the first server's socket and tearing the second down mid-request. A per-call local eliminates the shared state entirely.
+  const handle = await createWebServer(0, undefined, coordinatorPort, hubUrl);
 
   // Wait for the server to actually be listening
   await new Promise<void>((resolve) => {
-    if (handle?.server.listening === true) {
+    if (handle.server.listening) {
       resolve();
       return;
     }
-    handle?.server.once("listening", () => resolve());
+    handle.server.once("listening", () => resolve());
   });
 
   const addr = handle.server.address();
   const port = typeof addr === "object" && addr ? addr.port : 0;
   return {
     port,
+    handle,
     cleanup: async () => {
-      if (handle) {
-        handle.wss.close();
-        handle.server.close();
-        await handle.controller.shutdown();
-        handle = undefined;
-      }
+      // wss.close()/server.close() are asynchronous -- neither actually releases its port until its optional callback fires. Calling them without awaiting that could let cleanup resolve before the OS had genuinely freed the port, so a subsequent test's findFreePort() (an ephemeral, OS-assigned port 0) could be handed that same not-yet-released port and fail to bind it (EADDRINUSE).
+      await new Promise<void>((resolve) => {
+        handle.wss.close(() => resolve());
+      });
+      await new Promise<void>((resolve) => {
+        handle.server.close(() => resolve());
+      });
+      await handle.controller.shutdown();
     },
   };
 }
@@ -287,9 +290,8 @@ describe("Web server integration", () => {
   });
 
   it("getWebUrlStatus reports ready with the actual listening port once the server is up", async () => {
-    const { port, cleanup } = await setup();
+    const { port, handle, cleanup } = await setup();
     try {
-      if (!handle) throw new Error("setup() did not assign handle");
       expect(getWebPort(handle)).toBe(port);
       expect(getWebUrlStatus(handle)).toEqual({
         kind: "ready",

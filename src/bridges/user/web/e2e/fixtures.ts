@@ -49,8 +49,17 @@ export const test = base.extend<Fixtures>({
 
     await use(handle);
 
-    handle.wss.close();
-    handle.server.close();
+    // wss.close()/server.close() are asynchronous -- neither actually releases its port until its optional callback fires. Awaiting that here keeps a later test's allocFreePort() from being handed a port this handle hasn't genuinely released yet.
+    await new Promise<void>((resolve) => {
+      handle.wss.close(() => {
+        resolve();
+      });
+    });
+    await new Promise<void>((resolve) => {
+      handle.server.close(() => {
+        resolve();
+      });
+    });
     await handle.controller.shutdown();
   },
   port: async ({ server }, use: (port: number) => Promise<void>) => {

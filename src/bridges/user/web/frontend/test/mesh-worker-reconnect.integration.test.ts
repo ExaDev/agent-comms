@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import net from "node:net";
 import { createWebServer, type WebServerHandle } from "../../server.js";
-import { connect, ports, agents, rooms } from "../mesh-worker.js";
+import { connect, disconnect, ports, agents, rooms } from "../mesh-worker.js";
 import { unreachableHubUrl } from "../../../../../test/hub-helpers.js";
 
 async function findFreePort(): Promise<number> {
@@ -46,9 +46,15 @@ afterEach(async () => {
   ports.clear();
   agents.clear();
   rooms.clear();
+  // disconnect() first, before closing the server's own wss/http listeners -- ws's WebSocketServer.close() callback only fires once every client connection it's still tracking has actually closed, and this test always leaves a live, reconnected client connection open at the end. Without disconnect() first, wss.close() below waits forever for a client that was never going to disconnect on its own.
+  disconnect();
   if (handle) {
-    handle.wss.close();
-    handle.server.close();
+    await new Promise<void>((resolve) => {
+      handle?.wss.close(() => resolve());
+    });
+    await new Promise<void>((resolve) => {
+      handle?.server.close(() => resolve());
+    });
     await handle.controller.shutdown();
     handle = undefined;
   }
