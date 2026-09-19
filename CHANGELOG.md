@@ -1,3 +1,9 @@
+## [4.2.0](https://github.com/ExaDev/agent-comms/compare/v4.1.10...v4.2.0) (2026-09-19)
+
+### Features
+
+* **bridge:** let a cc-peer session answer a join or DM request ([d496198](https://github.com/ExaDev/agent-comms/commit/d496198b218e4cfed4fbc82751ba4b8e3380b264))
+
 ## [4.1.10](https://github.com/ExaDev/agent-comms/compare/v4.1.9...v4.1.10) (2026-09-19)
 
 ### Bug Fixes
