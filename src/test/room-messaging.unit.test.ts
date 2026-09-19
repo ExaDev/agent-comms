@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { dmRoomPath } from "../core/room-path.js";
+import { resolveRoomId } from "../core/room-lookup.js";
 import { loadRoomTokens } from "../core/identity-store.js";
 import {
   RoomMessaging,
@@ -73,8 +74,15 @@ function makeHarness() {
   const resolveAgent = vi
     .fn()
     .mockImplementation(async (id: string) => agents.get(id));
+  const rooms = new Map<string, Room>();
+  // Stands in for RoomLifecycle.resolveRoomId, which RoomMessaging only reaches through this dependency: resolves against the harness's own rooms, the same way the real one does for rooms this store holds.
+  const resolveRoomIdMock = vi
+    .fn()
+    .mockImplementation((roomIdOrName: string) =>
+      resolveRoomId(rooms.values(), roomIdOrName),
+    );
   const deps: RoomMessagingDeps = {
-    rooms: new Map<string, Room>(),
+    rooms,
     messages: new Map(),
     dms: new Map(),
     requireIdentity: () => ({
@@ -89,8 +97,10 @@ function makeHarness() {
     roomProtocol: { sendRoomRequestToMember },
     requestDmAccess,
     resolveAgent,
+    resolveRoomId: resolveRoomIdMock,
   };
   return {
+    resolveRoomId: resolveRoomIdMock,
     agents,
     resolveAgent,
     deps,
@@ -116,6 +126,41 @@ describe("RoomMessaging — sendRoomMessage", () => {
       message: "Room no-such-room not found",
       code: "ROOM_NOT_FOUND",
     });
+  });
+
+  it("looks the room up by the id its bare name resolves to", async () => {
+    const h = makeHarness();
+    const roomPath = `${TO_DEVICE_ID}/general`;
+    h.deps.rooms.set(
+      roomPath,
+      room({ id: roomPath, name: "general", members: [FROM_DEVICE_ID] }),
+    );
+    vi.mocked(loadRoomTokens).mockReturnValue({ [roomPath]: FAKE_TOKEN });
+
+    const message = await h.messaging.sendRoomMessage(
+      "general",
+      FROM_DEVICE_ID,
+      "hi",
+    );
+
+    expect(h.resolveRoomId).toHaveBeenCalledWith("general");
+    expect(message.room).toBe(roomPath);
+  });
+
+  it("propagates the resolver's ambiguity error instead of picking a room", async () => {
+    const h = makeHarness();
+    h.deps.rooms.set(
+      `${FROM_DEVICE_ID}/general`,
+      room({ id: `${FROM_DEVICE_ID}/general`, name: "general" }),
+    );
+    h.deps.rooms.set(
+      `${TO_DEVICE_ID}/general`,
+      room({ id: `${TO_DEVICE_ID}/general`, name: "general" }),
+    );
+
+    await expect(
+      h.messaging.sendRoomMessage("general", FROM_DEVICE_ID, "hi"),
+    ).rejects.toMatchObject({ code: "AMBIGUOUS_ROOM_NAME" });
   });
 
   it("throws NOT_MEMBER naming the exact room id when the sender isn't a member", async () => {

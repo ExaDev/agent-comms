@@ -92,6 +92,8 @@ async function makeHarness() {
     // This harness only sends room messages, never DMs, so DM admission is never reached.
     requestDmAccess: async () => undefined,
     resolveAgent: async () => undefined,
+    // Every send here already names the room by its real path.
+    resolveRoomId: (roomIdOrName) => roomIdOrName,
   };
 
   return {

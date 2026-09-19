@@ -289,6 +289,8 @@ export class MeshStore implements CommsStore {
       // RoomLifecycle doesn't exist yet at this point -- deferred the same lazy-`this`-capture way as the closures above.
       requestDmAccess: async (counterpart) =>
         this.roomLifecycle.requestDmAccess(counterpart),
+      resolveRoomId: (roomIdOrName) =>
+        this.roomLifecycle.resolveRoomId(roomIdOrName),
       // AgentRegistry doesn't exist yet at this point in the constructor -- deferred the same lazy-`this`-capture way DeliveryEngine's own sendRoomRequestToMember closure above is.
       resolveAgent: async (id) => this.agentRegistry.getAgent(id),
     });

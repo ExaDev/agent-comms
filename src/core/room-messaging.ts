@@ -6,7 +6,6 @@ import { bytesFromHex, bytesToHex } from "wire-mesh-core/domain/device-id";
 import { dmRoomPath } from "./room-path.js";
 import { loadRoomTokens } from "./identity-store.js";
 import { randomId } from "./random-id.js";
-import { resolveRoomId } from "./room-lookup.js";
 import { recordRoomSendNotice } from "./room-notice-log.js";
 import { CommsError } from "./store.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
@@ -30,6 +29,8 @@ export interface RoomMessagingDeps {
   roomProtocol: Pick<RoomProtocol, "sendRoomRequestToMember">;
   /** Runs the requester half of the DM consent flow against a counterpart device (RoomLifecycle.requestDmAccess), persisting the room:member token it is granted. Resolves once the counterpart admits this device, rejects if it refuses or never answers. */
   requestDmAccess: (counterpart: string) => Promise<void>;
+  /** Resolves a room id or plain room name to a real room id (RoomLifecycle.resolveRoomId), against rooms this store holds and rooms other devices advertise as hosted, so a name means the same room here as it does to join_room. Throws AMBIGUOUS_ROOM_NAME when the name is shared by more than one room. */
+  resolveRoomId: (roomIdOrName: string) => string;
   resolveAgent: (id: string) => Promise<AgentIdentity | undefined>;
 }
 
@@ -53,7 +54,7 @@ export class RoomMessaging {
     options?: RoomMessagingSendOptions,
   ): Promise<RoomMessage> {
     const { replyTo, streamingBehavior, durable } = options ?? {};
-    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
+    const roomId = this.deps.resolveRoomId(roomIdOrName);
     const room = this.deps.rooms.get(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
@@ -127,7 +128,7 @@ export class RoomMessaging {
     since?: string,
   ): Promise<RoomMessage[]> {
     await Promise.resolve();
-    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
+    const roomId = this.deps.resolveRoomId(roomIdOrName);
     const arr = this.deps.messages.get(roomId) ?? [];
     if (since === undefined || since === "") return [...arr];
     return arr.filter((m) => m.timestamp > since);
