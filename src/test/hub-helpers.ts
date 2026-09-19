@@ -80,14 +80,29 @@ function wsReceiveStream(socket: WsSocket): AsyncIterable<Frame> {
 
 function wsConnection(socket: WsSocket): Connection {
   return {
-    // async with no internal await, matching ws-dial.ts's own identical send() shape: promise-function-async requires the interface's Promise<void> return stay async, which is exactly what makes it have nothing to await.
-    send: async (frame: Frame) => {
-      socket.send(cbor2ToBytes(frame));
-    },
+    send: async (frame: Frame) =>
+      new Promise<void>((resolve, reject) => {
+        socket.send(cbor2ToBytes(frame), (error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      }),
     receive: () => wsReceiveStream(socket),
-    close: async () => {
-      socket.close(CLOSE_NORMAL);
-    },
+    // Resolves once the socket has actually closed, so a test asserting on the far end's connection count after close() sees the closure rather than racing it. A socket that is already closed never emits "close" again, so it resolves straight away.
+    close: async () =>
+      new Promise<void>((resolve) => {
+        if (socket.readyState === socket.CLOSED) {
+          resolve();
+          return;
+        }
+        socket.once("close", () => {
+          resolve();
+        });
+        socket.close(CLOSE_NORMAL);
+      }),
   };
 }
 
