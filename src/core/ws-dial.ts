@@ -128,7 +128,18 @@ function wrapSocket(socket: WsSocket): Connection {
       if (ended) {
         throw new Error("connection is closed");
       }
-      socket.send(new Uint8Array(encode(frame, cdeEncodeOptions)));
+      return new Promise<void>((resolve, reject) => {
+        socket.send(
+          new Uint8Array(encode(frame, cdeEncodeOptions)),
+          (error) => {
+            if (error) {
+              reject(error);
+            } else {
+              resolve();
+            }
+          },
+        );
+      });
     },
     receive: () => receiveStream,
     close: async () => {
