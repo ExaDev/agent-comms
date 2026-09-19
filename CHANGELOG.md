@@ -1,3 +1,9 @@
+## [4.4.0](https://github.com/ExaDev/agent-comms/compare/v4.3.0...v4.4.0) (2026-09-19)
+
+### Features
+
+* **tool:** admit a whole user for DMs, and show a user their own principal in whoami ([cf6cd84](https://github.com/ExaDev/agent-comms/commit/cf6cd840c8ae95b6a471555349b8cbd5a6530b7b))
+
 ## [4.3.0](https://github.com/ExaDev/agent-comms/compare/v4.2.0...v4.3.0) (2026-09-19)
 
 ### Features
