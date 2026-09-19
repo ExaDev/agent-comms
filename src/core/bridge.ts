@@ -123,7 +123,7 @@ export const MCP_TOOL_PARAMS = z.object({
   /** The redeemed code's own signature field (gateway_redeem_connection_code), or a PGP fingerprint the caller already independently trusts, used either to pin a supplied publicKey or to fetch one from a keyserver when publicKey is omitted. */
   signature: z.string().optional(),
   fingerprint: z.string().optional(),
-  /** For gateway_trust/gateway_untrust: when true, `device` names a user principal (agent-comms#187) rather than a bare remote device-id (agent-comms#193). */
+  /** For gateway_trust/gateway_untrust (and dm_admit, where `target` names it): when true, the id names a user principal (agent-comms#187) rather than a bare remote device-id (agent-comms#193). */
   principal: z.boolean().optional(),
   /** The dm:send grant text dm_admit returned, presented by dm_use_grant. */
   grant: z.string().optional(),
@@ -433,7 +433,11 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
     case "dm_admit":
       if (p.target === undefined)
         throw new BuildActionError("dm_admit", "target");
-      return { action: "dm_admit", target: p.target };
+      return {
+        action: "dm_admit",
+        target: p.target,
+        ...(p.principal !== undefined && { principal: p.principal }),
+      };
     case "dm_use_grant":
       if (p.target === undefined)
         throw new BuildActionError("dm_use_grant", "target");

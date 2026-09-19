@@ -16,17 +16,27 @@ function grantsUnavailable(): CommsResult {
   };
 }
 
-/** Admits action.target to DM this user ahead of time. `receiverId` is this agent's own device-id, which the returned instructions name so the sender can quote them back verbatim. */
+/** How many further hops a grant admitting a user principal permits: the principal delegating to one of its own devices. */
+const PRINCIPAL_DELEGATION_DEPTH = 1;
+
+/** Admits action.target to DM this user ahead of time: that one device, or, with action.principal, every device of that user principal. `receiverId` is this agent's own device-id, which the returned instructions name so the sender can quote them back verbatim. */
 export async function dmAdmit(
   store: Readonly<Pick<MeshOnlyFeatures, "admitAgentForDm">>,
   action: CommsAction & { action: "dm_admit" },
   receiverId: string,
 ): Promise<CommsResult> {
   if (!store.admitAgentForDm) return grantsUnavailable();
-  const grant = await store.admitAgentForDm(action.target);
+  const grant = await store.admitAgentForDm(
+    action.target,
+    action.principal === true ? PRINCIPAL_DELEGATION_DEPTH : 0,
+  );
+  const who =
+    action.principal === true
+      ? `${action.target} and every device of that user`
+      : action.target;
   return {
     content: [
-      `Admitted ${action.target} to DM you without asking again.`,
+      `Admitted ${who} to DM you without asking again.`,
       `Give them this grant, and have them call dm_use_grant with target ${receiverId} and this grant:`,
       encodeTokenText(grant),
     ].join("\n"),
@@ -36,12 +46,12 @@ export async function dmAdmit(
 
 /** Presents action.grant to action.target so this device's DMs to it are admitted without a decision. Throws INVALID_TOKEN, before contacting anyone, when the grant text is not a token. */
 export async function dmUseGrant(
-  store: Readonly<Pick<MeshOnlyFeatures, "requestDmAccess">>,
+  store: Readonly<Pick<MeshOnlyFeatures, "presentDmGrant">>,
   action: CommsAction & { action: "dm_use_grant" },
 ): Promise<CommsResult> {
-  if (!store.requestDmAccess) return grantsUnavailable();
+  if (!store.presentDmGrant) return grantsUnavailable();
   const grant = decodeTokenText(action.grant);
-  await store.requestDmAccess(action.target, grant);
+  await store.presentDmGrant(action.target, grant);
   return {
     content: `DM access to ${action.target} granted; you can now dm it.`,
     isError: false,
