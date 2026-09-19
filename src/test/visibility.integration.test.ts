@@ -165,7 +165,7 @@ describe("DiscoveryManager pause/resume genuinely re-advertises", () => {
 
 describe("MeshStore visibility delegation", () => {
   test("setVisibility delegates to discovery manager", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
 
@@ -184,7 +184,7 @@ describe("MeshStore visibility delegation", () => {
   });
 
   test("setVisibility with adapter delegates per-adapter", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
 
@@ -202,7 +202,7 @@ describe("MeshStore visibility delegation", () => {
 
 describe("CommsTool visibility actions", () => {
   test("mesh_set_visibility action sets visibility", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
 
@@ -232,7 +232,7 @@ describe("CommsTool visibility actions", () => {
   });
 
   test("mesh_set_visibility with adapter sets per-adapter", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
 
@@ -262,7 +262,7 @@ describe("CommsTool visibility actions", () => {
   });
 
   test("mesh_get_visibility returns current visibility", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
 

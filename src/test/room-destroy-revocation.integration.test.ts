@@ -18,7 +18,7 @@ async function makeRegisteredStore(
   port: number,
   name: string,
 ): Promise<MeshStore> {
-  const store = new MeshStore(port);
+  const store = new MeshStore({ coordinatorPort: port });
   await wireTestTransport(store);
   await store.init();
   await store.registerAgent({

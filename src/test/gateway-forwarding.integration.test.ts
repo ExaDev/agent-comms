@@ -53,13 +53,20 @@ describe("gateway forwarding", () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
-    const a1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(a1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const a1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(a1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await a1.init();
     cleanups.push(async () => a1.shutdown());
 
-    const a2 = new MeshStore(a1.coordinatorPort, hub.url);
-    await wireTestTransport(a2, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const a2 = new MeshStore({
+      coordinatorPort: a1.coordinatorPort,
+      hubUrl: hub.url,
+    });
+    await wireTestTransport(a2, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await a2.init();
     cleanups.push(async () => a2.shutdown());
     await a2.registerAgent({
@@ -71,8 +78,10 @@ describe("gateway forwarding", () => {
       tags: ["from-a2"],
     });
 
-    const b1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(b1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const b1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(b1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await b1.init();
     cleanups.push(async () => b1.shutdown());
 
@@ -104,18 +113,20 @@ describe("gateway forwarding", () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
-    const a1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(a1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const a1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(a1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await a1.init();
     cleanups.push(async () => a1.shutdown());
 
-    const aHidden = new MeshStore(a1.coordinatorPort, hub.url);
-    await wireTestTransport(
-      aHidden,
-      undefined,
-      undefined,
-      FAST_GOSSIP_INTERVAL_MS,
-    );
+    const aHidden = new MeshStore({
+      coordinatorPort: a1.coordinatorPort,
+      hubUrl: hub.url,
+    });
+    await wireTestTransport(aHidden, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await aHidden.init();
     cleanups.push(async () => aHidden.shutdown());
     await aHidden.registerAgent({
@@ -127,13 +138,13 @@ describe("gateway forwarding", () => {
       tags: [],
     });
 
-    const aGhost = new MeshStore(a1.coordinatorPort, hub.url);
-    await wireTestTransport(
-      aGhost,
-      undefined,
-      undefined,
-      FAST_GOSSIP_INTERVAL_MS,
-    );
+    const aGhost = new MeshStore({
+      coordinatorPort: a1.coordinatorPort,
+      hubUrl: hub.url,
+    });
+    await wireTestTransport(aGhost, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await aGhost.init();
     cleanups.push(async () => aGhost.shutdown());
     await aGhost.registerAgent({
@@ -146,13 +157,13 @@ describe("gateway forwarding", () => {
     });
 
     // A visible control peer on the identical mesh, registered after the hidden/ghost ones -- its own arrival on b1's side is the proof gossip genuinely had time to propagate, ruling out "nothing arrived at all" as a false-negative explanation for hidden/ghost never showing up below.
-    const aVisible = new MeshStore(a1.coordinatorPort, hub.url);
-    await wireTestTransport(
-      aVisible,
-      undefined,
-      undefined,
-      FAST_GOSSIP_INTERVAL_MS,
-    );
+    const aVisible = new MeshStore({
+      coordinatorPort: a1.coordinatorPort,
+      hubUrl: hub.url,
+    });
+    await wireTestTransport(aVisible, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await aVisible.init();
     cleanups.push(async () => aVisible.shutdown());
     await aVisible.registerAgent({
@@ -164,8 +175,10 @@ describe("gateway forwarding", () => {
       tags: [],
     });
 
-    const b1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(b1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const b1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(b1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await b1.init();
     cleanups.push(async () => b1.shutdown());
 
@@ -190,8 +203,10 @@ describe("gateway forwarding", () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
-    const a1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(a1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const a1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(a1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await a1.init();
     cleanups.push(async () => a1.shutdown());
     await a1.registerAgent({
@@ -203,8 +218,10 @@ describe("gateway forwarding", () => {
       tags: [],
     });
 
-    const b1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(b1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const b1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(b1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await b1.init();
     cleanups.push(async () => b1.shutdown());
     await b1.registerAgent({

@@ -21,7 +21,7 @@ const sleep = async (ms: number): Promise<void> =>
 
 /** A peer wired like a real bridge: WireMeshTransport, device-id peer ID. */
 function makePeer(identity: PeerIdentity): MeshStore {
-  const store = new MeshStore(TEST_PORT);
+  const store = new MeshStore({ coordinatorPort: TEST_PORT });
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   store.setTransport(new WireMeshTransport(store.events, identity));
   return store;

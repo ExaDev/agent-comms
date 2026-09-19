@@ -27,7 +27,7 @@ async function makeConnectedPair(port: number): Promise<{
   member: MeshStore;
   memberSlot: IdentitySlot;
 }> {
-  const owner = new MeshStore(port);
+  const owner = new MeshStore({ coordinatorPort: port });
   const ownerSlot = await wireTestTransport(owner);
   await owner.init();
   await owner.registerAgent({
@@ -39,7 +39,7 @@ async function makeConnectedPair(port: number): Promise<{
     tags: [],
   });
 
-  const member = new MeshStore(port);
+  const member = new MeshStore({ coordinatorPort: port });
   const memberSlot = await wireTestTransport(member);
   await member.init();
   await member.registerAgent({

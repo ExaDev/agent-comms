@@ -45,14 +45,8 @@ test("a principal's own device, holding only a delegated dm:send token, auto-adm
     loadOrCreateUserIdentity(aliceUserIdentityOptions),
   );
 
-  const a = new MeshStore(port);
-  await wireTestTransport(
-    a,
-    undefined,
-    undefined,
-    undefined,
-    aliceUserIdentityOptions,
-  );
+  const a = new MeshStore({ coordinatorPort: port });
+  await wireTestTransport(a, { userIdentityOptions: aliceUserIdentityOptions });
   await a.init();
   await a.registerAgent({
     name: "alice",
@@ -70,7 +64,7 @@ test("a principal's own device, holding only a delegated dm:send token, auto-adm
   );
 
   // One of Bob's own devices -- an ordinary bridge slot, wired and connected to Alice exactly like any other peer.
-  const d = new MeshStore(port);
+  const d = new MeshStore({ coordinatorPort: port });
   await wireTestTransport(d);
   await d.init();
   await d.registerAgent({

@@ -44,30 +44,12 @@ async function main(): Promise<void> {
 
   const trustA = new GatewayTrust();
   const trustB = new GatewayTrust();
-  const transportA = new WireMeshTransport(
-    eventsA,
-    generateIdentity(),
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    trustA,
-  );
-  const transportB = new WireMeshTransport(
-    eventsB,
-    generateIdentity(),
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    trustB,
-  );
+  const transportA = new WireMeshTransport(eventsA, generateIdentity(), {
+    gatewayTrust: trustA,
+  });
+  const transportB = new WireMeshTransport(eventsB, generateIdentity(), {
+    gatewayTrust: trustB,
+  });
 
   // GatewayTrust defaults to deny-all when a caller wires none in (see WireMeshTransport's own constructor doc comment). Without mutual trust here, HubSession's directory-merge drops each side's gossiped entry from the other before either transport's peers() list ever reflects it, so discovery below would never succeed.
   const deviceA = await transportA.hub.ownDeviceHex();

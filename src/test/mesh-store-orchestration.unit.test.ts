@@ -313,7 +313,7 @@ describe("MeshStore — init()", () => {
   });
 
   it("dials the constructor-supplied hub URL override instead of the default", async () => {
-    const store = new MeshStore(undefined, "wss://hub.example.test/");
+    const store = new MeshStore({ hubUrl: "wss://hub.example.test/" });
     const transport = fakeTransport();
     vi.mocked(transport.connectToCoordinator).mockRejectedValue(
       new Error("ECONNREFUSED"),

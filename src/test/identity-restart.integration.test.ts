@@ -47,10 +47,12 @@ async function makePeer(
   identity: PeerIdentity,
   slot: Readonly<IdentitySlot>,
 ): Promise<Peer> {
-  const store = new MeshStore(TEST_PORT);
+  const store = new MeshStore({ coordinatorPort: TEST_PORT });
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   store.setTransport(
-    new WireMeshTransport(store.events, identity, store.roomVerbHandlers),
+    new WireMeshTransport(store.events, identity, {
+      roomVerbHandlers: store.roomVerbHandlers,
+    }),
   );
   const userIdentityOptions = {
     dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-user-identity-")),

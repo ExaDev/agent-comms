@@ -51,8 +51,10 @@ describe("hub toDevice routing", () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
-    const a1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(a1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const a1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(a1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await a1.init();
     cleanups.push(async () => a1.shutdown());
     await a1.registerAgent({
@@ -64,8 +66,13 @@ describe("hub toDevice routing", () => {
       tags: [],
     });
 
-    const a2 = new MeshStore(a1.coordinatorPort, hub.url);
-    await wireTestTransport(a2, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const a2 = new MeshStore({
+      coordinatorPort: a1.coordinatorPort,
+      hubUrl: hub.url,
+    });
+    await wireTestTransport(a2, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await a2.init();
     cleanups.push(async () => a2.shutdown());
     await a2.registerAgent({
@@ -77,8 +84,10 @@ describe("hub toDevice routing", () => {
       tags: [],
     });
 
-    const b1 = new MeshStore(freshPort(), hub.url);
-    await wireTestTransport(b1, undefined, undefined, FAST_GOSSIP_INTERVAL_MS);
+    const b1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    await wireTestTransport(b1, {
+      presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
+    });
     await b1.init();
     cleanups.push(async () => b1.shutdown());
     await b1.registerAgent({

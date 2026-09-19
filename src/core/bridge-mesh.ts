@@ -39,19 +39,22 @@ export interface BridgeMeshSync extends BridgeMesh {
   attachIdentity: () => Promise<void>;
 }
 
+/** coordinatorPort/hubUrl thread straight into MeshStore's own constructor; fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup). */
+export interface BridgeMeshOptions {
+  coordinatorPort?: number | undefined;
+  hubUrl?: string | undefined;
+  fetchLatestVersion?: (() => Promise<string | undefined>) | undefined;
+}
+
 /** The synchronous half of bridge construction: everything loadOrCreateIdentity's own synchronous key material makes possible. Use this directly only when the calling entry point cannot await inline (see this file's own header comment); every other caller should use createBridgeMesh below. */
 export function createBridgeMeshSync(
   slot: Readonly<IdentitySlot>,
-  coordinatorPort?: number,
-  hubUrl?: string,
-  fetchLatestVersion?: () => Promise<string | undefined>,
+  options?: BridgeMeshOptions,
 ): BridgeMeshSync {
   return createBridgeMeshSyncFromIdentity(
     loadOrCreateIdentity(slot),
     slot,
-    coordinatorPort,
-    hubUrl,
-    fetchLatestVersion,
+    options,
   );
 }
 
@@ -61,29 +64,24 @@ export function createBridgeMeshSync(
 export function createBridgeMeshSyncFromIdentity(
   identity: PeerIdentity,
   slot: Readonly<IdentitySlot>,
-  coordinatorPort?: number,
-  hubUrl?: string,
-  fetchLatestVersion?: () => Promise<string | undefined>,
+  options?: BridgeMeshOptions,
 ): BridgeMeshSync {
+  const { coordinatorPort, hubUrl, fetchLatestVersion } = options ?? {};
   // The user-principal identity (agent-comms#160) is shared by every bridge on this machine account -- deliberately not scoped to slot, unlike identity above. userIdentityOptions is empty (the default ~/.agent-comms location); every real bridge shares it, and only tests need an override.
   const userIdentityOptions = {};
   const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
-  const store = new MeshStore(coordinatorPort, hubUrl, slot);
+  const store = new MeshStore({ coordinatorPort, hubUrl, slot });
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- oplogDirFor(slot) needs only the slot, not the async identity below, so this can be constructed synchronously right here.
   const dataStorage = createNodeFsStorage({ dir: oplogDirFor(slot) });
-  const transport = new WireMeshTransport(
-    store.events,
-    identity,
-    store.roomVerbHandlers,
-    undefined,
-    () => store.selfStatus,
-    undefined,
-    () => store.hostedRooms,
+  const transport = new WireMeshTransport(store.events, identity, {
+    roomVerbHandlers: store.roomVerbHandlers,
+    getCurrentPresence: () => store.selfStatus,
+    getHostedRooms: () => store.hostedRooms,
     dataStorage,
-    () => store.selfAgentAdvert,
-    store.gatewayTrust,
-  );
+    getSelfAgentAdvert: () => store.selfAgentAdvert,
+    gatewayTrust: store.gatewayTrust,
+  });
   transport.getCcPeerVersion = () => store.getCcPeerVersion?.();
   store.setTransport(transport);
   const versionChecker = new VersionDriftChecker({
@@ -91,9 +89,10 @@ export function createBridgeMeshSyncFromIdentity(
     ...(fetchLatestVersion !== undefined ? { fetchLatestVersion } : {}),
   });
   versionChecker.start();
-  const tool = new CommsTool(store, store.discovery, () =>
-    versionChecker.getNewerVersionIfAny(),
-  );
+  const tool = new CommsTool(store, {
+    discovery: store.discovery,
+    getNewerVersionIfAny: () => versionChecker.getNewerVersionIfAny(),
+  });
   const revocation = createRevocationView();
   return {
     store,
@@ -114,16 +113,9 @@ export function createBridgeMeshSyncFromIdentity(
 
 export async function createBridgeMesh(
   slot: Readonly<IdentitySlot>,
-  coordinatorPort?: number,
-  hubUrl?: string,
-  fetchLatestVersion?: () => Promise<string | undefined>,
+  options?: BridgeMeshOptions,
 ): Promise<BridgeMesh> {
-  const { store, tool, attachIdentity } = createBridgeMeshSync(
-    slot,
-    coordinatorPort,
-    hubUrl,
-    fetchLatestVersion,
-  );
+  const { store, tool, attachIdentity } = createBridgeMeshSync(slot, options);
   await attachIdentity();
   return { store, tool };
 }
@@ -132,16 +124,12 @@ export async function createBridgeMesh(
 export async function createBridgeMeshFromIdentity(
   identity: PeerIdentity,
   slot: Readonly<IdentitySlot>,
-  coordinatorPort?: number,
-  hubUrl?: string,
-  fetchLatestVersion?: () => Promise<string | undefined>,
+  options?: BridgeMeshOptions,
 ): Promise<BridgeMesh> {
   const { store, tool, attachIdentity } = createBridgeMeshSyncFromIdentity(
     identity,
     slot,
-    coordinatorPort,
-    hubUrl,
-    fetchLatestVersion,
+    options,
   );
   await attachIdentity();
   return { store, tool };

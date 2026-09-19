@@ -18,7 +18,7 @@ function freshPort(): number {
 async function makeConnectedPair(
   port: number,
 ): Promise<{ a: MeshStore; b: MeshStore }> {
-  const a = new MeshStore(port);
+  const a = new MeshStore({ coordinatorPort: port });
   await wireTestTransport(a);
   await a.init();
   await a.registerAgent({
@@ -30,7 +30,7 @@ async function makeConnectedPair(
     tags: [],
   });
 
-  const b = new MeshStore(port);
+  const b = new MeshStore({ coordinatorPort: port });
   await wireTestTransport(b);
   await b.init();
   await b.registerAgent({

@@ -24,7 +24,7 @@ const ERROR_PROCESSING_DELAY_MS = 300;
  * error event on the socket → uncaught exception → process crash.
  */
 test("coordinator survives ECONNRESET on accepted socket", async () => {
-  const store = new MeshStore(TEST_PORT);
+  const store = new MeshStore({ coordinatorPort: TEST_PORT });
   await wireTestTransport(store);
   await store.init();
 
