@@ -1,3 +1,9 @@
+## [4.0.1](https://github.com/ExaDev/agent-comms/compare/v4.0.0...v4.0.1) (2026-09-19)
+
+### Bug Fixes
+
+* **deps:** bump wire-mesh-core to 1.58.4 so a fresh npm install resolves ([812c830](https://github.com/ExaDev/agent-comms/commit/812c8301f53673a483d827401c57730a4bbc0454))
+
 ## [4.0.0](https://github.com/ExaDev/agent-comms/compare/v3.34.1...v4.0.0) (2026-09-19)
 
 ### ⚠ BREAKING CHANGES
