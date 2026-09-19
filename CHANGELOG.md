@@ -1,3 +1,9 @@
+## [4.1.2](https://github.com/ExaDev/agent-comms/compare/v4.1.1...v4.1.2) (2026-09-19)
+
+### CI
+
+* pass the exadev GitHub App's client id instead of the deprecated app-id input ([52a4f56](https://github.com/ExaDev/agent-comms/commit/52a4f5629a8423470b012d5d7c209904eba43413))
+
 ## [4.1.1](https://github.com/ExaDev/agent-comms/compare/v4.1.0...v4.1.1) (2026-09-19)
 
 ### CI
