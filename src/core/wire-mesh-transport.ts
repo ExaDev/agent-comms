@@ -10,6 +10,10 @@
 
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
 import * as bindRetry from "./bind-retry.js";
+import {
+  ROOM_JOIN_APPROVAL_TIMEOUT_MS,
+  manageRequestTimeoutMs,
+} from "./request-timeouts.js";
 import { connectWsUrl } from "./ws-dial.js";
 import { HubSession } from "./hub-session.js";
 import { GatewayTrust, type GatewayTrustReader } from "./gateway-trust.js";
@@ -229,6 +233,7 @@ export class WireMeshTransport implements MeshTransport {
   private readonly roomRouter: RoomRouter;
 
   private readonly pendingConnectionTimeoutMs: number;
+  private readonly roomJoinApprovalTimeoutMs: number;
 
   /** Reads this side's own current AgentStatus for the next gossip re-advertisement tick -- a pull, not a push, so MeshStore never needs to reach into this transport's internals on every status change (see updateAgent/setAgentOffline, which patch MeshStore's own agents map and let the next tick pick it up). undefined when no presence source was wired in (every existing construction site that predates this feature). */
   private readonly getCurrentPresence: WireMeshTransportOptions["getCurrentPresence"];
@@ -260,6 +265,7 @@ export class WireMeshTransport implements MeshTransport {
     const {
       roomVerbHandlers,
       pendingConnectionTimeoutMs = DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
+      roomJoinApprovalTimeoutMs = ROOM_JOIN_APPROVAL_TIMEOUT_MS,
       getCurrentPresence,
       presenceReadvertiseIntervalMs = PRESENCE_READVERTISE_INTERVAL_MS,
       getHostedRooms,
@@ -279,7 +285,9 @@ export class WireMeshTransport implements MeshTransport {
       events,
       handlers: { "path.trace": handlePathTraceRequest, ...roomVerbHandlers },
     });
+    this.roomJoinApprovalTimeoutMs = roomJoinApprovalTimeoutMs;
     this.hub = new HubSession({
+      roomJoinApprovalTimeoutMs,
       identityReady: this.identityReady,
       events: this.events,
       isShuttingDown: this.isShuttingDown.bind(this),
@@ -765,7 +773,13 @@ export class WireMeshTransport implements MeshTransport {
   ): Promise<ManageOutcome> {
     const session = this.peerSessions.get(memberId);
     if (session !== undefined) {
-      return session.sendManageRequest(command, scope, undefined, token);
+      return session.sendManageRequest(
+        command,
+        scope,
+        undefined,
+        token,
+        manageRequestTimeoutMs(command, this.roomJoinApprovalTimeoutMs),
+      );
     }
     if (!this.gatewayTrust.isTrusted(memberId)) {
       return { result: "error", code: "unauthorized" };

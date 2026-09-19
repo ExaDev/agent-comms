@@ -26,6 +26,9 @@ import { RoomProtocol, type RoomProtocolDeps } from "../core/room-protocol.js";
 import { randomId } from "../core/random-id.js";
 import type { AgentIdentity, Room } from "../core/types.js";
 
+/** Far longer than any test runs, so a pending join is never expired unless a test says so. */
+const JOIN_DECISION_TIMEOUT_MS = 600_000;
+
 const TOKEN_TTL_MS = 60_000;
 const MAX_QUEUED_DELIVERIES_PER_AGENT = 100;
 /** A device-id is a 64-character lowercase hex SHA-256 digest; room-path.ts's assertDeviceIdHex rejects anything shorter. */
@@ -178,6 +181,7 @@ async function makeHarness(): Promise<Harness> {
       broadcastPatch,
       deliverToRoom,
     },
+    joinDecisionTimeoutMs: JOIN_DECISION_TIMEOUT_MS,
     revokeMemberGrant,
   };
 

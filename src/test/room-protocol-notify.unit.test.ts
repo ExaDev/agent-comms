@@ -22,6 +22,9 @@ import { RoomProtocol, type RoomProtocolDeps } from "../core/room-protocol.js";
 import { randomId } from "../core/random-id.js";
 import type { DeliveryEvent, Room } from "../core/types.js";
 
+/** Far longer than any test runs, so a pending join is never expired unless a test says so. */
+const JOIN_DECISION_TIMEOUT_MS = 600_000;
+
 const TOKEN_TTL_MS = 60_000;
 
 function room(overrides: Partial<Room> = {}): Room {
@@ -129,6 +132,7 @@ async function makeHarness(): Promise<Harness> {
       broadcastPatch: vi.fn().mockResolvedValue(undefined),
       deliverToRoom: vi.fn().mockResolvedValue(undefined),
     },
+    joinDecisionTimeoutMs: JOIN_DECISION_TIMEOUT_MS,
     revokeMemberGrant: vi.fn().mockResolvedValue(undefined),
   };
 

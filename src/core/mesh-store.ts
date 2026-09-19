@@ -10,6 +10,7 @@
 
 import * as os from "node:os";
 import { nanoid } from "./nanoid.js";
+import { ROOM_JOIN_APPROVAL_TIMEOUT_MS } from "./request-timeouts.js";
 import { CommsError } from "./store.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
@@ -93,6 +94,8 @@ export interface MeshStoreOptions {
   readonly coordinatorPort?: number | undefined;
   /** Remote gateway hub this store dials whenever it holds the local coordinator role. Defaults to DEFAULT_HUB_URL. */
   readonly hubUrl?: string | undefined;
+  /** How long a room.join (including a first-contact DM request) may await a human decision, on this store as the receiver and on the transport it is wired to as the sender. Defaults to ROOM_JOIN_APPROVAL_TIMEOUT_MS; a test shortens it. */
+  readonly roomJoinApprovalTimeoutMs?: number | undefined;
   /** Shared between gatewayTrust and connectionCodes -- both are per-slot persisted bootstrap state for the same trust boundary, so a single slot is this store's one notion of "which bridge instance's own disk state this is". */
   readonly slot?: Readonly<IdentitySlot>;
 }
@@ -102,6 +105,8 @@ export class MeshStore implements CommsStore {
   readonly startedAt: string;
   readonly coordinatorPort: number;
   private readonly hubUrl: string;
+  /** Read by whoever wires this store to a transport, so both halves of a room.join agree on the approval window. */
+  readonly roomJoinApprovalTimeoutMs: number;
 
   private readonly agents = new Map<string, AgentIdentity>();
   private readonly rooms = new Map<string, Room>();
@@ -219,12 +224,14 @@ export class MeshStore implements CommsStore {
     const {
       coordinatorPort = DEFAULT_COORDINATOR_PORT,
       hubUrl = DEFAULT_HUB_URL,
+      roomJoinApprovalTimeoutMs = ROOM_JOIN_APPROVAL_TIMEOUT_MS,
       slot,
     } = options ?? {};
     this.peerId = nanoid(PEER_ID_LENGTH);
     this.startedAt = new Date().toISOString();
     this.coordinatorPort = coordinatorPort;
     this.hubUrl = hubUrl;
+    this.roomJoinApprovalTimeoutMs = roomJoinApprovalTimeoutMs;
     this.gatewayTrust = new GatewayTrust(slot);
     this.connectionCodes = new ConnectionCodeLedger(slot);
 
@@ -267,6 +274,7 @@ export class MeshStore implements CommsStore {
       requireIdentity: () => this.requireIdentity(),
       requireTransport: () => this.requireTransport(),
       deliveryEngine: this.deliveryEngine,
+      joinDecisionTimeoutMs: this.roomJoinApprovalTimeoutMs,
       // RoomLifecycle doesn't exist yet at this point -- deferred the same way DeliveryEngine's sendRoomRequestToMember closure above is.
       revokeMemberGrant: async (roomId, memberId) =>
         this.roomLifecycle.revokeMemberGrant(roomId, memberId),

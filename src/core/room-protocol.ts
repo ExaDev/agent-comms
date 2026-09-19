@@ -82,6 +82,8 @@ export interface RoomProtocolDeps {
     | "broadcastPatch"
     | "deliverToRoom"
   >;
+  /** How long a room.join may await a human decision before this side expires it and answers the requester with a timeout. */
+  joinDecisionTimeoutMs: number;
   /** RoomLifecycle's own method, deferred -- see the interface doc comment above. */
   revokeMemberGrant: (roomId: string, memberId: string) => Promise<void>;
 }
@@ -531,14 +533,25 @@ export class RoomProtocol {
     const decision: RoomJoinDecision = autoApprove
       ? { kind: "accept" }
       : await new Promise<RoomJoinDecision>((resolve) => {
+          // Expires the request if no decision arrives in time, so an unanswered one neither leaks in pendingRoomJoins nor leaves the requester waiting. unref: an undecided request must not keep the process alive.
+          const expiry = setTimeout(() => {
+            resolve({ kind: "expired" });
+          }, this.deps.joinDecisionTimeoutMs);
+          expiry.unref();
           this.pendingRoomJoins.set(`${roomPath}::${handle.id}`, {
             roomPath,
             requesterId: handle.id,
-            resolve,
+            resolve: (answer) => {
+              clearTimeout(expiry);
+              resolve(answer);
+            },
           });
           this.announcePendingRoomJoin(roomPath, handle.id);
         });
     if (!autoApprove) this.pendingRoomJoins.delete(`${roomPath}::${handle.id}`);
+    if (decision.kind === "expired") {
+      return { result: "error", code: "timeout" };
+    }
     if (decision.kind === "reject") {
       return {
         result: "error",

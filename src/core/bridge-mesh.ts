@@ -76,6 +76,7 @@ export function createBridgeMeshSyncFromIdentity(
   const dataStorage = createNodeFsStorage({ dir: oplogDirFor(slot) });
   const transport = new WireMeshTransport(store.events, identity, {
     roomVerbHandlers: store.roomVerbHandlers,
+    roomJoinApprovalTimeoutMs: store.roomJoinApprovalTimeoutMs,
     getCurrentPresence: () => store.selfStatus,
     getHostedRooms: () => store.hostedRooms,
     dataStorage,

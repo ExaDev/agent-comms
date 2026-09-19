@@ -24,6 +24,10 @@ import type {
   MeshTraceResult,
   TransportEvents,
 } from "./transport.js";
+import {
+  ROOM_REQUEST_TIMEOUT_MS,
+  manageRequestTimeoutMs,
+} from "./request-timeouts.js";
 import type { MeshMessage } from "./wire-protocol.js";
 import { extractMessage } from "./room-router.js";
 import type { RoomRequestOrigin } from "./room-router.js";
@@ -36,9 +40,10 @@ import {
 } from "./wire-mesh-transport.js";
 
 /** How long a room-domain request routed through the hub's relay-connect/relay-data pairing waits for a response before giving up. Unlike an ordinary local peer session, a relay-connect naming an unknown target-device is silently dropped by the hub (spec/relay-hub's own documented behaviour -- no error frame exists for "no such device"), so a request to a device that turns out not to be reachable via any gateway would otherwise hang forever rather than surfacing as a normal "not reachable" outcome. */
-const HUB_ROOM_REQUEST_TIMEOUT_MS = 15_000;
 
 export interface HubSessionDeps {
+  /** How long a room.join sent through this session may await a human decision at the receiving end -- see manageRequestTimeoutMs. */
+  roomJoinApprovalTimeoutMs: number;
   /** Resolves this node's own identity port once ready. */
   identityReady: Promise<Readonly<IdentityPort>>;
   events: Readonly<TransportEvents>;
@@ -228,7 +233,7 @@ export class HubSession {
       scope,
       hexToBytes(peerDeviceHex),
       token,
-      HUB_ROOM_REQUEST_TIMEOUT_MS,
+      manageRequestTimeoutMs(command, this.deps.roomJoinApprovalTimeoutMs),
     );
   }
 
@@ -249,7 +254,7 @@ export class HubSession {
       session,
       clock: { now: () => Date.now() },
       targetDevice: hexToBytes(peerDeviceHex),
-      timeoutMs: timeoutMs ?? HUB_ROOM_REQUEST_TIMEOUT_MS,
+      timeoutMs: timeoutMs ?? ROOM_REQUEST_TIMEOUT_MS,
       ...(this.url !== undefined ? { localHubAddress: this.url } : {}),
     });
   }
