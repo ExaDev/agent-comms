@@ -163,15 +163,15 @@ export class HubSession {
     void (async () => {
       for await (const request of session.incomingManageRequests) {
         if (this.deps.isShuttingDown()) break;
-        await dispatchHubRequest(
+        await dispatchHubRequest({
           request,
           ownDeviceHex,
-          this.deps,
-          (hex) => {
+          deps: this.deps,
+          onKnownPeer: (hex) => {
             this.hubPeersKnown.add(hex);
           },
-          this.url,
-        );
+          hubAddress: this.url,
+        });
       }
     })();
   }
@@ -280,13 +280,14 @@ export type HubRequestDispatchDeps = Pick<
  *
  * Multi-device gateway routing (agent-comms#184, wire-mesh-core 1.48.1's own IncomingManageRequest.toDevice, read directly from each relay-data frame's own to-device field rather than guessed from pairing state): when the request carries a toDevice naming a different device than ownDeviceHex, the command is first re-stamped with an on-behalf-of params field naming the true sender before forwardToLocalPeer forwards it on to that device's own local mesh session (one this gateway is directly connected to, never merely gossiped-about); room-router.ts's own resolveHandle reads that field back out on the receiving end, so the forwarded request is attributed to the true remote sender there, never to this gateway. Its outcome is relayed straight back. Only when forwardToLocalPeer finds no such local session (toDevice is absent, matches ownDeviceHex, or names a device this gateway doesn't actually front) does the request fall through to handleRoomRequest, dispatched against this side's own local mesh state, the same fallback a sender still on a pre-#184 wire-mesh-core (never stamping toDevice at all) already relied on -- and it's exactly that fallback call which carries hubAddress on to handleRoomRequest as origin.relayHubAddress (agent-comms#216), never the forwardToLocalPeer branch: a request forwarded on to a different local device is answered by that device's own session, not this gateway's hub session, so this gateway's own dialled hub address would be the wrong fact to attach to it.
  */
-export async function dispatchHubRequest(
-  request: IncomingManageRequest,
-  ownDeviceHex: string,
-  deps: Readonly<HubRequestDispatchDeps>,
-  onKnownPeer: (deviceHex: string) => void,
-  hubAddress?: string,
-): Promise<void> {
+export async function dispatchHubRequest(options: {
+  request: IncomingManageRequest;
+  ownDeviceHex: string;
+  deps: Readonly<HubRequestDispatchDeps>;
+  onKnownPeer: (deviceHex: string) => void;
+  hubAddress?: string | undefined;
+}): Promise<void> {
+  const { request, ownDeviceHex, deps, onKnownPeer, hubAddress } = options;
   if (request.fromDevice === undefined) {
     if (request.command.verb === FRAME_VERB) {
       await request.respond({ result: "ok" }).catch(() => undefined);
