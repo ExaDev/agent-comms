@@ -119,9 +119,7 @@ describe("RoomMessaging — sendRoomMessage durable flag", () => {
       h.roomPath,
       ownerDeviceHex,
       "hello, durably",
-      undefined,
-      undefined,
-      true,
+      { durable: true },
     );
 
     const [entry] = await readEntries(

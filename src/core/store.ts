@@ -32,7 +32,7 @@ import type {
   StreamingBehavior,
   Visibility,
 } from "./types.js";
-import type { CommsStore } from "./comms-store.js";
+import type { CommsStore, SendRoomMessageOptions } from "./comms-store.js";
 
 // ---------------------------------------------------------------------------
 // CommsError
@@ -495,9 +495,9 @@ export class FileStore implements CommsStore {
     roomId: string,
     from: string,
     content: string,
-    replyTo?: string,
-    streamingBehavior?: StreamingBehavior,
+    options?: SendRoomMessageOptions,
   ): Promise<RoomMessage> {
+    const { replyTo, streamingBehavior } = options ?? {};
     const room = await this.getRoom(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
