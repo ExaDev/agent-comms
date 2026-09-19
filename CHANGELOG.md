@@ -1,3 +1,17 @@
+## [4.1.0](https://github.com/ExaDev/agent-comms/compare/v4.0.1...v4.1.0) (2026-09-19)
+
+### Features
+
+* **core:** tell an agent when a room join is waiting on its decision ([c68a5e4](https://github.com/ExaDev/agent-comms/commit/c68a5e43e6c9ed0f9cde0780bda395b8a52be80b))
+
+### Bug Fixes
+
+* **core:** request DM access from sendDm when no room:member token is held yet ([05dd97d](https://github.com/ExaDev/agent-comms/commit/05dd97d6d8b0f330ace1b452b07ee04d7b7f0b8b))
+
+### CI
+
+* run the Playwright e2e suite on pull requests and pushes to main ([db38111](https://github.com/ExaDev/agent-comms/commit/db38111d0d1018d18579ab375495e8606c3344f9))
+
 ## [4.0.1](https://github.com/ExaDev/agent-comms/compare/v4.0.0...v4.0.1) (2026-09-19)
 
 ### Bug Fixes
