@@ -30,10 +30,23 @@ describe("dmAdmit", () => {
       RECEIVER,
     );
 
-    expect(admitAgentForDm).toHaveBeenCalledWith(SENDER);
+    expect(admitAgentForDm).toHaveBeenCalledWith(SENDER, 0);
     expect(result.isError).toBe(false);
     expect(result.content).toContain(encodeTokenText(GRANT));
     expect(result.content).toContain(`dm_use_grant with target ${RECEIVER}`);
+  });
+
+  it("admits a user principal with a delegation depth of one hop, so that user's devices can reuse the grant", async () => {
+    const admitAgentForDm = vi.fn(async () => Promise.resolve(GRANT));
+
+    const result = await dmAdmit(
+      { admitAgentForDm },
+      { action: "dm_admit", target: SENDER, principal: true },
+      RECEIVER,
+    );
+
+    expect(admitAgentForDm).toHaveBeenCalledWith(SENDER, 1);
+    expect(result.content).toContain("every device of that user");
   });
 
   it("reports that grants are unavailable on a store that cannot mint them", async () => {
@@ -49,10 +62,10 @@ describe("dmAdmit", () => {
 
 describe("dmUseGrant", () => {
   it("presents the decoded grant to the counterpart and reports DM access", async () => {
-    const requestDmAccess = vi.fn(async () => Promise.resolve());
+    const presentDmGrant = vi.fn(async () => Promise.resolve());
 
     const result = await dmUseGrant(
-      { requestDmAccess },
+      { presentDmGrant },
       {
         action: "dm_use_grant",
         target: RECEIVER,
@@ -60,21 +73,21 @@ describe("dmUseGrant", () => {
       },
     );
 
-    expect(requestDmAccess).toHaveBeenCalledWith(RECEIVER, GRANT);
+    expect(presentDmGrant).toHaveBeenCalledWith(RECEIVER, GRANT);
     expect(result.isError).toBe(false);
     expect(result.content).toContain(RECEIVER);
   });
 
   it("refuses text that is not a token before contacting anyone", async () => {
-    const requestDmAccess = vi.fn(async () => Promise.resolve());
+    const presentDmGrant = vi.fn(async () => Promise.resolve());
 
     await expect(
       dmUseGrant(
-        { requestDmAccess },
+        { presentDmGrant },
         { action: "dm_use_grant", target: RECEIVER, grant: "not a token" },
       ),
     ).rejects.toThrow(/not a valid capability token/);
-    expect(requestDmAccess).not.toHaveBeenCalled();
+    expect(presentDmGrant).not.toHaveBeenCalled();
   });
 
   it("reports that grants are unavailable on a store that cannot present them", async () => {

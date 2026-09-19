@@ -460,7 +460,12 @@ export const CommsActionSchema = defineSchema(
       principal: z.boolean().optional(),
     }),
     z.object({ action: z.literal("gateway_list_trusted") }),
-    z.object({ action: z.literal("dm_admit"), target: z.string() }),
+    z.object({
+      action: z.literal("dm_admit"),
+      target: z.string(),
+      /** When true, `target` is a user principal (its whoami Principal line) rather than one device: every device of that user can then use the grant. */
+      principal: z.boolean().optional(),
+    }),
     z.object({
       action: z.literal("dm_use_grant"),
       target: z.string(),

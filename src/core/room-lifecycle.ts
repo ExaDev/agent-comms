@@ -9,6 +9,7 @@ import {
 import {
   mintCapabilityToken,
   mintRevocationEntry,
+  verifyCapabilityToken,
 } from "wire-mesh-core/domain/tokens";
 import {
   roomJoinOkSchema,
@@ -25,6 +26,7 @@ import {
   ROOM_MEMBER_DELEGATION_POLICY,
 } from "./room-token-verification.js";
 import { DM_SEND_CAPABILITY } from "./dm-token-verification.js";
+import { delegateDmSendToDevice } from "./dm-send-delegation.js";
 import { resolveDelegationsRemaining } from "./delegation-policy.js";
 import {
   deleteIssuedRoomGrant,
@@ -83,6 +85,9 @@ export interface RoomLifecycleDeps {
     | "deliverToMember"
   >;
 }
+
+/** The verdict reason for a token whose bearer is someone other than the party it was checked against. */
+const BEARER_MISMATCH = "bearer_mismatch";
 
 export class RoomLifecycle {
   constructor(private readonly deps: RoomLifecycleDeps) {}
@@ -721,6 +726,69 @@ export class RoomLifecycle {
       type: "room_delete",
       roomId,
     });
+  }
+
+  /**
+   * Presents a dm:send grant another user issued, so this device's first DM to counterpart is admitted without a decision at the other end. A grant issued to this device is presented as it is. A grant issued to this device's own user principal (admitAgentForDm with a delegation depth) is first sub-delegated to this device by that principal, since the receiver verifies the bearer against the device actually connecting; every device of the user can therefore reuse the same grant.
+   *
+   * Throws GRANT_NOT_FOR_US when the grant names neither this device nor its user, and GRANT_REJECTED when it names one of them but is unusable (expired, revoked, or badly signed).
+   */
+  async presentDmGrant(
+    counterpart: string,
+    grant: CapabilityToken,
+  ): Promise<void> {
+    const { identity, clock, revocation, userIdentity, userIdentityOptions } =
+      this.deps.requireIdentity();
+    const forThisDevice = await verifyCapabilityToken(grant, {
+      identity,
+      clock,
+      revocation,
+      expectedBearer: identity.deviceId,
+    });
+    if (forThisDevice.ok) {
+      await this.requestDmAccess(counterpart, grant);
+      return;
+    }
+    if (forThisDevice.reason !== BEARER_MISMATCH) {
+      throw new CommsError(
+        `The DM grant cannot be used (${forThisDevice.reason})`,
+        "GRANT_REJECTED",
+      );
+    }
+
+    const forThisUser = await verifyCapabilityToken(grant, {
+      identity,
+      clock,
+      revocation,
+      expectedBearer: userIdentity.deviceId,
+    });
+    if (!forThisUser.ok) {
+      throw new CommsError(
+        forThisUser.reason === BEARER_MISMATCH
+          ? "The DM grant was not issued to this device or its user"
+          : `The DM grant cannot be used (${forThisUser.reason})`,
+        forThisUser.reason === BEARER_MISMATCH
+          ? "GRANT_NOT_FOR_US"
+          : "GRANT_REJECTED",
+      );
+    }
+    const delegated = await delegateDmSendToDevice({
+      userIdentity,
+      userIdentityOptions,
+      clock,
+      tokenId: randomId(),
+      parent: grant,
+      deviceId: identity.deviceId,
+      remoteUserPrincipalDeviceId: forThisUser.rootIssuer,
+      expires: forThisUser.claims.expires,
+    });
+    if (!delegated.ok) {
+      throw new CommsError(
+        `Could not delegate the DM grant to this device: ${delegated.reason}`,
+        "DELEGATION_FAILED",
+      );
+    }
+    await this.requestDmAccess(counterpart, delegated.token);
   }
 
   /**

@@ -149,12 +149,17 @@ export interface MeshOnlyFeatures {
   ) => Promise<RedeemConnectionCodeResult>;
   addTrustedGatewayPrincipal?: (deviceHex: string) => void;
   /** Mints a dm:send grant admitting bearerId to DM this user without a decision (agent-comms#162). */
-  admitAgentForDm?: (bearerId: string) => Promise<CapabilityToken>;
-  /** Asks counterpart for DM access, presenting a dm:send grant when given one so no decision is needed. */
-  requestDmAccess?: (
+  admitAgentForDm?: (
+    bearerId: string,
+    delegationsRemaining?: number,
+  ) => Promise<CapabilityToken>;
+  /** Presents a dm:send grant another user issued, so the first DM to counterpart needs no decision there. */
+  presentDmGrant?: (
     counterpart: string,
-    dmSendGrant?: CapabilityToken,
+    grant: CapabilityToken,
   ) => Promise<void>;
+  /** This user's own principal id (hex), or undefined before this store's identity is attached. */
+  getUserPrincipalId?: () => string | undefined;
   /** Withdraws the dm:send grant issued for bearerId. */
   revokeAgentDmAccess?: (bearerId: string) => Promise<void>;
   removeTrustedGatewayPrincipal?: (deviceHex: string) => void;
@@ -420,8 +425,10 @@ export class CommsTool {
   private async whoami(ctx: Readonly<CommsContext>): Promise<CommsResult> {
     const agent = await this.store.getAgent(ctx.agentId);
     if (!agent) return { content: "Not registered.", isError: true };
+    const principal = this.store.getUserPrincipalId?.();
     const lines = [
       `ID: ${agent.id}`,
+      ...(principal !== undefined ? [`Principal: ${principal}`] : []),
       `Name: ${agent.name}`,
       `Harness: ${agent.harness}`,
       `Visibility: ${agent.visibility}`,

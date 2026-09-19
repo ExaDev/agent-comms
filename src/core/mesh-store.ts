@@ -8,6 +8,7 @@
  * MeshStore itself is an orchestrator: it owns the shared state (the core agents/rooms/messages/dms/deliveryQueues Maps and a handful of smaller fields) and constructs the collaborators that implement almost every behaviour against direct references into that state -- DeliveryEngine, RoomProtocol, RoomMessaging, RoomLifecycle, AgentRegistry, ConnectionApproval, StaleAgentChecker, and PeerLifecycle. Every public method below that isn't inherently a MeshStore-level concern (transport/identity wiring, init/shutdown lifecycle, the events getter, mesh visibility, listener management) is a thin delegating wrapper to whichever collaborator now owns the real implementation, kept here only because CommsStore/MeshOnlyFeatures and a handful of concrete-only call sites (tests, bridge-mesh.ts, the web server, etc.) reach these names directly on a MeshStore-typed value.
  */
 
+import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import * as os from "node:os";
 import { nanoid } from "./nanoid.js";
 import { ROOM_JOIN_APPROVAL_TIMEOUT_MS } from "./request-timeouts.js";
@@ -607,6 +608,21 @@ export class MeshStore implements CommsStore {
     dmSendGrant?: CapabilityToken,
   ): Promise<void> {
     return this.roomLifecycle.requestDmAccess(counterpart, dmSendGrant);
+  }
+
+  /** Presents a dm:send grant issued by another user -- see RoomLifecycle.presentDmGrant. */
+  async presentDmGrant(
+    counterpart: string,
+    grant: CapabilityToken,
+  ): Promise<void> {
+    return this.roomLifecycle.presentDmGrant(counterpart, grant);
+  }
+
+  /** This user's own principal id (hex): the identity every device on this account shares, and the thing another user names to admit or trust this whole user rather than one device. Undefined until this store's identity is attached. */
+  getUserPrincipalId(): string | undefined {
+    return this.storeIdentity === undefined
+      ? undefined
+      : deviceIdToHex(this.storeIdentity.userIdentity.deviceId);
   }
 
   /** Admits bearerId into this user's own DM-communication scope (agent-comms#162): mints and persists a dm:send grant, self-signed by this store's own user principal. Returns the minted token for the caller to deliver to bearerId out of band. Deliberately outside the CommsStore interface, like requestDmAccess above. Concrete-only -- reached directly by tests. delegationsRemaining defaults to 0 (non-delegable, the original behaviour); a positive value admits bearerId as a user principal capable of sub-delegating to its own devices (agent-comms#187) -- see RoomLifecycle.admitAgentForDm's own doc comment. */
