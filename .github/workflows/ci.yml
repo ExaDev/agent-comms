@@ -185,7 +185,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.GH_APP_ID }}
+          client-id: Iv23liLMzahHqi38Qo4c
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       # The token is left persisted in the checkout's git config: semantic-release first tries the repository URL as it stands and only falls back to token-derived URLs when that push is refused, so persisted App credentials are what its push to main authenticates with.
       - uses: actions/checkout@v7
