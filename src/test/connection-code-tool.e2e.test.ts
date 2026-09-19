@@ -25,7 +25,7 @@ async function registerAgent(store: MeshStore, name: string) {
 
 describe("CommsTool connection-code actions", () => {
   test("gateway_generate_connection_code returns a bare code vouching for this store's own device-id", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
     const agent = await registerAgent(store, "connection-code-generate-test");
@@ -44,7 +44,7 @@ describe("CommsTool connection-code actions", () => {
   });
 
   test("gateway_redeem_connection_code trusts the vouched-for device on success", async () => {
-    const issuerStore = new MeshStore(TEST_PORT);
+    const issuerStore = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(issuerStore);
     await issuerStore.init();
     const issuerTool = new CommsTool(issuerStore);
@@ -62,7 +62,7 @@ describe("CommsTool connection-code actions", () => {
     const code: { code: string; expiresAt: string; deviceId: string } =
       JSON.parse(generateResult.content.split("\n").at(-1) ?? "{}");
 
-    const redeemerStore = new MeshStore(TEST_PORT);
+    const redeemerStore = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(redeemerStore);
     await redeemerStore.init();
     const redeemerTool = new CommsTool(redeemerStore);
@@ -91,7 +91,7 @@ describe("CommsTool connection-code actions", () => {
   });
 
   test("gateway_redeem_connection_code rejects an expired code without trusting anything", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
     const tool = new CommsTool(store);
@@ -115,7 +115,7 @@ describe("CommsTool connection-code actions", () => {
   });
 
   test("gateway_generate_connection_code signs the code when a private key is supplied", async () => {
-    const store = new MeshStore(TEST_PORT);
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(store);
     await store.init();
     const tool = new CommsTool(store);
@@ -146,7 +146,7 @@ describe("CommsTool connection-code actions", () => {
       format: "armored",
     });
 
-    const issuerStore = new MeshStore(TEST_PORT);
+    const issuerStore = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(issuerStore);
     await issuerStore.init();
     const issuerTool = new CommsTool(issuerStore);
@@ -168,7 +168,7 @@ describe("CommsTool connection-code actions", () => {
       signature: string;
     } = JSON.parse(generateResult.content.split("\n").at(-1) ?? "{}");
 
-    const redeemerStore = new MeshStore(TEST_PORT);
+    const redeemerStore = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(redeemerStore);
     await redeemerStore.init();
     const redeemerTool = new CommsTool(redeemerStore);
@@ -209,7 +209,7 @@ describe("CommsTool connection-code actions", () => {
     const readKey = await openpgp.readKey({ armoredKey: publicKey });
     const fingerprint = readKey.getFingerprint();
 
-    const issuerStore = new MeshStore(TEST_PORT);
+    const issuerStore = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(issuerStore);
     await issuerStore.init();
     const issuerTool = new CommsTool(issuerStore);
@@ -231,7 +231,7 @@ describe("CommsTool connection-code actions", () => {
       signature: string;
     } = JSON.parse(generateResult.content.split("\n").at(-1) ?? "{}");
 
-    const redeemerStore = new MeshStore(TEST_PORT);
+    const redeemerStore = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(redeemerStore);
     await redeemerStore.init();
     const fetchPgpPublicKeyByFingerprintImpl = async (
@@ -240,12 +240,9 @@ describe("CommsTool connection-code actions", () => {
       expect(requestedFingerprint).toBe(fingerprint);
       return publicKey;
     };
-    const redeemerTool = new CommsTool(
-      redeemerStore,
-      undefined,
-      undefined,
+    const redeemerTool = new CommsTool(redeemerStore, {
       fetchPgpPublicKeyByFingerprintImpl,
-    );
+    });
     const redeemerAgent = await registerAgent(
       redeemerStore,
       "keyserver-redeemer",
@@ -276,18 +273,15 @@ describe("CommsTool connection-code actions", () => {
   });
 
   test("gateway_redeem_connection_code reports a keyserver lookup failure without trusting anything", async () => {
-    const redeemerStore = new MeshStore(TEST_PORT);
+    const redeemerStore = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(redeemerStore);
     await redeemerStore.init();
     const failingFetch = async (): Promise<string> => {
       throw new Error("HTTP 404");
     };
-    const redeemerTool = new CommsTool(
-      redeemerStore,
-      undefined,
-      undefined,
-      failingFetch,
-    );
+    const redeemerTool = new CommsTool(redeemerStore, {
+      fetchPgpPublicKeyByFingerprintImpl: failingFetch,
+    });
     const redeemerAgent = await registerAgent(
       redeemerStore,
       "keyserver-failure-redeemer",
