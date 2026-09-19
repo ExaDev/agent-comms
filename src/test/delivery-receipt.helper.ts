@@ -354,9 +354,13 @@ async function testDrainDm(): Promise<void> {
     drained.length >= 1,
     `drainDelivery should return DM, got ${String(drained.length)}`,
   );
-  const event = drained[0];
-  assert.ok(event, "drainDelivery should return at least one event");
-  assert.strictEqual(event.type, "dm");
+  // The consent handshake leaves a room_join_request queued ahead of the DM, which is how the recipient's agent learns a request was waiting -- so the DM is found by type, not by position.
+  assert.ok(
+    drained.some((event) => event.type === "room_join_request"),
+    "drainDelivery should also return the join request the DM's consent handshake raised",
+  );
+  const event = drained.find((candidate) => candidate.type === "dm");
+  assert.ok(event, "drainDelivery should return the DM");
   assert.strictEqual(event.message.content, "Direct drain!");
 
   await cleanup(a, b);
