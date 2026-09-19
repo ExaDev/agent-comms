@@ -1,3 +1,9 @@
+## [4.1.8](https://github.com/ExaDev/agent-comms/compare/v4.1.7...v4.1.8) (2026-09-19)
+
+### Documentation
+
+* **bridge:** note that Claude Code holds cross-session messages until approved ([73c2ec1](https://github.com/ExaDev/agent-comms/commit/73c2ec1aba08d4c0b420fbcd20cea125a3678af2))
+
 ## [4.1.7](https://github.com/ExaDev/agent-comms/compare/v4.1.6...v4.1.7) (2026-09-19)
 
 ### Bug Fixes
