@@ -1,3 +1,17 @@
+## [4.1.9](https://github.com/ExaDev/agent-comms/compare/v4.1.8...v4.1.9) (2026-09-19)
+
+### Bug Fixes
+
+* **core:** bound how long a room.join may await a human decision ([f3a246f](https://github.com/ExaDev/agent-comms/commit/f3a246ffd41c6b112f3b383300616a55cd14d2d1))
+
+### Tests
+
+* **core:** find the drained DM by type instead of by position ([ec1f0bc](https://github.com/ExaDev/agent-comms/commit/ec1f0bc2d0ccb901d4bca8418a2fb8ca593c40f4))
+
+### CI
+
+* run the delivery receipt tests ([336e51a](https://github.com/ExaDev/agent-comms/commit/336e51a66424af7ccb3fb4e5f99cecdd3d6960ae))
+
 ## [4.1.8](https://github.com/ExaDev/agent-comms/compare/v4.1.7...v4.1.8) (2026-09-19)
 
 ### Documentation
