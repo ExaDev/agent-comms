@@ -12,6 +12,7 @@ import { RPCLink, type WebSocketLike } from "@orpc/client/websocket";
 import type { ContractRouterClient } from "@orpc/contract";
 import { createWebServer, type WebServerHandle } from "../server.js";
 import type { meshContract, MeshEvent } from "../contract.js";
+import { unreachableHubUrl } from "../../../../test/hub-helpers.js";
 
 type MeshClient = ContractRouterClient<typeof meshContract>;
 
@@ -53,7 +54,8 @@ function connectMeshClient(port: number): MeshClient {
 
 async function setup(): Promise<{ client: MeshClient; port: number }> {
   const coordinatorPort = await findFreePort();
-  handle = await createWebServer(0, undefined, coordinatorPort);
+  const hubUrl = await unreachableHubUrl();
+  handle = await createWebServer(0, undefined, coordinatorPort, hubUrl);
   await new Promise<void>((resolve) => {
     if (handle?.server.listening === true) {
       resolve();

@@ -8,6 +8,7 @@
 import { test as base } from "@playwright/test";
 import { createWebServer, type WebServerHandle } from "../server.js";
 import net from "node:net";
+import { unreachableHubUrl } from "../../../../test/hub-helpers.js";
 
 /** Allocate a random free port by binding to port 0. */
 async function allocFreePort(): Promise<number> {
@@ -34,7 +35,8 @@ export const test = base.extend<Fixtures>({
     // Each test gets its own coordinator port to avoid EADDRINUSE races
     // when the previous test's TLS transport hasn't released 19876 yet.
     const coordinatorPort = await allocFreePort();
-    const handle = await createWebServer(0, undefined, coordinatorPort);
+    const hubUrl = await unreachableHubUrl();
+    const handle = await createWebServer(0, undefined, coordinatorPort, hubUrl);
 
     // Wait for server to be listening
     await new Promise<void>((resolve) => {

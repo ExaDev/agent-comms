@@ -10,6 +10,7 @@ import http from "node:http";
 import net from "node:net";
 import { createWebServer, type WebServerHandle } from "../server.js";
 import { WEB_CONSOLE_MOUNT } from "../web-console-static.js";
+import { unreachableHubUrl } from "../../../../test/hub-helpers.js";
 
 const ENV_VAR = "AGENT_COMMS_WEB_CONSOLE_DIST";
 const HTTP_OK = 200;
@@ -59,7 +60,8 @@ let originalEnv: string | undefined;
 
 /** Starts a web server and resolves once it's actually listening, returning its port. */
 async function startAndGetPort(coordinatorPort: number): Promise<number> {
-  const started = await createWebServer(0, undefined, coordinatorPort);
+  const hubUrl = await unreachableHubUrl();
+  const started = await createWebServer(0, undefined, coordinatorPort, hubUrl);
   handle = started;
   await new Promise<void>((resolve) => {
     if (started.server.listening) {

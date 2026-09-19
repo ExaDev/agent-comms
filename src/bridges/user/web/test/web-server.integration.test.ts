@@ -14,6 +14,7 @@ import {
   type WebServerHandle,
 } from "../server.js";
 import WS from "ws";
+import { unreachableHubUrl } from "../../../../test/hub-helpers.js";
 
 /** HTTP 200 OK. */
 const HTTP_OK = 200;
@@ -44,7 +45,8 @@ async function setup(): Promise<{
   cleanup: () => Promise<void>;
 }> {
   const coordinatorPort = await findFreePort();
-  handle = await createWebServer(0, undefined, coordinatorPort);
+  const hubUrl = await unreachableHubUrl();
+  handle = await createWebServer(0, undefined, coordinatorPort, hubUrl);
 
   // Wait for the server to actually be listening
   await new Promise<void>((resolve) => {
