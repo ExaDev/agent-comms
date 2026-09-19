@@ -54,7 +54,7 @@ import {
 } from "./room-wire-extensions.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { MeshTransport } from "./transport.js";
-import type { HostedRoomAdvert } from "./wire-mesh-transport.js";
+import type { HostedRoomAdvert } from "./gossip-extensions.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type {
   AgentIdentity,

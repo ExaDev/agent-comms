@@ -49,10 +49,10 @@ describe("WireMeshTransport presence re-advertisement", () => {
     const transportA = new WireMeshTransport(
       eventsRecordingPresence(() => undefined),
       identityA,
-      undefined,
-      undefined,
-      () => currentStatusA,
-      SHORT_PRESENCE_INTERVAL_MS,
+      {
+        getCurrentPresence: () => currentStatusA,
+        presenceReadvertiseIntervalMs: SHORT_PRESENCE_INTERVAL_MS,
+      },
     );
     const transportB = new WireMeshTransport(
       eventsRecordingPresence((handle, status) => {

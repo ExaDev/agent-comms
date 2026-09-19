@@ -6,10 +6,8 @@ import { test, describe, expect } from "vitest";
 import { generateIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
-import {
-  WireMeshTransport,
-  type AgentSelfAdvert,
-} from "../core/wire-mesh-transport.js";
+import { WireMeshTransport } from "../core/wire-mesh-transport.js";
+import type { AgentSelfAdvert } from "../core/gossip-extensions.js";
 import type { TransportEvents } from "../core/transport.js";
 import { getOwnPackageVersion } from "../core/package-version.js";
 import { getWireMeshCoreVersion } from "../core/wire-mesh-core-version.js";
@@ -53,17 +51,10 @@ describe("WireMeshTransport agent-comms version gossip", () => {
       await toIdentityPort(identityB).then((p) => p.deviceId),
     );
 
-    const transportA = new WireMeshTransport(
-      inertEvents(),
-      identityA,
-      undefined,
-      undefined,
-      undefined,
-      SHORT_INTERVAL_MS,
-      undefined,
-      undefined,
-      () => selfAdvert,
-    );
+    const transportA = new WireMeshTransport(inertEvents(), identityA, {
+      presenceReadvertiseIntervalMs: SHORT_INTERVAL_MS,
+      getSelfAgentAdvert: () => selfAdvert,
+    });
     const transportB = new WireMeshTransport(inertEvents(), identityB);
 
     try {
@@ -113,17 +104,10 @@ describe("WireMeshTransport agent-comms version gossip", () => {
       await toIdentityPort(identityB).then((p) => p.deviceId),
     );
 
-    const transportA = new WireMeshTransport(
-      inertEvents(),
-      identityA,
-      undefined,
-      undefined,
-      undefined,
-      SHORT_INTERVAL_MS,
-      undefined,
-      undefined,
-      () => selfAdvert,
-    );
+    const transportA = new WireMeshTransport(inertEvents(), identityA, {
+      presenceReadvertiseIntervalMs: SHORT_INTERVAL_MS,
+      getSelfAgentAdvert: () => selfAdvert,
+    });
     transportA.getCcPeerVersion = () => "9.9.9";
     const transportB = new WireMeshTransport(inertEvents(), identityB);
 

@@ -69,26 +69,12 @@ describe("WireMeshTransport data-domain frame responder", () => {
       new TextEncoder().encode("catch-up-able message"),
     );
 
-    const transportA = new WireMeshTransport(
-      inertEvents(),
-      identityA,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      storageA,
-    );
-    const transportB = new WireMeshTransport(
-      inertEvents(),
-      identityB,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      storageB,
-    );
+    const transportA = new WireMeshTransport(inertEvents(), identityA, {
+      dataStorage: storageA,
+    });
+    const transportB = new WireMeshTransport(inertEvents(), identityB, {
+      dataStorage: storageB,
+    });
 
     try {
       await transportA.startDataServer();
@@ -140,16 +126,9 @@ describe("WireMeshTransport data-domain frame responder", () => {
       new TextEncoder().encode("hello"),
     );
 
-    const transportA = new WireMeshTransport(
-      inertEvents(),
-      identityA,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      storageA,
-    );
+    const transportA = new WireMeshTransport(inertEvents(), identityA, {
+      dataStorage: storageA,
+    });
     // No dataStorage passed for B -- the exact configuration every construction site that predates this feature has.
     const transportB = new WireMeshTransport(inertEvents(), identityB);
 

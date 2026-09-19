@@ -26,6 +26,7 @@ import type {
 } from "wire-mesh-core/generated/protocol";
 import type { ManageOutcome } from "wire-mesh-core/domain/mesh-session";
 import type { AgentStatus } from "./types.js";
+import type { ConnectToRemoteOptions } from "./wire-mesh-transport-options.js";
 
 // ---------------------------------------------------------------------------
 // Connection handle — opaque reference to a specific peer connection
@@ -196,14 +197,7 @@ export interface MeshTransport {
   /**
    * Initiate an outbound connection that requires approval. Sends connect_request instead of introduce and waits for connect_accepted or connect_rejected from the remote coordinator.
    */
-  connectToRemote: (
-    host: string,
-    port: number,
-    peerId: string,
-    dataPort: number,
-    name: string,
-    fingerprint: string,
-  ) => Promise<void>;
+  connectToRemote: (options: Readonly<ConnectToRemoteOptions>) => Promise<void>;
 
   /**
    * Broadcast a wire message to all connected peer data connections.

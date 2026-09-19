@@ -36,13 +36,9 @@ describe("WireMeshTransport.listKnownDevices", () => {
       await toIdentityPort(identityB).then((p) => p.deviceId),
     );
 
-    const transportA = new WireMeshTransport(
-      inertEvents(),
-      identityA,
-      undefined,
-      undefined,
-      () => "busy",
-    );
+    const transportA = new WireMeshTransport(inertEvents(), identityA, {
+      getCurrentPresence: () => "busy",
+    });
     const transportB = new WireMeshTransport(inertEvents(), identityB);
 
     try {
@@ -95,14 +91,10 @@ describe("WireMeshTransport.listKnownDevices", () => {
     let currentStatusA: "active" | "idle" = "active";
     const SHORT_PRESENCE_INTERVAL_MS = 50;
 
-    const transportA = new WireMeshTransport(
-      inertEvents(),
-      identityA,
-      undefined,
-      undefined,
-      () => currentStatusA,
-      SHORT_PRESENCE_INTERVAL_MS,
-    );
+    const transportA = new WireMeshTransport(inertEvents(), identityA, {
+      getCurrentPresence: () => currentStatusA,
+      presenceReadvertiseIntervalMs: SHORT_PRESENCE_INTERVAL_MS,
+    });
     const transportB = new WireMeshTransport(inertEvents(), identityB);
 
     try {

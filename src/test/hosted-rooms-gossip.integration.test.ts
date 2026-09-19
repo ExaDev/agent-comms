@@ -6,10 +6,8 @@ import { test, describe, expect } from "vitest";
 import { generateIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
-import {
-  WireMeshTransport,
-  type HostedRoomAdvert,
-} from "../core/wire-mesh-transport.js";
+import { WireMeshTransport } from "../core/wire-mesh-transport.js";
+import type { HostedRoomAdvert } from "../core/gossip-extensions.js";
 import type { TransportEvents } from "../core/transport.js";
 import { waitFor } from "./test-transport.js";
 
@@ -50,15 +48,10 @@ describe("WireMeshTransport hosted-rooms gossip", () => {
       },
     ];
 
-    const transportA = new WireMeshTransport(
-      inertEvents(),
-      identityA,
-      undefined,
-      undefined,
-      undefined,
-      SHORT_INTERVAL_MS,
-      () => hostedByA,
-    );
+    const transportA = new WireMeshTransport(inertEvents(), identityA, {
+      presenceReadvertiseIntervalMs: SHORT_INTERVAL_MS,
+      getHostedRooms: () => hostedByA,
+    });
     const transportB = new WireMeshTransport(inertEvents(), identityB);
 
     try {

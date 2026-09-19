@@ -43,18 +43,9 @@ describe("WireMeshTransport.sendRoomRequest -- gateway trust", () => {
     const identity = generateIdentity();
     const gatewayTrust = new GatewayTrust();
     gatewayTrust.add("nobody-home");
-    const transport = new WireMeshTransport(
-      noopEvents(),
-      identity,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      gatewayTrust,
-    );
+    const transport = new WireMeshTransport(noopEvents(), identity, {
+      gatewayTrust: gatewayTrust,
+    });
     try {
       const outcome = await transport.sendRoomRequest(
         "nobody-home",

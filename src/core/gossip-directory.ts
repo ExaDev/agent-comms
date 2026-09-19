@@ -16,7 +16,7 @@ import {
   PRESENCE_GOSSIP_KEY,
   type AgentSelfAdvert,
   type HostedRoomAdvert,
-} from "./wire-mesh-transport.js";
+} from "./gossip-extensions.js";
 import {
   AGENT_COMMS_VERSION_GOSSIP_KEY,
   type AgentCommsVersionsAdvert,
@@ -64,17 +64,27 @@ export function findPresenceAdvert(
 }
 
 /** Re-sends this side's own current presence status, currently-hosted rooms, self-agent identity, and package versions, together, onto every live session's gossip self-advert -- one gossip frame per tick carrying whichever facts are actually known, rather than a separate frame per fact. Split out of wire-mesh-transport.ts's own WireMeshTransport class purely to keep that file under the repo's max-lines cap, the same reason mergeKnownDevices/findPresenceAdvert above already live here rather than there. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. Unlike presence/hostedRooms/selfAgentAdvert, the versions extension is never actually absent (this side's own agent-comms package version is always known), so every tick this function is called for sends at least that one fact -- there is no "nothing to report" case left to short-circuit on. The hub's own session (agent-comms#156) is gated separately from every ordinary local-peer session in allSessions: local mesh trust is a different layer (connect_request/introduce approval already gated it before it ever joined allSessions), but the hub session is a broadcast to every connected hub peer, trusted or not, and would otherwise leak this side's own presence/hosted-rooms/self-agent/versions advert onto the hub regardless of GatewayTrust -- forwardAdvertsToHub/pushHubCatchUp's own hasAny gate exists to prevent exactly this for OTHER local peers' adverts, and this side's own self-advert deserves the identical gate, not a bypass. */
-export function readvertiseGossip(
-  allSessions: ReadonlySet<AcceptedMeshSession>,
-  hub: Readonly<Pick<HubSession, "ownsSession">>,
-  hasAnyTrustedGateway: () => boolean,
-  onError: ((error: Error) => void) | undefined,
-  getCurrentPresence: (() => AgentStatus | undefined) | undefined,
-  getHostedRooms: (() => readonly HostedRoomAdvert[]) | undefined,
-  getSelfAgentAdvert: (() => AgentSelfAdvert | undefined) | undefined,
+export function readvertiseGossip(options: {
+  allSessions: ReadonlySet<AcceptedMeshSession>;
+  hub: Readonly<Pick<HubSession, "ownsSession">>;
+  hasAnyTrustedGateway: () => boolean;
+  onError: ((error: Error) => void) | undefined;
+  getCurrentPresence: (() => AgentStatus | undefined) | undefined;
+  getHostedRooms: (() => readonly HostedRoomAdvert[]) | undefined;
+  getSelfAgentAdvert: (() => AgentSelfAdvert | undefined) | undefined;
   /** Reads this side's own currently-running cc-peer version, when this process is fronting/bridging one -- folded into the same AGENT_COMMS_VERSION_GOSSIP_KEY advert as this side's own always-known agent-comms package version (agent-comms#198). Unlike presence/hostedRooms/selfAgentAdvert, agent-comms' own version is never genuinely absent (getOwnPackageVersion() always answers), so the versions extension is built and included unconditionally whenever this function runs at all -- there is no "no version to report" case the way there is for the other three optional facts. */
-  getCcPeerVersion?: () => string | undefined,
-): void {
+  getCcPeerVersion: (() => string | undefined) | undefined;
+}): void {
+  const {
+    allSessions,
+    hub,
+    hasAnyTrustedGateway,
+    onError,
+    getCurrentPresence,
+    getHostedRooms,
+    getSelfAgentAdvert,
+    getCcPeerVersion,
+  } = options;
   const extensions: Record<string, unknown> = {};
   const status = getCurrentPresence?.();
   if (status !== undefined) extensions[PRESENCE_GOSSIP_KEY] = status;
@@ -99,17 +109,28 @@ export function readvertiseGossip(
 }
 
 /** Arms readvertiseGossip's own periodic tick, or does nothing at all when neither presence, hosted-rooms, nor self-agent-identity has a source -- WireMeshTransport's own constructor logic, split out here purely to keep that file under the repo's max-lines cap, the same reason mergeKnownDevices/findPresenceAdvert/readvertiseGossip above already live here rather than there. getCcPeerVersion never gates whether the interval starts at all (unlike the other three): it is only ever wired alongside getSelfAgentAdvert in real use (bridge-mesh.ts always supplies that one), so a construction site relying on getCcPeerVersion alone to start ticking isn't a real scenario worth its own branch. Unref'd immediately, matching every other timer this transport owns, so it never keeps the process alive on its own. */
-export function startGossipInterval(
-  allSessions: ReadonlySet<AcceptedMeshSession>,
-  hub: Readonly<Pick<HubSession, "ownsSession">>,
-  hasAnyTrustedGateway: () => boolean,
-  onError: ((error: Error) => void) | undefined,
-  getCurrentPresence: (() => AgentStatus | undefined) | undefined,
-  getHostedRooms: (() => readonly HostedRoomAdvert[]) | undefined,
-  getSelfAgentAdvert: (() => AgentSelfAdvert | undefined) | undefined,
-  getCcPeerVersion: (() => string | undefined) | undefined,
-  intervalMs: number,
-): ReturnType<typeof setInterval> | undefined {
+export function startGossipInterval(options: {
+  allSessions: ReadonlySet<AcceptedMeshSession>;
+  hub: Readonly<Pick<HubSession, "ownsSession">>;
+  hasAnyTrustedGateway: () => boolean;
+  onError: ((error: Error) => void) | undefined;
+  getCurrentPresence: (() => AgentStatus | undefined) | undefined;
+  getHostedRooms: (() => readonly HostedRoomAdvert[]) | undefined;
+  getSelfAgentAdvert: (() => AgentSelfAdvert | undefined) | undefined;
+  getCcPeerVersion: (() => string | undefined) | undefined;
+  intervalMs: number;
+}): ReturnType<typeof setInterval> | undefined {
+  const {
+    allSessions,
+    hub,
+    hasAnyTrustedGateway,
+    onError,
+    getCurrentPresence,
+    getHostedRooms,
+    getSelfAgentAdvert,
+    getCcPeerVersion,
+    intervalMs,
+  } = options;
   if (
     getCurrentPresence === undefined &&
     getHostedRooms === undefined &&
@@ -118,7 +139,7 @@ export function startGossipInterval(
     return undefined;
   }
   const interval = setInterval(() => {
-    readvertiseGossip(
+    readvertiseGossip({
       allSessions,
       hub,
       hasAnyTrustedGateway,
@@ -127,7 +148,7 @@ export function startGossipInterval(
       getHostedRooms,
       getSelfAgentAdvert,
       getCcPeerVersion,
-    );
+    });
   }, intervalMs);
   interval.unref();
   return interval;
