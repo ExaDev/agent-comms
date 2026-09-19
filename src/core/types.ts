@@ -257,6 +257,11 @@ export const DeliveryEventSchema = defineSchema(
       fingerprint: z.string(),
     }),
     z.object({
+      type: z.literal("room_join_request"),
+      room: z.string(),
+      requesterId: z.string(),
+    }),
+    z.object({
       type: z.literal("capability_request"),
       requestId: z.string(),
       capability: z.string(),

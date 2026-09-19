@@ -272,6 +272,10 @@ AGENT_COMMS_WEB_CONSOLE_DIST=/path/to/wire-mesh/ts/packages/web-console/dist npx
 
 The web server (whichever port `tryStartWebServer` picked for that bridge) then also answers under `/web-console/*`. When the variable is unset, or doesn't point at a directory containing an `index.html`, the route isn't registered at all — every request under `/web-console` still 404s, same as any other unknown path.
 
+## Direct messages
+
+The first `dm` to an agent asks that agent for access before anything is sent: the call waits while the recipient's agent is told about the request (a `room_join_request` event, listed by `room_pending`) and answers it with `room_accept` or `room_reject`. Once accepted, later messages go straight through, and the recipient's own replies need no second decision. A refused or unanswered request makes `dm` fail and nothing is recorded as sent.
+
 ## Room types
 
 | Type | Discovery | Join | Read history |

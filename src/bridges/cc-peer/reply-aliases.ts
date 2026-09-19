@@ -35,6 +35,7 @@ export function correspondentForEvent(
     case "name_changed":
     case "connection_request":
     case "capability_request":
+    case "room_join_request":
       return undefined;
     default:
       return event satisfies never;

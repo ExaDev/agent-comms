@@ -525,6 +525,8 @@ export function formatDeliveryEvent(event: DeliveryEvent): string {
       return `Connection request from ${event.peerId} (${event.name}) fingerprint ${event.fingerprint}`;
     case "capability_request":
       return `${event.requesterDevice} is asking for "${event.capability}" (${event.requestId})`;
+    case "room_join_request":
+      return `${event.requesterId} is asking to join ${event.room}: room_accept or room_reject to answer`;
     default:
       return event satisfies never;
   }
@@ -538,7 +540,7 @@ export function formatDeliveryEvent(event: DeliveryEvent): string {
  * Classify a delivery event as actionable (requires model attention)
  * or informational (can be buffered and returned with next tool call).
  *
- * Actionable: DMs, room messages, room invites — the model may need to respond.
+ * Actionable: DMs, room messages, room invites, and room join requests awaiting its decision — the model may need to respond, and a requester may be blocked until it does.
  * Informational: status changes, joins/leaves, renames, read receipts —
  *   the model may need to know eventually but never needs to act immediately.
  */
@@ -547,6 +549,7 @@ export function isActionableEvent(event: DeliveryEvent): boolean {
     case "dm":
     case "room_message":
     case "room_invite":
+    case "room_join_request":
       return true;
     case "member_joined":
     case "member_left":

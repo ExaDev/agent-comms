@@ -510,6 +510,18 @@ export class RoomProtocol {
     return this.admitRoomJoin(roomPath, handle, autoApprove);
   }
 
+  /** Tells this device's own agent a room.join is now waiting on its decision (accept with room_accept, refuse with room_reject), so a request held open for a human decision is never sitting unseen in pendingRoomJoins. */
+  private announcePendingRoomJoin(roomPath: string, requesterId: string): void {
+    const peerId = this.deps.getPeerId();
+    const event: DeliveryEvent = {
+      type: "room_join_request",
+      room: roomPath,
+      requesterId,
+    };
+    this.deps.deliveryEngine.queueDelivery(peerId, event);
+    this.deps.deliveryEngine.fireLocalDelivery(peerId, event);
+  }
+
   /** Shared admission continuation for both room.join branches above: waits for a human decision (unless auto-approved), then mints and returns the requester's own independent, parent-less room:member grant. */
   private async admitRoomJoin(
     roomPath: string,
@@ -524,6 +536,7 @@ export class RoomProtocol {
             requesterId: handle.id,
             resolve,
           });
+          this.announcePendingRoomJoin(roomPath, handle.id);
         });
     if (!autoApprove) this.pendingRoomJoins.delete(`${roomPath}::${handle.id}`);
     if (decision.kind === "reject") {
