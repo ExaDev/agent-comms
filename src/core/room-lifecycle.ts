@@ -40,6 +40,7 @@ import {
   saveIssuedDmGrant,
 } from "./user-identity.js";
 import { randomId } from "./random-id.js";
+import { listDiscoveredRooms } from "./room-discovery.js";
 import { resolveRoomId } from "./room-lookup.js";
 import { CommsError } from "./store.js";
 import {
@@ -54,7 +55,6 @@ import {
 } from "./room-wire-extensions.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { MeshTransport } from "./transport.js";
-import type { HostedRoomAdvert } from "./gossip-extensions.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type {
   AgentIdentity,
@@ -63,21 +63,6 @@ import type {
   RoomMessage,
   RoomType,
 } from "./types.js";
-
-/** Narrows an untrusted gossiped value (WireMeshTransport.listKnownDevices' own advert["room/hosted"], self-asserted by whichever peer advertised it) into a HostedRoomAdvert -- a malformed or non-conforming entry is silently skipped rather than treated as an error, the same convention presence/status' own gossip consumption already established: this is a discovery hint over self-asserted data, not a security check. */
-function isHostedRoomAdvert(value: unknown): value is HostedRoomAdvert {
-  if (typeof value !== "object" || value === null) return false;
-  if (!("path" in value) || typeof value.path !== "string") return false;
-  if (!("name" in value) || typeof value.name !== "string") return false;
-  if (
-    !("type" in value) ||
-    (value.type !== "public" && value.type !== "private")
-  )
-    return false;
-  if (!("description" in value) || typeof value.description !== "string")
-    return false;
-  return true;
-}
 
 /** The state and collaborators RoomLifecycle needs from MeshStore. rooms/messages/agents/dmRequestsInitiatedByMe are direct references into MeshStore's own fields (dmRequestsInitiatedByMe shared with RoomProtocol, which reads what requestDmAccess writes here); deliveryEngine is the already-constructed instance, narrowed to what room CRUD ever needs. */
 export interface RoomLifecycleDeps {
@@ -176,11 +161,29 @@ export class RoomLifecycle {
     return room;
   }
 
+  /**
+   * Resolves a room id or plain room name to a real room id, against the same set of rooms listRooms shows: rooms this store holds plus rooms other devices advertise as hosted. See resolveRoomId in room-lookup.ts for the exact resolution and ambiguity rules.
+   */
+  resolveRoomId(roomIdOrName: string): string {
+    return resolveRoomId(
+      [
+        ...this.deps.rooms.values(),
+        ...listDiscoveredRooms(this.deps.requireTransport()).map(
+          ({ path, name }) => ({ id: path, name }),
+        ),
+      ],
+      roomIdOrName,
+    );
+  }
+
   async getRoom(id: string): Promise<Room | undefined> {
     await Promise.resolve();
     return this.deps.rooms.get(id);
   }
 
+  /**
+   * Every room visible to requesterId: rooms this store holds (secret ones only for members), plus every room another device advertises as hosted that this store has not otherwise recorded. A discovered room is a placeholder-shaped hint built from the advert alone and is never merged into this.deps.rooms: a gossip hint is not membership.
+   */
   async listRooms(requesterId: string): Promise<Room[]> {
     await Promise.resolve();
     const result: Room[] = [];
@@ -189,7 +192,9 @@ export class RoomLifecycle {
         continue;
       result.push(room);
     }
-    for (const discovered of this.listDiscoverableRooms()) {
+    for (const discovered of listDiscoveredRooms(
+      this.deps.requireTransport(),
+    )) {
       if (this.deps.rooms.has(discovered.path)) continue;
       result.push({
         id: discovered.path,
@@ -206,26 +211,6 @@ export class RoomLifecycle {
         invitedJoins: {},
         invitedLeaves: {},
       });
-    }
-    return result;
-  }
-
-  /**
-   * Every public/private room this store has heard gossiped by another device but never joined or otherwise locally recorded -- the read half of P3.8's room-discovery replacement for createRoom's own broadcastPatch (agent-comms#48/#50). Never merged into this.deps.rooms: a gossip hint is not membership, and a room this store was never admitted to has nothing real to synthesize beyond what the advert itself carries. Secret rooms never need filtering here the way listRooms' own local-room check needs -- HostedRoomAdvert's own type field is restricted to "public" | "private" at the source (WireMeshTransport's getHostedRooms), so a secret room is never gossiped under this key at all.
-   */
-  private listDiscoverableRooms(): readonly (HostedRoomAdvert & {
-    ownerDeviceId: string;
-  })[] {
-    const transport = this.deps.requireTransport();
-    if (transport.listKnownDevices === undefined) return [];
-    const result: (HostedRoomAdvert & { ownerDeviceId: string })[] = [];
-    for (const { deviceId, advert } of transport.listKnownDevices()) {
-      const hosted = advert["room/hosted"];
-      if (!Array.isArray(hosted)) continue;
-      for (const candidate of hosted) {
-        if (!isHostedRoomAdvert(candidate)) continue;
-        result.push({ ...candidate, ownerDeviceId: deviceId });
-      }
     }
     return result;
   }
@@ -397,7 +382,7 @@ export class RoomLifecycle {
    * Joins a room. For this store's own identity, "already known locally" is not the right gate for skipping real admission: the legacy full-state-sync replicates a room's metadata to every mesh-connected peer the moment it's created, well before that peer has ever been admitted, so a room already present in this.rooms says nothing about whether this store actually holds a valid room:member token for it. The real gate is that token's presence -- absent, this always goes through joinRemoteRoom's real wire-level admission regardless of what this.rooms already knows, so a peer that merely heard about a room never mistakes hearing about it for having joined it. Joining on behalf of a DIFFERENT agentId (this store's own convergence/admin bookkeeping, exercised directly by state-sync-convergence.test.ts) is untouched -- that's a pure local CRDT mutation with no admission concept at all.
    */
   async joinRoom(roomIdOrName: string, agentId: string): Promise<Room> {
-    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
+    const roomId = this.resolveRoomId(roomIdOrName);
     const peerId = this.deps.getPeerId();
     if (agentId === peerId) {
       const { slot } = this.deps.requireIdentity();
@@ -481,7 +466,7 @@ export class RoomLifecycle {
    * Leaves a room. For this store's own identity leaving a room it does not itself own, the local Room object is only ever this store's own static snapshot from when it joined or was invited (P3.6/P3.8) -- mutating it directly, as the legacy branch below does, would tell nobody but this store itself. The real effect needs a wire round trip to the room's own owner instead, so this always defers to leaveRemoteRoom in that case. Leaving on behalf of a DIFFERENT agentId, or the owner leaving their own room (this store's own authoritative copy), is untouched -- that is the legacy CRDT mutation state-sync-convergence.test.ts exercises directly.
    */
   async leaveRoom(roomIdOrName: string, agentId: string): Promise<void> {
-    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
+    const roomId = this.resolveRoomId(roomIdOrName);
     const room = this.deps.rooms.get(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
@@ -570,7 +555,7 @@ export class RoomLifecycle {
     targetId: string,
     inviterId: string,
   ): Promise<void> {
-    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
+    const roomId = this.resolveRoomId(roomIdOrName);
     const room = this.deps.rooms.get(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
@@ -684,7 +669,7 @@ export class RoomLifecycle {
     targetId: string,
     kickerId: string,
   ): Promise<void> {
-    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
+    const roomId = this.resolveRoomId(roomIdOrName);
     const room = this.deps.rooms.get(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
@@ -708,7 +693,7 @@ export class RoomLifecycle {
    * Destroys roomId, revoking every member's own room:member grant for real first (P3.8) -- the same revocation machinery kickFromRoom already uses, since destroying a room out from under its members is exactly as much a membership revocation as kicking them individually would be, just for all of them at once. Room-existence notification (agent_upsert/room_delete) stays on the legacy broadcastPatch for now: replacing it needs the same broader informational-events redesign the rest of P3.8 already tracks as separate, larger work, not something this specific fix should improvise alone.
    */
   async destroyRoom(roomIdOrName: string, agentId: string): Promise<void> {
-    const roomId = resolveRoomId(this.deps.rooms, roomIdOrName);
+    const roomId = this.resolveRoomId(roomIdOrName);
     const room = this.deps.rooms.get(roomId);
     if (!room)
       throw new CommsError(`Room ${roomId} not found`, "ROOM_NOT_FOUND");
