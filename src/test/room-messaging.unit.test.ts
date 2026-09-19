@@ -11,6 +11,7 @@ import {
   type RoomMessagingDeps,
 } from "../core/room-messaging.js";
 import type { AgentIdentity, Room } from "../core/types.js";
+import { CommsError } from "../core/store.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 
 vi.mock("../core/identity-store.js", () => ({
@@ -66,6 +67,7 @@ function agent(overrides: Partial<AgentIdentity> = {}): AgentIdentity {
 
 function makeHarness() {
   const sendRoomRequestToMember = vi.fn().mockResolvedValue(undefined);
+  const requestDmAccess = vi.fn().mockResolvedValue(undefined);
   // Backs the default resolveAgent mock below -- a plain lookup Map standing in for AgentRegistry.getAgent's own real "known, else gossip-discovered" resolution, which RoomMessaging itself never sees; it only calls resolveAgent opaquely.
   const agents = new Map<string, AgentIdentity>();
   const resolveAgent = vi
@@ -85,6 +87,7 @@ function makeHarness() {
       userIdentityOptions: {},
     }),
     roomProtocol: { sendRoomRequestToMember },
+    requestDmAccess,
     resolveAgent,
   };
   return {
@@ -93,6 +96,7 @@ function makeHarness() {
     deps,
     messaging: new RoomMessaging(deps),
     sendRoomRequestToMember,
+    requestDmAccess,
   };
 }
 
@@ -455,7 +459,69 @@ describe("RoomMessaging — sendDm", () => {
     expect(withoutBehavior).not.toHaveProperty("streamingBehavior");
   });
 
-  it("throws NOT_MEMBER naming the exact dm key when no room:member token is persisted for a cross-agent DM", async () => {
+  it("requests DM access from the recipient when no room:member token is persisted, then sends with the token that request granted", async () => {
+    const h = makeHarness();
+    h.agents.set(TO_DEVICE_ID, agent());
+    const key = dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID);
+    vi.mocked(loadRoomTokens)
+      .mockReturnValueOnce({})
+      .mockReturnValue({ [key]: FAKE_TOKEN });
+
+    const message = await h.messaging.sendDm(
+      FROM_DEVICE_ID,
+      TO_DEVICE_ID,
+      "hi",
+    );
+
+    expect(h.requestDmAccess).toHaveBeenCalledExactlyOnceWith(TO_DEVICE_ID);
+    expect(h.sendRoomRequestToMember).toHaveBeenCalledWith(
+      TO_DEVICE_ID,
+      key,
+      FAKE_TOKEN,
+      expect.anything(),
+    );
+    expect(h.deps.dms.get(key)).toEqual([message]);
+  });
+
+  it("does not request DM access when a room:member token is already persisted", async () => {
+    const h = makeHarness();
+    h.agents.set(TO_DEVICE_ID, agent());
+    vi.mocked(loadRoomTokens).mockReturnValue({
+      [dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID)]: FAKE_TOKEN,
+    });
+
+    await h.messaging.sendDm(FROM_DEVICE_ID, TO_DEVICE_ID, "hi");
+
+    expect(h.requestDmAccess).not.toHaveBeenCalled();
+  });
+
+  it("never requests DM access for a self-DM", async () => {
+    const h = makeHarness();
+
+    await h.messaging.sendDm(FROM_DEVICE_ID, FROM_DEVICE_ID, "note");
+
+    expect(h.requestDmAccess).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a refused DM access request and records nothing locally or on the wire", async () => {
+    const h = makeHarness();
+    h.agents.set(TO_DEVICE_ID, agent());
+    vi.mocked(loadRoomTokens).mockReturnValue({});
+    h.requestDmAccess.mockRejectedValue(
+      new CommsError("DM access request was refused (denied)", "JOIN_REFUSED"),
+    );
+
+    await expect(
+      h.messaging.sendDm(FROM_DEVICE_ID, TO_DEVICE_ID, "hi"),
+    ).rejects.toMatchObject({ code: "JOIN_REFUSED" });
+
+    expect(h.deps.dms.get(dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID))).toBe(
+      undefined,
+    );
+    expect(h.sendRoomRequestToMember).not.toHaveBeenCalled();
+  });
+
+  it("throws NOT_MEMBER naming the exact dm key when access was granted but no token was persisted", async () => {
     const h = makeHarness();
     h.agents.set(TO_DEVICE_ID, agent());
     vi.mocked(loadRoomTokens).mockReturnValue({});

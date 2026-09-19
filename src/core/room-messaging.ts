@@ -11,6 +11,7 @@ import { recordRoomSendNotice } from "./room-notice-log.js";
 import { CommsError } from "./store.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import type { RoomProtocol } from "./room-protocol.js";
+import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type {
   AgentIdentity,
   DmMessage,
@@ -27,6 +28,8 @@ export interface RoomMessagingDeps {
   dms: Map<string, DmMessage[]>;
   requireIdentity: () => MeshStoreIdentity;
   roomProtocol: Pick<RoomProtocol, "sendRoomRequestToMember">;
+  /** Runs the requester half of the DM consent flow against a counterpart device (RoomLifecycle.requestDmAccess), persisting the room:member token it is granted. Resolves once the counterpart admits this device, rejects if it refuses or never answers. */
+  requestDmAccess: (counterpart: string) => Promise<void>;
   resolveAgent: (id: string) => Promise<AgentIdentity | undefined>;
 }
 
@@ -147,6 +150,10 @@ export class RoomMessaging {
         throw new CommsError(`Cannot DM agent ${to}`, "AGENT_NOT_FOUND");
     }
 
+    // A cross-device DM needs a room:member token for the pair's dm path. The first message to a counterpart has none yet, so obtain one via the consent flow before anything is recorded or sent: a refused or unanswered request must leave no trace of a message that never went out.
+    const token =
+      to === from ? undefined : await this.dmRoomMemberToken(from, to);
+
     const messageId = randomId();
     const id = bytesToHex(messageId);
     const message: DmMessage = {
@@ -159,18 +166,14 @@ export class RoomMessaging {
       ...(streamingBehavior !== undefined && { streamingBehavior }),
     };
 
-    // Self-DM is a purely local scratchpad note -- it never leaves the process, so it needs no room-path and dmRoomPath's own a===b refusal (a path naming the same device twice is not a valid DM path at all) correctly does not apply here.
+    // Self-DM is a purely local scratchpad note -- it never leaves the process, so it needs no room-path and dmRoomPath's own a===b refusal (a path naming the same device twice is not a valid DM path at all) correctly does not apply.
     const key = to === from ? `self:${from}` : dmRoomPath(from, to);
     const arr = this.deps.dms.get(key) ?? [];
     arr.push(message);
     this.deps.dms.set(key, arr);
 
-    if (to !== from) {
-      const { slot, clock } = this.deps.requireIdentity();
-      const token = loadRoomTokens(slot)[key];
-      if (token === undefined) {
-        throw new CommsError(`No room:member token for ${key}`, "NOT_MEMBER");
-      }
+    if (token !== undefined) {
+      const { clock } = this.deps.requireIdentity();
       const params: Record<string, unknown> = {
         verb: "room.send",
         "message-id": messageId,
@@ -189,5 +192,23 @@ export class RoomMessaging {
     }
 
     return message;
+  }
+
+  /** The room:member token this device holds for its DM path with `to`, requesting DM access from `to` first when none is persisted yet. Throws NOT_MEMBER if the request resolves without a token having been persisted, since no send can be authenticated without one. */
+  private async dmRoomMemberToken(
+    from: string,
+    to: string,
+  ): Promise<CapabilityToken> {
+    const key = dmRoomPath(from, to);
+    const { slot } = this.deps.requireIdentity();
+    const existing = loadRoomTokens(slot)[key];
+    if (existing !== undefined) return existing;
+
+    await this.deps.requestDmAccess(to);
+    const granted = loadRoomTokens(slot)[key];
+    if (granted === undefined) {
+      throw new CommsError(`No room:member token for ${key}`, "NOT_MEMBER");
+    }
+    return granted;
   }
 }
