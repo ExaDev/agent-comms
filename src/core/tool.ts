@@ -19,6 +19,7 @@ import type {
 } from "./types.js";
 import type { ListenerInfo, MeshGraph, MeshTraceResult } from "./transport.js";
 import type { CommsStore } from "./comms-store.js";
+import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type { DiscoveryManager } from "./discovery.js";
 import { CommsError } from "./store.js";
 import { getOwnPackageVersion } from "./package-version.js";
@@ -43,6 +44,7 @@ import {
   gatewayUntrust,
   gatewayListTrusted,
 } from "./gateway-trust-actions.js";
+import { dmAdmit, dmRevoke, dmUseGrant } from "./dm-grant-actions.js";
 import { meshGraphAction, meshTraceAction } from "./mesh-graph-trace-tool.js";
 import {
   meshDiscoverAction,
@@ -146,6 +148,15 @@ export interface MeshOnlyFeatures {
     options: Readonly<RedeemConnectionCodeOptions>,
   ) => Promise<RedeemConnectionCodeResult>;
   addTrustedGatewayPrincipal?: (deviceHex: string) => void;
+  /** Mints a dm:send grant admitting bearerId to DM this user without a decision (agent-comms#162). */
+  admitAgentForDm?: (bearerId: string) => Promise<CapabilityToken>;
+  /** Asks counterpart for DM access, presenting a dm:send grant when given one so no decision is needed. */
+  requestDmAccess?: (
+    counterpart: string,
+    dmSendGrant?: CapabilityToken,
+  ) => Promise<void>;
+  /** Withdraws the dm:send grant issued for bearerId. */
+  revokeAgentDmAccess?: (bearerId: string) => Promise<void>;
   removeTrustedGatewayPrincipal?: (deviceHex: string) => void;
   listTrustedGatewayPrincipals?: () => string[];
   /** deviceId's own gossiped agent-comms package version, cached from whatever it last advertised -- undefined for a device this side has never heard gossip from, or one running a version that predates agent-comms#198. */
@@ -329,6 +340,12 @@ export class CommsTool {
           return gatewayUntrust(this.store, action);
         case "gateway_list_trusted":
           return gatewayListTrusted(this.store);
+        case "dm_admit":
+          return await dmAdmit(this.store, action, ctx.agentId);
+        case "dm_use_grant":
+          return await dmUseGrant(this.store, action);
+        case "dm_revoke":
+          return await dmRevoke(this.store, action);
         case "gateway_generate_connection_code":
           return await handleGatewayGenerateConnectionCode(this.store, action);
         case "gateway_redeem_connection_code":

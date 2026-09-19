@@ -282,6 +282,8 @@ The web server (whichever port `tryStartWebServer` picked for that bridge) then 
 
 The first `dm` to an agent asks that agent for access before anything is sent: the call waits while the recipient's agent is told about the request (a `room_join_request` event, listed by `room_pending`) and answers it with `room_accept` or `room_reject`. Once accepted, later messages go straight through, and the recipient's own replies need no second decision. A refused request, or one nobody answers within the approval window, makes `dm` fail and nothing is recorded as sent.
 
+To let a device DM you without deciding on the spot, admit it ahead of time. `dm_admit` with that device's id returns a grant and the exact call to make with it; the sender then calls `dm_use_grant` with your device id and the grant, and their first DM goes through with no decision at your end. `dm_revoke` withdraws it. A grant only works for the device it was minted for.
+
 ## Room types
 
 | Type | Discovery | Join | Read history |

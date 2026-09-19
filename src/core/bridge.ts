@@ -71,6 +71,9 @@ export const MCP_TOOL_PARAMS = z.object({
     "gateway_trust",
     "gateway_untrust",
     "gateway_list_trusted",
+    "dm_admit",
+    "dm_use_grant",
+    "dm_revoke",
     "gateway_generate_connection_code",
     "gateway_redeem_connection_code",
     "query_version",
@@ -122,6 +125,8 @@ export const MCP_TOOL_PARAMS = z.object({
   fingerprint: z.string().optional(),
   /** For gateway_trust/gateway_untrust: when true, `device` names a user principal (agent-comms#187) rather than a bare remote device-id (agent-comms#193). */
   principal: z.boolean().optional(),
+  /** The dm:send grant text dm_admit returned, presented by dm_use_grant. */
+  grant: z.string().optional(),
   /** How long mesh_trace waits for a path.trace response before giving up (agent-comms#199). */
   timeoutMs: z.number().optional(),
 });
@@ -425,6 +430,20 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       };
     case "gateway_list_trusted":
       return { action: "gateway_list_trusted" };
+    case "dm_admit":
+      if (p.target === undefined)
+        throw new BuildActionError("dm_admit", "target");
+      return { action: "dm_admit", target: p.target };
+    case "dm_use_grant":
+      if (p.target === undefined)
+        throw new BuildActionError("dm_use_grant", "target");
+      if (p.grant === undefined)
+        throw new BuildActionError("dm_use_grant", "grant");
+      return { action: "dm_use_grant", target: p.target, grant: p.grant };
+    case "dm_revoke":
+      if (p.target === undefined)
+        throw new BuildActionError("dm_revoke", "target");
+      return { action: "dm_revoke", target: p.target };
     case "gateway_generate_connection_code":
       return {
         action: "gateway_generate_connection_code",

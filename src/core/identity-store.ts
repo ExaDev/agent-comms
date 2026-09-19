@@ -38,7 +38,7 @@ const OWNER_ONLY_RW_PERMISSIONS = 0o600;
 const INT32_BYTE_LENGTH = 4;
 
 /** A CapabilityToken (COSE_Sign1: [protected header bytes, unprotected header map, payload bytes or null, signature bytes]) with every byte-string field base64-encoded for JSON storage. Only the two named unprotected-header fields (alg, kid) are round-tripped -- every token minted by wire-mesh-core today leaves the unprotected header empty (alg/kid live in the protected header instead), so the schema's own open catchall for arbitrary extra keys is left unhandled until a real caller actually needs one preserved. */
-type SerializedCapabilityToken = [
+export type SerializedCapabilityToken = [
   string,
   { "1"?: number; "4"?: string; [key: string]: unknown },
   string | null,
@@ -59,7 +59,7 @@ interface StoredIdentity {
 /** A COSE_Sign1 tuple always has exactly 4 elements: protected header, unprotected header, payload, signature. */
 const COSE_SIGN1_TUPLE_LENGTH = 4;
 
-function isSerializedCapabilityToken(
+export function isSerializedCapabilityToken(
   value: unknown,
 ): value is SerializedCapabilityToken {
   if (!Array.isArray(value) || value.length !== COSE_SIGN1_TUPLE_LENGTH)
@@ -110,7 +110,10 @@ function isStoredIdentity(value: unknown): value is StoredIdentity {
   return true;
 }
 
-function serializeToken(token: CapabilityToken): SerializedCapabilityToken {
+/** A capability token as plain JSON: every byte string base64-encoded. */
+export function serializeToken(
+  token: CapabilityToken,
+): SerializedCapabilityToken {
   const [protectedHeader, unprotectedHeader, payload, signature] = token;
   const serializedUnprotected: SerializedCapabilityToken[1] = {
     ...(unprotectedHeader["1"] !== undefined
@@ -128,7 +131,8 @@ function serializeToken(token: CapabilityToken): SerializedCapabilityToken {
   ];
 }
 
-function deserializeToken(
+/** The inverse of serializeToken. */
+export function deserializeToken(
   serialized: SerializedCapabilityToken,
 ): CapabilityToken {
   const [protectedHeader, unprotectedHeader, payload, signature] = serialized;

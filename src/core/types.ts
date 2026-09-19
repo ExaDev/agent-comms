@@ -460,6 +460,13 @@ export const CommsActionSchema = defineSchema(
       principal: z.boolean().optional(),
     }),
     z.object({ action: z.literal("gateway_list_trusted") }),
+    z.object({ action: z.literal("dm_admit"), target: z.string() }),
+    z.object({
+      action: z.literal("dm_use_grant"),
+      target: z.string(),
+      grant: z.string(),
+    }),
+    z.object({ action: z.literal("dm_revoke"), target: z.string() }),
     z.object({
       action: z.literal("gateway_generate_connection_code"),
       ttlMs: z.number().optional(),
