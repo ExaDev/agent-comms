@@ -2,27 +2,35 @@
   "$schema": "https://turborepo.com/schema.json",
 
   "tasks": {
-    "build:frontend:run": {
+    "_build:frontend": {
       "inputs": ["src/bridges/user/web/vite.config.ts", "src/bridges/user/web/frontend/**"],
       "outputs": ["src/bridges/user/web/dist/**"]
     },
-    "build:run": {
-      "dependsOn": ["build:frontend:run"],
-      // Excludes build:frontend:run's own output (nested under src/, since the Vite bundle lands in src/bridges/user/web/dist/) -- without this, restoring that output on a cache hit changes build:run's own input hash and forces a spurious re-execution.
+    "_build": {
+      "dependsOn": ["_build:frontend"],
+      // Excludes _build:frontend's own output (nested under src/, since the Vite bundle lands in src/bridges/user/web/dist/) -- without this, restoring that output on a cache hit changes _build's own input hash and forces a spurious re-execution.
       "inputs": ["src/**", "!src/bridges/user/web/dist/**", "scripts/copy-web-assets.ts", "tsconfig.json"],
       "outputs": ["dist/**"]
     },
-    "lint:run": {
+    "_lint": {
       "inputs": ["$TURBO_DEFAULT$", "eslint.config.ts"]
     },
-    "typecheck:run": {
+    "_typecheck": {
       "inputs": ["**/*.ts", "**/*.tsx", "tsconfig.json"]
     },
-    "test:run": {},
-    "test:e2e:run": {
+    "_test": {
+      // The web-bridge integration tests import server.ts, which reads src/bridges/user/web/dist/index.html at
+      // module load -- without this dependency, a fresh checkout with no prior build (a new worktree's pre-push
+      // hook, in particular) fails those suites with ENOENT rather than actually exercising them.
+      "dependsOn": ["_build:frontend"]
+    },
+    "_prepush": {
+      "dependsOn": ["_lint", "_typecheck", "_test"]
+    },
+    "_test:e2e": {
       // A real browser driving a real server over a real socket -- exactly the kind of run where replaying a stale cached pass could mask a genuine regression in the actual runtime environment, so it's never cached.
       "cache": false,
-      "dependsOn": ["build:frontend:run"]
+      "dependsOn": ["_build:frontend"]
     }
   }
 }
