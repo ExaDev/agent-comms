@@ -1,3 +1,9 @@
+## [5.0.3](https://github.com/ExaDev/agent-comms/compare/v5.0.2...v5.0.3) (2026-09-20)
+
+### Tests
+
+* **core:** tear hub tests down in reverse order so the hub outlives its clients ([26a052f](https://github.com/ExaDev/agent-comms/commit/26a052fcc8169bb89cc371787772da13168beba2))
+
 ## [5.0.2](https://github.com/ExaDev/agent-comms/compare/v5.0.1...v5.0.2) (2026-09-20)
 
 ### Build
