@@ -36,15 +36,16 @@ export function forwardAdvertsToHub(
 
 /** Catches the hub up with every local device already known at the moment this side becomes the gateway (connectHub's own trailing call, right after hub.connect resolves) -- without this, a device whose own last gossip arrived before this coordinator took over the gateway role would never be (re-)advertised until its own next periodic gossip tick (hub-side state is rebuilt from scratch on every takeover, per coordinator-gateway.ts's own class doc). Reuses forwardAdvertsToHub's own eligibility filter and trust gate, so only ever a visible, agent/self-bearing device is pushed, and only once a remote gateway is trusted, exactly as an ordinary directory-change forward would. */
 export function pushHubCatchUp(
-  hub: Readonly<Pick<HubSession, "isConnected" | "advertiseDevices">>,
+  hub: Readonly<Pick<HubSession, "isConnected" | "advertiseDevices" | "peers">>,
   knownDevices: ReadonlyMap<string, Readonly<PeerAdvert>>,
   onError: ((error: Error) => void) | undefined,
   hasAnyTrustedGateway: () => boolean,
 ): void {
-  const catchUp = [...knownDevices.values()].map((advert) => ({
-    device: advert.device,
-    advert,
-  }));
+  // knownDevices also holds every remote device learned from this same hub, and the hub already has those adverts from their own senders. Handing one back would register it against this gateway's connection if it were ever fresher than the hub's copy, and is otherwise dropped by the hub's freshness rule, so only the devices this side fronts are advertised.
+  const learnedFromHub = new Set(hub.peers());
+  const catchUp = [...knownDevices.entries()]
+    .filter(([deviceHex]) => !learnedFromHub.has(deviceHex))
+    .map(([, advert]) => ({ device: advert.device, advert }));
   forwardAdvertsToHub(hub, catchUp, onError, hasAnyTrustedGateway);
 }
 
@@ -89,7 +90,7 @@ export async function routeRoomRequestViaHub(options: {
 /** Dials the hub and immediately pushes a catch-up of every already-known local device onto it (agent-comms#154's own hub-connection-establishment sequence, kept together here rather than split across two call-site statements in WireMeshTransport.connectHub) -- without the trailing catch-up, a device whose own last gossip arrived before this coordinator took over the gateway role would stay invisible on the hub until its own next periodic gossip tick. */
 export async function connectHubGateway(options: {
   hub: Readonly<
-    Pick<HubSession, "isConnected" | "advertiseDevices" | "connect">
+    Pick<HubSession, "isConnected" | "advertiseDevices" | "connect" | "peers">
   >;
   url: string;
   knownDevices: ReadonlyMap<string, Readonly<PeerAdvert>>;

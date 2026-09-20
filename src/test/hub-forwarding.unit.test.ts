@@ -14,11 +14,12 @@ import type {
 import type {
   CapabilityScope,
   ManageCommand,
-  PeerAdvert,
 } from "wire-mesh-core/generated/protocol";
+import { syntheticAdvert } from "./synthetic-advert.js";
 
 const DEVICE_ID_HEX_LENGTH = 64;
 const DEVICE_A_HEX = "a".repeat(DEVICE_ID_HEX_LENGTH);
+const DEVICE_B_HEX = "b".repeat(DEVICE_ID_HEX_LENGTH);
 
 function deviceIdBytes(hex: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(new ArrayBuffer(hex.length / 2));
@@ -28,25 +29,27 @@ function deviceIdBytes(hex: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-function advert(): PeerAdvert {
-  return { addresses: [], "snapshot-seconds": 1 } as unknown as PeerAdvert;
-}
-
 function entry(hex: string): DirectoryEntry {
+  const device = deviceIdBytes(hex);
   return {
-    device: deviceIdBytes(hex),
-    advert: { ...advert(), "agent/self": {} },
+    device,
+    advert: syntheticAdvert(device, {
+      snapshotSeconds: 1,
+      extensions: { "agent/self": {} },
+    }),
   };
 }
 
-function fakeHub(): {
+function fakeHub(peers: readonly string[] = []): {
   isConnected: boolean;
+  peers: () => readonly string[];
   advertiseDevices: ReturnType<
     typeof vi.fn<(entries: readonly DirectoryEntry[]) => Promise<void>>
   >;
 } {
   return {
     isConnected: true,
+    peers: () => peers,
     advertiseDevices: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -95,6 +98,32 @@ describe("pushHubCatchUp -- gateway-trust gate", () => {
     pushHubCatchUp(hub, knownDevices, undefined, () => true);
 
     expect(hub.advertiseDevices).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("pushHubCatchUp -- devices learned from the hub", () => {
+  it("advertises only the devices this side fronts, never one it learned from the hub", () => {
+    const hub = fakeHub([DEVICE_B_HEX]);
+    const knownDevices = new Map([
+      [DEVICE_A_HEX, entry(DEVICE_A_HEX).advert],
+      [DEVICE_B_HEX, entry(DEVICE_B_HEX).advert],
+    ]);
+
+    pushHubCatchUp(hub, knownDevices, undefined, () => true);
+
+    const advertised = hub.advertiseDevices.mock.calls.flatMap(([entries]) =>
+      entries.map((forwarded) => forwarded.advert.device),
+    );
+    expect(advertised).toEqual([entry(DEVICE_A_HEX).advert.device]);
+  });
+
+  it("advertises nothing when every known device was learned from the hub", () => {
+    const hub = fakeHub([DEVICE_A_HEX]);
+    const knownDevices = new Map([[DEVICE_A_HEX, entry(DEVICE_A_HEX).advert]]);
+
+    pushHubCatchUp(hub, knownDevices, undefined, () => true);
+
+    expect(hub.advertiseDevices).not.toHaveBeenCalled();
   });
 });
 
