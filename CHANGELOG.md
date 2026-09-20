@@ -1,3 +1,26 @@
+## [5.2.0](https://github.com/ExaDev/agent-comms/compare/v5.1.0...v5.2.0) (2026-09-20)
+
+### Features
+
+* **core:** report whether a sent message was delivered or only queued ([3de4c88](https://github.com/ExaDev/agent-comms/commit/3de4c8868d3d551f107c0701f5b13cf71ffc0e28))
+
+### Bug Fixes
+
+* **core:** answer no_route when this side has nowhere to send a request ([44ea176](https://github.com/ExaDev/agent-comms/commit/44ea1767c8b7cde66e49d6f68c02ace83cf9459d))
+* **core:** only ask for an identity once something is actually queued ([57bab37](https://github.com/ExaDev/agent-comms/commit/57bab3723b1b9f64843c88e7363e56f2f1b8d049))
+* **mesh-store:** retry a queued room request when any route to the member appears ([1d5d82d](https://github.com/ExaDev/agent-comms/commit/1d5d82dbc633e8d7c35a310f93bdd516910a40f9))
+
+### Styles
+
+* **core:** wrap two long test assertions ([7196ec8](https://github.com/ExaDev/agent-comms/commit/7196ec8d3dfd6fa2c0c90a504aa31f628edd494c))
+
+### Tests
+
+* **bridge:** assert the web UI names who a delivery status is about ([0db1177](https://github.com/ExaDev/agent-comms/commit/0db1177cd56581b69293adc6a1281bf5e6bd989b))
+* **core:** cover the queued-then-delivered DM path end to end ([1459a48](https://github.com/ExaDev/agent-comms/commit/1459a487ec29795ae33bac904f33db2a1375ca06))
+* **core:** expect no_route from an untrusted target with no session ([54f0340](https://github.com/ExaDev/agent-comms/commit/54f034070053b87ee28f249d10a105d19330e979))
+* **core:** expect the nested delivery union on delivery_status events ([bc8f071](https://github.com/ExaDev/agent-comms/commit/bc8f071014058eb28795f07903a81093e427ca18))
+
 ## [5.1.0](https://github.com/ExaDev/agent-comms/compare/v5.0.6...v5.1.0) (2026-09-20)
 
 ### Features
