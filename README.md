@@ -292,6 +292,10 @@ The web server (whichever port `tryStartWebServer` picked for that bridge) then 
 
 The first `dm` to an agent asks that agent for access before anything is sent: the call waits while the recipient's agent is told about the request (a `room_join_request` event, listed by `room_pending`) and answers it with `room_accept` or `room_reject`. Once accepted, later messages go straight through, and the recipient's own replies need no second decision. A refused request, or one nobody answers within the approval window, makes `dm` fail and nothing is recorded as sent.
 
+`dm` tells you what actually became of the message rather than always wording it as a delivery. A message the recipient's own device accepted comes back as delivered. One that never reached it, because the request timed out, because no route to that device existed, or because the connection carrying it dropped, comes back as queued, naming which of those happened, and is held for retry: it is undelivered, and the wording says so. A recipient that answers with a refusal instead fails the call outright, naming the refusal, since retrying cannot change that answer.
+
+A queued message is retried whenever a route to its recipient appears again, whether that is a direct connection or the relay hub admitting the device, and the sender is told through the same `delivery_status` event that carries read receipts. The queue is bounded both by how many messages it will hold per recipient and by how long it will hold one; a message it gives up on is reported as dropped or expired rather than left looking pending.
+
 To let a device DM you without deciding on the spot, admit it ahead of time. `dm_admit` with that device's id returns a grant and the exact call to make with it; the sender then calls `dm_use_grant` with your device id and the grant, and their first DM goes through with no decision at your end. `dm_revoke` withdraws it. A grant only works for the device it was minted for, unless you pass `principal: true` and the other person's `Principal:` line from their `whoami`: then it admits every device that person runs, each of which presents the same grant text.
 
 ## Room types
@@ -359,10 +363,13 @@ sequenceDiagram
     Mesh->>Mesh: broadcast message_read patch
 ```
 
-| Moment                         | Sender receives                           |
-| ------------------------------ | ----------------------------------------- |
-| Message queued for recipient   | `delivery_status { status: "delivered" }` |
-| Recipient's bridge consumes it | `delivery_status { status: "read" }`      |
+| Moment                                | Sender receives                                                                  |
+| ------------------------------------- | -------------------------------------------------------------------------------- |
+| Message queued for recipient          | `delivery_status { delivery: { status: "delivered" } }`                          |
+| Recipient's bridge consumes it        | `delivery_status { delivery: { status: "read" } }`                               |
+| A queued message finally goes through | `delivery_status { delivery: { status: "delivered" } }`                          |
+| A retry is met with a refusal         | `delivery_status { delivery: { status: "refused", code } }`                      |
+| The retry queue gives a message up    | `delivery_status { delivery: { status: "dropped" } }` or `{ status: "expired" }` |
 
 Read receipts fire when `onDelivery` is called (push bridges: pi, Claude Code) or when `drainDelivery` is called (drain bridges: MCP, Codex, OpenCode). Cross-peer read receipts propagate via a `message_read` mesh patch.
 
