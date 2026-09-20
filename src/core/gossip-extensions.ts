@@ -28,4 +28,6 @@ export interface AgentSelfAdvert {
   startedAt: string;
   tags: string[];
   subscribedRooms: string[];
+  /** A proof that this device's user principal vouches for it (membership-proof.ts), so a peer that trusts that principal trusts this device without it being listed individually. Absent until the first proof has been minted. */
+  membership?: string;
 }

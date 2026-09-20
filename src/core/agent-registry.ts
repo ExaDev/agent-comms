@@ -37,6 +37,8 @@ function isAgentSelfAdvert(value: unknown): value is AgentSelfAdvert {
   if (!("tags" in value) || !Array.isArray(value.tags)) return false;
   if (!("subscribedRooms" in value) || !Array.isArray(value.subscribedRooms))
     return false;
+  if ("membership" in value && typeof value.membership !== "string")
+    return false;
   return true;
 }
 

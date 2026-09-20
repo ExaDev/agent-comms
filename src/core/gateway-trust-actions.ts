@@ -13,6 +13,7 @@ export type GatewayTrustStore = Pick<
   | "addTrustedGatewayPrincipal"
   | "removeTrustedGatewayPrincipal"
   | "listTrustedGatewayPrincipals"
+  | "listVerifiedMembers"
 >;
 
 /** Uniform "gateway trust isn't available on this store" result, mirroring tool.ts's own notMeshBacked helper for the other MeshOnlyFeatures methods. */
@@ -72,7 +73,8 @@ export function gatewayListTrusted(
   if (!store.listTrustedGateways) return gatewayTrustUnavailable();
   const devices = store.listTrustedGateways();
   const principals = store.listTrustedGatewayPrincipals?.() ?? [];
-  if (devices.length === 0 && principals.length === 0) {
+  const members = store.listVerifiedMembers?.() ?? [];
+  if (devices.length === 0 && principals.length === 0 && members.length === 0) {
     return {
       content: "No remote gateway devices or principals are trusted.",
       isError: false,
@@ -87,6 +89,11 @@ export function gatewayListTrusted(
   if (principals.length > 0) {
     sections.push(
       `Trusted remote gateway principals:\n${principals.map((principal) => `  ${principal}`).join("\n")}`,
+    );
+  }
+  if (members.length > 0) {
+    sections.push(
+      `Devices trusted through a principal:\n${members.map((member) => `  ${member.device} (vouched for by ${member.principal})`).join("\n")}`,
     );
   }
   return {

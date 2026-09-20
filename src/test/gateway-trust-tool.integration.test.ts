@@ -9,6 +9,7 @@ import { wireTestTransport } from "./test-transport.js";
 
 const TEST_PORT = 0;
 const DEVICE_HEX = "aabbccdd";
+const ONE_HOUR_MS = 3_600_000;
 const PRINCIPAL_HEX = "eeff0011";
 
 describe("CommsTool gateway trust actions", () => {
@@ -169,6 +170,40 @@ describe("CommsTool gateway trust actions", () => {
     expect(result.isError, result.content).toBe(false);
     expect(result.content).toContain(DEVICE_HEX);
     expect(result.content).toContain(PRINCIPAL_HEX);
+
+    await store.shutdown();
+  });
+
+  test("gateway_list_trusted reports a device trusted only through a principal, with the principal that vouches for it", async () => {
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    await wireTestTransport(store);
+    await store.init();
+    const agent = await store.registerAgent({
+      name: "gateway-list-member-test",
+      harness: "test",
+      cwd: "/test",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
+    const tool = new CommsTool(store);
+    const memberHex = "1234567812345678";
+    store.addTrustedGatewayPrincipal(PRINCIPAL_HEX);
+    store.gatewayTrust.noteVerifiedMember(
+      memberHex,
+      PRINCIPAL_HEX,
+      Date.now() + ONE_HOUR_MS,
+    );
+
+    const result = await tool.handle(
+      { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
+      { action: "gateway_list_trusted" },
+    );
+
+    expect(result.isError, result.content).toBe(false);
+    expect(result.content).toContain(
+      `Devices trusted through a principal:\n  ${memberHex} (vouched for by ${PRINCIPAL_HEX})`,
+    );
 
     await store.shutdown();
   });

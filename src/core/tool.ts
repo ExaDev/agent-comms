@@ -164,6 +164,8 @@ export interface MeshOnlyFeatures {
   revokeAgentDmAccess?: (bearerId: string) => Promise<void>;
   removeTrustedGatewayPrincipal?: (deviceHex: string) => void;
   listTrustedGatewayPrincipals?: () => string[];
+  /** Devices trusted only because a trusted principal vouches for them (a verified membership proof), with that principal. */
+  listVerifiedMembers?: () => { device: string; principal: string }[];
   /** deviceId's own gossiped agent-comms package version, cached from whatever it last advertised -- undefined for a device this side has never heard gossip from, or one running a version that predates agent-comms#198. */
   getPeerAgentCommsVersion?: (deviceId: string) => string | undefined;
   /** deviceId's own gossiped cc-peer package version, present only while that device is actually fronting a cc-peer session or running the one-shot `bridge cc-peer` command. */

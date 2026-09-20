@@ -32,6 +32,7 @@ import {
   mergeKnownDevices,
   startGossipInterval,
 } from "./gossip-directory.js";
+import { directoryAdmission } from "./directory-admission.js";
 import {
   connectHubGateway,
   forwardAdvertsToHub,
@@ -272,6 +273,7 @@ export class WireMeshTransport implements MeshTransport {
       dataStorage,
       getSelfAgentAdvert,
       gatewayTrust = new GatewayTrust(),
+      verifyMembership,
     } = options ?? {};
     this.events = events;
     this.wireTransport = createTlsTransport({
@@ -301,9 +303,7 @@ export class WireMeshTransport implements MeshTransport {
       },
       handleRoomRequest: this.roomRouter.handleRequest,
       isTrusted: (deviceHex) => this.gatewayTrust.isTrusted(deviceHex),
-      isTrustedForDirectory: (deviceHex) =>
-        this.gatewayTrust.isTrusted(deviceHex) ||
-        this.gatewayTrust.isTrustedPrincipal(deviceHex),
+      admitEntry: directoryAdmission({ gatewayTrust, verifyMembership }),
       forwardToLocalPeer: makeSendToLocalPeer(this.peerSessions),
     });
     this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;

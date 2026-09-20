@@ -66,10 +66,10 @@ export interface HubSessionDeps {
     handle: Readonly<ConnectionHandle>,
     origin?: Readonly<RoomRequestOrigin>,
   ) => Promise<void>;
-  /** The gateway trust boundary (agent-comms#156): whether the given device-id (hex) is currently trusted as a bare device. Since agent-comms#192, this gates only the traffic that carries no independent per-message security of its own: the legacy FRAME_VERB path (consume()'s own doc explains why) and dispatchHubRequest's own hubPeersKnown bookkeeping for a room-domain sender. A real room-domain verb's own dispatch is never gated on this at all; see dispatchHubRequest's own doc for why that is sound. connect()'s own directory-merge filter uses isTrustedForDirectory below instead, not this. */
+  /** The gateway trust boundary (agent-comms#156): whether the given device-id (hex) is currently trusted as a bare device. Since agent-comms#192, this gates only the traffic that carries no independent per-message security of its own: the legacy FRAME_VERB path (consume()'s own doc explains why) and dispatchHubRequest's own hubPeersKnown bookkeeping for a room-domain sender. A real room-domain verb's own dispatch is never gated on this at all; see dispatchHubRequest's own doc for why that is sound. connect()'s own directory-merge filter uses admitEntry below instead, not this. */
   isTrusted: (deviceHex: string) => boolean;
-  /** Whether the given device-id (hex) is trusted for gossip directory-merge purposes (agent-comms#192): true when it is on the same bare-device allowlist isTrusted above checks, or when it is itself a trusted user-principal's own device-id (agent-comms#187's GatewayTrust.isTrustedPrincipal). A gossiped directory entry carries no capability token to chain-verify, only a bare device-id, so this can't reuse isTrustedFor's own bearer/rootIssuer chain check the way a real capability-token verification does; checking the gossiped device-id directly against the principal set is the sound degenerate case of that check, since a principal's own device presenting itself is, trivially, its own chain root. Scoped to connect()'s own directory-merge filter only: every other isTrusted call site keeps its original bare-device-only meaning, since agent-comms#192 only asked for the principal extension here. */
-  isTrustedForDirectory: (deviceHex: string) => boolean;
+  /** Whether a gossiped directory entry may be merged (agent-comms#156, widened by #187 and #266): its device is trusted by id, or is itself a trusted principal's own device (agent-comms#192), or carries a membership proof a trusted principal vouches for. A gossiped advert is self-asserted, so the proof is what makes trusting a principal cover its devices; verifying one is cryptography, hence asynchronous. */
+  admitEntry: (entry: Readonly<DirectoryEntry>) => Promise<boolean>;
   /** Forwards a room-domain manage-request on to a specific LOCAL peer session (one this gateway is directly connected to over the ordinary local mesh, keyed by device-id hex) rather than dispatching it against this gateway's own local state -- consume()'s own toDevice disambiguation (agent-comms#184, wire-mesh-core 1.48.1's IncomingManageRequest.toDevice). Returns undefined when no local session exists for that device-id, in which case consume() falls back to handleRoomRequest exactly as it always has. */
   forwardToLocalPeer: (
     deviceHex: string,
@@ -140,16 +140,18 @@ export class HubSession {
     this.connection = connection;
     this.url = url;
     this.deps.trackForShutdown(session);
-    // Merge the hub's directory (its catch-up arrives as the first session events) and keep refreshing it on every subsequent one. Every trusted remote entry is also surfaced via onDirectory, so the transport can merge it into its own mesh-wide knownDevices (agent-comms#155's remote-directory-merge leg). Filtered to isTrustedForDirectory (agent-comms#156, widened by agent-comms#187's principal allowlist per agent-comms#192) before either hubPeersKnown tracking or onDirectory sees it: an untrusted device's gossiped presence is not merely withheld from listAgents, it is never even recorded as "known" here, so nothing downstream can act on it via any path this class exposes.
+    // Merge the hub's directory (its catch-up arrives as the first session events) and keep refreshing it on every subsequent one. Every trusted remote entry is also surfaced via onDirectory, so the transport can merge it into its own mesh-wide knownDevices (agent-comms#155's remote-directory-merge leg). Filtered to admitEntry (agent-comms#156, widened by agent-comms#187's principal allowlist per agent-comms#192 and by #266's membership proofs) before either hubPeersKnown tracking or onDirectory sees it: an untrusted device's gossiped presence is not merely withheld from listAgents, it is never even recorded as "known" here, so nothing downstream can act on it via any path this class exposes.
     void (async () => {
       const ownHex = deviceIdToHex(identity.deviceId);
       for await (const event of session.events) {
         if (this.deps.isShuttingDown()) break;
-        const remoteEntries = event.directory.filter(
-          (entry) =>
-            deviceIdToHex(entry.device) !== ownHex &&
-            this.deps.isTrustedForDirectory(deviceIdToHex(entry.device)),
-        );
+        const remoteEntries: DirectoryEntry[] = [];
+        for (const entry of event.directory) {
+          if (deviceIdToHex(entry.device) === ownHex) continue;
+          if (await this.deps.admitEntry(entry)) {
+            remoteEntries.push(entry);
+          }
+        }
         for (const entry of remoteEntries) {
           this.hubPeersKnown.add(deviceIdToHex(entry.device));
         }
