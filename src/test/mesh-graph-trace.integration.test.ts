@@ -149,10 +149,15 @@ describe("WireMeshTransport meshGraph/meshTrace (agent-comms#199)", () => {
       const storeB = new MeshStore();
       const { transport: transportB } = await wireTestTransportWithHub(storeB);
       try {
+        // A relay-connect naming a device the hub has not yet registered is dropped silently, and registration follows the hub verifying that device's gossiped advert, so being connected is not enough to trace to a peer. Mutual gateway trust lets each side's own hub directory surface the other, and A seeing B there means the hub registered B.
+        storeA.gatewayTrust.add(storeB.peerId);
+        storeB.gatewayTrust.add(storeA.peerId);
         await transportA.connectHub?.(hub.url);
         await transportB.connectHub?.(hub.url);
         await waitForCondition(
-          () => transportA.hub.isConnected && transportB.hub.isConnected,
+          () =>
+            transportA.hub.peers().includes(storeB.peerId) &&
+            transportB.hub.peers().includes(storeA.peerId),
         );
 
         const result = await transportA.meshTrace(storeB.peerId);
