@@ -170,11 +170,35 @@ export const DmMessageSchema = defineSchema(
 );
 export type DmMessage = z.infer<typeof DmMessageSchema>;
 
-const DeliveryStatusSchema = defineSchema(
-  z.union([z.literal("delivered"), z.literal("read")]),
+/** Why a directed send did not reach its recipient yet, in a way a later retry may still fix: the request deadline passed with no answer (timeout), no route to the recipient existed when it was attempted (not_connected), or the connection carrying it dropped mid-request (connection_lost). Every other failure is a refusal the recipient will repeat on every retry, so it is never one of these. */
+export const TransientSendFailureSchema = defineSchema(
+  z.union([
+    z.literal("timeout"),
+    z.literal("not_connected"),
+    z.literal("connection_lost"),
+  ]),
 );
-export type DeliveryStatus = z.infer<typeof DeliveryStatusSchema>;
-export { DeliveryStatusSchema as DeliveryStatus };
+export type TransientSendFailure = z.infer<typeof TransientSendFailureSchema>;
+
+/**
+ * What has become of one message for one recipient. Discriminated on status rather than carried as flags, so a state that has something to say carries exactly its own reason and no state can be combined with another: a message is delivered, or read, or held for retry, or refused, or gone, never two of those at once.
+ *
+ * delivered: the recipient's own side accepted the message and answered ok. read: the recipient's bridge consumed it. queued: the first attempt failed transiently and the message is held for retry, undelivered. refused: the recipient answered with a failure a retry cannot fix, naming the wire code it answered with. dropped: the message was evicted from the retry queue to keep it within its bound. expired: the message sat in the retry queue past its maximum age. The last three are terminal -- nothing further will be attempted for that recipient.
+ */
+export const MessageDeliverySchema = defineSchema(
+  z.discriminatedUnion("status", [
+    z.object({ status: z.literal("delivered") }),
+    z.object({ status: z.literal("read") }),
+    z.object({
+      status: z.literal("queued"),
+      reason: TransientSendFailureSchema,
+    }),
+    z.object({ status: z.literal("refused"), code: z.string() }),
+    z.object({ status: z.literal("dropped") }),
+    z.object({ status: z.literal("expired") }),
+  ]),
+);
+export type MessageDelivery = z.infer<typeof MessageDeliverySchema>;
 
 // ---------------------------------------------------------------------------
 // Delivery events
@@ -232,7 +256,7 @@ export const DeliveryEventSchema = defineSchema(
       type: z.literal("delivery_status"),
       messageId: z.string(),
       agent: z.string(),
-      status: DeliveryStatusSchema,
+      delivery: MessageDeliverySchema,
       room: z.string().optional(),
     }),
     z.object({

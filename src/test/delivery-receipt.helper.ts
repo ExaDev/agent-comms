@@ -416,7 +416,7 @@ async function testReadReceiptPush(): Promise<void> {
 
   const readReceipt = deliveriesA.find(
     (ev): ev is Extract<DeliveryEvent, { type: "delivery_status" }> =>
-      ev.type === "delivery_status" && ev.status === "read",
+      ev.type === "delivery_status" && ev.delivery.status === "read",
   );
   assert.ok(readReceipt !== undefined, "A should receive a read receipt");
   assert.strictEqual(readReceipt.agent, b.peerId);
@@ -475,7 +475,7 @@ async function testReadReceiptDrain(): Promise<void> {
   await sleep(MESH_PROPAGATION_SETTLE_MS);
 
   const readReceipt = deliveriesA.find(
-    (ev) => ev.type === "delivery_status" && ev.status === "read",
+    (ev) => ev.type === "delivery_status" && ev.delivery.status === "read",
   );
   assert.ok(
     readReceipt !== undefined,
@@ -532,7 +532,7 @@ async function testReadbyArray(): Promise<void> {
   await sleep(READBY_SETTLE_MS);
 
   const messages = await a.readRoomMessages(room.id);
-  const sent = messages.find((m) => m.id === msg.id);
+  const sent = messages.find((m) => m.id === msg.message.id);
   assert.ok(sent !== undefined, "Should find the sent message");
   assert.ok(
     sent.readBy.includes(b.peerId),

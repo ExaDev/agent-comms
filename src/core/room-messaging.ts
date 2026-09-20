@@ -8,17 +8,34 @@ import { loadRoomTokens } from "./identity-store.js";
 import { randomId } from "./random-id.js";
 import { recordRoomSendNotice } from "./room-notice-log.js";
 import { CommsError } from "./store.js";
+import { describeRefusal } from "./send-outcome.js";
+import type { RoomRequestOutcome } from "./send-outcome.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import type { RoomProtocol } from "./room-protocol.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type {
   AgentIdentity,
   DmMessage,
+  MessageDelivery,
   Room,
   RoomMessage,
   StreamingBehavior,
 } from "./types.js";
-import type { SendRoomMessageOptions } from "./comms-store.js";
+import type {
+  MemberDelivery,
+  SentDm,
+  SentRoomMessage,
+  SendRoomMessageOptions,
+} from "./comms-store.js";
+
+/** Turns one member's send outcome into the delivery state its sender is told about. A refusal is not represented here at all: a refused send raises rather than resolving, so this only ever maps the two states a resolved send can be in. */
+function deliveryFromOutcome(
+  outcome: Readonly<Exclude<RoomRequestOutcome, { kind: "refused" }>>,
+): MessageDelivery {
+  return outcome.kind === "delivered"
+    ? { status: "delivered" }
+    : { status: "queued", reason: outcome.reason };
+}
 
 /** The state and collaborators RoomMessaging needs from MeshStore. rooms/messages/dms are direct references into MeshStore's own fields; roomProtocol is the already-constructed instance (construction order: ... -\> roomProtocol -\> roomMessaging -\> ...), narrowed to what sending a message or DM ever needs; resolveAgent is AgentRegistry's own getAgent (deferred the same lazy-closure way DeliveryEngine's sendRoomRequestToMember closure is, since AgentRegistry doesn't exist yet at RoomMessaging's own construction point) rather than a bare `agents.get` lookup, so sendDm's own existence check also resolves a gossip-discovered agent (a remote, hub-learned one included, agent-comms#155) that will never appear in the agents map directly. */
 export interface RoomMessagingDeps {
@@ -46,13 +63,15 @@ export class RoomMessaging {
    * Sends a room message via a real, wire-authenticated room.send fan-out (P3.5): one directed request per member, each carrying this sender's own persisted room:member token, rather than the legacy broadcastPatch's full-state replication. A member unreachable right now is queued for retry (see sendRoomRequestToMember/flushPendingRoomRequests) instead of blocking or failing the whole send -- delivery to any one recipient is independent of every other.
    *
    * durable, when true, additionally records this same message as a room-notice in the sender's own oplog via recordRoomSendNotice (P5, agent-comms#50) -- deliberately opt-in per call, not automatic: matching this codebase's own design principle that delivery and durable catch-up are the same artifact only when a caller actually opts a message into it. A caller that wants an offline member to be able to catch up on this specific message later passes true; every other send stays exactly as before.
+   *
+   * Returns the message alongside one delivery state per remote member, so the caller can tell who actually received it from who it is merely queued for. A member that refuses the message outright raises: a refusal is the member's settled answer, not a state to report as pending, and a fan-out whose members cannot all be reported honestly is not a successful send.
    */
   async sendRoomMessage(
     roomIdOrName: string,
     from: string,
     content: string,
     options?: RoomMessagingSendOptions,
-  ): Promise<RoomMessage> {
+  ): Promise<SentRoomMessage> {
     const { replyTo, streamingBehavior, durable } = options ?? {};
     const roomId = this.deps.resolveRoomId(roomIdOrName);
     const room = this.deps.rooms.get(roomId);
@@ -109,18 +128,26 @@ export class RoomMessaging {
       }),
     };
 
+    const deliveries: MemberDelivery[] = [];
     for (const memberId of room.members) {
-      if (memberId !== from) {
-        await this.deps.roomProtocol.sendRoomRequestToMember(
-          memberId,
-          roomId,
-          token,
-          params,
-        );
-      }
+      if (memberId === from) continue;
+      const outcome = await this.deps.roomProtocol.sendRoomRequestToMember(
+        memberId,
+        roomId,
+        token,
+        params,
+      );
+      // A refusal is reported as this member's own delivery state rather than raised, unlike sendDm's single recipient: delivery to any one member is independent of every other, so one member's refusal must neither stop the message reaching the rest nor discard what became of them.
+      deliveries.push({
+        member: memberId,
+        delivery:
+          outcome.kind === "refused"
+            ? { status: "refused", code: describeRefusal(outcome) }
+            : deliveryFromOutcome(outcome),
+      });
     }
 
-    return message;
+    return { message, deliveries };
   }
 
   async readRoomMessages(
@@ -135,14 +162,16 @@ export class RoomMessaging {
   }
 
   /**
-   * Sends a DM via the same wire-authenticated room.send fan-out sendRoomMessage uses (P3.5): a DM is just a dm-shaped room path with exactly one other member, so it rides the identical mechanism rather than a separate one. Self-DM is the one exception -- a purely local scratchpad note that never leaves the process, so it needs no token and no wire round trip at all.
+   * Sends a DM via the same wire-authenticated room.send fan-out sendRoomMessage uses (P3.5): a DM is just a dm-shaped room path with exactly one other member, so it rides the identical mechanism rather than a separate one. Self-DM is the one exception -- a purely local scratchpad note that never leaves the process, so it needs no token and no wire round trip at all, and is delivered the moment it is recorded.
+   *
+   * Returns the message alongside what actually became of it, so a caller can never mistake a message merely held for retry for one the recipient received. A recipient that refuses the message raises SEND_REFUSED naming its own reason: a DM has exactly one recipient, so its refusal is the whole send failing, and no retry will change it.
    */
   async sendDm(
     from: string,
     to: string,
     content: string,
     streamingBehavior?: StreamingBehavior,
-  ): Promise<DmMessage> {
+  ): Promise<SentDm> {
     if (to !== from) {
       const recipient = await this.deps.resolveAgent(to);
       if (!recipient)
@@ -173,26 +202,34 @@ export class RoomMessaging {
     arr.push(message);
     this.deps.dms.set(key, arr);
 
-    if (token !== undefined) {
-      const { clock } = this.deps.requireIdentity();
-      const params: Record<string, unknown> = {
-        verb: "room.send",
-        "message-id": messageId,
-        "sent-at": clock.now(),
-        text: content,
-        ...(streamingBehavior !== undefined && {
-          "streaming-behavior": streamingBehavior,
-        }),
-      };
-      await this.deps.roomProtocol.sendRoomRequestToMember(
-        to,
-        key,
-        token,
-        params,
+    // A self-DM never leaves the process, so it is already exactly as delivered as it will ever be by the time it is recorded above.
+    if (token === undefined)
+      return { message, delivery: { status: "delivered" } };
+
+    const { clock } = this.deps.requireIdentity();
+    const params: Record<string, unknown> = {
+      verb: "room.send",
+      "message-id": messageId,
+      "sent-at": clock.now(),
+      text: content,
+      ...(streamingBehavior !== undefined && {
+        "streaming-behavior": streamingBehavior,
+      }),
+    };
+    const outcome = await this.deps.roomProtocol.sendRoomRequestToMember(
+      to,
+      key,
+      token,
+      params,
+    );
+    if (outcome.kind === "refused") {
+      throw new CommsError(
+        `DM to ${to} refused (${describeRefusal(outcome)})`,
+        "SEND_REFUSED",
       );
     }
 
-    return message;
+    return { message, delivery: deliveryFromOutcome(outcome) };
   }
 
   /** The room:member token this device holds for its DM path with `to`, requesting DM access from `to` first when none is persisted yet. Throws NOT_MEMBER if the request resolves without a token having been persisted, since no send can be authenticated without one. */

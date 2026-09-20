@@ -32,7 +32,12 @@ import type {
   StreamingBehavior,
   Visibility,
 } from "./types.js";
-import type { CommsStore, SendRoomMessageOptions } from "./comms-store.js";
+import type {
+  CommsStore,
+  SendRoomMessageOptions,
+  SentDm,
+  SentRoomMessage,
+} from "./comms-store.js";
 
 // ---------------------------------------------------------------------------
 // CommsError
@@ -496,7 +501,7 @@ export class FileStore implements CommsStore {
     from: string,
     content: string,
     options?: SendRoomMessageOptions,
-  ): Promise<RoomMessage> {
+  ): Promise<SentRoomMessage> {
     const { replyTo, streamingBehavior } = options ?? {};
     const room = await this.getRoom(roomId);
     if (!room)
@@ -528,7 +533,16 @@ export class FileStore implements CommsStore {
       from,
     );
 
-    return message;
+    // A file-backed store hands every member's copy straight to the filesystem, which either succeeds or throws -- there is no unreachable member and nothing to hold for retry, so every member's delivery is settled the moment this returns.
+    return {
+      message,
+      deliveries: room.members
+        .filter((member) => member !== from)
+        .map((member) => ({
+          member,
+          delivery: { status: "delivered" as const },
+        })),
+    };
   }
 
   async readRoomMessages(
@@ -564,7 +578,7 @@ export class FileStore implements CommsStore {
     to: string,
     content: string,
     streamingBehavior?: StreamingBehavior,
-  ): Promise<DmMessage> {
+  ): Promise<SentDm> {
     if (to !== from) {
       const recipient = await this.getAgent(to);
       if (!recipient)
@@ -590,7 +604,7 @@ export class FileStore implements CommsStore {
 
     await this.deliver(to, { type: "dm", message });
 
-    return message;
+    return { message, delivery: { status: "delivered" } };
   }
 
   // -------------------------------------------------------------------------

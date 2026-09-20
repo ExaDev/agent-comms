@@ -67,7 +67,9 @@ function agent(overrides: Partial<AgentIdentity> = {}): AgentIdentity {
 }
 
 function makeHarness() {
-  const sendRoomRequestToMember = vi.fn().mockResolvedValue(undefined);
+  const sendRoomRequestToMember = vi
+    .fn()
+    .mockResolvedValue({ kind: "delivered" });
   const requestDmAccess = vi.fn().mockResolvedValue(undefined);
   // Backs the default resolveAgent mock below -- a plain lookup Map standing in for AgentRegistry.getAgent's own real "known, else gossip-discovered" resolution, which RoomMessaging itself never sees; it only calls resolveAgent opaquely.
   const agents = new Map<string, AgentIdentity>();
@@ -137,7 +139,7 @@ describe("RoomMessaging — sendRoomMessage", () => {
     );
     vi.mocked(loadRoomTokens).mockReturnValue({ [roomPath]: FAKE_TOKEN });
 
-    const message = await h.messaging.sendRoomMessage(
+    const { message } = await h.messaging.sendRoomMessage(
       "general",
       FROM_DEVICE_ID,
       "hi",
@@ -189,7 +191,7 @@ describe("RoomMessaging — sendRoomMessage", () => {
   it("stores the message and records it in the room's history", async () => {
     const h = makeHarness();
     h.deps.rooms.set("room-1", room());
-    const message = await h.messaging.sendRoomMessage(
+    const { message } = await h.messaging.sendRoomMessage(
       "room-1",
       FROM_DEVICE_ID,
       "hello",
@@ -203,7 +205,7 @@ describe("RoomMessaging — sendRoomMessage", () => {
     const h = makeHarness();
     h.deps.rooms.set("room-1", room());
     const replyToId = "aa".repeat(MESSAGE_ID_BYTE_LENGTH);
-    const withReply = await h.messaging.sendRoomMessage(
+    const { message: withReply } = await h.messaging.sendRoomMessage(
       "room-1",
       FROM_DEVICE_ID,
       "hi",
@@ -211,7 +213,7 @@ describe("RoomMessaging — sendRoomMessage", () => {
     );
     expect(withReply.replyTo).toBe(replyToId);
 
-    const withoutReply = await h.messaging.sendRoomMessage(
+    const { message: withoutReply } = await h.messaging.sendRoomMessage(
       "room-1",
       FROM_DEVICE_ID,
       "hi",
@@ -223,7 +225,7 @@ describe("RoomMessaging — sendRoomMessage", () => {
     const h = makeHarness();
     h.deps.rooms.set("room-1", room());
 
-    const withBehavior = await h.messaging.sendRoomMessage(
+    const { message: withBehavior } = await h.messaging.sendRoomMessage(
       "room-1",
       FROM_DEVICE_ID,
       "hi",
@@ -231,7 +233,7 @@ describe("RoomMessaging — sendRoomMessage", () => {
     );
     expect(withBehavior.streamingBehavior).toBe("steer");
 
-    const withoutBehavior = await h.messaging.sendRoomMessage(
+    const { message: withoutBehavior } = await h.messaging.sendRoomMessage(
       "room-1",
       FROM_DEVICE_ID,
       "hi",
@@ -423,7 +425,7 @@ describe("RoomMessaging — sendDm", () => {
     vi.mocked(loadRoomTokens).mockReturnValue({
       [dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID)]: FAKE_TOKEN,
     });
-    const message = await h.messaging.sendDm(
+    const { message } = await h.messaging.sendDm(
       FROM_DEVICE_ID,
       TO_DEVICE_ID,
       "hi",
@@ -434,7 +436,7 @@ describe("RoomMessaging — sendDm", () => {
 
   it("skips recipient validation entirely for a self-DM", async () => {
     const h = makeHarness();
-    const message = await h.messaging.sendDm(
+    const { message } = await h.messaging.sendDm(
       FROM_DEVICE_ID,
       FROM_DEVICE_ID,
       "note to self",
@@ -444,7 +446,7 @@ describe("RoomMessaging — sendDm", () => {
 
   it("stores a self-DM under a self:<id> key and never dials out", async () => {
     const h = makeHarness();
-    const message = await h.messaging.sendDm(
+    const { message } = await h.messaging.sendDm(
       FROM_DEVICE_ID,
       FROM_DEVICE_ID,
       "note to self",
@@ -460,7 +462,7 @@ describe("RoomMessaging — sendDm", () => {
       [dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID)]: FAKE_TOKEN,
     });
 
-    const message = await h.messaging.sendDm(
+    const { message } = await h.messaging.sendDm(
       FROM_DEVICE_ID,
       TO_DEVICE_ID,
       "hi",
@@ -478,7 +480,7 @@ describe("RoomMessaging — sendDm", () => {
 
   it("sets readBy to exactly the sender on a new DM", async () => {
     const h = makeHarness();
-    const message = await h.messaging.sendDm(
+    const { message } = await h.messaging.sendDm(
       FROM_DEVICE_ID,
       FROM_DEVICE_ID,
       "hi",
@@ -488,7 +490,7 @@ describe("RoomMessaging — sendDm", () => {
 
   it("includes streamingBehavior on the stored message only when given", async () => {
     const h = makeHarness();
-    const withBehavior = await h.messaging.sendDm(
+    const { message: withBehavior } = await h.messaging.sendDm(
       FROM_DEVICE_ID,
       FROM_DEVICE_ID,
       "hi",
@@ -496,7 +498,7 @@ describe("RoomMessaging — sendDm", () => {
     );
     expect(withBehavior.streamingBehavior).toBe("followUp");
 
-    const withoutBehavior = await h.messaging.sendDm(
+    const { message: withoutBehavior } = await h.messaging.sendDm(
       FROM_DEVICE_ID,
       FROM_DEVICE_ID,
       "hi",
@@ -512,7 +514,7 @@ describe("RoomMessaging — sendDm", () => {
       .mockReturnValueOnce({})
       .mockReturnValue({ [key]: FAKE_TOKEN });
 
-    const message = await h.messaging.sendDm(
+    const { message } = await h.messaging.sendDm(
       FROM_DEVICE_ID,
       TO_DEVICE_ID,
       "hi",

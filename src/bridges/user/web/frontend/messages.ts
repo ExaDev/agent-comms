@@ -5,6 +5,7 @@
  */
 
 import type { DeliveryEvent, DisplayMessage, RoomMessage } from "./types.js";
+import { describeDeliveryFor } from "../../../../core/send-outcome.js";
 
 /** Format an ISO timestamp to HH:MM:SS for display. */
 const ISO_TIME_OF_DAY_START = 11;
@@ -58,7 +59,7 @@ export function deliveryEventToMessage(
     case "delivery_status":
       return {
         type: "status",
-        text: `Message ${event.messageId} ${event.status} by ${event.agent}`,
+        text: `Message ${event.messageId} ${describeDeliveryFor(event.delivery, event.agent)}`,
       };
 
     case "room_members":

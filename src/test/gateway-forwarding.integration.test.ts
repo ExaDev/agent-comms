@@ -252,11 +252,11 @@ describe("gateway forwarding", () => {
 
     await waitFor("a1 to receive the DM via the hub", async () => {
       const a1Dms = a1.serialise().dms[dmPath] ?? [];
-      return a1Dms.some((m) => m.id === message.id);
+      return a1Dms.some((m) => m.id === message.message.id);
     });
 
     const delivered = (a1.serialise().dms[dmPath] ?? []).find(
-      (m) => m.id === message.id,
+      (m) => m.id === message.message.id,
     );
     expect(delivered).toMatchObject({
       from: b1.peerId,

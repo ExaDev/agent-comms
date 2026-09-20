@@ -23,6 +23,7 @@ import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type { DiscoveryManager } from "./discovery.js";
 import { CommsError } from "./store.js";
 import { getOwnPackageVersion } from "./package-version.js";
+import { describeDeliveryFor } from "./send-outcome.js";
 import {
   formatListedAgentVersions,
   formatSelfVersionLines,
@@ -520,7 +521,7 @@ export class CommsTool {
     action: CommsAction & { action: "send" },
   ): Promise<CommsResult> {
     const roomId = action.target;
-    const msg = await this.store.sendRoomMessage(
+    const { message, deliveries } = await this.store.sendRoomMessage(
       roomId,
       ctx.agentId,
       action.content,
@@ -529,9 +530,25 @@ export class CommsTool {
         streamingBehavior: action.streamingBehavior,
       },
     );
+    const unsettled = deliveries.filter(
+      (entry) => entry.delivery.status !== "delivered",
+    );
+    if (unsettled.length === 0) {
+      return {
+        content: `Sent to ${action.target}: ${message.id}`,
+        isError: false,
+      };
+    }
+    const detail = unsettled
+      .map((entry) => describeDeliveryFor(entry.delivery, entry.member))
+      .join("; ");
+    // A refusal is the recipient's settled answer and no retry will change it, so the caller is told this send failed for that member. A member it is merely queued for may still receive it, so that is reported as a fact about the send rather than as its failure.
+    const refused = unsettled.some(
+      (entry) => entry.delivery.status === "refused",
+    );
     return {
-      content: `Sent to ${action.target}: ${msg.id}`,
-      isError: false,
+      content: `Sent to ${action.target}: ${message.id}. Not delivered to every member: ${detail}.`,
+      isError: refused,
     };
   }
 
@@ -540,14 +557,15 @@ export class CommsTool {
     action: CommsAction & { action: "dm" },
   ): Promise<CommsResult> {
     const targetId = action.target;
-    const msg = await this.store.sendDm(
+    const { message, delivery } = await this.store.sendDm(
       ctx.agentId,
       targetId,
       action.content,
       action.streamingBehavior,
     );
+    // A DM the recipient refused never reaches here: sendDm raises SEND_REFUSED, which handle() turns into an error result naming the reason. What is left is a real delivery or a message merely held for retry, and the wording distinguishes the two rather than calling both "sent".
     return {
-      content: `DM sent to ${action.target}: ${msg.id}`,
+      content: `DM ${describeDeliveryFor(delivery, action.target)}: ${message.id}`,
       isError: false,
     };
   }

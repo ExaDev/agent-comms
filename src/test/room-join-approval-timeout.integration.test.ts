@@ -95,7 +95,8 @@ test("a decision inside the window still admits the requester, and the cleared w
       setTimeout(resolve, APPROVAL_WINDOW_MS * 2);
     });
     await waitFor(
-      () => (b.serialise().dms[dmPath] ?? []).some((m) => m.id === sent.id),
+      () =>
+        (b.serialise().dms[dmPath] ?? []).some((m) => m.id === sent.message.id),
       "b received the first DM",
     );
     expect(b.listPendingRoomJoins()).toEqual([]);

@@ -22,6 +22,7 @@
 import * as readline from "node:readline";
 import { ChatController } from "./controller.js";
 import type { DeliveryEvent } from "../../core/types.js";
+import { describeDeliveryFor } from "../../core/send-outcome.js";
 
 // ANSI helpers
 const BOLD = "\x1b[1m";
@@ -272,7 +273,7 @@ function formatForTerminal(event: DeliveryEvent): string {
     case "member_status":
       return `${CYAN}● ${event.agent} is now ${event.status} in ${event.room}${RESET}`;
     case "delivery_status":
-      return `${DIM}✓ Message ${event.messageId} ${event.status} by ${event.agent}${RESET}`;
+      return `${DIM}✓ Message ${event.messageId} ${describeDeliveryFor(event.delivery, event.agent)}${RESET}`;
     case "room_invite": {
       const desc = event.roomDescription ? ` — ${event.roomDescription}` : "";
       return `${CYAN}✉ ${event.fromName} invited you to "${event.room}"${desc}${RESET}`;

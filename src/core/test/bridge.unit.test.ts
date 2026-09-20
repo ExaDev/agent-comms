@@ -123,7 +123,7 @@ describe("isActionableEvent", () => {
       type: "delivery_status",
       messageId: "m1",
       agent: "a1",
-      status: "delivered",
+      delivery: { status: "delivered" },
     };
     expect(isActionableEvent(event)).toBe(false);
   });
