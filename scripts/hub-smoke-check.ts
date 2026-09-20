@@ -1,4 +1,4 @@
-// One-off live smoke check: two real WireMeshTransport instances in this process, both dialling the production hub (wss://mesh.exadev.io/), discovering each other via the hub's gossip, and exchanging a message through a relay pairing. Run with: npx tsx scripts/hub-smoke-check.ts
+// One-off live smoke check: two real WireMeshTransport instances in this process, both dialling the production hub (wss://mesh.exadev.io/), discovering each other via the hub's gossip, and completing a path.trace request through a relay pairing. Run with: npx tsx scripts/hub-smoke-check.ts
 
 import { generateIdentity } from "../src/core/identity.js";
 import { WireMeshTransport } from "../src/core/wire-mesh-transport.js";
@@ -10,9 +10,9 @@ const DISCOVERY_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 100;
 const SHUTDOWN_GRACE_MS = 500;
 
-function inertEvents(onMessage: TransportEvents["onMessage"]): TransportEvents {
+function inertEvents(): TransportEvents {
   return {
-    onMessage,
+    onMessage: () => undefined,
     onPeerConnected: () => undefined,
     onPeerDisconnected: () => undefined,
     onIntroduction: () => undefined,
@@ -32,15 +32,8 @@ async function sleep(ms: number): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  let received = "";
-  let receivedFrom = "";
-  const eventsA = inertEvents(() => undefined);
-  const eventsB = inertEvents((handle, message) => {
-    if (message.method === "peer_joined") {
-      received = message.peer.id;
-      receivedFrom = handle.id;
-    }
-  });
+  const eventsA = inertEvents();
+  const eventsB = inertEvents();
 
   const trustA = new GatewayTrust();
   const trustB = new GatewayTrust();
@@ -81,35 +74,18 @@ async function main(): Promise<void> {
     throw new Error("mutual discovery did not happen within the timeout");
   }
 
-  console.log("sending a message from A to B through the relay pairing...");
-  await transportA.hub.sendToPeer(deviceB, {
-    method: "peer_joined",
-    peer: {
-      id: "hub-smoke-payload",
-      port: 0,
-      startedAt: "2026-01-01T00:00:00.000Z",
-    },
-  });
-
-  const sendStarted = Date.now();
-  while (received === "" && Date.now() - sendStarted < DISCOVERY_TIMEOUT_MS) {
-    await sleep(POLL_INTERVAL_MS);
-  }
-  if (received !== "hub-smoke-payload") {
-    throw new Error("B never received the relayed message within the timeout");
-  }
-  console.log(
-    `B received the message from ${receivedFrom} (expected ${deviceA})`,
-  );
-  if (receivedFrom !== deviceA) {
-    throw new Error("message attributed to the wrong sender");
+  console.log("tracing a path from A to B through the relay pairing...");
+  const trace = await transportA.hub.tracePath(deviceB, DISCOVERY_TIMEOUT_MS);
+  console.log(`trace outcome: ${trace.outcome.result}`);
+  if (trace.outcome.result !== "ok") {
+    throw new Error("B never answered the relayed path.trace");
   }
 
   await transportA.shutdown();
   await transportB.shutdown();
   await sleep(SHUTDOWN_GRACE_MS);
   console.log(
-    "PASS: two agents discovered each other and exchanged a message through the production hub",
+    "PASS: two agents discovered each other and completed a relayed path.trace through the production hub",
   );
 }
 
