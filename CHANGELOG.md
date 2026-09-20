@@ -1,3 +1,13 @@
+## [5.2.1](https://github.com/ExaDev/agent-comms/compare/v5.2.0...v5.2.1) (2026-09-20)
+
+### Bug Fixes
+
+* **bridge:** deliver a fronted session's DM from the correspondent's alias ([3de7364](https://github.com/ExaDev/agent-comms/commit/3de73645c4315c519090203471211eb6a19ce660))
+
+### Documentation
+
+* describe alias-sender delivery and how to accept inbound messages ([d3f609b](https://github.com/ExaDev/agent-comms/commit/d3f609b7c03273c29ba22c2dcc1c8cc9595c1722))
+
 ## [5.2.0](https://github.com/ExaDev/agent-comms/compare/v5.1.0...v5.2.0) (2026-09-20)
 
 ### Features
