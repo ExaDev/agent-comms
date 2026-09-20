@@ -781,8 +781,9 @@ export class WireMeshTransport implements MeshTransport {
         manageRequestTimeoutMs(command, this.roomJoinApprovalTimeoutMs),
       );
     }
+    // no_route, never unauthorized: this side has nowhere to send the request, which is a fact about this side's own routing rather than an answer from memberId, and a caller must be able to tell the two apart. A device with no session that this side is willing to relay for may become reachable later, once it connects or once an operator trusts it, so a request for it is worth holding; a request the recipient itself refused never is.
     if (!this.gatewayTrust.isReachable(memberId)) {
-      return { result: "error", code: "unauthorized" };
+      return { result: "error", code: "no_route" };
     }
     return routeRoomRequestViaHub({
       hub: this.hub,
