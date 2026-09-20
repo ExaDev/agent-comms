@@ -53,18 +53,21 @@ sequenceDiagram
     P3->>P2: establish data connection
     Note over P1,P3: All peers now connected directly
     rect rgb(255, 230, 230)
-        Note over P1: Coordinator crashes
+        Note over P1: Coordinator is killed
         P2->>P2: race to bind 19876
         P3->>P3: race to bind 19876
-        Note over P2,P3: ~100ms recovery, longest-running wins
+        Note over P2,P3: the operating system's bind picks one winner
+        P3->>P2: loser re-introduces itself to the winner
     end
 ```
 
 - **Well-known port** 19876 on localhost — the only agreed-upon constant
 - The first instance to bind it becomes coordinator
 - Coordinator handles introductions only; it is not a router
-- On graceful shutdown, coordinator hands over to the longest-running peer
-- On crash, remaining peers race to bind the port (~100ms recovery)
+- On graceful shutdown, the coordinator names its longest-running peer as successor and hands the role over before closing
+- On a crash, every surviving peer independently races to rebind the port; the operating system's exclusive bind picks the single winner, and the losers re-introduce themselves to it
+
+Either way, direct peer-to-peer data connections are untouched, so messages between survivors keep flowing throughout. What is lost is what only the coordinator does: while no coordinator exists, no new peer can join (nothing answers the well-known port), no stale-agent probe runs, this machine has no gateway connection to the relay hub, and no cc-peer front is serving local Claude Code sessions that have no bridge of their own. The winner restarts all of that as it takes the role, and rebuilds hub-side state from scratch, so anything in flight across the gap is lost.
 
 ### Identity
 
@@ -190,7 +193,11 @@ const tool = new CommsTool(store);
 
 // 1. Initialise mesh and register identity
 await store.init();
-const { agentId } = await ensureRegistered({ store, harness: "my-harness", defaultName: "my-agent" });
+const { agentId } = await ensureRegistered({
+  store,
+  harness: "my-harness",
+  defaultName: "my-agent",
+});
 
 // 2. Wire delivery callback for real-time push
 store.onDelivery = (_targetId, event) => {
@@ -200,7 +207,10 @@ store.onDelivery = (_targetId, event) => {
 
 // 3. Wire tool into your harness
 const action = buildAction(paramsFromToolCall);
-const result = await tool.handle({ agentId, harness: "my-harness", cwd: process.cwd(), pid: process.pid }, action);
+const result = await tool.handle(
+  { agentId, harness: "my-harness", cwd: process.cwd(), pid: process.pid },
+  action,
+);
 ```
 
 See `src/bridges/` for working examples.
@@ -243,11 +253,11 @@ agent_comms({ action: "update", visibility: "hidden" })
 
 `send` and `dm` accept an optional `streamingBehavior` field that tells the receiving bridge how urgently to surface the message:
 
-| Value | Meaning | Pi bridge | Claude Code bridge | Drain bridges (MCP, Codex) |
-|---|---|---|---|---|
-| `steer` | Act now — react at the next decision boundary | `deliverAs: "steer"` | `[STEER]` prefix + `meta.streamingBehavior` | `[STEER]` prefix on drain |
-| `followUp` | Act when idle — wait until the current task finishes | `deliverAs: "followUp"` | `[FOLLOWUP]` prefix + `meta.streamingBehavior` | `[FOLLOWUP]` prefix on drain |
-| `info` | Whenever convenient (default, matches current behaviour) | Informational buffer | No prefix | No prefix |
+| Value      | Meaning                                                  | Pi bridge               | Claude Code bridge                             | Drain bridges (MCP, Codex)   |
+| ---------- | -------------------------------------------------------- | ----------------------- | ---------------------------------------------- | ---------------------------- |
+| `steer`    | Act now — react at the next decision boundary            | `deliverAs: "steer"`    | `[STEER]` prefix + `meta.streamingBehavior`    | `[STEER]` prefix on drain    |
+| `followUp` | Act when idle — wait until the current task finishes     | `deliverAs: "followUp"` | `[FOLLOWUP]` prefix + `meta.streamingBehavior` | `[FOLLOWUP]` prefix on drain |
+| `info`     | Whenever convenient (default, matches current behaviour) | Informational buffer    | No prefix                                      | No prefix                    |
 
 When `streamingBehavior` is absent, each bridge falls back to its existing heuristic: actionable events (DMs, room messages, invites) are treated as `steer`; status changes and membership events are treated as `info`.
 
@@ -262,7 +272,7 @@ Two independent transports sit inside that dashboard, both built on [oRPC](https
 - **Worker ↔ server**, over a real WebSocket at `/ws/mesh`. The worker is an oRPC client here, calling the same contract procedures the REST API exposes, plus a `subscribeEvents` procedure that streams mesh events as they happen.
 - **Tab ↔ worker**, over a `MessagePort`. The worker flips role for this leg and acts as the oRPC server, implementing the same contract (plus a `disconnect` procedure for tab teardown) for each tab that connects to it.
 
-Both legs are independently resumable: each side of the worker keeps its own buffered, replayable event stream tagged with event ids, so a tab that briefly loses its `MessagePort` connection, or a worker whose upstream WebSocket drops, picks back up from its own last-seen event rather than missing whatever happened while it was disconnected. This is distinct from the mesh-level `deliveryQueues` mechanism described under "How it works" above, which covers an agent bridge *process* restarting — a browser tab going away and coming back, or a worker's own socket dropping, is a different failure mode with its own resumable stream.
+Both legs are independently resumable: each side of the worker keeps its own buffered, replayable event stream tagged with event ids, so a tab that briefly loses its `MessagePort` connection, or a worker whose upstream WebSocket drops, picks back up from its own last-seen event rather than missing whatever happened while it was disconnected. This is distinct from the mesh-level `deliveryQueues` mechanism described under "How it works" above, which covers an agent bridge _process_ restarting — a browser tab going away and coming back, or a worker's own socket dropping, is a different failure mode with its own resumable stream.
 
 Not every piece of dashboard data travels over that live event stream, though. Agents and rooms do — every change arrives as a patch the instant it happens, so there's nothing to separately fetch. Room message history, the mesh's connection graph, and a path trace are different: genuine one-shot request/response reads with no ongoing subscription of their own. Those three go through [TanStack Query](https://tanstack.com/query), wired up via [oRPC's own TanStack Query integration](https://orpc.unnoq.com/docs/integrations/tanstack-query) over the same tab-to-worker oRPC client described above — caching, request de-duplication, and cache invalidation on the same events that already drive the live side of the dashboard.
 
@@ -286,19 +296,19 @@ To let a device DM you without deciding on the spot, admit it ahead of time. `dm
 
 ## Room types
 
-| Type | Discovery | Join | Read history |
-|------|-----------|------|-------------|
-| `public` | Listed in `list_rooms` | Anyone | Anyone |
-| `private` | Name visible | Invite only | Members only |
-| `secret` | Invisible | Invite only | Members only |
+| Type      | Discovery              | Join        | Read history |
+| --------- | ---------------------- | ----------- | ------------ |
+| `public`  | Listed in `list_rooms` | Anyone      | Anyone       |
+| `private` | Name visible           | Invite only | Members only |
+| `secret`  | Invisible              | Invite only | Members only |
 
 ## Visibility levels
 
-| Level | Listed | Can be DM'd | Room member list |
-|-------|--------|-------------|-----------------|
-| `visible` | ✓ | ✓ | ✓ |
-| `hidden` | ✗ | ✓ (if ID known) | Members only |
-| `ghost` | ✗ | ✗ | ✗ |
+| Level     | Listed | Can be DM'd     | Room member list |
+| --------- | ------ | --------------- | ---------------- |
+| `visible` | ✓      | ✓               | ✓                |
+| `hidden`  | ✗      | ✓ (if ID known) | Members only     |
+| `ghost`   | ✗      | ✗               | ✗                |
 
 ## Room member awareness
 
@@ -349,10 +359,10 @@ sequenceDiagram
     Mesh->>Mesh: broadcast message_read patch
 ```
 
-| Moment | Sender receives |
-|--------|-----------------|
-| Message queued for recipient | `delivery_status { status: "delivered" }` |
-| Recipient's bridge consumes it | `delivery_status { status: "read" }` |
+| Moment                         | Sender receives                           |
+| ------------------------------ | ----------------------------------------- |
+| Message queued for recipient   | `delivery_status { status: "delivered" }` |
+| Recipient's bridge consumes it | `delivery_status { status: "read" }`      |
 
 Read receipts fire when `onDelivery` is called (push bridges: pi, Claude Code) or when `drainDelivery` is called (drain bridges: MCP, Codex, OpenCode). Cross-peer read receipts propagate via a `message_read` mesh patch.
 
@@ -360,7 +370,9 @@ This works for both room messages and DMs.
 
 ## Stale agent cleanup
 
-The coordinator probes registered agent PIDs every 5 seconds using signal 0 (existence check). Dead agents are marked offline and the status is broadcast to all peers. Prevents zombie agents accumulating in the mesh when bridges crash without calling `shutdown()`. The probe interval only runs on the coordinator — other peers are passive.
+The coordinator retires an agent as soon as its peer's connection ends, marking it offline and broadcasting that to every other peer. Behind that, it also probes registered agent PIDs every 5 seconds using signal 0 (existence check), which catches an agent whose process is gone but whose socket has not closed. Either way the announcement comes from the coordinator alone, so a departure produces one status change rather than one per surviving peer; other peers are passive.
+
+Every bridge answers SIGTERM, SIGINT and SIGHUP by marking its own agent offline and shutting the store down, which is what hands the coordinator role on rather than leaving the mesh to the crash race. A bridge that owns its process exits afterwards; the OpenCode plugin, which runs inside its host's process, re-raises the signal instead and leaves the decision to the host. The pi extension uses pi's own `session_shutdown` hook for the same thing.
 
 ## Gateway trust and connection codes
 
@@ -420,4 +432,4 @@ agent_comms({
 })
 ```
 
-The fingerprint is never a trust anchor supplied by the keyserver — it's the thing the redeemer already independently trusts (from a business card, a prior verification, wherever), and the redeemer's own check is that the key actually fetched or pasted verifies to that exact fingerprint, not merely that *some* key was found. Redemption never calls back to whoever generated the code: the whole point is bootstrapping trust before any connection between the two devices exists.
+The fingerprint is never a trust anchor supplied by the keyserver — it's the thing the redeemer already independently trusts (from a business card, a prior verification, wherever), and the redeemer's own check is that the key actually fetched or pasted verifies to that exact fingerprint, not merely that _some_ key was found. Redemption never calls back to whoever generated the code: the whole point is bootstrapping trust before any connection between the two devices exists.
