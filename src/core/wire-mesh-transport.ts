@@ -282,7 +282,7 @@ export class WireMeshTransport implements MeshTransport {
     });
     this.identityReady = toIdentityPort(identity);
     this.gatewayTrust = gatewayTrust;
-    // Built before this.hub below (roomRouter has no dependency on it) so the hub can be wired with a direct this.roomRouter.handleRequest reference rather than a lazy closure. path.trace (agent-comms#199) is always registered here, ahead of any caller-supplied roomVerbHandlers, since every real construction site wants it answered identically regardless of which room verbs it registers.
+    // Built before this.hub below (roomRouter has no dependency on it) so the hub can be wired with a direct this.roomRouter.handleRelayedRequest reference rather than a lazy closure. path.trace (agent-comms#199) is always registered here, ahead of any caller-supplied roomVerbHandlers, since every real construction site wants it answered identically regardless of which room verbs it registers.
     this.roomRouter = createRoomRouter({
       events,
       handlers: { "path.trace": handlePathTraceRequest, ...roomVerbHandlers },
@@ -301,7 +301,7 @@ export class WireMeshTransport implements MeshTransport {
       onDirectory: (entries) => {
         mergeKnownDevices(this.knownDevices, entries);
       },
-      handleRoomRequest: this.roomRouter.handleRequest,
+      handleRoomRequest: this.roomRouter.handleRelayedRequest,
       isTrusted: (deviceHex) => this.gatewayTrust.isTrusted(deviceHex),
       admitEntries: directoryAdmission({ gatewayTrust, verifyMembership }),
       forwardToLocalPeer: makeSendToLocalPeer(this.peerSessions),
@@ -440,7 +440,7 @@ export class WireMeshTransport implements MeshTransport {
       for await (const request of session.incomingManageRequests) {
         if (this.shutDown) break;
         if (approved) {
-          await this.roomRouter.handleRequest(request, handle);
+          await this.roomRouter.handleLocalRequest(request, handle);
           continue;
         }
         const message = extractMessage(request.command);
