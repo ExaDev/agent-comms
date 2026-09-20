@@ -138,7 +138,9 @@ describe("deliveryEventToMessage", () => {
         delivery: { status: "queued", reason: "timeout" },
       };
       const result = deliveryEventToMessage(event, undefined);
-      expect(result?.text).toContain("queued for a1 (timeout), not yet delivered");
+      expect(result?.text).toContain(
+        "queued for a1 (timeout), not yet delivered",
+      );
     });
   });
 
