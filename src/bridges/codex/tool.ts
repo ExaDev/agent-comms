@@ -17,9 +17,11 @@ import {
   buildAction,
   ensureRegistered,
   drainAndFormat,
+  installShutdownSignalHandlers,
   MCP_TOOL_PARAMS,
 } from "../../core/index.js";
 import type { IdentitySlot } from "../../core/identity-store.js";
+import { releaseIdentityLock } from "../../core/identity-store.js";
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
 import { tryStartWebServer, getWebUrlStatus } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
@@ -32,7 +34,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const CODEX_AGENT_NAME_SUFFIX_LENGTH = 4;
 
 export async function run(): Promise<void> {
-  // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us. The stdio server has no graceful shutdown hook; a stale lock self-heals via the pid probe.
+  // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us.
   const identitySlot: IdentitySlot = { harness: "codex", cwd: process.cwd() };
   const { store, tool } = await createBridgeMesh(identitySlot);
   store.onError = createMeshErrorReporter();
@@ -115,4 +117,13 @@ export async function run(): Promise<void> {
     defaultName: `codex-${nanoid(CODEX_AGENT_NAME_SUFFIX_LENGTH)}`,
   });
   agentId = reg.agentId;
+
+  installShutdownSignalHandlers({
+    shutdown: async () => {
+      if (agentId !== undefined) await store.setAgentOffline(agentId);
+      await store.shutdown();
+      releaseIdentityLock(identitySlot);
+    },
+    disposition: "exit",
+  });
 }

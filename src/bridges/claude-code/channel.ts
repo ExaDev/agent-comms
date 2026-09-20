@@ -27,6 +27,7 @@ import {
   ensureRegistered,
   extractStreamingBehavior,
   formatDeliveryEvent,
+  installShutdownSignalHandlers,
   isActionableEvent,
   MCP_TOOL_PARAMS,
 } from "../../core/index.js";
@@ -301,11 +302,7 @@ export async function run(): Promise<void> {
     }
   }
 
-  for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
-    process.on(signal, () => {
-      void shutdown().finally(() => process.exit(0));
-    });
-  }
+  installShutdownSignalHandlers({ shutdown, disposition: "exit" });
 
   process.on("exit", () => {
     // Synchronous fallback if async shutdown didn't complete in time.
