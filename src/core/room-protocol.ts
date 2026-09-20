@@ -468,8 +468,11 @@ export class RoomProtocol {
   /**
    * Gives up on every queued request older than the age bound, across every member, telling each one's sender it expired. Deliberately a sweep run from sendRoomRequestToMember and flushPendingRoomRequests rather than a timer: the queue only ever grows on a send and only ever drains on a flush, so those are exactly the moments an expired entry starts to matter, and nothing has to keep a timer alive for a member that may never come back.
    */
-  private expirePendingRoomRequests(now: number): void {
-    const cutoff = now - PENDING_ROOM_REQUEST_TTL_MS;
+  private expirePendingRoomRequests(): void {
+    // Nothing queued means nothing to sweep, and nothing to ask this store's identity for: a bridge with no identity yet still sees peers connect, and a sweep must not turn that into a rejected promise inside a fire-and-forget event handler.
+    if (this.pendingRoomRequests.size === 0) return;
+    const cutoff =
+      this.deps.requireIdentity().clock.now() - PENDING_ROOM_REQUEST_TTL_MS;
     for (const [memberId, queue] of this.pendingRoomRequests) {
       const live = queue.filter((entry) => entry.queuedAt > cutoff);
       if (live.length === queue.length) continue;
@@ -515,8 +518,7 @@ export class RoomProtocol {
     token: CapabilityToken,
     params: Record<string, unknown>,
   ): Promise<RoomRequestOutcome> {
-    const { clock } = this.deps.requireIdentity();
-    this.expirePendingRoomRequests(clock.now());
+    this.expirePendingRoomRequests();
     const outcome = await this.attemptRoomRequest(
       memberId,
       roomPath,
@@ -527,7 +529,7 @@ export class RoomProtocol {
       this.enqueuePendingRoomRequest(memberId, {
         roomPath,
         params,
-        queuedAt: clock.now(),
+        queuedAt: this.deps.requireIdentity().clock.now(),
         reason: outcome.reason,
         messageId: messageIdFromParams(params),
       });
@@ -539,11 +541,11 @@ export class RoomProtocol {
    * Retries every request queued for memberId since it was last reachable, and tells each one's sender what came of the retry: delivered, refused, or still undelivered and held for another attempt. An entry whose room this store no longer holds a token for can never be sent at all, so it is reported as dropped rather than retried forever. Called whenever memberId becomes reachable by any route -- a direct peer connection, or the hub admitting its device into this side's directory -- since a queued request cares only that some path to the member now exists, not which one.
    */
   async flushPendingRoomRequests(memberId: string): Promise<void> {
-    const { slot, clock } = this.deps.requireIdentity();
-    this.expirePendingRoomRequests(clock.now());
+    this.expirePendingRoomRequests();
     const queue = this.pendingRoomRequests.get(memberId);
     if (queue === undefined || queue.length === 0) return;
     this.pendingRoomRequests.delete(memberId);
+    const { slot } = this.deps.requireIdentity();
     for (const pending of queue) {
       const token = loadRoomTokens(slot)[pending.roomPath];
       if (token === undefined) {
