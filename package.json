@@ -36,7 +36,7 @@
     "@eslint/json": "2.1.0",
     "@eslint/markdown": "8.0.3",
     "@exadev/eslint-config": "2.20.1",
-    "@playwright/test": "1.61.1",
+    "@playwright/test": "1.63.0",
     "@semantic-release/changelog": "6.0.3",
     "@semantic-release/commit-analyzer": "13.0.1",
     "@semantic-release/exec": "7.1.0",
