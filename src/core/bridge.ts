@@ -19,6 +19,7 @@ import type {
   Visibility,
 } from "./types.js";
 import { ownerNamedRoomPath, slugRoomName } from "./room-path.js";
+import { describeDeliveryFor } from "./send-outcome.js";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -539,7 +540,7 @@ export function formatDeliveryEvent(event: DeliveryEvent): string {
     case "member_status":
       return `${event.agent} is now ${event.status} in ${event.room}`;
     case "delivery_status":
-      return `Message ${event.messageId} ${event.status} by ${event.agent}${event.room !== undefined ? ` in ${event.room}` : ""}`;
+      return `Message ${event.messageId} ${describeDeliveryFor(event.delivery, event.agent)}${event.room !== undefined ? ` in ${event.room}` : ""}`;
     case "invite_declined":
       return `${event.agentName} declined invite to ${event.room}: "${event.reason}"`;
     case "name_changed":

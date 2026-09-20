@@ -55,6 +55,17 @@ export type RoomJoinDecision =
  */
 export const MAX_QUEUED_DELIVERIES_PER_AGENT = 100;
 
+/** Bound on directed room-domain requests held for retry per unreachable member. Requests beyond the bound drop oldest-first, and each drop is reported to its own sender as a terminal delivery status, so a message given up on is never left looking merely pending. */
+export const MAX_PENDING_ROOM_REQUESTS_PER_MEMBER = 100;
+
+/** How long a directed room-domain request may sit in the retry queue before it is given up on and its sender told it expired. Generous enough to outlast a peer restarting, a laptop sleeping overnight, or a hub outage, all of which a retry genuinely does fix; short enough that a message to a device that is never coming back stops being reported as pending indefinitely. */
+const PENDING_ROOM_REQUEST_TTL_HOURS = 24;
+export const PENDING_ROOM_REQUEST_TTL_MS =
+  PENDING_ROOM_REQUEST_TTL_HOURS *
+  MINUTES_PER_HOUR *
+  SECONDS_PER_MINUTE *
+  MS_PER_SECOND;
+
 /** The coordinator's own bind host -- always loopback, since the mesh coordinator role only ever needs to be reachable from other local peers on this machine. Shared between mesh-store.ts's own init() and PeerLifecycle's handleBecomeCoordinator. */
 export const COORDINATOR_HOST = "127.0.0.1";
 

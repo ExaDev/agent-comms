@@ -131,12 +131,12 @@ describe("hub toDevice routing", () => {
       "a2 to receive the DM via the hub, routed through a1",
       async () => {
         const a2Dms = a2.serialise().dms[dmPath] ?? [];
-        return a2Dms.some((m) => m.id === message.id);
+        return a2Dms.some((m) => m.id === message.message.id);
       },
     );
 
     const delivered = (a2.serialise().dms[dmPath] ?? []).find(
-      (m) => m.id === message.id,
+      (m) => m.id === message.message.id,
     );
     expect(delivered).toMatchObject({
       from: b1.peerId,

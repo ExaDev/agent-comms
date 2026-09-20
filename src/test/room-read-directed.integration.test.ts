@@ -122,13 +122,14 @@ test("reading a directed room.send notifies only its own author via room.read", 
       () =>
         ownerDeliveries.some(
           (event) =>
-            event.type === "delivery_status" && event.status === "read",
+            event.type === "delivery_status" &&
+            event.delivery.status === "read",
         ),
       "owner receives the read receipt",
     );
     const readReceipt = ownerDeliveries.find(
       (event): event is Extract<DeliveryEvent, { type: "delivery_status" }> =>
-        event.type === "delivery_status" && event.status === "read",
+        event.type === "delivery_status" && event.delivery.status === "read",
     );
     expect(readReceipt).toBeTruthy();
     if (readReceipt === undefined)

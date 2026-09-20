@@ -13,13 +13,14 @@ import {
 } from "./mesh-store-shared.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import type { MeshTransport } from "./transport.js";
+import type { RoomRequestOutcome } from "./send-outcome.js";
 import type { MeshStatePatch, SerialisedState } from "./wire-protocol.js";
 import type {
   AgentIdentity,
   AgentStatus,
   DeliveryEvent,
-  DeliveryStatus,
   DmMessage,
+  MessageDelivery,
   Room,
   RoomMessage,
 } from "./types.js";
@@ -45,14 +46,14 @@ export interface DeliveryEngineDeps {
     ((patch: MeshStatePatch) => void | Promise<void>) | undefined;
   isShutDown: () => boolean;
   /**
-   * Sends one directed room-domain request to a single member, queuing it for retry when unreachable -- RoomProtocol's own method. Deferred: RoomProtocol doesn't exist yet when DeliveryEngine is constructed (construction order: discovery -\> deliveryEngine -\> ... -\> roomProtocol), so MeshStore wires this as `(...) => this.roomProtocol.sendRoomRequestToMember(...)`, a closure over `this` that only resolves `this.roomProtocol` when markRead actually calls it at runtime, well after the constructor has finished.
+   * Sends one directed room-domain request to a single member, reporting what became of it and queuing it for retry when the member never answered -- RoomProtocol's own method. Deferred: RoomProtocol doesn't exist yet when DeliveryEngine is constructed (construction order: discovery -\> deliveryEngine -\> ... -\> roomProtocol), so MeshStore wires this as `(...) => this.roomProtocol.sendRoomRequestToMember(...)`, a closure over `this` that only resolves `this.roomProtocol` when markRead actually calls it at runtime, well after the constructor has finished. Every call here carries a read receipt or an informational notice rather than a message of this device's own, so the outcome is deliberately not acted on: both are best-effort by design, and a recipient that refuses one has nothing a sender needs to be told about.
    */
   sendRoomRequestToMember: (
     memberId: string,
     roomPath: string,
     token: CapabilityToken,
     params: Record<string, unknown>,
-  ) => Promise<void>;
+  ) => Promise<RoomRequestOutcome>;
 }
 
 /** Cap on `localDeliveryKeys`, the dedup set of already-delivered event keys kept per process; oldest entries are evicted once this is exceeded. */
@@ -373,11 +374,13 @@ export class DeliveryEngine {
       await this.emitDeliveryStatus(
         event.message.id,
         agentId,
-        "delivered",
+        { status: "delivered" },
         event.message.room,
       );
     } else if (event.type === "dm") {
-      await this.emitDeliveryStatus(event.message.id, agentId, "delivered");
+      await this.emitDeliveryStatus(event.message.id, agentId, {
+        status: "delivered",
+      });
     }
 
     this.fireLocalDelivery(agentId, event);
@@ -510,7 +513,7 @@ export class DeliveryEngine {
   private async emitDeliveryStatus(
     messageId: string,
     agentId: string,
-    status: DeliveryStatus,
+    delivery: MessageDelivery,
     room?: string,
   ): Promise<void> {
     const location = this.findMessageLocation(messageId, room);
@@ -520,7 +523,7 @@ export class DeliveryEngine {
       type: "delivery_status",
       messageId,
       agent: agentId,
-      status,
+      delivery,
       room,
     };
     if (senderId === this.deps.getPeerId()) {

@@ -69,13 +69,19 @@ test("a first sendDm holds for the counterpart's decision, delivers once accepte
     const first = await firstSend;
 
     await waitFor(
-      () => (b.serialise().dms[dmPath] ?? []).some((m) => m.id === first.id),
+      () =>
+        (b.serialise().dms[dmPath] ?? []).some(
+          (m) => m.id === first.message.id,
+        ),
       "b receives the first DM",
     );
 
     const second = await a.sendDm(a.peerId, b.peerId, "second");
     await waitFor(
-      () => (b.serialise().dms[dmPath] ?? []).some((m) => m.id === second.id),
+      () =>
+        (b.serialise().dms[dmPath] ?? []).some(
+          (m) => m.id === second.message.id,
+        ),
       "b receives the second DM",
     );
     expect(b.listPendingRoomJoins()).toEqual([]);
@@ -83,7 +89,10 @@ test("a first sendDm holds for the counterpart's decision, delivers once accepte
     // b's reply asks a for access in the other direction; a's own outbound request already covers it.
     const reply = await b.sendDm(b.peerId, a.peerId, "reply");
     await waitFor(
-      () => (a.serialise().dms[dmPath] ?? []).some((m) => m.id === reply.id),
+      () =>
+        (a.serialise().dms[dmPath] ?? []).some(
+          (m) => m.id === reply.message.id,
+        ),
       "a receives b's reply",
     );
     expect(a.listPendingRoomJoins()).toEqual([]);

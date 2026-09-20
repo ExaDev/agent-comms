@@ -4,7 +4,10 @@
  * These mirror the wire format from server.ts and core/types.ts. No Zod — just interfaces for the browser bundle.
  */
 
-import type { RoomMessage as CoreRoomMessage } from "../../../../core/types.js";
+import type {
+  MessageDelivery,
+  RoomMessage as CoreRoomMessage,
+} from "../../../../core/types.js";
 import type {
   MeshGraph as ContractMeshGraph,
   MeshTraceResult as ContractMeshTraceResult,
@@ -84,7 +87,7 @@ export type DeliveryEvent =
       type: "delivery_status";
       messageId: string;
       agent: string;
-      status: "delivered" | "read";
+      delivery: MessageDelivery;
       room?: string;
     }
   | {

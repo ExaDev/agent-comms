@@ -34,9 +34,14 @@ import {
 import { randomId } from "./random-id.js";
 import { CommsError } from "./store.js";
 import {
-  MAX_QUEUED_DELIVERIES_PER_AGENT,
+  MAX_PENDING_ROOM_REQUESTS_PER_MEMBER,
+  PENDING_ROOM_REQUEST_TTL_MS,
   ROOM_TOKEN_LIFETIME_MS,
 } from "./mesh-store-shared.js";
+import {
+  classifyManageOutcome,
+  type RoomRequestOutcome,
+} from "./send-outcome.js";
 import type {
   MeshStoreIdentity,
   RoomJoinDecision,
@@ -55,9 +60,29 @@ import type {
   AgentIdentity,
   DeliveryEvent,
   DmMessage,
+  MessageDelivery,
   Room,
   RoomMessage,
+  TransientSendFailure,
 } from "./types.js";
+
+/** One directed room-domain request held for retry. queuedAt fixes the entry's age for the queue's own age bound, and survives a failed retry rather than being refreshed by it, so a member that is briefly reachable over and over cannot keep a message pending forever. messageId is the hex id of the message this request carries, present only for a room.send: a room.read or room.notify has no message of this sender's own to report a status against. */
+interface PendingRoomRequest {
+  roomPath: string;
+  params: Record<string, unknown>;
+  queuedAt: number;
+  reason: TransientSendFailure;
+  messageId: string | undefined;
+}
+
+/** The hex message-id a directed room-domain request carries, when it is a room.send carrying one. Read from the already-built params rather than re-derived, so a queued entry can report a delivery status against the very message the sender was told about. */
+function messageIdFromParams(
+  params: Readonly<Record<string, unknown>>,
+): string | undefined {
+  if (params.verb !== "room.send") return undefined;
+  const raw = params["message-id"];
+  return raw instanceof Uint8Array ? bytesToHex(raw) : undefined;
+}
 
 /** room.notify's own params shape: the already-validated DeliveryEvent to deliver, and nothing else -- room.notify carries no content of its own beyond the event, unlike room.send's own message/dm fields. Not a wire-mesh-generated schema (room.notify is agent-comms' own verb, riding manage-command-params' open socket the same way the legacy opaque frame carriage always did, never a real wire-mesh CDDL type other clients need to interoperate with). */
 const RoomNotifyParamsSchema = z.object({ event: DeliveryEventSchema });
@@ -89,10 +114,10 @@ export interface RoomProtocolDeps {
 }
 
 export class RoomProtocol {
-  /** Directed room-domain requests (room.send, room.read) that failed because their target member wasn't reachable at send time, held for retry when that member's own connection is (re)established -- the wire-authenticated fan-out's substitute for the legacy full-state-sync's own automatic eventual consistency, since a direct request to a disconnected peer fails immediately with no protocol-level retry of its own. Keyed by member device-id hex, bounded oldest-first per member with the same cap ordinary delivery queues use. */
+  /** Directed room-domain requests (room.send, room.read) that failed because their target member wasn't reachable at send time, held for retry when that member becomes reachable by any route -- the wire-authenticated fan-out's substitute for the legacy full-state-sync's own automatic eventual consistency, since a direct request to a disconnected peer fails immediately with no protocol-level retry of its own. Keyed by member device-id hex, bounded oldest-first per member and by each entry's own age; every entry that leaves the queue without being delivered is reported to its sender as a terminal delivery status. */
   private readonly pendingRoomRequests = new Map<
     string,
-    { roomPath: string; params: Record<string, unknown> }[]
+    PendingRoomRequest[]
   >();
 
   /** Pending room.join requests awaiting owner approval, keyed by `${roomPath}::${requesterId}` -- the held-open manage-request's own resolve() function is stored here so acceptRoomJoin/rejectRoomJoin can settle it in place. */
@@ -312,7 +337,7 @@ export class RoomProtocol {
         type: "delivery_status",
         messageId,
         agent: handle.id,
-        status: "read",
+        delivery: { status: "read" },
         ...(isDm ? {} : { room: roomPath }),
       };
       this.deps.deliveryEngine.queueDelivery(peerId, event);
@@ -404,30 +429,67 @@ export class RoomProtocol {
     }
   }
 
-  /** Records a room-domain request that couldn't reach memberId right now, for a later flushPendingRoomRequests to retry once that member reconnects. Bounded oldest-first with the same cap ordinary delivery queues use, so an indefinitely-offline member cannot grow this without limit. */
-  private queuePendingRoomRequest(
+  /** Tells this device's own agent what became of a message it sent, over the same delivery_status event read receipts already ride, so a queued, dropped, expired or refused message reaches the sender through the one path that already reports delivery. Does nothing for a request carrying no message of this sender's own (a room.read receipt, a room.notify), which has no message-id to report against. */
+  private reportDelivery(
     memberId: string,
-    roomPath: string,
-    params: Record<string, unknown>,
+    entry: Readonly<Pick<PendingRoomRequest, "roomPath" | "messageId">>,
+    delivery: MessageDelivery,
+  ): void {
+    if (entry.messageId === undefined) return;
+    const peerId = this.deps.getPeerId();
+    const isDm = parseRoomPath(entry.roomPath).kind === "dm";
+    const event: DeliveryEvent = {
+      type: "delivery_status",
+      messageId: entry.messageId,
+      agent: memberId,
+      delivery,
+      ...(isDm ? {} : { room: entry.roomPath }),
+    };
+    this.deps.deliveryEngine.queueDelivery(peerId, event);
+    this.deps.deliveryEngine.fireLocalDelivery(peerId, event);
+  }
+
+  /** Holds a request for retry, evicting the oldest entries beyond the per-member bound and telling each evicted entry's sender the message was dropped, so a message given up on is never left looking merely pending. */
+  private enqueuePendingRoomRequest(
+    memberId: string,
+    entry: PendingRoomRequest,
   ): void {
     const queue = this.pendingRoomRequests.get(memberId) ?? [];
-    queue.push({ roomPath, params });
-    if (queue.length > MAX_QUEUED_DELIVERIES_PER_AGENT) {
-      queue.splice(0, queue.length - MAX_QUEUED_DELIVERIES_PER_AGENT);
+    queue.push(entry);
+    while (queue.length > MAX_PENDING_ROOM_REQUESTS_PER_MEMBER) {
+      const evicted = queue.shift();
+      if (evicted !== undefined) {
+        this.reportDelivery(memberId, evicted, { status: "dropped" });
+      }
     }
     this.pendingRoomRequests.set(memberId, queue);
   }
 
   /**
-   * Sends one directed room-domain request (room.send, room.read, or any future room:member-gated verb) to a single member, queuing it for retry instead of throwing when the member isn't currently reachable -- the fan-out's own per-recipient primitive, distinct from sendRoomMessageDirected's deliberate throw-on-failure contract for a caller sending to one specific, known recipient. Silently drops a request this store no longer holds a token for (no longer a member of the room) rather than queuing something that will only fail again on retry.
+   * Gives up on every queued request older than the age bound, across every member, telling each one's sender it expired. Deliberately a sweep run from sendRoomRequestToMember and flushPendingRoomRequests rather than a timer: the queue only ever grows on a send and only ever drains on a flush, so those are exactly the moments an expired entry starts to matter, and nothing has to keep a timer alive for a member that may never come back.
    */
-  async sendRoomRequestToMember(
+  private expirePendingRoomRequests(now: number): void {
+    const cutoff = now - PENDING_ROOM_REQUEST_TTL_MS;
+    for (const [memberId, queue] of this.pendingRoomRequests) {
+      const live = queue.filter((entry) => entry.queuedAt > cutoff);
+      if (live.length === queue.length) continue;
+      for (const entry of queue) {
+        if (entry.queuedAt <= cutoff) {
+          this.reportDelivery(memberId, entry, { status: "expired" });
+        }
+      }
+      if (live.length === 0) this.pendingRoomRequests.delete(memberId);
+      else this.pendingRoomRequests.set(memberId, live);
+    }
+  }
+
+  /** One attempt at a directed room-domain request, with no queueing of its own: the raw wire outcome classified into delivered, undelivered (nobody answered, so a retry may still work) or refused (the member answered with a failure it will repeat). A rejection from the transport is the connection dropping mid-request, per wire-mesh-core's own rejectPendingManageRequests, which is the same "never answered" fact as a timeout. */
+  private async attemptRoomRequest(
     memberId: string,
     roomPath: string,
     token: CapabilityToken,
     params: Record<string, unknown>,
-  ): Promise<void> {
-    // sendRoomRequest can reject outright (e.g. the connection drops mid-request, per wire-mesh-core's own rejectPendingManageRequests), not just resolve with an error outcome -- both are exactly the same "memberId isn't reachable right now" fact from this method's own point of view, so both queue for retry rather than one of them propagating as an uncaught rejection out of what every caller treats as a fire-and-forget send.
+  ): Promise<RoomRequestOutcome> {
     let outcome: ManageOutcome;
     try {
       outcome = await this.deps
@@ -439,29 +501,75 @@ export class RoomProtocol {
           token,
         );
     } catch {
-      this.queuePendingRoomRequest(memberId, roomPath, params);
-      return;
+      return { kind: "undelivered", reason: "connection_lost" };
     }
-    if (outcome.result !== "ok") {
-      this.queuePendingRoomRequest(memberId, roomPath, params);
-    }
+    return classifyManageOutcome(outcome);
   }
 
-  /** Retries every room.send queued for memberId since it was last reachable, dropping (not re-queuing) any whose room this store no longer holds a token for. Called once a connection to memberId is (re)established -- handlePeerConnected fires for both a fresh introduction and a reconnection after downtime, exactly the two cases a queued send needs to be retried on. */
+  /**
+   * Sends one directed room-domain request (room.send, room.read, or any future room:member-gated verb) to a single member and reports honestly what became of it -- the fan-out's own per-recipient primitive, distinct from sendRoomMessageDirected's deliberate throw-on-failure contract for a caller sending to one specific, known recipient. An undelivered request is held for retry and says so; a refused one is not queued at all, since the member has already answered with a failure it will give again, and its sender needs to know now rather than waiting on a retry that cannot help.
+   */
+  async sendRoomRequestToMember(
+    memberId: string,
+    roomPath: string,
+    token: CapabilityToken,
+    params: Record<string, unknown>,
+  ): Promise<RoomRequestOutcome> {
+    const { clock } = this.deps.requireIdentity();
+    this.expirePendingRoomRequests(clock.now());
+    const outcome = await this.attemptRoomRequest(
+      memberId,
+      roomPath,
+      token,
+      params,
+    );
+    if (outcome.kind === "undelivered") {
+      this.enqueuePendingRoomRequest(memberId, {
+        roomPath,
+        params,
+        queuedAt: clock.now(),
+        reason: outcome.reason,
+        messageId: messageIdFromParams(params),
+      });
+    }
+    return outcome;
+  }
+
+  /**
+   * Retries every request queued for memberId since it was last reachable, and tells each one's sender what came of the retry: delivered, refused, or still undelivered and held for another attempt. An entry whose room this store no longer holds a token for can never be sent at all, so it is reported as dropped rather than retried forever. Called whenever memberId becomes reachable by any route -- a direct peer connection, or the hub admitting its device into this side's directory -- since a queued request cares only that some path to the member now exists, not which one.
+   */
   async flushPendingRoomRequests(memberId: string): Promise<void> {
+    const { slot, clock } = this.deps.requireIdentity();
+    this.expirePendingRoomRequests(clock.now());
     const queue = this.pendingRoomRequests.get(memberId);
     if (queue === undefined || queue.length === 0) return;
     this.pendingRoomRequests.delete(memberId);
-    const { slot } = this.deps.requireIdentity();
     for (const pending of queue) {
       const token = loadRoomTokens(slot)[pending.roomPath];
-      if (token === undefined) continue;
-      await this.sendRoomRequestToMember(
+      if (token === undefined) {
+        this.reportDelivery(memberId, pending, { status: "dropped" });
+        continue;
+      }
+      const outcome = await this.attemptRoomRequest(
         memberId,
         pending.roomPath,
         token,
         pending.params,
       );
+      if (outcome.kind === "delivered") {
+        this.reportDelivery(memberId, pending, { status: "delivered" });
+      } else if (outcome.kind === "refused") {
+        this.reportDelivery(memberId, pending, {
+          status: "refused",
+          code: outcome.code,
+        });
+      } else {
+        // Re-queued with its original queuedAt, never a fresh one: a member that keeps briefly reappearing and failing must not be able to keep a message pending past the age bound.
+        this.enqueuePendingRoomRequest(memberId, {
+          ...pending,
+          reason: outcome.reason,
+        });
+      }
     }
   }
 

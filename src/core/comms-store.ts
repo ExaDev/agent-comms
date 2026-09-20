@@ -12,6 +12,7 @@ import type {
   AgentIdentity,
   DeliveryEvent,
   DmMessage,
+  MessageDelivery,
   Room,
   RoomMessage,
   RoomType,
@@ -22,6 +23,24 @@ import type {
 export interface SendRoomMessageOptions {
   replyTo?: string | undefined;
   streamingBehavior?: StreamingBehavior | undefined;
+}
+
+/** What became of a room message for one specific member of that room. Delivery is per member because a room send fans out one directed request each, and a member that is unreachable right now is independent of every other. */
+export interface MemberDelivery {
+  member: string;
+  delivery: MessageDelivery;
+}
+
+/** A room message as sent: the message itself, plus what became of it for each member other than its sender. A caller that only wants the message reads `message`; one that needs to know whether anybody actually received it reads `deliveries`. */
+export interface SentRoomMessage {
+  message: RoomMessage;
+  deliveries: MemberDelivery[];
+}
+
+/** A DM as sent: the message itself, plus what became of it. Exactly one delivery state, since a DM has exactly one recipient. */
+export interface SentDm {
+  message: DmMessage;
+  delivery: MessageDelivery;
 }
 
 export interface CommsStore {
@@ -89,7 +108,7 @@ export interface CommsStore {
     from: string,
     content: string,
     options?: SendRoomMessageOptions,
-  ) => Promise<RoomMessage>;
+  ) => Promise<SentRoomMessage>;
   readRoomMessages: (roomId: string, since?: string) => Promise<RoomMessage[]>;
 
   // -- DMs --
@@ -98,7 +117,7 @@ export interface CommsStore {
     to: string,
     content: string,
     streamingBehavior?: StreamingBehavior,
-  ) => Promise<DmMessage>;
+  ) => Promise<SentDm>;
 
   // -- Delivery --
   deliver: (agentId: string, event: DeliveryEvent) => Promise<void>;

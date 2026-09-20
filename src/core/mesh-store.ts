@@ -61,7 +61,12 @@ import type {
   MeshTransport,
   TransportEvents,
 } from "./transport.js";
-import type { CommsStore, SendRoomMessageOptions } from "./comms-store.js";
+import type {
+  CommsStore,
+  SendRoomMessageOptions,
+  SentDm,
+  SentRoomMessage,
+} from "./comms-store.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type {
   AgentIdentity,
@@ -269,13 +274,8 @@ export class MeshStore implements CommsStore {
       getOnPatch: () => this.onPatch,
       isShutDown: () => this.isShutDown,
       // RoomProtocol doesn't exist yet at this point in the constructor -- this closure resolves `this.roomProtocol` lazily, only once markRead actually calls it at runtime, well after the constructor has finished.
-      sendRoomRequestToMember: async (memberId, roomPath, token, params) =>
-        this.roomProtocol.sendRoomRequestToMember(
-          memberId,
-          roomPath,
-          token,
-          params,
-        ),
+      sendRoomRequestToMember: async (...args) =>
+        this.roomProtocol.sendRoomRequestToMember(...args),
     });
 
     this.roomProtocol = new RoomProtocol({
@@ -696,7 +696,7 @@ export class MeshStore implements CommsStore {
     from: string,
     content: string,
     options?: SendRoomMessageOptions,
-  ): Promise<RoomMessage> {
+  ): Promise<SentRoomMessage> {
     return this.roomMessaging.sendRoomMessage(roomId, from, content, options);
   }
 
@@ -716,7 +716,7 @@ export class MeshStore implements CommsStore {
     to: string,
     content: string,
     streamingBehavior?: StreamingBehavior,
-  ): Promise<DmMessage> {
+  ): Promise<SentDm> {
     return this.roomMessaging.sendDm(from, to, content, streamingBehavior);
   }
 

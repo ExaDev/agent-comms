@@ -89,7 +89,9 @@ test("a session with no agent-comms tool admits a first-contact DM by messaging 
     const sent = await send;
     await waitFor(
       () =>
-        (fronted.serialise().dms[dmPath] ?? []).some((m) => m.id === sent.id),
+        (fronted.serialise().dms[dmPath] ?? []).some(
+          (m) => m.id === sent.message.id,
+        ),
       "the fronted agent receives the DM",
     );
     await waitFor(
