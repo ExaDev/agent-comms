@@ -1,3 +1,9 @@
+## [5.0.4](https://github.com/ExaDev/agent-comms/compare/v5.0.3...v5.0.4) (2026-09-20)
+
+### Build
+
+* **deps-dev:** bump @semantic-release/git from 10.0.1 to 11.0.1 ([2cf35f2](https://github.com/ExaDev/agent-comms/commit/2cf35f284cd1ebf068f6a2da94e23dbcaa7748a1))
+
 ## [5.0.3](https://github.com/ExaDev/agent-comms/compare/v5.0.2...v5.0.3) (2026-09-20)
 
 ### Tests
