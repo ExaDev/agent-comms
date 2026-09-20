@@ -123,11 +123,22 @@ describe("deliveryEventToMessage", () => {
         type: "delivery_status",
         messageId: "msg-1",
         agent: "a1",
-        status: "delivered",
+        delivery: { status: "delivered" },
       };
       const result = deliveryEventToMessage(event, undefined);
       expect(result?.type).toBe("status");
-      expect(result?.text?.includes("delivered")).toBeTruthy();
+      expect(result?.text?.includes("delivered to a1")).toBeTruthy();
+    });
+
+    it("says a queued message is not yet delivered, naming why", () => {
+      const event: DeliveryEvent = {
+        type: "delivery_status",
+        messageId: "msg-1",
+        agent: "a1",
+        delivery: { status: "queued", reason: "timeout" },
+      };
+      const result = deliveryEventToMessage(event, undefined);
+      expect(result?.text).toContain("queued for a1 (timeout), not yet delivered");
     });
   });
 
