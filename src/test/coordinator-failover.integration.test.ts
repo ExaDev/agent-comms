@@ -204,3 +204,45 @@ test("a graceful shutdown still hands the coordinator role to the longest-runnin
     await teardown.run();
   }
 });
+
+/** How long a status change may take to reach a peer, and how often it is checked while waiting. */
+const STATUS_WAIT_TIMEOUT_MS = 10_000;
+const STATUS_POLL_INTERVAL_MS = 50;
+
+/** Polls a node's own view of one agent until it reports the wanted status, since a status change reaches a peer over the wire rather than synchronously. */
+async function waitForStatus(
+  node: Node,
+  agentId: string,
+  status: AgentIdentity["status"],
+): Promise<void> {
+  const deadline = Date.now() + STATUS_WAIT_TIMEOUT_MS;
+  while ((await agentsOf(node)).get(agentId)?.status !== status) {
+    if (Date.now() >= deadline) {
+      throw new Error(`${node.name} never saw ${agentId} as ${status}`);
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, STATUS_POLL_INTERVAL_MS);
+    });
+  }
+}
+
+test("a running agent stays online everywhere when the mesh is told it is offline, as happens to a session the previous coordinator was fronting", async () => {
+  const port = freshCoordinatorPort();
+  const teardown = new TeardownStack();
+  try {
+    const coordinator = await startNode("coordinator", port, teardown);
+    const member = await startNode("member", port, teardown);
+    await waitForStatus(coordinator, member.agentId, "active");
+
+    await coordinator.transport.broadcast({
+      method: "state_update",
+      patch: { type: "agent_offline", agentId: member.agentId },
+    });
+
+    // The coordinator applied nothing itself (broadcast reaches peers only), so it holds the offline report only if the member's contradiction never came back; the member then has to have kept its own record active too.
+    await waitForStatus(member, member.agentId, "active");
+    await waitForStatus(coordinator, member.agentId, "active");
+  } finally {
+    await teardown.run();
+  }
+});

@@ -707,6 +707,31 @@ describe("DeliveryEngine — applyPatch(agent_offline)", () => {
     ).resolves.toBeUndefined();
     expect(h.deps.agents.has(OTHER_ID)).toBe(false);
   });
+
+  it("contradicts a report that this store's own running agent is offline, re-announcing it active at a higher revision", async () => {
+    const h = makeHarness();
+    h.deps.agents.set(PEER_ID, agent({ id: PEER_ID, status: "active" }));
+
+    await h.engine.applyPatch({ type: "agent_offline", agentId: PEER_ID });
+
+    const own = h.deps.agents.get(PEER_ID);
+    expect(own?.status).toBe("active");
+    expect(own?.version).toBe(2);
+    expect(h.transport.broadcast).toHaveBeenCalledWith({
+      method: "state_update",
+      patch: { type: "agent_upsert", agent: own },
+    });
+  });
+
+  it("accepts this store's own agent going offline once it has itself set it offline, without re-announcing it", async () => {
+    const h = makeHarness();
+    h.deps.agents.set(PEER_ID, agent({ id: PEER_ID, status: "offline" }));
+
+    await h.engine.applyPatch({ type: "agent_offline", agentId: PEER_ID });
+
+    expect(h.deps.agents.get(PEER_ID)?.status).toBe("offline");
+    expect(h.transport.broadcast).not.toHaveBeenCalled();
+  });
 });
 
 describe("DeliveryEngine — applyPatch(room_delete/message_add/dm_add)", () => {

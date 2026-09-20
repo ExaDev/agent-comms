@@ -275,10 +275,18 @@ export class DeliveryEngine {
       }
       case "agent_offline": {
         const agent = this.deps.agents.get(patch.agentId);
-        if (agent) {
-          agent.status = "offline";
-          this.deps.agents.set(patch.agentId, agent);
+        if (agent === undefined) break;
+        // An agent is its own store's peer, so this store is the authority on whether it is running. A report that it is offline while it is (a previous coordinator retiring the session it fronted, or a stale process probe) is stale by definition, and applying it would stick: this store gossips its own status, so it would go on advertising itself offline. It is contradicted instead, at a higher revision so every peer accepts the correction. A store that has itself set its agent offline is not contradicted.
+        if (
+          patch.agentId === this.deps.getPeerId() &&
+          agent.status !== "offline"
+        ) {
+          this.bump(agent);
+          await this.broadcastPatch({ type: "agent_upsert", agent });
+          break;
         }
+        agent.status = "offline";
+        this.deps.agents.set(patch.agentId, agent);
         break;
       }
       case "room_upsert": {
