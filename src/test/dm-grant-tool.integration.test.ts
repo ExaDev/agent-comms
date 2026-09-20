@@ -154,7 +154,8 @@ test("a revoked grant is refused", async () => {
     });
 
     expect(used.isError).toBe(true);
-    expect(used.content).toMatch(/refused/);
+    // Refused locally once the revocation has reached this side's view, otherwise by the receiver: both are the grant being rejected as revoked.
+    expect(used.content).toMatch(/cannot be used \(revoked\)|refused/);
   } finally {
     await receiver.store.shutdown();
     await sender.store.shutdown();
