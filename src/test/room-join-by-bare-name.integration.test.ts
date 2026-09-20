@@ -7,7 +7,11 @@ import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
 import { wireTestTransportWithHub } from "./test-transport.js";
-import { realHubOverWs, waitForCondition } from "./hub-helpers.js";
+import {
+  realHubOverWs,
+  TeardownStack,
+  waitForCondition,
+} from "./hub-helpers.js";
 
 const GOSSIP_INTERVAL_MS = 100;
 const POLL_INTERVAL_MS = 25;
@@ -20,12 +24,10 @@ interface ToolContext {
   pid: number;
 }
 
-const cleanups: (() => Promise<void>)[] = [];
+const cleanups = new TeardownStack();
 
 afterEach(async () => {
-  for (const close of cleanups.splice(0)) {
-    await close();
-  }
+  await cleanups.run();
 });
 
 /** Polls an async condition until it holds. hub-helpers' waitForCondition only accepts a synchronous predicate, and listRooms is async. */

@@ -7,14 +7,16 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { wireTestTransportWithHub } from "./test-transport.js";
-import { realHubOverWs, waitForCondition } from "./hub-helpers.js";
+import {
+  realHubOverWs,
+  TeardownStack,
+  waitForCondition,
+} from "./hub-helpers.js";
 
-const cleanups: (() => Promise<void>)[] = [];
+const cleanups = new TeardownStack();
 
 afterEach(async () => {
-  for (const close of cleanups.splice(0)) {
-    await close();
-  }
+  await cleanups.run();
 });
 
 /** Wires up an owner and a requester MeshStore, each connected to the same real hub, with the requester trusting the owner's device (the outbound leg WireMeshTransport.sendRoomRequest needs before it will even attempt routing via the hub) but the owner trusting nothing at all -- the absence that is the whole point of every test in this file. Deliberately never calls MeshStore.init(): that method's own local-mesh coordinator election (connectToCoordinator/becomeCoordinator against the real, well-known port 19876) has nothing to do with hub mode and risks colliding with an unrelated coordinator already running on the machine -- hub-mode-session.integration.test.ts's own raw-WireMeshTransport tests never call it either, for the same reason. */

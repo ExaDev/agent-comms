@@ -1,6 +1,7 @@
 // Integration: connectToRemote against a ws:// URL, through a minimal in-test fake hub speaking the real protocol (handshake reply, connect_request answered with manage-ok) -- proving the URL branch drives the identical session + connect_request flow the TLS branch uses, without standing up a TLS stack or a deployed hub.
 
 import { createServer, type Server } from "node:http";
+import { TeardownStack } from "./hub-helpers.js";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
 import { afterEach, describe, expect, it } from "vitest";
 import { cdeDecodeOptions, cdeEncodeOptions, decode, encode } from "cbor2";
@@ -91,12 +92,10 @@ async function fakeHub(): Promise<{
   };
 }
 
-const cleanups: (() => Promise<void>)[] = [];
+const cleanups = new TeardownStack();
 
 afterEach(async () => {
-  for (const close of cleanups.splice(0)) {
-    await close();
-  }
+  await cleanups.run();
 });
 
 describe("connectToRemote with a ws:// URL", () => {

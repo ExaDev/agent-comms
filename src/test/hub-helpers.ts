@@ -192,3 +192,21 @@ export async function waitForCondition(
     check();
   });
 }
+
+/**
+ * A test's registered teardown steps, run in reverse registration order. A test registers the hub before the stores that dial it, so closing in registration order shuts the hub while its clients are still running, and a store shutting down then can hand its coordinator role to a peer that dials the already-closed hub. Reverse order shuts the dependents down first, while the hub is still there to answer them.
+ */
+export class TeardownStack {
+  private readonly steps: (() => Promise<void>)[] = [];
+
+  push(step: () => Promise<void>): void {
+    this.steps.push(step);
+  }
+
+  /** Runs every registered step, latest first, and empties the stack so the next test starts clean. */
+  async run(): Promise<void> {
+    for (const step of this.steps.splice(0).reverse()) {
+      await step();
+    }
+  }
+}
