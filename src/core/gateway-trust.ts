@@ -14,6 +14,7 @@ import { loadGatewayTrust, saveGatewayTrust } from "./identity-store.js";
 export type GatewayTrustReader = Pick<
   GatewayTrust,
   | "isTrusted"
+  | "isReachable"
   | "hasAny"
   | "isTrustedPrincipal"
   | "isTrustedFor"
@@ -69,32 +70,40 @@ export class GatewayTrust {
     return [...this.trusted];
   }
 
-  /** Whether the given device-id (hex, case-insensitive) is currently trusted. */
+  /** Whether the given device-id (hex, case-insensitive) is trusted by id: on the bare-device allowlist. A device trusted only because a principal vouches for it (noteVerifiedMember) is not, on purpose: its proof is a claim that anyone who has read the device's gossiped advert can repeat, so it earns only what isReachable grants. */
   isTrusted(deviceHex: string): boolean {
+    return this.trusted.has(deviceHex.toLowerCase());
+  }
+
+  /** Whether this side may merge the device's gossiped directory entry and route requests to it: trusted by id, or a verified member of a trusted principal. Requests routed to a device are still authenticated end to end by the session inside the relay, so a false claim can misroute one (which then fails its handshake) but not read or forge one. */
+  isReachable(deviceHex: string): boolean {
     const key = deviceHex.toLowerCase();
     return this.trusted.has(key) || this.isVerifiedMember(key);
   }
 
-  /** Records that deviceHex presented a membership proof, valid until expiresAt (epoch ms), verified against principalHex (agent-comms#266). From then until the proof lapses, or principalHex stops being trusted, isTrusted treats the device as trusted without it being on the bare-device list. The caller has already verified the proof: this class does no cryptography. */
+  /** Records that deviceHex presented a membership proof, valid until expiresAt (epoch ms), verified against principalHex (agent-comms#266). From then until the proof lapses, or principalHex stops being trusted, isReachable treats the device as reachable. A later proof never shortens an earlier one's window. The caller has already verified the proof: this class does no cryptography. */
   noteVerifiedMember(
     deviceHex: string,
     principalHex: string,
     expiresAt: number,
   ): void {
-    this.verifiedMembers.set(deviceHex.toLowerCase(), {
+    const key = deviceHex.toLowerCase();
+    const now = Date.now();
+    for (const [device, member] of this.verifiedMembers) {
+      if (member.expiresAt <= now) this.verifiedMembers.delete(device);
+    }
+    const existing = this.verifiedMembers.get(key);
+    this.verifiedMembers.set(key, {
       principal: principalHex.toLowerCase(),
-      expiresAt,
+      expiresAt: Math.max(expiresAt, existing?.expiresAt ?? 0),
     });
   }
 
-  /** Every device currently trusted only because a trusted principal vouches for it, with that principal. Excludes proofs that have lapsed and members whose principal is no longer trusted. */
+  /** Every device currently reachable only because a trusted principal vouches for it, with that principal. Excludes proofs that have lapsed and members whose principal is no longer trusted. */
   listVerifiedMembers(): { device: string; principal: string }[] {
-    return [...this.verifiedMembers.keys()]
-      .filter((device) => this.isVerifiedMember(device))
-      .map((device) => ({
-        device,
-        principal: this.verifiedMembers.get(device)?.principal ?? "",
-      }));
+    return [...this.verifiedMembers]
+      .filter(([device]) => this.isVerifiedMember(device))
+      .map(([device, member]) => ({ device, principal: member.principal }));
   }
 
   private isVerifiedMember(deviceKey: string): boolean {
@@ -114,7 +123,11 @@ export class GatewayTrust {
 
   /** Withdraws a previously trusted principal (hex, case-insensitive). A no-op if it was never trusted. Governs future chain checks only, mirroring `remove`'s own already-merged-traffic-is-unaffected posture. Persists the updated set when this instance was constructed with a slot. */
   removePrincipal(deviceHex: string): void {
-    this.trustedPrincipals.delete(deviceHex.toLowerCase());
+    const key = deviceHex.toLowerCase();
+    this.trustedPrincipals.delete(key);
+    for (const [device, member] of this.verifiedMembers) {
+      if (member.principal === key) this.verifiedMembers.delete(device);
+    }
     this.persist();
   }
 

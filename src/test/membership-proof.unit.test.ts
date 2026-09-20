@@ -11,6 +11,7 @@ import { generateIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import {
+  MAX_MEMBERSHIP_PROOF_LENGTH,
   MEMBERSHIP_PROOF_LIFETIME_MS,
   mintMembershipProof,
   verifyMembershipProof,
@@ -133,6 +134,33 @@ describe("membership proof", () => {
     });
 
     expect(verdict.ok).toBe(false);
+  });
+
+  it("refuses proof text longer than any real proof, before spending any effort on it", async () => {
+    const user = await makeUser();
+    const device = await toIdentityPort(generateIdentity());
+
+    const verdict = await verifyMembershipProof({
+      proof: "a".repeat(MAX_MEMBERSHIP_PROOF_LENGTH + 1),
+      deviceId: device.deviceId,
+      principalId: user.deviceId,
+      ...(await makeVerifier()),
+    });
+
+    expect(verdict).toEqual({ ok: false, reason: "too_long" });
+  });
+
+  it("mints proofs comfortably inside the length limit", async () => {
+    const user = await makeUser();
+    const device = await toIdentityPort(generateIdentity());
+
+    const proof = await mintMembershipProof({
+      userIdentity: user,
+      clock: createSystemClock(),
+      deviceId: device.deviceId,
+    });
+
+    expect(proof.length).toBeLessThan(MAX_MEMBERSHIP_PROOF_LENGTH / 2);
   });
 
   it("does not verify text that is not a proof", async () => {

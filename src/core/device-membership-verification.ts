@@ -30,14 +30,14 @@ export type DeviceMembershipVerdictReason =
   | "wrong_chain_root";
 
 export type DeviceMembershipVerdict =
-  | { ok: true; claims: TokenClaims }
+  | { ok: true; claims: TokenClaims; depth: number }
   | { ok: false; reason: DeviceMembershipVerdictReason };
 
 export interface VerifyDeviceMembershipOptions extends Omit<
   VerifyCapabilityTokenOptions,
   "expectedBearer"
 > {
-  /** The device actually authenticated on the arriving connection (or otherwise known out of band) -- never a relay-asserted or gossip-derived value. Mandatory here, unlike verifyCapabilityToken's own optional field for a caller presenting a token to authorise itself. */
+  /** The device actually authenticated on the arriving connection (or otherwise known out of band) -- never a relay-asserted or gossip-derived value, whenever the result is used to authorise something. Mandatory here, unlike verifyCapabilityToken's own optional field for a caller presenting a token to authorise itself. The one caller that passes a gossip-derived id (directory-admission.ts, for a membership proof read off a gossiped advert) deliberately treats the result as a claim about that id and nothing more. */
   expectedBearer: DeviceId;
   /** The user principal this membership is claimed to belong to. Determines both the expected scope.path (userGroupPath) and the delegation chain's only acceptable root -- a device-membership token minted by anyone other than this principal must never verify, regardless of what its scope claims. */
   userDeviceId: DeviceId;
@@ -77,5 +77,5 @@ export async function verifyDeviceMembership(
     return { ok: false, reason: "wrong_chain_root" };
   }
 
-  return { ok: true, claims: verdict.claims };
+  return { ok: true, claims: verdict.claims, depth: verdict.depth };
 }
