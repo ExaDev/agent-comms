@@ -109,13 +109,16 @@ export class MeshStore implements CommsStore {
   private readonly hubUrl: string;
   /** Read by whoever wires this store to a transport, so both halves of a room.join agree on the approval window. */
   readonly roomJoinApprovalTimeoutMs: number;
+  /** Forwards a collaborator's failure to this store's own error channel, normalising a non-Error rejection on the way so a bridge always sees one shape. An arrow field rather than a method, so every collaborator can take it as a bare callback reference. */
+  private readonly reportError = (error: unknown): void => {
+    this.onError?.(error instanceof Error ? error : new Error(String(error)));
+  };
+
   /** This device's own membership proof and the check for other devices' proofs (agent-comms#266). */
   readonly membership = new MembershipProofs({
     getIdentity: () => this.requireIdentity(),
     getPeerId: () => this.peerId,
-    onError: (error) => {
-      this.onError?.(error);
-    },
+    onError: this.reportError,
   });
 
   private readonly agents = new Map<string, AgentIdentity>();
@@ -365,9 +368,7 @@ export class MeshStore implements CommsStore {
       disconnectHub: async () => {
         await this.requireTransport().disconnectHub?.();
       },
-      onError: (error) => {
-        this.onError?.(error);
-      },
+      onError: this.reportError,
     });
 
     this.peerLifecycle = new PeerLifecycle({
@@ -375,15 +376,16 @@ export class MeshStore implements CommsStore {
       agents: this.agents,
       coordinatorPort: this.coordinatorPort,
       getPeerId: () => this.peerId,
+      getCoordinatorPeerId: () => this.requireTransport().coordinatorPeerId,
       requireTransport: () => this.requireTransport(),
       serialise: () => this.serialise(),
       roomProtocol: this.roomProtocol,
       deliveryEngine: this.deliveryEngine,
       staleAgentChecker: this.staleAgentChecker,
       coordinatorGateway: this.coordinatorGateway,
-      onCoordinatorRoleChanged: async () => {
-        await this.onCoordinatorRoleChanged?.(true);
-      },
+      onCoordinatorRoleChanged: async () =>
+        this.onCoordinatorRoleChanged?.(true),
+      onError: this.reportError,
     });
   }
 
@@ -515,14 +517,15 @@ export class MeshStore implements CommsStore {
         this.peerLifecycle.handlePeerJoined(peer);
       },
       onBecomeCoordinator: (peerList) => {
-        void this.peerLifecycle.handleBecomeCoordinator(peerList);
+        // A handover this side cannot honour (the outgoing coordinator's port never freed, say) leaves the mesh without a coordinator until the next crash race, which is worth reporting rather than losing as an unhandled rejection.
+        void this.peerLifecycle
+          .handleBecomeCoordinator(peerList)
+          .catch(this.reportError);
       },
       onConnectionRequest: (handle, request) => {
         this.connectionApproval.handleConnectionRequest(handle, request);
       },
-      onError: (error) => {
-        this.onError?.(error);
-      },
+      onError: this.reportError,
       onRevocationAnnounce: (entry) => {
         void this.deliveryEngine.handleRevocationAnnounce(entry);
       },

@@ -8,6 +8,7 @@ import type {
   PeerInfo,
   SerialisedState,
 } from "./wire-protocol.js";
+import { isAddrInUse } from "./bind-retry.js";
 import { COORDINATOR_HOST } from "./mesh-store-shared.js";
 import type { CoordinatorGateway } from "./coordinator-gateway.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
@@ -22,18 +23,33 @@ export interface PeerLifecycleDeps {
   agents: Map<string, AgentIdentity>;
   coordinatorPort: number;
   getPeerId: () => string;
+  /** The peer ID of the coordinator this side currently answers to, as the transport reports it -- undefined when this side is the coordinator itself or has never reached one. Supplied as its own dep rather than read off requireTransport() so the crash-race decision below is expressible against a plain value in tests. */
+  getCoordinatorPeerId: () => string | undefined;
   requireTransport: () => MeshTransport;
   serialise: () => SerialisedState;
   roomProtocol: Pick<RoomProtocol, "flushPendingRoomRequests">;
-  deliveryEngine: Pick<DeliveryEngine, "applyStateSync" | "applyPatch">;
+  deliveryEngine: Pick<
+    DeliveryEngine,
+    "applyStateSync" | "applyPatch" | "notifyRoomsOfStatus" | "broadcastPatch"
+  >;
   staleAgentChecker: Pick<StaleAgentChecker, "start">;
   /** Dials the hub the moment this side takes over as coordinator (agent-comms#154) -- see CoordinatorGateway's own class doc. Narrowed to the one method handleBecomeCoordinator ever calls; onLostCoordinator is MeshStore.shutdown()'s own concern, not this class's. */
   coordinatorGateway: Pick<CoordinatorGateway, "onBecameCoordinator">;
   /** Fires alongside coordinatorGateway.onBecameCoordinator, right after this side takes over as coordinator -- MeshStore's own hook for starting a coordinator-only capability that doesn't belong in the transport-agnostic core itself (e.g. the cc-peer front, agent-comms#157). Optional and left unset by most callers, mirroring MeshStore's own onDelivery/onPatch/onError callback fields. */
   onCoordinatorRoleChanged?: (() => void | Promise<void>) | undefined;
+  /** Reports a failed takeover or rejoin. The crash-race path runs detached from any caller that could handle a rejection, so this is the only signal that a coordinator loss was noticed but not recovered from. */
+  onError?: ((error: Error) => void) | undefined;
+}
+
+/** The message an unknown thrown value is reported as, so a takeover or rejoin failure reads the same whether the transport rejected with an Error or something else. */
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export class PeerLifecycle {
+  /** Guards against a second contest running while the first is still binding or rejoining -- a coordinator whose process dies can close more than one session to this side, and each close arrives as its own disconnect. */
+  private contestingCoordinatorRole = false;
+
   constructor(private readonly deps: PeerLifecycleDeps) {}
 
   handlePeerList(peers: readonly PeerInfo[]): void {
@@ -112,8 +128,11 @@ export class PeerLifecycle {
     await this.deps
       .requireTransport()
       .becomeCoordinator(COORDINATOR_HOST, this.deps.coordinatorPort);
-    this.deps.peerInfo.clear();
     const peerId = this.deps.getPeerId();
+    // peerList never names the successor itself (neither the graceful handover nor the crash race includes it), so this side's own entry is carried across the reset rather than dropped: handleIntroduction answers every later joiner with exactly these entries, and a joiner that is never told the coordinator's own data port never dials it.
+    const self = this.deps.peerInfo.get(peerId);
+    this.deps.peerInfo.clear();
+    if (self !== undefined) this.deps.peerInfo.set(peerId, self);
     for (const peer of peerList) {
       this.deps.peerInfo.set(peer.id, peer);
       void this.deps.requireTransport().connectToPeer(peer, peerId);
@@ -124,7 +143,80 @@ export class PeerLifecycle {
   }
 
   handlePeerDisconnected(handle: Readonly<ConnectionHandle>): void {
-    this.deps.peerInfo.delete(handle.id);
+    void this.handlePeerDeparture(handle.id);
+  }
+
+  /** The awaitable form of handlePeerDisconnected, which TransportEvents forces to be synchronous. A departing peer leaves the peer list; when it was this side's own coordinator, its vacated role is contested before anything else, so whoever wins is already coordinator by the time the departed peer's agent record is retired. */
+  async handlePeerDeparture(peerId: string): Promise<void> {
+    this.deps.peerInfo.delete(peerId);
+    if (peerId === this.deps.getCoordinatorPeerId()) {
+      await this.contestCoordinatorRole(peerId);
+    }
+    await this.retireDepartedAgent(peerId);
+  }
+
+  /** Races every other surviving peer to rebind the coordinator port, which is what makes a coordinator CRASH recoverable at all: unlike the graceful handover, a killed coordinator names no successor, so each survivor contests independently and the operating system's own exclusive bind decides the single winner. The winner runs the ordinary takeover path (handleBecomeCoordinator) over the peers it still holds connections to; a loser -- the one case where the bind fails specifically because the port is already taken -- re-introduces itself to the winner so it is a full member of the new mesh again, with its own data port known to whoever joins next. Direct peer-to-peer data connections are untouched throughout, so traffic between survivors never depends on the outcome of this race. */
+  private async contestCoordinatorRole(
+    lostCoordinatorId: string,
+  ): Promise<void> {
+    const transport = this.deps.requireTransport();
+    if (transport.isCoordinator || this.contestingCoordinatorRole) return;
+    this.contestingCoordinatorRole = true;
+    try {
+      const selfId = this.deps.getPeerId();
+      const survivors = [...this.deps.peerInfo.values()].filter(
+        (peer) => peer.id !== selfId && peer.id !== lostCoordinatorId,
+      );
+      try {
+        await this.handleBecomeCoordinator(survivors);
+        return;
+      } catch (error) {
+        if (!isAddrInUse(error)) {
+          this.deps.onError?.(
+            new Error(
+              `PeerLifecycle: could not take over the vacated coordinator role: ${describe(error)}`,
+            ),
+          );
+          return;
+        }
+      }
+      await this.rejoinUnderNewCoordinator(selfId);
+    } finally {
+      this.contestingCoordinatorRole = false;
+    }
+  }
+
+  /** Re-introduces this side to whichever survivor won the bind race, over a fresh coordinator connection to the same well-known port. Without it this peer would keep its existing data connections but be unknown to the new coordinator, so it would never appear in the peer list handed to the next joiner. */
+  private async rejoinUnderNewCoordinator(selfId: string): Promise<void> {
+    const transport = this.deps.requireTransport();
+    try {
+      await transport.connectToCoordinator(
+        COORDINATOR_HOST,
+        this.deps.coordinatorPort,
+        selfId,
+        transport.dataPort,
+      );
+    } catch (error) {
+      this.deps.onError?.(
+        new Error(
+          `PeerLifecycle: lost the coordinator bind race and could not rejoin under the new coordinator: ${describe(error)}`,
+        ),
+      );
+    }
+  }
+
+  /** Marks a departed peer's own agent offline and announces it, but only from the coordinator -- the same single-authority rule StaleAgentChecker's PID probe already follows, so a departure produces one announcement rather than one per surviving peer. An agent's id is its peer's id (AgentRegistry.registerAgent), so the departed peer names its own record directly; the PID probe remains the backstop for an agent whose process dies without its session closing. */
+  private async retireDepartedAgent(peerId: string): Promise<void> {
+    if (!this.deps.requireTransport().isCoordinator) return;
+    const agent = this.deps.agents.get(peerId);
+    if (agent === undefined || agent.status === "offline") return;
+    agent.status = "offline";
+    this.deps.agents.set(peerId, agent);
+    await this.deps.deliveryEngine.notifyRoomsOfStatus(peerId, "offline");
+    await this.deps.deliveryEngine.broadcastPatch({
+      type: "agent_offline",
+      agentId: peerId,
+    });
   }
 
   /** Graceful coordinator handover (agent-comms#170): called by MeshStore.shutdown() while the transport is still up. A no-op unless this side currently holds the coordinator role and at least one other peer remains connected -- neither condition is this class's own business to log or report on, since a solo coordinator shutting down or a non-coordinator peer shutting down are both entirely ordinary. When both hold, picks the longest-running remaining peer (the one with the earliest recorded PeerInfo.startedAt, matching the README's documented policy) as the successor and sends it become_coordinator carrying every other remaining peer -- exactly the peerList shape handleBecomeCoordinator already expects (it dials each entry itself; the successor doesn't need to be told about itself). The crash-race path (each surviving peer independently racing to rebind the coordinator port) is a separate mechanism and untouched by this method. */

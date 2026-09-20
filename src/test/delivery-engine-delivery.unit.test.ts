@@ -106,6 +106,7 @@ function fakeTransport(): MeshTransport {
     dataPort: 4000,
     isCoordinator: false,
     hasCoordinatorConnection: false,
+    coordinatorPeerId: undefined,
     startDataServer: vi.fn().mockResolvedValue(undefined),
     connectToCoordinator: vi.fn().mockResolvedValue(undefined),
     becomeCoordinator: vi.fn().mockResolvedValue(undefined),
