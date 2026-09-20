@@ -1,3 +1,25 @@
+## [5.0.0](https://github.com/ExaDev/agent-comms/compare/v4.5.2...v5.0.0) (2026-09-20)
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** peers and hubs running wire-mesh-core 1 no longer interoperate with this version.
+
+### Features
+
+* **deps:** require wire-mesh-core 2 and its signed peer adverts ([4370a98](https://github.com/ExaDev/agent-comms/commit/4370a98131c16ce355ce36a8b91c292a0a31d39d))
+
+### Bug Fixes
+
+* **core:** catch a hub up with only the devices this side fronts ([180247d](https://github.com/ExaDev/agent-comms/commit/180247db9f626a17e69d30fdf84a2f95407b8339))
+
+### Documentation
+
+* **core:** describe signed adverts and why a merge and the hub differ on ties ([92ddaf1](https://github.com/ExaDev/agent-comms/commit/92ddaf1244d723c8424eb33d2c2d48b9e8c9e2f4))
+
+### Tests
+
+* **core:** wait for the hub to register a peer before relaying to it ([d568ed4](https://github.com/ExaDev/agent-comms/commit/d568ed46c06867a1a82ff3f8f10ad313d5761526))
+
 ## [4.5.2](https://github.com/ExaDev/agent-comms/compare/v4.5.1...v4.5.2) (2026-09-20)
 
 ### Refactoring
