@@ -1,3 +1,19 @@
+## [5.1.0](https://github.com/ExaDev/agent-comms/compare/v5.0.6...v5.1.0) (2026-09-20)
+
+### Features
+
+* **bridge:** answer termination signals in every bridge, not just two of them ([7772cca](https://github.com/ExaDev/agent-comms/commit/7772cca8e8510818238e28dd3b00200db57a3880))
+
+### Bug Fixes
+
+* **core:** read a hub session's events from one consumer so a close is never missed ([36a746a](https://github.com/ExaDev/agent-comms/commit/36a746ae6881d8a80354143a8ab4eb510f8be78b))
+* **mesh-store:** bound the deadline on mesh-state frames and settle a lost coordinator ([0f99514](https://github.com/ExaDev/agent-comms/commit/0f995145c4b1f03498c88fa08d2a2797d85378d2))
+* **mesh-store:** race to rebind the coordinator port when the coordinator crashes ([939d058](https://github.com/ExaDev/agent-comms/commit/939d05853360d8554ba661734de51f83cf1f0f86))
+
+### Documentation
+
+* describe what actually happens when the coordinator goes away ([6a706bf](https://github.com/ExaDev/agent-comms/commit/6a706bf43a168b093728dbc778cd2f1f31909216))
+
 ## [5.0.6](https://github.com/ExaDev/agent-comms/compare/v5.0.5...v5.0.6) (2026-09-20)
 
 ### Build
