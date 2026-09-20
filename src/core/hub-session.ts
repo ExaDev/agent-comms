@@ -135,9 +135,29 @@ export class HubSession {
     this.connection = connection;
     this.url = url;
     this.deps.trackForShutdown(session);
-    // Merge the hub's directory (its catch-up arrives as the first session events) and keep refreshing it on every subsequent one. Every trusted remote entry is also surfaced via onDirectory, so the transport can merge it into its own mesh-wide knownDevices (agent-comms#155's remote-directory-merge leg). Filtered to admitEntries (agent-comms#156, widened by agent-comms#187's principal allowlist per agent-comms#192 and by #266's membership proofs) before either hubPeersKnown tracking or onDirectory sees it: an untrusted device's gossiped presence is not merely withheld from listAgents, it is never even recorded as "known" here, so nothing downstream can act on it via any path this class exposes.
-    void (async () => {
-      const ownHex = deviceIdToHex(identity.deviceId);
+    void this.consumeEvents(session, deviceIdToHex(identity.deviceId)).catch(
+      (error: unknown) => {
+        // The merge loop must not die silently: a failure here would stop this side learning of every remote device until the hub is redialled.
+        this.deps.events.onError?.(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      },
+    );
+    this.consume(session, deviceIdToHex(identity.deviceId));
+  }
+
+  /**
+   * The single consumer of one hub session's own event stream: merges the hub's directory (its catch-up arrives as the first event, and it is refreshed on every subsequent one) and, once the session ends, drops the held connection so isConnected answers honestly.
+   *
+   * Single is the operative word. wire-mesh-core delivers each event to exactly one waiting reader, so two concurrent loops over the same stream split it between them: the closed event reaches whichever of them happened to be waiting first. When that was the directory loop, the connection stayed recorded as live for the rest of the process, and every later advertiseDevices threw on a socket that was already gone -- once per directory change, which is what filled a replacement coordinator's stderr with "connection is closed" after the previous coordinator was killed.
+   *
+   * Every trusted remote entry is surfaced via onDirectory, so the transport can merge it into its own mesh-wide knownDevices (agent-comms#155's remote-directory-merge leg). Filtered to admitEntries (agent-comms#156, widened by agent-comms#187's principal allowlist per agent-comms#192 and by #266's membership proofs) before either hubPeersKnown tracking or onDirectory sees it: an untrusted device's gossiped presence is not merely withheld from listAgents, it is never even recorded as "known" here, so nothing downstream can act on it via any path this class exposes.
+   */
+  private async consumeEvents(
+    session: AcceptedMeshSession,
+    ownHex: string,
+  ): Promise<void> {
+    try {
       for await (const event of session.events) {
         if (this.deps.isShuttingDown()) break;
         const remoteEntries = await this.deps.admitEntries(
@@ -151,16 +171,13 @@ export class HubSession {
         if (remoteEntries.length > 0) this.deps.onDirectory(remoteEntries);
         if (event.state.status === "closed") break;
       }
-    })().catch((error: unknown) => {
-      // The merge loop must not die silently: a failure here would stop this side learning of every remote device until the hub is redialled.
-      this.deps.events.onError?.(
-        error instanceof Error ? error : new Error(String(error)),
-      );
-    });
-    this.consume(session, deviceIdToHex(identity.deviceId));
-    void (async () => {
-      await this.watchDisconnect(session);
-    })();
+    } finally {
+      if (this.session === session) {
+        this.session = undefined;
+        this.connection = undefined;
+        this.url = undefined;
+      }
+    }
   }
 
   /** Consumes one hub session's inbound relayed manage-requests until it ends, dispatching each in arrival order to dispatchHubRequest -- see that function's own doc for the actual per-request trust decision. Split out purely so the decision itself is directly unit-testable against fake requests/deps (hub-session-dispatch.test.ts), the same reason hub-forwarding.ts's own forwardAdvertsToHub/pushHubCatchUp are standalone functions rather than private methods. Passes this.url through as dispatchHubRequest's own hubAddress -- this side's own dialled address for the hub every request on this specific session arrived over (agent-comms#216), the answering-side equivalent of tracePath's own local.hubAddress above. */
@@ -179,17 +196,6 @@ export class HubSession {
         });
       }
     })();
-  }
-
-  private async watchDisconnect(session: AcceptedMeshSession): Promise<void> {
-    for await (const event of session.events) {
-      if (event.state.status === "closed") break;
-    }
-    if (this.session === session) {
-      this.session = undefined;
-      this.connection = undefined;
-      this.url = undefined;
-    }
   }
 
   /** Gossips a raw `gossip` frame carrying every given entry's own advert onto the hub, over the raw connection rather than sendGossipUpdate (which can only ever advertise this side's own single device) -- the outbound leg of agent-comms#155's gateway forwarding. relay-hub.ts registers each advert's own `device` field against the CONNECTION it arrives on, so every entry passed here becomes reachable, cross-machine, as "via this gateway" -- callers are responsible for only ever passing entries that are actually meant to be advertised (WireMeshTransport filters to local, visible-agent-bearing entries before calling this). Throws if this side isn't currently connected to a hub, matching sendToPeer's own contract -- callers gate on isConnected first. */
