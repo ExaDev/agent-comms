@@ -23,7 +23,7 @@ import {
 } from "./peer-versions.js";
 import type { HubSession } from "./hub-session.js";
 
-/** Merges one session event's own directory into the mesh-wide knownDevices view (mutated in place), keeping the newer advert (by snapshot-seconds) whenever a device-id is already known from an earlier event or a different session. */
+/** Merges one session event's own directory into the mesh-wide knownDevices view (mutated in place), keeping the newer advert (by snapshot-seconds) whenever a device-id is already known from an earlier event or a different session. An equal snapshot replaces the held advert, unlike the relay hub, which lets an advert take a device's registration over from a different connection only when it is strictly newer: the hub is guarding a route against a replayed advert, whereas every entry here has already been verified by the session that produced it, so an equal one carries the same content and the freshest copy is the one to keep. */
 export function mergeKnownDevices(
   knownDevices: Map<string, PeerAdvert>,
   directory: readonly DirectoryEntry[],
