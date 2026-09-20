@@ -50,7 +50,7 @@ describe("createRoomRouter", () => {
       buildCommand({ method: "peer_list", peers: [] }),
     );
 
-    await router.handleRequest(request, TEST_HANDLE);
+    await router.handleLocalRequest(request, TEST_HANDLE);
 
     expect(
       (events.onPeerList as unknown as ReturnType<typeof vi.fn>).mock.calls
@@ -68,7 +68,7 @@ describe("createRoomRouter", () => {
       params: { message: { method: "not-a-real-method" } },
     });
 
-    await router.handleRequest(request, TEST_HANDLE);
+    await router.handleLocalRequest(request, TEST_HANDLE);
 
     expect(
       (events.onMessage as unknown as ReturnType<typeof vi.fn>).mock.calls
@@ -85,7 +85,7 @@ describe("createRoomRouter", () => {
       params: {},
     });
 
-    await router.handleRequest(request, TEST_HANDLE);
+    await router.handleLocalRequest(request, TEST_HANDLE);
 
     expect(
       (events.onMessage as unknown as ReturnType<typeof vi.fn>).mock.calls
@@ -111,7 +111,7 @@ describe("createRoomRouter", () => {
       params: { verb: "room.send", text: "hi" },
     });
 
-    await router.handleRequest(request, TEST_HANDLE);
+    await router.handleLocalRequest(request, TEST_HANDLE);
 
     expect(handled).toEqual([{ verb: "room.send", text: "hi" }]);
     expect(responses).toEqual([{ result: "ok" }]);
@@ -125,7 +125,7 @@ describe("createRoomRouter", () => {
       params: { verb: "room.send", text: "hi" },
     });
 
-    await router.handleRequest(request, TEST_HANDLE);
+    await router.handleLocalRequest(request, TEST_HANDLE);
 
     expect(responses.length).toBe(1);
     expect(responses[0]).toEqual({
@@ -142,7 +142,7 @@ describe("createRoomRouter", () => {
       params: { verb: "exec.list" },
     });
 
-    await router.handleRequest(request, TEST_HANDLE);
+    await router.handleLocalRequest(request, TEST_HANDLE);
 
     expect(responses).toEqual([{ result: "error", code: "unsupported_verb" }]);
   });
@@ -155,7 +155,7 @@ describe("createRoomRouter", () => {
       params: {},
     });
 
-    await router.handleRequest(request, TEST_HANDLE);
+    await router.handleLocalRequest(request, TEST_HANDLE);
 
     expect(responses).toEqual([{ result: "error", code: "unsupported_verb" }]);
   });
@@ -177,7 +177,7 @@ describe("createRoomRouter", () => {
       params: { verb: "room.send", text: "hi" },
     });
 
-    await router.handleRequest(request, TEST_HANDLE, {
+    await router.handleLocalRequest(request, TEST_HANDLE, {
       relayHubAddress: "wss://hub.example/",
     });
 
@@ -203,8 +203,85 @@ describe("createRoomRouter", () => {
       params: { verb: "room.send", text: "hi" },
     });
 
-    await router.handleRequest(request, TEST_HANDLE);
+    await router.handleLocalRequest(request, TEST_HANDLE);
 
     expect(receivedOrigins).toEqual([{}]);
+  });
+
+  it("dispatches a registered room verb from a relayed request to its own handler", async () => {
+    const events = fakeEvents();
+    const handled: unknown[] = [];
+    const router = createRoomRouter({
+      events,
+      handlers: {
+        "room.send": async (request) => {
+          handled.push(request.command.params);
+          return { result: "ok" };
+        },
+      },
+    });
+    const { request, responses } = fakeRequest({
+      verb: "room:member",
+      params: { verb: "room.send", text: "hi" },
+    });
+
+    await router.handleRelayedRequest(request, TEST_HANDLE);
+
+    expect(handled).toEqual([{ verb: "room.send", text: "hi" }]);
+    expect(responses).toEqual([{ result: "ok" }]);
+  });
+
+  it.each([
+    {
+      label: "state_update",
+      message: {
+        method: "state_update",
+        patch: { type: "agent_offline", agentId: "spoofed" },
+      },
+    },
+    { label: "peer_list", message: { method: "peer_list", peers: [] } },
+    {
+      label: "an unrecognised method",
+      message: { method: "not-a-real-method" },
+    },
+  ])(
+    "refuses a relayed FRAME_VERB carrying $label with unsupported_verb and reaches no TransportEvents callback",
+    async ({ message }) => {
+      const events = fakeEvents();
+      const router = createRoomRouter({ events });
+      const { request, responses } = fakeRequest({
+        verb: FRAME_VERB,
+        params: { message },
+      });
+
+      await router.handleRelayedRequest(request, TEST_HANDLE);
+
+      expect(responses).toEqual([
+        { result: "error", code: "unsupported_verb" },
+      ]);
+      for (const callback of Object.values(events)) {
+        expect(callback).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("refuses a relayed FRAME_VERB even when its params also name a registered room verb", async () => {
+    const handler = vi.fn().mockResolvedValue({ result: "ok" });
+    const router = createRoomRouter({
+      events: fakeEvents(),
+      handlers: { "room.send": handler },
+    });
+    const { request, responses } = fakeRequest({
+      verb: FRAME_VERB,
+      params: {
+        verb: "room.send",
+        message: { method: "peer_list", peers: [] },
+      },
+    });
+
+    await router.handleRelayedRequest(request, TEST_HANDLE);
+
+    expect(responses).toEqual([{ result: "error", code: "unsupported_verb" }]);
+    expect(handler).not.toHaveBeenCalled();
   });
 });

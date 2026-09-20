@@ -131,13 +131,19 @@ export interface RoomRouterOptions {
 }
 
 export interface RoomRouter {
-  /** Handles one already-received request. Exported for direct unit testing; drainSession below is the thin per-session loop wrapper real callers use. origin defaults to an empty object (nothing to report) when omitted -- an ordinary local peer session's own call sites (drainSession, WireMeshTransport's consumeQuarantined) never have anything to supply here; only the hub-relayed dispatch path (hub-session.ts's dispatchHubRequest, which calls this directly as its own handleRoomRequest dep) ever passes a real one. */
-  handleRequest: (
+  /** Handles one request that arrived over an ordinary local peer session: a legacy FRAME_VERB frame goes to the matching TransportEvents callback, and anything else is dispatched as a room verb. Exported for direct unit testing; drainSession below is the thin per-session loop wrapper real callers use. origin defaults to an empty object (nothing to report) when omitted, since an ordinary local peer session has no relay-hub address of its own to report. */
+  handleLocalRequest: (
     request: IncomingManageRequest,
     handle: Readonly<ConnectionHandle>,
     origin?: Readonly<RoomRequestOrigin>,
   ) => Promise<void>;
-  /** Consumes one session's incomingManageRequests until it ends, dispatching each request via handleRequest. Becomes the single consumer of that iterable from this point on -- the caller must not also iterate the same session's incomingManageRequests itself once this is called. allowOnBehalfOf (default false) permits resolveHandle's own "on-behalf-of" substitution for every request on this session -- wire-mesh-transport.ts's consumeIncoming passes true only when this session's peer identity matches this side's own recorded coordinator device (see resolveHandle's own doc comment for why identity, not call site, is what's checked). */
+  /** Handles one request that arrived relayed through a hub. Only a room verb is ever dispatched: a legacy FRAME_VERB frame is answered with unsupported_verb and never decoded, so a relayed sender cannot reach the TransportEvents callbacks (mesh-state gossip such as state_sync and state_update) however it is routed here. Separate from handleLocalRequest so that the distinction is structural rather than a check each caller must remember to make first. */
+  handleRelayedRequest: (
+    request: IncomingManageRequest,
+    handle: Readonly<ConnectionHandle>,
+    origin?: Readonly<RoomRequestOrigin>,
+  ) => Promise<void>;
+  /** Consumes one session's incomingManageRequests until it ends, dispatching each request via handleLocalRequest. Becomes the single consumer of that iterable from this point on -- the caller must not also iterate the same session's incomingManageRequests itself once this is called. allowOnBehalfOf (default false) permits resolveHandle's own "on-behalf-of" substitution for every request on this session -- wire-mesh-transport.ts's consumeIncoming passes true only when this session's peer identity matches this side's own recorded coordinator device (see resolveHandle's own doc comment for why identity, not call site, is what's checked). */
   drainSession: (
     session: AcceptedMeshSession,
     handle: Readonly<ConnectionHandle>,
@@ -146,7 +152,28 @@ export interface RoomRouter {
 }
 
 export function createRoomRouter(options: RoomRouterOptions): RoomRouter {
-  async function handleRequest(
+  /** A room verb is never carried under FRAME_VERB, so a frame reaching here is not a room request whatever its params claim, and is refused like any other unregistered verb. */
+  async function dispatchRoomVerb(
+    request: IncomingManageRequest,
+    handle: Readonly<ConnectionHandle>,
+    origin: Readonly<RoomRequestOrigin>,
+  ): Promise<void> {
+    const verb = extractParamsVerb(request.command.params);
+    const handler =
+      request.command.verb !== FRAME_VERB && verb !== undefined
+        ? options.handlers?.[verb]
+        : undefined;
+    if (handler === undefined) {
+      await request
+        .respond({ result: "error", code: "unsupported_verb" })
+        .catch(() => undefined);
+      return;
+    }
+    const outcome = await handler(request, handle, origin);
+    await request.respond(outcome).catch(() => undefined);
+  }
+
+  async function handleLocalRequest(
     request: IncomingManageRequest,
     handle: Readonly<ConnectionHandle>,
     origin: Readonly<RoomRequestOrigin> = {},
@@ -159,25 +186,24 @@ export function createRoomRouter(options: RoomRouterOptions): RoomRouter {
       await request.respond({ result: "ok" }).catch(() => undefined);
       return;
     }
+    await dispatchRoomVerb(request, handle, origin);
+  }
 
-    const verb = extractParamsVerb(request.command.params);
-    const handler = verb !== undefined ? options.handlers?.[verb] : undefined;
-    if (handler === undefined) {
-      await request
-        .respond({ result: "error", code: "unsupported_verb" })
-        .catch(() => undefined);
-      return;
-    }
-    const outcome = await handler(request, handle, origin);
-    await request.respond(outcome).catch(() => undefined);
+  async function handleRelayedRequest(
+    request: IncomingManageRequest,
+    handle: Readonly<ConnectionHandle>,
+    origin: Readonly<RoomRequestOrigin> = {},
+  ): Promise<void> {
+    await dispatchRoomVerb(request, handle, origin);
   }
 
   return {
-    handleRequest,
+    handleLocalRequest,
+    handleRelayedRequest,
     drainSession(session, handle, allowOnBehalfOf = false) {
       void (async () => {
         for await (const request of session.incomingManageRequests) {
-          await handleRequest(
+          await handleLocalRequest(
             request,
             resolveHandle(request, handle, allowOnBehalfOf),
           );
