@@ -112,7 +112,7 @@ export function createDefaultCcPeerFront(
     },
   };
 
-  /** Materialises the front's own shared AliasPool on first use (mirroring ensureSharedPeer's own lazy-construction convention) and wires its "message" event -- every reply arriving on any fronted session's own correspondent aliases -- straight into the controller's handleAliasMessage, which resolves the sending session and the alias's own correspondent before routing it on. */
+  /** Materialises the front's own shared AliasPool on first use (mirroring ensureSharedPeer's own lazy-construction convention) and wires its "message" event, every reply arriving on any fronted session's own correspondent aliases, straight into the controller's handleAliasMessage, which resolves the sending session and the alias's own correspondent before routing it on. The pool is also what delivers a correspondent's own messages into a fronted session, from that correspondent's alias, so the session's reply comes back on this same "message" event. */
   function ensureAliasPool(): AliasPool {
     if (aliasPool) return aliasPool;
     const pool = AliasPool.create();
@@ -158,6 +158,7 @@ export function createDefaultCcPeerFront(
       peer,
       aliasPool: ensureAliasPool(),
       aliasDirectory,
+      onError: options.onError,
     });
   }
 }

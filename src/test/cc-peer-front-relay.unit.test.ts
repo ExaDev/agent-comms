@@ -106,13 +106,29 @@ function dmMessage(overrides: Partial<DmMessage> = {}): DmMessage {
   };
 }
 
-function fakeAliasPool(): FrontRelayAliasPool & { ensureCalls: string[] } {
-  const ensureCalls: string[] = [];
+function fakeAliasPool(): FrontRelayAliasPool & {
+  sendCalls: { alias: string; target: unknown; body: string }[];
+} {
+  const sendCalls: { alias: string; target: unknown; body: string }[] = [];
   return {
-    ensureCalls,
-    ensure: vi.fn(async (name: string) => {
-      ensureCalls.push(name);
-      return Promise.resolve();
+    sendCalls,
+    send: vi.fn(async (alias: string, target: unknown, body: string) => {
+      sendCalls.push({ alias, target, body });
+      return Promise.resolve({ msgId: "alias-msg-1" });
+    }),
+  };
+}
+
+/** A tool whose every call is refused, for the paths that must report a refusal back into the session rather than discard it. */
+function refusingTool(
+  content: string,
+): Pick<CommsTool, "handle"> & { handleCalls: unknown[] } {
+  const handleCalls: unknown[] = [];
+  return {
+    handleCalls,
+    handle: vi.fn(async (ctx: unknown, action: unknown) => {
+      handleCalls.push({ ctx, action });
+      return Promise.resolve({ content, isError: true });
     }),
   };
 }
@@ -126,9 +142,9 @@ function fakeAliasDirectory(
 }
 
 describe("buildFrontedSessionRecord — outbound (mesh -> cc-peer)", () => {
-  it("wires store.onDelivery to send the formatted event to the session's own pid", async () => {
+  it("wires store.onDelivery to send the event to the session's own pid", async () => {
     const store = fakeStore();
-    const peer = fakePeer();
+    const aliasPool = fakeAliasPool();
     const entry = rosterEntry({ pid: 333 });
 
     buildFrontedSessionRecord({
@@ -138,8 +154,8 @@ describe("buildFrontedSessionRecord — outbound (mesh -> cc-peer)", () => {
       roomId: "owner/project",
       store,
       tool: fakeTool(),
-      peer,
-      aliasPool: fakeAliasPool(),
+      peer: fakePeer(),
+      aliasPool,
       aliasDirectory: fakeAliasDirectory(),
     });
 
@@ -150,11 +166,11 @@ describe("buildFrontedSessionRecord — outbound (mesh -> cc-peer)", () => {
     };
     await store.onDelivery?.("agent-1", event);
 
-    expect(peer.sendCalls).toHaveLength(1);
-    expect(peer.sendCalls[0]?.target).toEqual({ pid: 333 });
+    expect(aliasPool.sendCalls).toHaveLength(1);
+    expect(aliasPool.sendCalls[0]?.target).toEqual({ pid: 333 });
   });
 
-  it("materialises a reply alias for the event's own correspondent and mentions it in the delivered body", async () => {
+  it("sends a DM from the correspondent's own alias, not from the front's shared peer", async () => {
     const store = fakeStore();
     const peer = fakePeer();
     const aliasPool = fakeAliasPool();
@@ -179,10 +195,38 @@ describe("buildFrontedSessionRecord — outbound (mesh -> cc-peer)", () => {
     await store.onDelivery?.("agent-1", event);
 
     expect(aliasDirectory.ensure).toHaveBeenCalledWith("correspondent-1");
-    expect(aliasPool.ensureCalls).toEqual(["mesh-correspondent-1"]);
-    expect(peer.sendCalls[0]?.body).toContain(
-      'reply via peer "mesh-correspondent-1"',
-    );
+    expect(aliasPool.sendCalls).toEqual([
+      {
+        alias: "mesh-correspondent-1",
+        target: { pid: 222 },
+        body: expect.stringContaining("hi from the mesh"),
+      },
+    ]);
+    expect(peer.sendCalls).toEqual([]);
+  });
+
+  it("leaves the delivered body free of a reply hint, since the sender is now the reply target", async () => {
+    const store = fakeStore();
+    const aliasPool = fakeAliasPool();
+
+    buildFrontedSessionRecord({
+      entry: rosterEntry(),
+      peerName: PEER_NAME,
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store,
+      tool: fakeTool(),
+      peer: fakePeer(),
+      aliasPool,
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    await store.onDelivery?.("agent-1", {
+      type: "dm",
+      message: dmMessage({ from: "correspondent-1" }),
+    });
+
+    expect(aliasPool.sendCalls[0]?.body).not.toContain("reply via peer");
   });
 
   it("delivers an event with no single correspondent (e.g. member_joined) without touching the alias pool", async () => {
@@ -209,16 +253,51 @@ describe("buildFrontedSessionRecord — outbound (mesh -> cc-peer)", () => {
     };
     await store.onDelivery?.("agent-1", event);
 
-    expect(aliasPool.ensureCalls).toEqual([]);
+    expect(aliasPool.sendCalls).toEqual([]);
     expect(peer.sendCalls).toHaveLength(1);
   });
 
-  it("still delivers the event, without a reply hint, if materialising the alias fails", async () => {
+  it("reports the failure and warns the session when the alias cannot deliver", async () => {
     const store = fakeStore();
     const peer = fakePeer();
+    const onError = vi.fn<(error: Error) => void>();
     const failure = new Error("alias worker failed to start");
     const aliasPool: FrontRelayAliasPool = {
-      ensure: vi.fn(async () => Promise.reject(failure)),
+      send: vi.fn(async () => Promise.reject(failure)),
+    };
+
+    buildFrontedSessionRecord({
+      entry: rosterEntry(),
+      peerName: PEER_NAME,
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store,
+      tool: fakeTool(),
+      peer,
+      aliasPool,
+      aliasDirectory: fakeAliasDirectory(),
+      onError,
+    });
+
+    const event: DeliveryEvent = {
+      type: "dm",
+      message: dmMessage({ from: "correspondent-1" }),
+    };
+    await store.onDelivery?.("agent-1", event);
+
+    expect(onError).toHaveBeenCalledWith(failure);
+    expect(peer.sendCalls).toHaveLength(1);
+    const body = peer.sendCalls[0]?.body ?? "";
+    expect(body).toContain("hi from the mesh");
+    expect(body).toContain("Cannot reply");
+    expect(body).toContain("correspondent-1");
+  });
+
+  it("still delivers the content when the alias fails and no error channel is wired", async () => {
+    const store = fakeStore();
+    const peer = fakePeer();
+    const aliasPool: FrontRelayAliasPool = {
+      send: vi.fn(async () => Promise.reject(new Error("no alias"))),
     };
 
     buildFrontedSessionRecord({
@@ -233,14 +312,12 @@ describe("buildFrontedSessionRecord — outbound (mesh -> cc-peer)", () => {
       aliasDirectory: fakeAliasDirectory(),
     });
 
-    const event: DeliveryEvent = {
+    await store.onDelivery?.("agent-1", {
       type: "dm",
       message: dmMessage({ from: "correspondent-1" }),
-    };
-    await store.onDelivery?.("agent-1", event);
+    });
 
     expect(peer.sendCalls).toHaveLength(1);
-    expect(peer.sendCalls[0]?.body).not.toContain("reply via peer");
   });
 });
 
@@ -279,6 +356,54 @@ describe("buildFrontedSessionRecord — alias reply (cc-peer -> mesh DM)", () =>
         content: "reply body",
       },
     });
+  });
+
+  it("tells the session when the mesh refuses the reply, rather than discarding the result", async () => {
+    const peer = fakePeer();
+    const record = buildFrontedSessionRecord({
+      entry: rosterEntry({ pid: 555 }),
+      peerName: PEER_NAME,
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store: fakeStore(),
+      tool: refusingTool("No DM grant for correspondent-1."),
+      peer,
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    record.handleAliasReply("correspondent-1", { body: "reply body" });
+
+    await vi.waitFor(() => {
+      expect(peer.sendCalls).toHaveLength(1);
+    });
+    expect(peer.sendCalls[0]?.target).toEqual({ pid: 555 });
+    expect(peer.sendCalls[0]?.body).toBe(
+      "Reply to correspondent-1 not delivered: No DM grant for correspondent-1.",
+    );
+  });
+
+  it("stays quiet when the reply is delivered", async () => {
+    const peer = fakePeer();
+    const tool = fakeTool();
+    const record = buildFrontedSessionRecord({
+      entry: rosterEntry(),
+      peerName: PEER_NAME,
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store: fakeStore(),
+      tool,
+      peer,
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    record.handleAliasReply("correspondent-1", { body: "reply body" });
+
+    await vi.waitFor(() => {
+      expect(tool.handleCalls).toHaveLength(1);
+    });
+    expect(peer.sendCalls).toEqual([]);
   });
 });
 
@@ -362,6 +487,31 @@ describe("buildFrontedSessionRecord — inbound (cc-peer -> mesh)", () => {
 
     const call = tool.handleCalls[0] as { action: { content: string } };
     expect(call.action.content).toBe("local-session: hi");
+  });
+
+  it("tells the session when the project-room post is refused, rather than discarding the result", async () => {
+    const peer = fakePeer();
+    const record = buildFrontedSessionRecord({
+      entry: rosterEntry({ pid: 777 }),
+      peerName: PEER_NAME,
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store: fakeStore(),
+      tool: refusingTool("Not a member of owner/project."),
+      peer,
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    record.handleInbound({ from: "local-session", body: "hi" });
+
+    await vi.waitFor(() => {
+      expect(peer.sendCalls).toHaveLength(1);
+    });
+    expect(peer.sendCalls[0]?.target).toEqual({ pid: 777 });
+    expect(peer.sendCalls[0]?.body).toBe(
+      "Not posted to owner/project: Not a member of owner/project.",
+    );
   });
 });
 
