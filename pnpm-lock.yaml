@@ -207,8 +207,8 @@ importers:
         specifier: 2.3.0
         version: 2.3.0
       cc-peer:
-        specifier: 1.5.3
-        version: 1.5.3
+        specifier: 1.6.0
+        version: 1.6.0
       d3-force:
         specifier: 3.0.0
         version: 3.0.0
@@ -3124,8 +3124,8 @@ packages:
     resolution: {integrity: sha512-76WB3hq8BoaGkMkBVJ27fW5LJU+qqDLEpgRNCG/SYKhODWXpVPOTD4UcUto3IEzYLA52nsvbhb0wabhHDn3qXg==}
     engines: {node: '>=20'}
 
-  cc-peer@1.5.3:
-    resolution: {integrity: sha512-7Ic+baspYX3e+eenZeicoEAMLIrntXhKWqY5N18puzwHSsjHXGKv55wWbst9SoOuOkgQCI/Mj90WdY90Uq+vng==}
+  cc-peer@1.6.0:
+    resolution: {integrity: sha512-j3CnXMrm574lR8niPw/gUmqM8SBCr2sMkGuNQMrq1uqWT8oClj5yC7K14TJN8rfWJg7i7avTEG5PM9GFeHHEiA==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -9568,7 +9568,7 @@ snapshots:
     dependencies:
       '@cto.af/wtf8': 0.0.5
 
-  cc-peer@1.5.3:
+  cc-peer@1.6.0:
     dependencies:
       zod: 4.5.4
 
