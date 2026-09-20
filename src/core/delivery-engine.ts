@@ -178,6 +178,24 @@ export class DeliveryEngine {
   // State sync and patch application
   // -----------------------------------------------------------------------
 
+  /** Whether `agent` is this store's own agent and is running, that is, not already set offline by this store itself. An agent's id is its own store's peer id, so this store is the authority on whether it is running. */
+  private isOwnRunningAgent(
+    agentId: string,
+    agent: Readonly<AgentIdentity>,
+  ): boolean {
+    return agentId === this.deps.getPeerId() && agent.status !== "offline";
+  }
+
+  /** Contradicts a stale offline report about this store's own running agent: raises its revision above the one the report carried, so every peer accepts the correction, and re-announces it. */
+  private async reassertOwnAgent(
+    agent: AgentIdentity,
+    reportedVersion: number,
+  ): Promise<void> {
+    agent.version = Math.max(agent.version, reportedVersion);
+    this.bump(agent);
+    await this.broadcastPatch({ type: "agent_upsert", agent });
+  }
+
   /**
    * Merge a peer's state snapshot into the local state. Agents and rooms accept the incoming copy when it carries a revision at least as high as the local one, so a peer holding stale entities converges when it receives a fresher snapshot, while its own stale copies are rejected by peers that stayed current (#27). Message and DM histories are append-only: add unseen entries and union read receipts.
    */
@@ -191,6 +209,16 @@ export class DeliveryEngine {
     for (const [id, agent] of incoming.agents) {
       const existingVersion = this.deps.agents.get(id)?.version;
       if (existingVersion !== undefined && agent.version < existingVersion) {
+        continue;
+      }
+      const own = this.deps.agents.get(id);
+      if (
+        own !== undefined &&
+        this.isOwnRunningAgent(id, own) &&
+        agent.status === "offline"
+      ) {
+        // The same authority rule as an agent_offline patch: a snapshot from a peer that still holds this store's agent as offline (the previous coordinator retired it) must not overwrite a running agent, or the store would gossip itself offline for good.
+        void this.reassertOwnAgent(own, agent.version);
         continue;
       }
       if (existingVersion === agent.version) {
@@ -277,12 +305,8 @@ export class DeliveryEngine {
         const agent = this.deps.agents.get(patch.agentId);
         if (agent === undefined) break;
         // An agent is its own store's peer, so this store is the authority on whether it is running. A report that it is offline while it is (a previous coordinator retiring the session it fronted, or a stale process probe) is stale by definition, and applying it would stick: this store gossips its own status, so it would go on advertising itself offline. It is contradicted instead, at a higher revision so every peer accepts the correction. A store that has itself set its agent offline is not contradicted.
-        if (
-          patch.agentId === this.deps.getPeerId() &&
-          agent.status !== "offline"
-        ) {
-          this.bump(agent);
-          await this.broadcastPatch({ type: "agent_upsert", agent });
+        if (this.isOwnRunningAgent(patch.agentId, agent)) {
+          await this.reassertOwnAgent(agent, agent.version);
           break;
         }
         agent.status = "offline";
