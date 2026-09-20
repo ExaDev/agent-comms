@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { mergeKnownDevices } from "../core/gossip-directory.js";
 import type { DirectoryEntry } from "wire-mesh-core/domain/mesh-session";
 import type { PeerAdvert } from "wire-mesh-core/generated/protocol";
+import { syntheticAdvert } from "./synthetic-advert.js";
 
 const DEVICE_ID_HEX_LENGTH = 64;
 const DEVICE_A_HEX = "a".repeat(DEVICE_ID_HEX_LENGTH);
@@ -20,15 +21,12 @@ function deviceIdBytes(hex: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-function advert(snapshotSeconds: number): PeerAdvert {
-  return {
-    addresses: [],
-    "snapshot-seconds": snapshotSeconds,
-  } as unknown as PeerAdvert;
+function advert(snapshotSeconds: number, hex = DEVICE_A_HEX): PeerAdvert {
+  return syntheticAdvert(deviceIdBytes(hex), { snapshotSeconds });
 }
 
 function entry(hex: string, snapshotSeconds: number): DirectoryEntry {
-  return { device: deviceIdBytes(hex), advert: advert(snapshotSeconds) };
+  return { device: deviceIdBytes(hex), advert: advert(snapshotSeconds, hex) };
 }
 
 describe("mergeKnownDevices", () => {

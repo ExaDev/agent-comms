@@ -17,6 +17,7 @@ import {
   handlePathTraceRequest,
 } from "../core/mesh-graph.js";
 import type { ConnectionHandle } from "../core/transport.js";
+import { syntheticAdvert } from "./synthetic-advert.js";
 
 /** A device-id is a hex-encoded SHA-256 hash: 32 bytes, 64 hex characters. */
 const DEVICE_ID_HEX_LENGTH = 64;
@@ -33,22 +34,21 @@ function advertFor(
     relayed?: { device: string; via?: string }[];
   },
 ): PeerAdvert {
-  return {
-    device: deviceIdFromHex(deviceHex),
-    addresses: [],
-    "snapshot-seconds": 0,
+  return syntheticAdvert(deviceIdFromHex(deviceHex), {
     ...(topology !== undefined
       ? {
-          [TOPOLOGY_PEERS_GOSSIP_KEY]: {
-            direct: (topology.direct ?? []).map(deviceIdFromHex),
-            relayed: (topology.relayed ?? []).map((r) => ({
-              device: deviceIdFromHex(r.device),
-              ...(r.via !== undefined ? { via: deviceIdFromHex(r.via) } : {}),
-            })),
+          extensions: {
+            [TOPOLOGY_PEERS_GOSSIP_KEY]: {
+              direct: (topology.direct ?? []).map(deviceIdFromHex),
+              relayed: (topology.relayed ?? []).map((r) => ({
+                device: deviceIdFromHex(r.device),
+                ...(r.via !== undefined ? { via: deviceIdFromHex(r.via) } : {}),
+              })),
+            },
           },
         }
       : {}),
-  };
+  });
 }
 
 describe("computeMeshGraph", () => {
