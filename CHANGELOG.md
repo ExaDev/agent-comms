@@ -1,3 +1,9 @@
+## [5.2.5](https://github.com/ExaDev/agent-comms/compare/v5.2.4...v5.2.5) (2026-09-20)
+
+### Bug Fixes
+
+* **core:** keep a running agent online when a state snapshot carries it as offline ([49e9a93](https://github.com/ExaDev/agent-comms/commit/49e9a9327e6e89482d31f6c50c2b8207bda8636a))
+
 ## [5.2.4](https://github.com/ExaDev/agent-comms/compare/v5.2.3...v5.2.4) (2026-09-20)
 
 ### Bug Fixes
