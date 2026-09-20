@@ -378,7 +378,7 @@ describe("DeliveryEngine — deliverLocallyAndBroadcast", () => {
         type: "delivery_status",
         messageId: sent.id,
         agent: OTHER_ID,
-        status: "delivered",
+        delivery: { status: "delivered" },
       }),
     );
   });
@@ -394,7 +394,7 @@ describe("DeliveryEngine — deliverLocallyAndBroadcast", () => {
         type: "delivery_status",
         messageId: sent.id,
         agent: OTHER_ID,
-        status: "delivered",
+        delivery: { status: "delivered" },
       }),
     );
   });
