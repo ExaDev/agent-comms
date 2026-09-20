@@ -1,3 +1,14 @@
+## [5.0.2](https://github.com/ExaDev/agent-comms/compare/v5.0.1...v5.0.2) (2026-09-20)
+
+### Build
+
+* **deps-dev:** bump @commitlint/config-conventional ([7c4917b](https://github.com/ExaDev/agent-comms/commit/7c4917bda9574727e9dde972b5123e84275e4c6f))
+* **deps-dev:** bump @playwright/test from 1.61.1 to 1.63.0 ([88d2c65](https://github.com/ExaDev/agent-comms/commit/88d2c656e60339b25ccc051ecd1bb3430c190528))
+* **deps-dev:** bump @types/node from 26.1.1 to 26.6.1 ([dd141c7](https://github.com/ExaDev/agent-comms/commit/dd141c7fe9aa6751a4566067bc2e06caddc049af))
+* **deps-dev:** bump prettier from 3.9.5 to 3.9.7 ([1309722](https://github.com/ExaDev/agent-comms/commit/130972253d28c5bdb3661ddf66a1efcb66ed90a1))
+* **deps:** bump cc-peer to 1.5.3 ([a60067e](https://github.com/ExaDev/agent-comms/commit/a60067ec38e5775eceb1e9be42b6e62a5090f41f))
+* **deps:** bump web-ui-primitives to 1.1.0 ([76844f7](https://github.com/ExaDev/agent-comms/commit/76844f749908224240b0b4304478d5446a60b577))
+
 ## [5.0.1](https://github.com/ExaDev/agent-comms/compare/v5.0.0...v5.0.1) (2026-09-20)
 
 ### Build
