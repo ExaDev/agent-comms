@@ -11,6 +11,11 @@ export { MeshStore } from "./mesh-store.js";
 export { CommsTool } from "./tool.js";
 export { createMeshErrorReporter, formatMeshError } from "./error-reporting.js";
 export {
+  installShutdownSignalHandlers,
+  type ShutdownDisposition,
+  type ShutdownSignalOptions,
+} from "./shutdown-signals.js";
+export {
   createBridgeMesh,
   createBridgeMeshSync,
   createBridgeMeshFromIdentity,

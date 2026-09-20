@@ -12,6 +12,7 @@ import {
   createMeshErrorReporter,
   ensureRegistered,
   ensureProjectRoom,
+  installShutdownSignalHandlers,
 } from "../../core/index.js";
 import type { IdentitySlot } from "../../core/identity-store.js";
 import { releaseIdentityLock } from "../../core/identity-store.js";
@@ -85,18 +86,15 @@ export async function run(): Promise<void> {
 
   await store.init();
 
-  process.on("SIGINT", () => {
-    void shutdown();
+  installShutdownSignalHandlers({
+    shutdown: async () => {
+      await peer.stop();
+      await store.setAgentOffline(reg.agentId);
+      // After store.shutdown(), not before: the mesh handover this bridge owes its peers rides the sessions shutdown() closes, and the lock is what stops a replacement claiming this slot's identity while that is still in flight.
+      await store.shutdown();
+      releaseIdentityLock(identitySlot);
+    },
+    disposition: "exit",
+    onError: createMeshErrorReporter(),
   });
-  process.on("SIGTERM", () => {
-    void shutdown();
-  });
-
-  async function shutdown(): Promise<void> {
-    await peer.stop();
-    await store.setAgentOffline(reg.agentId);
-    releaseIdentityLock(identitySlot);
-    await store.shutdown();
-    process.exit(0);
-  }
 }

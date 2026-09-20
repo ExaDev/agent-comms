@@ -13,13 +13,15 @@ import {
   createMeshErrorReporter,
   ensureRegistered,
   formatDeliveryEvent,
+  installShutdownSignalHandlers,
 } from "../../core/index.js";
 import type { IdentitySlot } from "../../core/identity-store.js";
+import { releaseIdentityLock } from "../../core/identity-store.js";
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
 import { tryStartWebServer } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
-// Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us. A plugin unload has no hook here; a stale lock self-heals via the pid probe.
+// Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us. A plugin unload has no hook here, so an unload that is not a process exit still leaves a stale lock, which self-heals via the pid probe.
 const identitySlot: IdentitySlot = { harness: "opencode", cwd: process.cwd() };
 
 // Length (in characters) of the random suffix appended to the default auto-generated agent name.
@@ -74,6 +76,17 @@ export const AgentCommsPlugin = async (opts: {
     defaultName: `opencode-${nanoid(DEFAULT_NAME_SUFFIX_LENGTH)}`,
   });
   const agentId = reg.agentId;
+
+  // "reraise", not "exit": this plugin runs inside OpenCode's own process, and registering a signal listener at all removes Node's default terminate behaviour, so exiting here would pre-empt the host and doing nothing would swallow its Ctrl-C.
+  installShutdownSignalHandlers({
+    shutdown: async () => {
+      await store.setAgentOffline(agentId);
+      await store.shutdown();
+      releaseIdentityLock(identitySlot);
+    },
+    disposition: "reraise",
+    onError: createMeshErrorReporter(),
+  });
 
   // Incoming messages arrive via TCP mesh — push to TUI immediately
   store.onDelivery = async (_targetId: string, event) => {
