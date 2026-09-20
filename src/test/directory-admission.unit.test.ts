@@ -12,6 +12,7 @@ import {
   directoryAdmission,
 } from "../core/directory-admission.js";
 import { GatewayTrust } from "../core/gateway-trust.js";
+import { syntheticAdvert } from "./synthetic-advert.js";
 
 /** A device-id is a 64-character lowercase hex SHA-256 digest. */
 const DEVICE_ID_HEX_LENGTH = 64;
@@ -26,14 +27,16 @@ function deviceHex(label: string): string {
   return createHash("sha256").update(label).digest("hex");
 }
 
-/** An entry whose advert carries `proof` (when given) under agent/self. The cast stands in for the fields of a real advert this policy never reads. */
+/** An entry whose advert carries `proof` (when given) under agent/self. */
 function entry(label: string, proof?: string): DirectoryEntry {
-  const advert = {
-    addresses: [],
-    "snapshot-seconds": 1,
-    "agent/self": proof === undefined ? {} : { membership: proof },
-  } as unknown as PeerAdvert;
-  return { device: deviceIdFromHex(deviceHex(label)), advert };
+  const device = deviceIdFromHex(deviceHex(label));
+  const advert: PeerAdvert = syntheticAdvert(device, {
+    snapshotSeconds: 1,
+    extensions: {
+      "agent/self": proof === undefined ? {} : { membership: proof },
+    },
+  });
+  return { device, advert };
 }
 
 type Verify = NonNullable<

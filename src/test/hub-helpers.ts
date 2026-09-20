@@ -6,6 +6,10 @@ import { WebSocketServer, type WebSocket as WsSocket } from "ws";
 import { cdeDecodeOptions, cdeEncodeOptions, decode, encode } from "cbor2";
 import { frameSchema } from "wire-mesh-core/generated/protocol";
 import { createRelayHub } from "wire-mesh-core/domain/relay-hub";
+import {
+  deriveDeviceId,
+  verifyWithPublicKey,
+} from "wire-mesh-core/adapters/node-identity";
 import type { Connection } from "wire-mesh-core/ports/transport";
 import type { Frame } from "wire-mesh-core/generated/protocol";
 
@@ -114,7 +118,9 @@ export async function realHubOverWs(): Promise<{
 }> {
   const http: Server = createServer();
   const wss = new WebSocketServer({ server: http });
-  const hub = createRelayHub();
+  const hub = createRelayHub({
+    identity: { verify: verifyWithPublicKey, deriveDeviceId },
+  });
   wss.on("connection", (socket: WsSocket) => {
     socket.binaryType = "arraybuffer";
     void hub.handleConnection(wsConnection(socket));
