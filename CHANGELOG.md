@@ -1,3 +1,9 @@
+## [5.2.4](https://github.com/ExaDev/agent-comms/compare/v5.2.3...v5.2.4) (2026-09-20)
+
+### Bug Fixes
+
+* **core:** contradict a stale offline report about this store's own running agent ([b6e300f](https://github.com/ExaDev/agent-comms/commit/b6e300f6b3c34b8c728e7c08c314ff1fbdb9bfe5))
+
 ## [5.2.3](https://github.com/ExaDev/agent-comms/compare/v5.2.2...v5.2.3) (2026-09-20)
 
 ### Build
