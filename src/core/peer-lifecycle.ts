@@ -8,7 +8,7 @@ import type {
   PeerInfo,
   SerialisedState,
 } from "./wire-protocol.js";
-import { isAddrInUse } from "./bind-retry.js";
+import { isAddrInUse, isConnectionRefused } from "./bind-retry.js";
 import { COORDINATOR_HOST } from "./mesh-store-shared.js";
 import type { CoordinatorGateway } from "./coordinator-gateway.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
@@ -45,6 +45,12 @@ export interface PeerLifecycleDeps {
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+
+/** How many times a peer that has lost its coordinator alternates between binding the vacated port and joining whoever bound it first. More than one round is genuinely needed: a graceful handover names its successor before the outgoing coordinator's own listener closes, so a bind attempted in that window fails on a port that is about to be free, and the join it falls back to finds nothing listening a moment later. */
+const COORDINATOR_TAKEOVER_ROUNDS = 5;
+
+/** What one attempt to join whoever won the bind race concluded. "nothing-listening" is the only outcome worth re-entering the race for: the port was taken when this side tried to bind it and free again by the time it tried to dial, so neither role has actually been settled yet. */
+type RejoinOutcome = "joined" | "nothing-listening" | "failed";
 
 export class PeerLifecycle {
   /** Guards against a second contest running while the first is still binding or rejoining -- a coordinator whose process dies can close more than one session to this side, and each close arrives as its own disconnect. */
@@ -167,27 +173,41 @@ export class PeerLifecycle {
       const survivors = [...this.deps.peerInfo.values()].filter(
         (peer) => peer.id !== selfId && peer.id !== lostCoordinatorId,
       );
-      try {
-        await this.handleBecomeCoordinator(survivors);
-        return;
-      } catch (error) {
-        if (!isAddrInUse(error)) {
-          this.deps.onError?.(
-            new Error(
-              `PeerLifecycle: could not take over the vacated coordinator role: ${describe(error)}`,
-            ),
-          );
+      for (let round = 0; round < COORDINATOR_TAKEOVER_ROUNDS; round++) {
+        try {
+          await this.handleBecomeCoordinator(survivors);
           return;
+        } catch (error) {
+          if (!isAddrInUse(error)) {
+            this.deps.onError?.(
+              new Error(
+                `PeerLifecycle: could not take over the vacated coordinator role: ${describe(error)}`,
+              ),
+            );
+            return;
+          }
         }
+        // A graceful handover racing this crash race can have made this side the coordinator while the bind above was in flight: the bind then fails against this side's own freshly bound listener, and dialling it would be this peer introducing itself to itself. Re-read through requireTransport() rather than the narrowed local, which TypeScript still believes is false from the guard at the top of this method.
+        if (this.deps.requireTransport().isCoordinator) return;
+        if (
+          (await this.rejoinUnderNewCoordinator(selfId)) !== "nothing-listening"
+        )
+          return;
       }
-      await this.rejoinUnderNewCoordinator(selfId);
+      this.deps.onError?.(
+        new Error(
+          "PeerLifecycle: the vacated coordinator port kept changing hands and this peer neither took it nor found anyone holding it",
+        ),
+      );
     } finally {
       this.contestingCoordinatorRole = false;
     }
   }
 
-  /** Re-introduces this side to whichever survivor won the bind race, over a fresh coordinator connection to the same well-known port. Without it this peer would keep its existing data connections but be unknown to the new coordinator, so it would never appear in the peer list handed to the next joiner. */
-  private async rejoinUnderNewCoordinator(selfId: string): Promise<void> {
+  /** Re-introduces this side to whichever survivor won the bind race, over a fresh coordinator connection to the same well-known port. Without it this peer would keep its existing data connections but be unknown to the new coordinator, so it would never appear in the peer list handed to the next joiner. A refused dial is reported as "nothing-listening" rather than as an error: it means the winner released the port again (or never finished taking it), which the caller answers by re-entering the bind race. Any other failure is reported here, since it says the coordinator is there and this peer still cannot reach it. */
+  private async rejoinUnderNewCoordinator(
+    selfId: string,
+  ): Promise<RejoinOutcome> {
     const transport = this.deps.requireTransport();
     try {
       await transport.connectToCoordinator(
@@ -196,12 +216,15 @@ export class PeerLifecycle {
         selfId,
         transport.dataPort,
       );
+      return "joined";
     } catch (error) {
+      if (isConnectionRefused(error)) return "nothing-listening";
       this.deps.onError?.(
         new Error(
           `PeerLifecycle: lost the coordinator bind race and could not rejoin under the new coordinator: ${describe(error)}`,
         ),
       );
+      return "failed";
     }
   }
 
