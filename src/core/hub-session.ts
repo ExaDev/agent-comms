@@ -66,10 +66,12 @@ export interface HubSessionDeps {
     handle: Readonly<ConnectionHandle>,
     origin?: Readonly<RoomRequestOrigin>,
   ) => Promise<void>;
-  /** The gateway trust boundary (agent-comms#156): whether the given device-id (hex) is currently trusted as a bare device. Since agent-comms#192, this gates only the traffic that carries no independent per-message security of its own: the legacy FRAME_VERB path (consume()'s own doc explains why) and dispatchHubRequest's own hubPeersKnown bookkeeping for a room-domain sender. A real room-domain verb's own dispatch is never gated on this at all; see dispatchHubRequest's own doc for why that is sound. connect()'s own directory-merge filter uses admitEntry below instead, not this. */
+  /** The gateway trust boundary (agent-comms#156): whether the given device-id (hex) is currently trusted as a bare device. Since agent-comms#192, this gates only the traffic that carries no independent per-message security of its own: the legacy FRAME_VERB path (consume()'s own doc explains why) and dispatchHubRequest's own hubPeersKnown bookkeeping for a room-domain sender. A real room-domain verb's own dispatch is never gated on this at all; see dispatchHubRequest's own doc for why that is sound. connect()'s own directory-merge filter uses admitEntries below instead, not this. */
   isTrusted: (deviceHex: string) => boolean;
   /** Whether a gossiped directory entry may be merged (agent-comms#156, widened by #187 and #266): its device is trusted by id, or is itself a trusted principal's own device (agent-comms#192), or carries a membership proof a trusted principal vouches for. A gossiped advert is self-asserted, so the proof is what makes trusting a principal cover its devices; verifying one is cryptography, hence asynchronous. */
-  admitEntry: (entry: Readonly<DirectoryEntry>) => Promise<boolean>;
+  admitEntries: (
+    entries: readonly DirectoryEntry[],
+  ) => Promise<DirectoryEntry[]>;
   /** Forwards a room-domain manage-request on to a specific LOCAL peer session (one this gateway is directly connected to over the ordinary local mesh, keyed by device-id hex) rather than dispatching it against this gateway's own local state -- consume()'s own toDevice disambiguation (agent-comms#184, wire-mesh-core 1.48.1's IncomingManageRequest.toDevice). Returns undefined when no local session exists for that device-id, in which case consume() falls back to handleRoomRequest exactly as it always has. */
   forwardToLocalPeer: (
     deviceHex: string,
@@ -140,25 +142,28 @@ export class HubSession {
     this.connection = connection;
     this.url = url;
     this.deps.trackForShutdown(session);
-    // Merge the hub's directory (its catch-up arrives as the first session events) and keep refreshing it on every subsequent one. Every trusted remote entry is also surfaced via onDirectory, so the transport can merge it into its own mesh-wide knownDevices (agent-comms#155's remote-directory-merge leg). Filtered to admitEntry (agent-comms#156, widened by agent-comms#187's principal allowlist per agent-comms#192 and by #266's membership proofs) before either hubPeersKnown tracking or onDirectory sees it: an untrusted device's gossiped presence is not merely withheld from listAgents, it is never even recorded as "known" here, so nothing downstream can act on it via any path this class exposes.
+    // Merge the hub's directory (its catch-up arrives as the first session events) and keep refreshing it on every subsequent one. Every trusted remote entry is also surfaced via onDirectory, so the transport can merge it into its own mesh-wide knownDevices (agent-comms#155's remote-directory-merge leg). Filtered to admitEntries (agent-comms#156, widened by agent-comms#187's principal allowlist per agent-comms#192 and by #266's membership proofs) before either hubPeersKnown tracking or onDirectory sees it: an untrusted device's gossiped presence is not merely withheld from listAgents, it is never even recorded as "known" here, so nothing downstream can act on it via any path this class exposes.
     void (async () => {
       const ownHex = deviceIdToHex(identity.deviceId);
       for await (const event of session.events) {
         if (this.deps.isShuttingDown()) break;
-        const remoteEntries: DirectoryEntry[] = [];
-        for (const entry of event.directory) {
-          if (deviceIdToHex(entry.device) === ownHex) continue;
-          if (await this.deps.admitEntry(entry)) {
-            remoteEntries.push(entry);
-          }
-        }
+        const remoteEntries = await this.deps.admitEntries(
+          event.directory.filter(
+            (entry) => deviceIdToHex(entry.device) !== ownHex,
+          ),
+        );
         for (const entry of remoteEntries) {
           this.hubPeersKnown.add(deviceIdToHex(entry.device));
         }
         if (remoteEntries.length > 0) this.deps.onDirectory(remoteEntries);
         if (event.state.status === "closed") break;
       }
-    })();
+    })().catch((error: unknown) => {
+      // The merge loop must not die silently: a failure here would stop this side learning of every remote device until the hub is redialled.
+      this.deps.events.onError?.(
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    });
     this.consume(session, deviceIdToHex(identity.deviceId));
     void (async () => {
       await this.watchDisconnect(session);

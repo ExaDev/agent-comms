@@ -178,4 +178,25 @@ describe("principal membership trust", () => {
       principal: principalOf(a1),
     });
   });
+
+  it("keeps merging, and still honours the valid principal, when another trusted principal id is malformed", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+    const dirA = userDir();
+    const dirB = userDir();
+
+    const a1 = await machineStore(hub.url, freshPort(), dirA);
+    const a2 = await machineStore(hub.url, a1.coordinatorPort, dirA);
+    await register(a2, "a2-local-agent");
+    const b1 = await machineStore(hub.url, freshPort(), dirB);
+    a1.addTrustedGatewayPrincipal(principalOf(b1));
+    // A typo ahead of the real principal: it must neither stop the hub directory merge nor block the principal after it.
+    b1.addTrustedGatewayPrincipal("not-a-device-id");
+    b1.addTrustedGatewayPrincipal(principalOf(a1));
+
+    await waitFor("b1 to see a2 despite the malformed principal", async () => {
+      const agents = await b1.listAgents(b1.peerId);
+      return agents.some((agent) => agent.id === a2.peerId);
+    });
+  });
 });

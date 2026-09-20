@@ -380,7 +380,9 @@ agent_comms({ action: "gateway_untrust", device: "1a2b3c..." })
 agent_comms({ action: "gateway_list_trusted" })
 ```
 
-Trusting a principal covers every device that person runs, so each of their sessions doesn't need adding one by one. Every bridge gossips a short-lived proof, signed by its account's user identity, that it belongs to that principal. A gateway that trusts the principal verifies the proof, then treats the device as trusted, both in `list_agents` and for requests sent to it, until the proof lapses or you untrust the principal. `gateway_list_trusted` shows such devices with the principal that vouches for each.
+Trusting a principal covers every device that person runs, so each of their sessions doesn't need adding one by one. Every bridge gossips a short-lived proof, signed by its account's user identity, that it belongs to that principal. A gateway that trusts the principal verifies the proof and then lets that device appear in `list_agents` and be sent requests, until the proof lapses or you untrust the principal. `gateway_list_trusted` shows such devices with the principal that vouches for each.
+
+Three limits are worth knowing. A proof says the principal vouches for a device id, not that whoever gossips it is that device: anyone connected to the hub can read and repeat one, so it is only enough to be listed and routed to, never to have relayed frames accepted as trusted, and every request to the device is still authenticated end to end. Proofs can't be revoked, only left to expire, so removing a device from an account doesn't stop it while it still holds the account's key. And a proof names the principal in the clear, so anyone on the hub can see which devices belong to the same person.
 
 The device-id itself normally has to be learned out of band (Slack, email, a phone call) before it can be pasted into `gateway_trust`. A connection code is a single-use, short-lived artifact that makes that hand-off itself verifiable instead of a bare, unauthenticated string:
 

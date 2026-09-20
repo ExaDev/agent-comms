@@ -26,6 +26,7 @@ export interface MembershipProofsDeps {
 
 export class MembershipProofs {
   private proof: string | undefined;
+  private minting = false;
   private timer: ReturnType<typeof setInterval> | undefined;
 
   constructor(private readonly deps: Readonly<MembershipProofsDeps>) {}
@@ -37,6 +38,7 @@ export class MembershipProofs {
 
   /** Mints a proof now and again on an interval. A failed mint is reported and retried on the next tick; the previous proof stays until it lapses. */
   start(): void {
+    this.stop();
     this.refresh();
     this.timer = setInterval(() => {
       this.refresh();
@@ -65,20 +67,26 @@ export class MembershipProofs {
   }
 
   private refresh(): void {
+    if (this.minting) return;
+    this.minting = true;
     const { userIdentity, clock } = this.deps.getIdentity();
     mintMembershipProof({
       userIdentity,
       clock,
       deviceId: deviceIdFromHex(this.deps.getPeerId()),
-    }).then(
-      (proof) => {
-        this.proof = proof;
-      },
-      (error: unknown) => {
-        this.deps.onError(
-          error instanceof Error ? error : new Error(String(error)),
-        );
-      },
-    );
+    })
+      .then(
+        (proof) => {
+          this.proof = proof;
+        },
+        (error: unknown) => {
+          this.deps.onError(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        },
+      )
+      .finally(() => {
+        this.minting = false;
+      });
   }
 }

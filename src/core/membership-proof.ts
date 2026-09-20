@@ -1,7 +1,9 @@
 /**
  * The proof a device gossips to show that its user principal vouches for it (agent-comms#266): a short-lived group:member token, minted by that principal for that one device, carried as one line of text. A receiver that trusts the principal verifies it against the gossiping device and then trusts the device without it being listed individually, which is what trusting a principal is for.
  *
- * Every bridge of one account shares that account's user identity, so any of them can mint a proof for any device id, which is the same trust the principal is given anyway. Proofs are short-lived rather than revocable: they are minted without recording an issued-grant, so a bridge refreshing its own does not rewrite the shared user-identity.json.
+ * A proof shows that the principal vouches for a device id. It does not show that whoever gossips it is that device: both arrive in the same unauthenticated advert and anyone who has read one can repeat it, so it earns only what GatewayTrust.isReachable grants (see directory-admission.ts). It is also public: it names the principal, so anyone connected to the hub can see which devices belong to which principal.
+ *
+ * Every bridge of one account shares that account's user identity, so any of them can mint a proof for any device id, which is the same trust the principal is given anyway. Proofs are short-lived rather than revocable, so removeDevice (which revokes an admitDevice grant) does not affect them and a removed device holding the account's key can keep minting its own: they are minted without recording an issued-grant, so a bridge refreshing its own does not rewrite the shared user-identity.json.
  */
 
 import type { Clock } from "wire-mesh-core/ports/clock";
@@ -16,6 +18,9 @@ import { decodeTokenText, encodeTokenText } from "./token-text.js";
 
 const MS_PER_MINUTE = 60_000;
 const MEMBERSHIP_PROOF_LIFETIME_MINUTES = 15;
+
+/** The longest proof text a receiver will look at. A real proof is a single root-level token, well under half of this; a longer one can only be something else, and the length also bounds how deep a delegation chain could be smuggled in. */
+export const MAX_MEMBERSHIP_PROOF_LENGTH = 4096;
 
 /** How long a minted proof stays valid. Long enough to ride out a missed refresh or a gossip gap, short enough that a device an account stops running stops being trusted soon after. */
 export const MEMBERSHIP_PROOF_LIFETIME_MS =
@@ -68,6 +73,9 @@ export type MembershipProofVerdict =
 export async function verifyMembershipProof(
   options: Readonly<VerifyMembershipProofOptions>,
 ): Promise<MembershipProofVerdict> {
+  if (options.proof.length > MAX_MEMBERSHIP_PROOF_LENGTH) {
+    return { ok: false, reason: "too_long" };
+  }
   let token;
   try {
     token = decodeTokenText(options.proof);
@@ -82,5 +90,7 @@ export async function verifyMembershipProof(
     userDeviceId: options.principalId,
   });
   if (!verdict.ok) return { ok: false, reason: verdict.reason };
+  // Every proof is minted at the root and cannot be delegated; a chain here would be someone else's construction.
+  if (verdict.depth !== 0) return { ok: false, reason: "not_root_level" };
   return { ok: true, expires: verdict.claims.expires };
 }
