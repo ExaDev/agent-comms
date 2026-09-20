@@ -25,6 +25,7 @@ function inertEvents(): TransportEvents {
     onBecomeCoordinator: () => undefined,
     onRevocationAnnounce: () => undefined,
     onPresenceAdvert: () => undefined,
+    onDeviceReachable: () => undefined,
   };
 }
 

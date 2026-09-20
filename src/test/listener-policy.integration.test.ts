@@ -355,6 +355,7 @@ describe("listener policy", () => {
       onBecomeCoordinator: () => undefined,
       onRevocationAnnounce: () => undefined,
       onPresenceAdvert: () => undefined,
+      onDeviceReachable: () => undefined,
     };
     const identity = generateIdentity();
     const transport = new WireMeshTransport(events, identity);
