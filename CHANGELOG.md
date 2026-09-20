@@ -1,3 +1,10 @@
+## [4.5.1](https://github.com/ExaDev/agent-comms/compare/v4.5.0...v4.5.1) (2026-09-20)
+
+### Bug Fixes
+
+* **build:** smoke-check the hub with a relayed path.trace ([bfb879a](https://github.com/ExaDev/agent-comms/commit/bfb879a672381e14f874ff383d2d4aa42b692de8))
+* **core:** refuse legacy frame requests relayed through a hub ([c8f94f6](https://github.com/ExaDev/agent-comms/commit/c8f94f639d8de80cd34dd8cdac55778547cde4a8))
+
 ## [4.5.0](https://github.com/ExaDev/agent-comms/compare/v4.4.0...v4.5.0) (2026-09-20)
 
 ### Features
