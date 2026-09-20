@@ -24,7 +24,7 @@ function noopEvents(): TransportEvents {
 }
 
 describe("WireMeshTransport.sendRoomRequest -- gateway trust", () => {
-  test("resolves unauthorized without ever touching the hub when the target device isn't trusted", async () => {
+  test("resolves no_route without ever touching the hub when the target device isn't trusted", async () => {
     const identity = generateIdentity();
     // No GatewayTrust passed -- defaults to a fresh, empty (deny-all) instance.
     const transport = new WireMeshTransport(noopEvents(), identity);
@@ -34,7 +34,8 @@ describe("WireMeshTransport.sendRoomRequest -- gateway trust", () => {
         { verb: "room.send", params: {} },
         { kind: "agent-comms-mesh" },
       );
-      expect(outcome).toEqual({ result: "error", code: "unauthorized" });
+      // no_route, not unauthorized: nothing left this side, so there is nobody to have refused it, and a caller must be able to tell an untrodden route from a recipient's own answer.
+      expect(outcome).toEqual({ result: "error", code: "no_route" });
     } finally {
       await transport.shutdown();
     }
