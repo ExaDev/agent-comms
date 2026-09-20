@@ -55,7 +55,8 @@ export interface CcPeerFrontDeps<TRecord extends FrontedSessionRecord> {
   onError?: ((error: Error) => void) | undefined;
 }
 
-function toError(value: unknown): Error {
+/** Normalises a caught value for the front's own error channel, which reports Errors. Exported so front-relay.ts reports a failed relay onto that same channel in the same shape, rather than keeping its own copy of this. */
+export function toError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
 }
 

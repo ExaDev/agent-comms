@@ -43,6 +43,7 @@ test("a session with no agent-comms tool admits a first-contact DM by messaging 
   );
 
   const toSession: string[] = [];
+  const toSessionFromAlias: { alias: string; body: string }[] = [];
   const record = buildFrontedSessionRecord({
     entry: {
       pid: SESSION_PID,
@@ -61,7 +62,12 @@ test("a session with no agent-comms tool admits a first-contact DM by messaging 
         return Promise.resolve({ msgId: "m" });
       },
     },
-    aliasPool: { ensure: async () => Promise.resolve() },
+    aliasPool: {
+      send: async (alias, _target, body) => {
+        toSessionFromAlias.push({ alias, body });
+        return Promise.resolve({ msgId: "m" });
+      },
+    },
     aliasDirectory: { ensure: (correspondent) => `mesh-${correspondent}` },
   });
 
@@ -96,6 +102,16 @@ test("a session with no agent-comms tool admits a first-contact DM by messaging 
       () => toSession.some((body) => body.startsWith("Accepted ")),
       "the session hears the outcome",
     );
+    // The admitted DM reaches the session from the sender's own alias, never from the front, so the session's reply-to-sender goes back to the sender.
+    await waitFor(
+      () => toSessionFromAlias.length > 0,
+      "the DM itself arrives from the sender's alias",
+    );
+    expect(toSessionFromAlias[0]?.alias).toBe(`mesh-${sender.peerId}`);
+    expect(toSessionFromAlias[0]?.body).toContain("hello session");
+    expect(toSession.some((body) => body.includes("hello session"))).toBe(
+      false,
+    );
   } finally {
     await fronted.shutdown();
     await sender.shutdown();
@@ -112,6 +128,7 @@ test("a session that rejects a first-contact DM makes the sender's dm fail", asy
   );
 
   const toSession: string[] = [];
+  const toSessionFromAlias: { alias: string; body: string }[] = [];
   const record = buildFrontedSessionRecord({
     entry: {
       pid: SESSION_PID,
@@ -130,7 +147,12 @@ test("a session that rejects a first-contact DM makes the sender's dm fail", asy
         return Promise.resolve({ msgId: "m" });
       },
     },
-    aliasPool: { ensure: async () => Promise.resolve() },
+    aliasPool: {
+      send: async (alias, _target, body) => {
+        toSessionFromAlias.push({ alias, body });
+        return Promise.resolve({ msgId: "m" });
+      },
+    },
     aliasDirectory: { ensure: (correspondent) => `mesh-${correspondent}` },
   });
 
