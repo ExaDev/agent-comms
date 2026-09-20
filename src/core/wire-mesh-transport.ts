@@ -9,9 +9,9 @@
  */
 
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
-import * as bindRetry from "./bind-retry.js";
 import {
   ROOM_JOIN_APPROVAL_TIMEOUT_MS,
+  ROOM_REQUEST_TIMEOUT_MS,
   manageRequestTimeoutMs,
 } from "./request-timeouts.js";
 import { connectWsUrl } from "./ws-dial.js";
@@ -19,9 +19,9 @@ import { HubSession } from "./hub-session.js";
 import { GatewayTrust, type GatewayTrustReader } from "./gateway-trust.js";
 import {
   advertisedListenerAddresses,
-  LISTENER_ID_LENGTH,
   listenerPort,
   listTrackedListeners,
+  registerDefaultListener,
   registerListener,
   unregisterListener,
   type TrackedListener,
@@ -80,7 +80,6 @@ import type {
 } from "./transport.js";
 import type { PeerIdentity } from "./identity.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
-import { nanoid } from "./nanoid.js";
 import type {
   ConnectToRemoteOptions,
   WireMeshTransportOptions,
@@ -630,12 +629,10 @@ export class WireMeshTransport implements MeshTransport {
       this.watchForDisconnect(session, handle, handle.id);
     }
     // Fire-and-forget, matching the previous transport's own contract: this resolves once the introduction is sent, not once a response arrives -- peer_list/peer_joined/become_coordinator arrive asynchronously via the normal dispatch path above, independent of this call's own promise.
-    void session
-      .sendManageRequest(
-        buildCommand({ method: "introduce", peerId, dataPort }),
-        FRAME_SCOPE,
-      )
-      .catch(() => undefined);
+    void this.sendFrame(
+      session,
+      buildCommand({ method: "introduce", peerId, dataPort }),
+    ).catch(() => undefined);
   }
 
   // -----------------------------------------------------------------------
@@ -643,33 +640,19 @@ export class WireMeshTransport implements MeshTransport {
   // -----------------------------------------------------------------------
 
   async becomeCoordinator(host: string, port: number): Promise<void> {
-    const id = nanoid(LISTENER_ID_LENGTH);
-    const listener = await bindRetry.retryOnAddrInUse(
-      async () =>
-        this.wireTransport.listen(`${host}:${String(port)}`, (connection) => {
-          const tracked = this.coordinatorListeners.get(id);
-          void this.handleAcceptedConnection(
-            connection,
-            tracked?.policy,
-            false,
-            true,
-          );
-        }),
-      bindRetry.BECOME_COORDINATOR_BIND_RETRIES,
-      bindRetry.BECOME_COORDINATOR_BIND_RETRY_DELAY_MS,
-    );
+    this.defaultListenerId = await registerDefaultListener({
+      wireTransport: this.wireTransport,
+      coordinatorListeners: this.coordinatorListeners,
+      host,
+      port,
+      onAccepted: (connection) => {
+        void this.handleAcceptedConnection(connection, "full", false, true);
+      },
+    });
     this._isCoordinator = true;
     // This side now IS the coordinator, so it answers to no other one: leaving a departed coordinator's device-id here would keep coordinatorPeerId naming a peer whose disconnect has already been dealt with, and would keep granting that device consumeIncoming's own on-behalf-of privilege.
     this.coordinatorDeviceHex = undefined;
     this.coordinatorSession = undefined;
-    this.coordinatorListeners.set(id, {
-      listener,
-      policy: "full",
-      host,
-      port: listenerPort(listener),
-      isDefault: true,
-    });
-    this.defaultListenerId = id;
   }
 
   // -----------------------------------------------------------------------
@@ -685,14 +668,11 @@ export class WireMeshTransport implements MeshTransport {
     const connection = await this.wireTransport
       .connect(`${COORDINATOR_HOST}:${String(peer.port)}`)
       .catch((error: unknown) => {
+        const reason = error instanceof Error ? error.message : String(error);
         this.events.onError?.(
-          error instanceof Error
-            ? new Error(
-                `connectToPeer(${peer.id}, port ${String(peer.port)}): ${error.message}`,
-              )
-            : new Error(
-                `connectToPeer(${peer.id}, port ${String(peer.port)}) failed`,
-              ),
+          new Error(
+            `connectToPeer(${peer.id}, port ${String(peer.port)}): ${reason}`,
+          ),
         );
         return undefined;
       });
@@ -740,22 +720,36 @@ export class WireMeshTransport implements MeshTransport {
   ): Promise<void> {
     const session = this.peerSessions.get(handle.id);
     if (session === undefined) return;
-    await session
-      .sendManageRequest(buildCommand(message), FRAME_SCOPE)
-      .catch((error: unknown) => {
+    await this.sendFrame(session, buildCommand(message)).catch(
+      (error: unknown) => {
         this.events.onError?.(
           error instanceof Error
             ? error
             : new Error(`send(${handle.id}) failed: ${String(error)}`),
         );
-      });
+      },
+    );
+  }
+
+  /** Sends one opaque MeshMessage frame over a session under the ordinary network deadline. The deadline is what makes it safe to await: wire-mesh-core waits forever for a manage-response when given none, so a frame sent to a peer whose socket has already died but whose close this side has not yet observed would never settle, and MeshStore.shutdown() awaits exactly such a broadcast on its way out. */
+  private async sendFrame(
+    session: AcceptedMeshSession,
+    command: ManageCommand,
+  ): Promise<ManageOutcome> {
+    return session.sendManageRequest(
+      command,
+      FRAME_SCOPE,
+      undefined,
+      undefined,
+      ROOM_REQUEST_TIMEOUT_MS,
+    );
   }
 
   async broadcast(message: MeshMessage): Promise<void> {
     const command = buildCommand(message);
     await Promise.all(
       [...this.peerSessions.values()].map(async (session) =>
-        session.sendManageRequest(command, FRAME_SCOPE).catch(() => undefined),
+        this.sendFrame(session, command).catch(() => undefined),
       ),
     );
   }
@@ -958,6 +952,8 @@ export class WireMeshTransport implements MeshTransport {
 
   async shutdown(): Promise<void> {
     this.shutDown = true;
+    // A shut-down transport holds no listener, so it is no longer the coordinator -- leaving the flag set would have a second shutdown pass try to hand the role on, and would have isCoordinator lie to anything that outlives the transport.
+    this._isCoordinator = false;
     if (this.gossipInterval !== undefined) {
       clearInterval(this.gossipInterval);
       this.gossipInterval = undefined;

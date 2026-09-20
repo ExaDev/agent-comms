@@ -457,13 +457,8 @@ export class MeshStore implements CommsStore {
     } catch {
       let eaddrinuseMessage: string | undefined;
       try {
-        await this.requireTransport().becomeCoordinator(
-          COORDINATOR_HOST,
-          this.coordinatorPort,
-        );
-        this.staleAgentChecker.start();
-        await this.coordinatorGateway.onBecameCoordinator();
-        await this.onCoordinatorRoleChanged?.(true);
+        // The same takeover PeerLifecycle runs for a handover or a crash race: bind, adopt the peer list (only this store's own entry exists yet), start stale-agent probing, dial the gateway hub, and start whatever the coordinator role owns.
+        await this.peerLifecycle.handleBecomeCoordinator([]);
         connected = true;
       } catch (coordErr) {
         const msg =
@@ -1059,6 +1054,8 @@ export class MeshStore implements CommsStore {
   // -----------------------------------------------------------------------
 
   async shutdown(): Promise<void> {
+    // Idempotent: a bridge's signal handler and whatever already owns its exit path can both reach here, and a second pass would try to hand the coordinator role on over sessions the first pass has already closed.
+    if (this.isShutDown) return;
     this.isShutDown = true;
     this.membership.stop();
     // Clear any pending markRead timers so they don't fire after the transport is shut down (which would attempt sends on closed sockets) or keep the event loop alive after process.exit().

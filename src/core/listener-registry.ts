@@ -3,6 +3,11 @@
  */
 
 import { nanoid } from "./nanoid.js";
+import {
+  BECOME_COORDINATOR_BIND_RETRIES,
+  BECOME_COORDINATOR_BIND_RETRY_DELAY_MS,
+  retryOnAddrInUse,
+} from "./bind-retry.js";
 import type {
   Connection,
   Listener,
@@ -55,6 +60,32 @@ export async function registerListener(options: {
     host,
     port: listenerPort(listener),
     isDefault: false,
+  });
+  return id;
+}
+
+/** Binds the default bootstrap coordinator listener at host:port and tracks it, returning its id -- WireMeshTransport.becomeCoordinator's own bookkeeping, kept beside the registry that owns the same Map. Unlike registerListener this retries a port conflict, because both routes to the coordinator role contend for an occupied port: a graceful handover names its successor while the outgoing coordinator's own listener is still open, and a crash race has every surviving peer attempting the bind at once. The entry is marked default, which is what keeps it out of the advertised-address list and unremovable through removeListener. */
+export async function registerDefaultListener(options: {
+  wireTransport: Readonly<Pick<Transport, "listen">>;
+  coordinatorListeners: Map<string, TrackedListener>;
+  host: string;
+  port: number;
+  onAccepted: (connection: Readonly<Connection>) => void;
+}): Promise<string> {
+  const { wireTransport, coordinatorListeners, host, port, onAccepted } =
+    options;
+  const id = nanoid(LISTENER_ID_LENGTH);
+  const listener = await retryOnAddrInUse(
+    async () => wireTransport.listen(`${host}:${String(port)}`, onAccepted),
+    BECOME_COORDINATOR_BIND_RETRIES,
+    BECOME_COORDINATOR_BIND_RETRY_DELAY_MS,
+  );
+  coordinatorListeners.set(id, {
+    listener,
+    policy: "full",
+    host,
+    port: listenerPort(listener),
+    isDefault: true,
   });
   return id;
 }

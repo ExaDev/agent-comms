@@ -106,15 +106,15 @@ const DEFAULT_WAIT_FOR_TIMEOUT_MS = 20_000;
 const WAIT_FOR_POLL_INTERVAL_MS = 20;
 
 /**
- * Polls condition() until it returns true or timeoutMs elapses, rather than a fixed sleep() before a single check. A real TLS handshake plus the peer_list -\> connectToPeer -\> state_sync -\> handlePeerConnected round trip genuinely takes variable, load-dependent wall-clock time -- comfortably inside a fixed sleep on a fast local machine, not reliably so under a throttled CI runner. Throws with a descriptive message on timeout rather than letting the caller's own assertion fail with a less specific one.
+ * Polls condition() until it returns true or timeoutMs elapses, rather than a fixed sleep() before a single check. A real TLS handshake plus the peer_list -\> connectToPeer -\> state_sync -\> handlePeerConnected round trip genuinely takes variable, load-dependent wall-clock time -- comfortably inside a fixed sleep on a fast local machine, not reliably so under a throttled CI runner. Throws with a descriptive message on timeout rather than letting the caller's own assertion fail with a less specific one. An asynchronous condition is awaited on each poll, so a test can poll a store method (listAgents, say) directly instead of maintaining its own synchronous mirror of the state it is waiting on.
  */
 export async function waitFor(
-  condition: () => boolean,
+  condition: () => boolean | Promise<boolean>,
   description: string,
   timeoutMs = DEFAULT_WAIT_FOR_TIMEOUT_MS,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  while (!condition()) {
+  while (!(await condition())) {
     if (Date.now() >= deadline) {
       throw new Error(
         `waitFor timed out after ${String(timeoutMs)}ms: ${description}`,

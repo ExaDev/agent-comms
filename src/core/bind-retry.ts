@@ -13,6 +13,12 @@ export function isAddrInUse(error: unknown): boolean {
   return message.includes("EADDRINUSE");
 }
 
+/** Whether an error is a nothing-is-listening dial failure. Distinguished from every other dial failure because it alone means the port is genuinely free, which is what tells PeerLifecycle's takeover that re-entering the bind race is worth it rather than that the coordinator is there but unreachable. Matched on the message for the same reason isAddrInUse is. */
+export function isConnectionRefused(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("ECONNREFUSED");
+}
+
 /** Retries `attempt` while it keeps rejecting with an EADDRINUSE-shaped error, up to `retries` further attempts, waiting `delayMs` between each. Any other error, or exhausting the retry budget, rethrows immediately -- never silently swallowed. A pure, transport-agnostic helper (no socket knowledge of its own) so becomeCoordinator's bind-retry race is fast and deterministic to test directly. */
 export async function retryOnAddrInUse<T>(
   attempt: () => Promise<T>,
