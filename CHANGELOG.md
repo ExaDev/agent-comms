@@ -1,3 +1,17 @@
+## [4.5.0](https://github.com/ExaDev/agent-comms/compare/v4.4.0...v4.5.0) (2026-09-20)
+
+### Features
+
+* **core:** trust a principal to cover every device it vouches for ([9ace9d2](https://github.com/ExaDev/agent-comms/commit/9ace9d225d77faf9743dbc7d120c0e283180db9c))
+
+### Bug Fixes
+
+* **core:** bound and harden membership proof admission ([6cdf560](https://github.com/ExaDev/agent-comms/commit/6cdf560bac878cb886c357fc29e05dc7a9d23c99))
+
+### Tests
+
+* **tool:** accept either rejection path for a revoked DM grant ([1fe8057](https://github.com/ExaDev/agent-comms/commit/1fe805717ea610c24e24792e497d912bd97bd3d9))
+
 ## [4.4.0](https://github.com/ExaDev/agent-comms/compare/v4.3.0...v4.4.0) (2026-09-19)
 
 ### Features
