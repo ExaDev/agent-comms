@@ -77,6 +77,7 @@ export function createBridgeMeshSyncFromIdentity(
   const transport = new WireMeshTransport(store.events, identity, {
     roomVerbHandlers: store.roomVerbHandlers,
     roomJoinApprovalTimeoutMs: store.roomJoinApprovalTimeoutMs,
+    verifyMembership: async (claim) => store.membership.verify(claim),
     getCurrentPresence: () => store.selfStatus,
     getHostedRooms: () => store.hostedRooms,
     dataStorage,

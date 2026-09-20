@@ -13,12 +13,22 @@ import { loadGatewayTrust, saveGatewayTrust } from "./identity-store.js";
 /** The read-only slice of GatewayTrust every consumer of the trust boundary actually needs (WireMeshTransport, HubSession, hub-forwarding.ts) -- named so call sites that only ever read trust decisions, never mutate them, don't repeat the same `Pick<GatewayTrust, "isTrusted" | "hasAny" | "isTrustedPrincipal" | "isTrustedFor">` inline at every field/parameter that takes one. */
 export type GatewayTrustReader = Pick<
   GatewayTrust,
-  "isTrusted" | "hasAny" | "isTrustedPrincipal" | "isTrustedFor"
+  | "isTrusted"
+  | "hasAny"
+  | "isTrustedPrincipal"
+  | "isTrustedFor"
+  | "listPrincipals"
+  | "noteVerifiedMember"
 >;
 
 export class GatewayTrust {
   private readonly trusted = new Set<string>();
   private readonly trustedPrincipals = new Set<string>();
+  /** Devices whose gossiped membership proof was verified against a trusted principal, with that principal and when the proof lapses. In memory only: a proof is short-lived and re-verified from the next advert, so nothing here is worth persisting. */
+  private readonly verifiedMembers = new Map<
+    string,
+    { principal: string; expiresAt: number }
+  >();
   private readonly slot: Readonly<IdentitySlot> | undefined;
 
   /** Constructs the trust boundary, optionally bound to a bridge identity slot for persistence (agent-comms#186); see this class's own doc comment for what a slot does and doesn't change. Given a slot, immediately loads whatever devices and principals were trusted before the last restart into the initial in-memory sets. */
@@ -61,7 +71,39 @@ export class GatewayTrust {
 
   /** Whether the given device-id (hex, case-insensitive) is currently trusted. */
   isTrusted(deviceHex: string): boolean {
-    return this.trusted.has(deviceHex.toLowerCase());
+    const key = deviceHex.toLowerCase();
+    return this.trusted.has(key) || this.isVerifiedMember(key);
+  }
+
+  /** Records that deviceHex presented a membership proof, valid until expiresAt (epoch ms), verified against principalHex (agent-comms#266). From then until the proof lapses, or principalHex stops being trusted, isTrusted treats the device as trusted without it being on the bare-device list. The caller has already verified the proof: this class does no cryptography. */
+  noteVerifiedMember(
+    deviceHex: string,
+    principalHex: string,
+    expiresAt: number,
+  ): void {
+    this.verifiedMembers.set(deviceHex.toLowerCase(), {
+      principal: principalHex.toLowerCase(),
+      expiresAt,
+    });
+  }
+
+  /** Every device currently trusted only because a trusted principal vouches for it, with that principal. Excludes proofs that have lapsed and members whose principal is no longer trusted. */
+  listVerifiedMembers(): { device: string; principal: string }[] {
+    return [...this.verifiedMembers.keys()]
+      .filter((device) => this.isVerifiedMember(device))
+      .map((device) => ({
+        device,
+        principal: this.verifiedMembers.get(device)?.principal ?? "",
+      }));
+  }
+
+  private isVerifiedMember(deviceKey: string): boolean {
+    const member = this.verifiedMembers.get(deviceKey);
+    return (
+      member !== undefined &&
+      member.expiresAt > Date.now() &&
+      this.trustedPrincipals.has(member.principal)
+    );
   }
 
   /** Marks a remote user-principal device-id (hex, case-insensitive; user-identity.ts) as trusted (agent-comms#187): a peer presenting a token whose delegation chain roots at this principal is trusted via `isTrustedFor` below, without that peer's own bare device-id ever needing individual trust. Idempotent, and entirely independent of the bare-device allowlist `add` manages. Persists the updated set when this instance was constructed with a slot. */

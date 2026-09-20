@@ -11,6 +11,7 @@
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import * as os from "node:os";
 import { nanoid } from "./nanoid.js";
+import { MembershipProofs } from "./membership-proofs.js";
 import { ROOM_JOIN_APPROVAL_TIMEOUT_MS } from "./request-timeouts.js";
 import { CommsError } from "./store.js";
 import { DiscoveryManager } from "./discovery.js";
@@ -108,6 +109,14 @@ export class MeshStore implements CommsStore {
   private readonly hubUrl: string;
   /** Read by whoever wires this store to a transport, so both halves of a room.join agree on the approval window. */
   readonly roomJoinApprovalTimeoutMs: number;
+  /** This device's own membership proof and the check for other devices' proofs (agent-comms#266). */
+  readonly membership = new MembershipProofs({
+    getIdentity: () => this.requireIdentity(),
+    getPeerId: () => this.peerId,
+    onError: (error) => {
+      this.onError?.(error);
+    },
+  });
 
   private readonly agents = new Map<string, AgentIdentity>();
   private readonly rooms = new Map<string, Room>();
@@ -178,6 +187,7 @@ export class MeshStore implements CommsStore {
       startedAt: agent.startedAt,
       tags: agent.tags,
       subscribedRooms: agent.subscribedRooms,
+      ...this.membership.advertField(),
     };
   }
 
@@ -395,6 +405,12 @@ export class MeshStore implements CommsStore {
   /** Sets the identity/clock/slot this store mints and persists room-membership grants against. Must be called before createRoom() or any other identity-using method, mirroring setTransport()'s own contract. */
   setIdentity(identity: MeshStoreIdentity): void {
     this.storeIdentity = identity;
+    this.membership.start();
+  }
+
+  /** Every device this side trusts only because a trusted principal vouches for it, with that principal. */
+  listVerifiedMembers(): { device: string; principal: string }[] {
+    return this.gatewayTrust.listVerifiedMembers();
   }
 
   /** The set identity, or throws if setIdentity() hasn't been called yet -- the single place every identity-using method reads through, mirroring requireTransport() above. */
@@ -620,9 +636,8 @@ export class MeshStore implements CommsStore {
 
   /** This user's own principal id (hex): the identity every device on this account shares, and the thing another user names to admit or trust this whole user rather than one device. Undefined until this store's identity is attached. */
   getUserPrincipalId(): string | undefined {
-    return this.storeIdentity === undefined
-      ? undefined
-      : deviceIdToHex(this.storeIdentity.userIdentity.deviceId);
+    const user = this.storeIdentity?.userIdentity;
+    return user === undefined ? undefined : deviceIdToHex(user.deviceId);
   }
 
   /** Admits bearerId into this user's own DM-communication scope (agent-comms#162): mints and persists a dm:send grant, self-signed by this store's own user principal. Returns the minted token for the caller to deliver to bearerId out of band. Deliberately outside the CommsStore interface, like requestDmAccess above. Concrete-only -- reached directly by tests. delegationsRemaining defaults to 0 (non-delegable, the original behaviour); a positive value admits bearerId as a user principal capable of sub-delegating to its own devices (agent-comms#187) -- see RoomLifecycle.admitAgentForDm's own doc comment. */
@@ -1042,6 +1057,7 @@ export class MeshStore implements CommsStore {
 
   async shutdown(): Promise<void> {
     this.isShutDown = true;
+    this.membership.stop();
     // Clear any pending markRead timers so they don't fire after the transport is shut down (which would attempt sends on closed sockets) or keep the event loop alive after process.exit().
     for (const timer of this.pendingMarkReadTimers) {
       clearTimeout(timer);

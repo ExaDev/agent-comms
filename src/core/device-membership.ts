@@ -43,13 +43,16 @@ export interface AdmitDeviceOptions {
   expires: number;
 }
 
-/**
- * Mints deviceId's own group:member grant from the user principal: a root-level, non-delegable token scoped to the principal's own group (userGroupPath). On success, records the grant's token-id under the principal's own issued-grant store so a later removeDevice call can find it to revoke -- an admission without this bookkeeping would leave removal permanently unable to find what to revoke, so this is not optional side-book-keeping, it is what makes revocation possible at all.
- */
-export async function admitDevice(
-  options: Readonly<AdmitDeviceOptions>,
+/** The group:member token itself, with no record kept of having issued it: a root-level, non-delegable grant bearing options.deviceId and scoped to the principal's own group (userGroupPath). admitDevice adds the issued-grant bookkeeping a later removeDevice needs; a caller that only needs a short-lived proof (membership-proof.ts) uses this directly, so the account's shared user-identity.json is not rewritten every time one of its many bridges refreshes its proof. */
+export async function mintDeviceMembership(
+  options: Readonly<
+    Pick<
+      AdmitDeviceOptions,
+      "userIdentity" | "clock" | "tokenId" | "deviceId" | "expires"
+    >
+  >,
 ): Promise<MintVerdict> {
-  const verdict = await mintCapabilityToken({
+  return mintCapabilityToken({
     identity: options.userIdentity,
     clock: options.clock,
     tokenId: options.tokenId,
@@ -62,6 +65,15 @@ export async function admitDevice(
     expires: options.expires,
     delegationsRemaining: NOT_DELEGABLE,
   });
+}
+
+/**
+ * Mints deviceId's own group:member grant from the user principal: a root-level, non-delegable token scoped to the principal's own group (userGroupPath). On success, records the grant's token-id under the principal's own issued-grant store so a later removeDevice call can find it to revoke -- an admission without this bookkeeping would leave removal permanently unable to find what to revoke, so this is not optional side-book-keeping, it is what makes revocation possible at all.
+ */
+export async function admitDevice(
+  options: Readonly<AdmitDeviceOptions>,
+): Promise<MintVerdict> {
+  const verdict = await mintDeviceMembership(options);
   if (!verdict.ok) return verdict;
 
   saveIssuedDeviceGrant(

@@ -63,6 +63,16 @@ export function findPresenceAdvert(
   return AgentStatus.is(status) ? status : undefined;
 }
 
+/** The membership proof a peer gossiped in its agent/self advert, or undefined when it carries none. The advert is self-asserted by whichever peer sent it, so this only reads it; nothing about the proof is believed until it is verified. */
+export function readMembershipProof(
+  advert: Readonly<PeerAdvert>,
+): string | undefined {
+  const self: unknown = advert[AGENT_SELF_GOSSIP_KEY];
+  if (typeof self !== "object" || self === null) return undefined;
+  if (!("membership" in self)) return undefined;
+  return typeof self.membership === "string" ? self.membership : undefined;
+}
+
 /** Re-sends this side's own current presence status, currently-hosted rooms, self-agent identity, and package versions, together, onto every live session's gossip self-advert -- one gossip frame per tick carrying whichever facts are actually known, rather than a separate frame per fact. Split out of wire-mesh-transport.ts's own WireMeshTransport class purely to keep that file under the repo's max-lines cap, the same reason mergeKnownDevices/findPresenceAdvert above already live here rather than there. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. Unlike presence/hostedRooms/selfAgentAdvert, the versions extension is never actually absent (this side's own agent-comms package version is always known), so every tick this function is called for sends at least that one fact -- there is no "nothing to report" case left to short-circuit on. The hub's own session (agent-comms#156) is gated separately from every ordinary local-peer session in allSessions: local mesh trust is a different layer (connect_request/introduce approval already gated it before it ever joined allSessions), but the hub session is a broadcast to every connected hub peer, trusted or not, and would otherwise leak this side's own presence/hosted-rooms/self-agent/versions advert onto the hub regardless of GatewayTrust -- forwardAdvertsToHub/pushHubCatchUp's own hasAny gate exists to prevent exactly this for OTHER local peers' adverts, and this side's own self-advert deserves the identical gate, not a bypass. */
 export function readvertiseGossip(options: {
   allSessions: ReadonlySet<AcceptedMeshSession>;

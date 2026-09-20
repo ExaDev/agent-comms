@@ -4,7 +4,7 @@
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { GatewayTrust } from "../core/gateway-trust.js";
 import type { IdentitySlot } from "../core/identity-store.js";
 
@@ -251,5 +251,89 @@ describe("GatewayTrust -- principal-keyed trust (agent-comms#187)", () => {
       trust.addPrincipal("FFFFFF");
       expect(trust.isTrustedFor("AABBCC", "ffffff")).toBe(true);
     });
+  });
+});
+
+describe("GatewayTrust — verified members of a trusted principal", () => {
+  const PRINCIPAL = "aabbccdd";
+  const DEVICE = "11223344";
+  const ONE_HOUR_MS = 3_600_000;
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("trusts a device recorded as a verified member of a trusted principal", () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL);
+
+    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+
+    expect(trust.isTrusted(DEVICE)).toBe(true);
+  });
+
+  it("matches device and principal ids case-insensitively, like every other id here", () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL.toUpperCase());
+
+    trust.noteVerifiedMember(
+      DEVICE.toUpperCase(),
+      PRINCIPAL,
+      Date.now() + ONE_HOUR_MS,
+    );
+
+    expect(trust.isTrusted(DEVICE)).toBe(true);
+  });
+
+  it("stops trusting the device the moment its principal is no longer trusted", () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL);
+    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+
+    trust.removePrincipal(PRINCIPAL);
+
+    expect(trust.isTrusted(DEVICE)).toBe(false);
+  });
+
+  it("does not trust a device recorded against a principal that was never trusted", () => {
+    const trust = new GatewayTrust();
+
+    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+
+    expect(trust.isTrusted(DEVICE)).toBe(false);
+  });
+
+  it("stops trusting the device once its proof has expired", () => {
+    vi.useFakeTimers();
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL);
+    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+
+    vi.advanceTimersByTime(ONE_HOUR_MS + 1);
+
+    expect(trust.isTrusted(DEVICE)).toBe(false);
+  });
+
+  it("lists only the members that are currently trusted, with the principal each was verified against", () => {
+    vi.useFakeTimers();
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL);
+    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+    trust.noteVerifiedMember("55667788", PRINCIPAL, Date.now() + 1);
+    trust.noteVerifiedMember("99aabbcc", "ffffffff", Date.now() + ONE_HOUR_MS);
+
+    vi.advanceTimersByTime(2);
+
+    expect(trust.listVerifiedMembers()).toEqual([
+      { device: DEVICE, principal: PRINCIPAL },
+    ]);
+  });
+
+  it("does not count a verified member as a bare-device trust, so it is not persisted or listed as one", () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL);
+    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+
+    expect(trust.list()).toEqual([]);
   });
 });

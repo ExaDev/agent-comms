@@ -380,6 +380,8 @@ agent_comms({ action: "gateway_untrust", device: "1a2b3c..." })
 agent_comms({ action: "gateway_list_trusted" })
 ```
 
+Trusting a principal covers every device that person runs, so each of their sessions doesn't need adding one by one. Every bridge gossips a short-lived proof, signed by its account's user identity, that it belongs to that principal. A gateway that trusts the principal verifies the proof, then treats the device as trusted, both in `list_agents` and for requests sent to it, until the proof lapses or you untrust the principal. `gateway_list_trusted` shows such devices with the principal that vouches for each.
+
 The device-id itself normally has to be learned out of band (Slack, email, a phone call) before it can be pasted into `gateway_trust`. A connection code is a single-use, short-lived artifact that makes that hand-off itself verifiable instead of a bare, unauthenticated string:
 
 ```
