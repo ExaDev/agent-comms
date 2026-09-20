@@ -1,0 +1,22 @@
+name: Sibling dependency instant update
+
+# wire-mesh, cc-peer and web-ui-primitives each notify this repository the moment they publish (a repository_dispatch of type sibling-released), so their new version lands here as a pull request that merges once CI passes, without waiting for a scheduled scan. The push trigger re-checks any of those pull requests that has fallen behind main, and workflow_dispatch lets a missed notification be replayed by hand.
+on:
+  repository_dispatch:
+    types: [sibling-released]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    uses: ExaDev/dependency-heal/.github/workflows/sibling-dependency-update.yml@v1
+    with:
+      # The ExaDev Sync app, installed on every repository in the organisation. Its id is public, so it is written out here rather than read from a variable.
+      app-id: "4816274"
+    secrets:
+      app-private-key: ${{ secrets.EXADEV_SYNC_PRIVATE_KEY }}
