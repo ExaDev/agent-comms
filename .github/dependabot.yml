@@ -9,6 +9,11 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - dependencies
+    # wire-mesh-core, cc-peer and web-ui-primitives are bumped the moment they publish by sibling-dependency-update.yml, so a scheduled scan would only open a second pull request for the same version.
+    ignore:
+      - dependency-name: wire-mesh-core
+      - dependency-name: cc-peer
+      - dependency-name: web-ui-primitives
 
   - package-ecosystem: github-actions
     directory: /
