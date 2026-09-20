@@ -10,6 +10,8 @@ const TRANSIENT_OUTCOME_CODES: ReadonlyMap<string, TransientSendFailure> =
   new Map([
     ["timeout", "timeout"],
     ["not_connected", "not_connected"],
+    // This side's own transport answering that it has nowhere to send the request (no session, and no gateway willing to relay for that device). Reported as not_connected because that is exactly what it means to the sender: no route to the recipient existed when the request was attempted.
+    ["no_route", "not_connected"],
   ]);
 
 /**

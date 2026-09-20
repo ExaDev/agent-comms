@@ -50,6 +50,13 @@ describe("classifyManageOutcome", () => {
     });
   });
 
+  it("classifies this side's own no_route as undelivered, not as a refusal", () => {
+    // no_route is the local transport saying it had nowhere to send the request, so nobody refused anything and a route appearing later genuinely fixes it. Spelling it the same as a recipient's own unauthorized would bury a message in the retry queue, or fail a send nobody ever refused.
+    expect(classifyManageOutcome({ result: "error", code: "no_route" })).toEqual(
+      { kind: "undelivered", reason: "not_connected" },
+    );
+  });
+
   it("treats a code it does not recognise as a refusal rather than queueing it", () => {
     expect(
       classifyManageOutcome({ result: "error", code: "some_future_code" }),

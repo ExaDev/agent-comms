@@ -62,12 +62,13 @@ describe("WireMeshTransport.queryVersion", () => {
     }
   });
 
-  test("answers unauthorized for a device with no live session and no gateway trust", async () => {
+  test("answers no_route for a device with no live session and no gateway trust", async () => {
     const identity = generateIdentity();
     const transport = new WireMeshTransport(noopEvents(), identity);
     try {
       const outcome = await transport.queryVersion("nobody-home");
-      expect(outcome).toEqual({ result: "error", code: "unauthorized" });
+      // no_route, not unauthorized: nothing was sent anywhere, so there is nobody to have refused it.
+      expect(outcome).toEqual({ result: "error", code: "no_route" });
     } finally {
       await transport.shutdown();
     }

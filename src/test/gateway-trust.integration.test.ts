@@ -181,6 +181,6 @@ describe("gateway trust -- deny by default", () => {
     cleanups.push(async () => b1.shutdown());
     // b1 never trusts a1 -- requestDmAccess must be refused fast, not hang out sendRoomRequest's own hub timeout.
 
-    await expect(b1.requestDmAccess(a1.peerId)).rejects.toThrow(/unauthorized/);
+    await expect(b1.requestDmAccess(a1.peerId)).rejects.toThrow(/no_route/);
   });
 });
