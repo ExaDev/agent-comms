@@ -224,6 +224,7 @@ describe("joinRoom (requester side, remote path)", () => {
       dataPort: 0,
       isCoordinator: false,
       hasCoordinatorConnection: false,
+      coordinatorPeerId: undefined,
       startDataServer: async () => {},
       connectToCoordinator: async () => {},
       becomeCoordinator: async () => {},

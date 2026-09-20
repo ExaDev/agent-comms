@@ -176,7 +176,7 @@ export class WireMeshTransport implements MeshTransport {
   private readonly coordinatorListeners = new Map<string, TrackedListener>();
   private defaultListenerId: string | undefined;
 
-  // -- The session dialled via connectToCoordinator, when this instance is not itself the coordinator -- and that same coordinator's own device-id hex, set alongside it and never cleared: consumeIncoming's own allowOnBehalfOf gate (see its doc comment) compares every session's authenticated peer identity against the hex, not merely "was this the specific session connectToCoordinator itself dialled", since mesh formation's own reciprocal connectToPeer can just as easily reach this transport over an accepted connection to the identical coordinator device.
+  // -- The session dialled via connectToCoordinator, when this instance is not itself the coordinator -- and that same coordinator's own device-id hex, set alongside it: consumeIncoming's own allowOnBehalfOf gate (see its doc comment) compares every session's authenticated peer identity against the hex, not merely "was this the specific session connectToCoordinator itself dialled", since mesh formation's own reciprocal connectToPeer can just as easily reach this transport over an accepted connection to the identical coordinator device. The session is dropped when it closes and the hex when this side takes the coordinator role itself, so coordinatorPeerId below names a coordinator this instance genuinely still answers to.
   private coordinatorSession: AcceptedMeshSession | undefined;
   private coordinatorDeviceHex: string | undefined;
 
@@ -370,6 +370,10 @@ export class WireMeshTransport implements MeshTransport {
     return this.coordinatorSession !== undefined;
   }
 
+  get coordinatorPeerId(): string | undefined {
+    return this.coordinatorDeviceHex;
+  }
+
   // -----------------------------------------------------------------------
   // Connection acceptance -- shared by every listener (coordinator or data)
   // -----------------------------------------------------------------------
@@ -391,13 +395,7 @@ export class WireMeshTransport implements MeshTransport {
       return;
     }
     const deviceIdHex = deviceIdToHex(peerDeviceId);
-    const identity = await this.identityReady;
-    const session = await acceptMeshSession(connection, identity, [DOMAIN], {
-      onFrame: async (conn, frame) => {
-        await this.handleDataFrame(conn, frame);
-      },
-      addresses: this.advertisedAddresses,
-    });
+    const session = await this.openSession(connection);
     if (this.isShuttingDown()) {
       await session.close();
       return;
@@ -500,6 +498,19 @@ export class WireMeshTransport implements MeshTransport {
     })();
   }
 
+  /** Opens a mesh session over an already-established connection, wired to this transport's own frame dispatch and advertised addresses. Every session this transport owns is built exactly this way, whether the connection was accepted by a listener or dialled at a peer, at the coordinator, or at a remote gateway, so the wiring lives here rather than being restated at each call site. */
+  private async openSession(
+    connection: Readonly<Connection>,
+  ): Promise<AcceptedMeshSession> {
+    const identity = await this.identityReady;
+    return acceptMeshSession(connection, identity, [DOMAIN], {
+      onFrame: async (conn, frame) => {
+        await this.handleDataFrame(conn, frame);
+      },
+      addresses: this.advertisedAddresses,
+    });
+  }
+
   /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch. Derives roomRouter's own allowOnBehalfOf gate itself, from whether this SPECIFIC handle's peer identity matches coordinatorDeviceHex -- never from which method established this particular session (mesh formation's reciprocal connectToPeer means the same coordinator device can just as easily reach this transport over an accepted connection as over the one connectToCoordinator itself dialled; see coordinatorDeviceHex's own field comment). A coordinator-less instance (coordinatorDeviceHex still undefined, e.g. this transport IS the coordinator) never allows it for anything. */
   private consumeIncoming(
     session: AcceptedMeshSession,
@@ -541,6 +552,9 @@ export class WireMeshTransport implements MeshTransport {
           const wasTracked = this.peerSessions.get(deviceIdHex) === session;
           if (wasTracked) this.peerSessions.delete(deviceIdHex);
           this.allSessions.delete(session);
+          // Dropping the closed coordinator session is what makes hasCoordinatorConnection answer honestly once the coordinator process is gone; coordinatorDeviceHex deliberately survives, so the onPeerDisconnected fired just below can still be recognised as the coordinator's own departure rather than an ordinary peer's.
+          if (this.coordinatorSession === session)
+            this.coordinatorSession = undefined;
           // A requester disconnecting before a human decides must unblock consumeQuarantined's own still-suspended loop iteration -- otherwise that promise, and the closure awaiting it, never settle.
           const pending = this.pendingConnections.get(deviceIdHex);
           if (pending !== undefined) {
@@ -603,13 +617,7 @@ export class WireMeshTransport implements MeshTransport {
     const connection = await this.wireTransport.connect(
       `${host}:${String(port)}`,
     );
-    const identity = await this.identityReady;
-    const session = await acceptMeshSession(connection, identity, [DOMAIN], {
-      onFrame: async (conn, frame) => {
-        await this.handleDataFrame(conn, frame);
-      },
-      addresses: this.advertisedAddresses,
-    });
+    const session = await this.openSession(connection);
     this.coordinatorSession = session;
     const coordinatorDeviceId = connection.peerDeviceId;
     if (coordinatorDeviceId !== undefined) {
@@ -651,6 +659,9 @@ export class WireMeshTransport implements MeshTransport {
       bindRetry.BECOME_COORDINATOR_BIND_RETRY_DELAY_MS,
     );
     this._isCoordinator = true;
+    // This side now IS the coordinator, so it answers to no other one: leaving a departed coordinator's device-id here would keep coordinatorPeerId naming a peer whose disconnect has already been dealt with, and would keep granting that device consumeIncoming's own on-behalf-of privilege.
+    this.coordinatorDeviceHex = undefined;
+    this.coordinatorSession = undefined;
     this.coordinatorListeners.set(id, {
       listener,
       policy: "full",
@@ -707,13 +718,7 @@ export class WireMeshTransport implements MeshTransport {
       await connection.close();
       return;
     }
-    const identity = await this.identityReady;
-    const session = await acceptMeshSession(connection, identity, [DOMAIN], {
-      onFrame: async (conn, frame) => {
-        await this.handleDataFrame(conn, frame);
-      },
-      addresses: this.advertisedAddresses,
-    });
+    const session = await this.openSession(connection);
     if (this.isShuttingDown()) {
       this.dataDials.delete(peer.id);
       await session.close();
@@ -824,13 +829,7 @@ export class WireMeshTransport implements MeshTransport {
     const connection = isWsUrl
       ? await connectWsUrl(host)
       : await this.wireTransport.connect(`${host}:${String(port)}`);
-    const identity = await this.identityReady;
-    const session = await acceptMeshSession(connection, identity, [DOMAIN], {
-      onFrame: async (conn, frame) => {
-        await this.handleDataFrame(conn, frame);
-      },
-      addresses: this.advertisedAddresses,
-    });
+    const session = await this.openSession(connection);
     const outcome = await session.sendManageRequest(
       buildCommand({
         method: "connect_request",

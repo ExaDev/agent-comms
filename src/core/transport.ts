@@ -147,6 +147,9 @@ export interface MeshTransport {
   /** Whether this instance has a live connection to a coordinator. */
   readonly hasCoordinatorConnection: boolean;
 
+  /** The peer ID of the coordinator this instance currently answers to, or undefined when it is the coordinator itself or has never reached one. Survives that coordinator's session closing, so an onPeerDisconnected handler can tell the coordinator's own departure apart from an ordinary peer's and contest the vacated role. */
+  readonly coordinatorPeerId: string | undefined;
+
   /**
    * Start the data server on an OS-assigned port.
    * Resolves when the server is listening.

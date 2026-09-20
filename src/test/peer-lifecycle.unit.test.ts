@@ -54,6 +54,8 @@ function makeHarness(): Harness {
   const applyStateSync =
     vi.fn<PeerLifecycleDeps["deliveryEngine"]["applyStateSync"]>();
   const applyPatch = vi.fn().mockResolvedValue(undefined);
+  const notifyRoomsOfStatus = vi.fn().mockResolvedValue(undefined);
+  const broadcastPatch = vi.fn().mockResolvedValue(undefined);
   const staleAgentCheckerStart =
     vi.fn<PeerLifecycleDeps["staleAgentChecker"]["start"]>();
   const coordinatorGatewayOnBecameCoordinator = vi
@@ -67,10 +69,16 @@ function makeHarness(): Harness {
     agents: new Map(),
     coordinatorPort: COORDINATOR_PORT,
     getPeerId: () => OWNER_ID,
+    getCoordinatorPeerId: () => undefined,
     requireTransport: () => transport as never,
     serialise: () => emptyState(),
     roomProtocol: { flushPendingRoomRequests },
-    deliveryEngine: { applyStateSync, applyPatch },
+    deliveryEngine: {
+      applyStateSync,
+      applyPatch,
+      notifyRoomsOfStatus,
+      broadcastPatch,
+    },
     staleAgentChecker: { start: staleAgentCheckerStart },
     coordinatorGateway: {
       onBecameCoordinator: coordinatorGatewayOnBecameCoordinator,
