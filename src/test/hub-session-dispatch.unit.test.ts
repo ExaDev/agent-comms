@@ -83,21 +83,10 @@ function fakeRequest(
 }
 
 function fakeDeps(
-  overrides: Readonly<Omit<Partial<HubRequestDispatchDeps>, "events">> = {},
-): HubRequestDispatchDeps & {
-  events: TransportEvents & { messages: MeshMessage[] };
-} {
-  const messages: MeshMessage[] = [];
-  const events = {
-    ...noopEvents(),
-    messages,
-    onMessage: (_handle: Readonly<ConnectionHandle>, message: MeshMessage) => {
-      messages.push(message);
-    },
-  };
+  overrides: Readonly<Partial<HubRequestDispatchDeps>> = {},
+): HubRequestDispatchDeps {
   return {
     isTrusted: () => false,
-    events,
     handleRoomRequest: vi.fn().mockResolvedValue(undefined),
     forwardToLocalPeer: () => undefined,
     ...overrides,
@@ -105,23 +94,6 @@ function fakeDeps(
 }
 
 describe("dispatchHubRequest", () => {
-  it("drops a FRAME_VERB request with no fromDevice, responding ok, without ever calling onMessage", async () => {
-    const { request, responses } = fakeRequest({ verb: FRAME_VERB });
-    const deps = fakeDeps();
-    const onKnownPeer = fakeOnKnownPeer();
-
-    await dispatchHubRequest({
-      request,
-      ownDeviceHex: OWN_HEX,
-      deps,
-      onKnownPeer: onKnownPeer,
-    });
-
-    expect(responses).toEqual([{ result: "ok" }]);
-    expect(deps.events.messages).toEqual([]);
-    expect(onKnownPeer).not.toHaveBeenCalled();
-  });
-
   it("refuses a room-domain verb with no fromDevice with an ordinary unauthorized outcome, never dispatching to handleRoomRequest", async () => {
     const { request, responses } = fakeRequest({ verb: "room:member" });
     const deps = fakeDeps();
@@ -139,74 +111,40 @@ describe("dispatchHubRequest", () => {
     expect(onKnownPeer).not.toHaveBeenCalled();
   });
 
-  it("drops a FRAME_VERB request from an untrusted device, responding ok, without calling onMessage", async () => {
-    const { request, responses } = fakeRequest({
-      verb: FRAME_VERB,
-      fromDevice: SENDER_HEX,
-    });
-    const deps = fakeDeps({ isTrusted: () => false });
-    const onKnownPeer = fakeOnKnownPeer();
+  it.each([
+    { label: "an untrusted device", fromDevice: SENDER_HEX, trusted: false },
+    { label: "a trusted device", fromDevice: SENDER_HEX, trusted: true },
+    { label: "no identified device", fromDevice: undefined, trusted: false },
+  ])(
+    "refuses a legacy FRAME_VERB request from $label with unsupported_verb, never dispatching it or recording a known peer (agent-comms#169, agent-comms#268)",
+    async ({ fromDevice, trusted }) => {
+      const { request, responses } = fakeRequest({
+        verb: FRAME_VERB,
+        ...(fromDevice !== undefined ? { fromDevice } : {}),
+      });
+      request.command.params = {
+        message: {
+          method: "state_update",
+          patch: { type: "agent_offline", agentId: "spoofed" },
+        },
+      };
+      const deps = fakeDeps({ isTrusted: () => trusted });
+      const onKnownPeer = fakeOnKnownPeer();
 
-    await dispatchHubRequest({
-      request,
-      ownDeviceHex: OWN_HEX,
-      deps,
-      onKnownPeer: onKnownPeer,
-    });
+      await dispatchHubRequest({
+        request,
+        ownDeviceHex: OWN_HEX,
+        deps,
+        onKnownPeer,
+      });
 
-    expect(responses).toEqual([{ result: "ok" }]);
-    expect(deps.events.messages).toEqual([]);
-    expect(onKnownPeer).not.toHaveBeenCalled();
-  });
-
-  it("delivers a FRAME_VERB request from a trusted device to onMessage and records it as a known hub peer", async () => {
-    const message: MeshMessage = {
-      method: "peer_joined",
-      peer: { id: "hi", port: 0, startedAt: "2026-01-01T00:00:00.000Z" },
-    };
-    const { request, responses } = fakeRequest({
-      verb: FRAME_VERB,
-      fromDevice: SENDER_HEX,
-    });
-    request.command.params = { message };
-    const deps = fakeDeps({ isTrusted: (hex) => hex === SENDER_HEX });
-    const onKnownPeer = fakeOnKnownPeer();
-
-    await dispatchHubRequest({
-      request,
-      ownDeviceHex: OWN_HEX,
-      deps,
-      onKnownPeer: onKnownPeer,
-    });
-
-    expect(responses).toEqual([{ result: "ok" }]);
-    expect(deps.events.messages).toEqual([message]);
-    expect(onKnownPeer).toHaveBeenCalledWith(SENDER_HEX);
-  });
-
-  it("never delivers a state_sync or state_update from a trusted device to onMessage (agent-comms#169)", async () => {
-    const { request, responses } = fakeRequest({
-      verb: FRAME_VERB,
-      fromDevice: SENDER_HEX,
-    });
-    request.command.params = {
-      message: {
-        method: "state_update",
-        patch: { type: "agent_offline", agentId: "spoofed" },
-      },
-    };
-    const deps = fakeDeps({ isTrusted: () => true });
-
-    await dispatchHubRequest({
-      request,
-      ownDeviceHex: OWN_HEX,
-      deps,
-      onKnownPeer: fakeOnKnownPeer(),
-    });
-
-    expect(responses).toEqual([{ result: "ok" }]);
-    expect(deps.events.messages).toEqual([]);
-  });
+      expect(responses).toEqual([
+        { result: "error", code: "unsupported_verb" },
+      ]);
+      expect(deps.handleRoomRequest).not.toHaveBeenCalled();
+      expect(onKnownPeer).not.toHaveBeenCalled();
+    },
+  );
 
   it("dispatches a room-domain verb from an UNTRUSTED but identified device straight to handleRoomRequest, never rejecting it as unauthorized (the actual agent-comms#192 fix)", async () => {
     const { request, responses } = fakeRequest({

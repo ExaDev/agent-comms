@@ -28,16 +28,9 @@ import {
   ROOM_REQUEST_TIMEOUT_MS,
   manageRequestTimeoutMs,
 } from "./request-timeouts.js";
-import type { MeshMessage } from "./wire-protocol.js";
-import { extractMessage } from "./room-router.js";
 import type { RoomRequestOrigin } from "./room-router.js";
 import { connectWsUrl } from "./ws-dial.js";
-import {
-  buildCommand,
-  DOMAIN,
-  FRAME_SCOPE,
-  FRAME_VERB,
-} from "./wire-mesh-transport.js";
+import { DOMAIN, FRAME_VERB } from "./wire-mesh-transport.js";
 
 /** How long a room-domain request routed through the hub's relay-connect/relay-data pairing waits for a response before giving up. Unlike an ordinary local peer session, a relay-connect naming an unknown target-device is silently dropped by the hub (spec/relay-hub's own documented behaviour -- no error frame exists for "no such device"), so a request to a device that turns out not to be reachable via any gateway would otherwise hang forever rather than surfacing as a normal "not reachable" outcome. */
 
@@ -66,7 +59,7 @@ export interface HubSessionDeps {
     handle: Readonly<ConnectionHandle>,
     origin?: Readonly<RoomRequestOrigin>,
   ) => Promise<void>;
-  /** The gateway trust boundary (agent-comms#156): whether the given device-id (hex) is currently trusted as a bare device. Since agent-comms#192, this gates only the traffic that carries no independent per-message security of its own: the legacy FRAME_VERB path (consume()'s own doc explains why) and dispatchHubRequest's own hubPeersKnown bookkeeping for a room-domain sender. A real room-domain verb's own dispatch is never gated on this at all; see dispatchHubRequest's own doc for why that is sound. connect()'s own directory-merge filter uses admitEntries below instead, not this. */
+  /** The gateway trust boundary (agent-comms#156): whether the given device-id (hex) is currently trusted as a bare device. It only decides which room-domain senders dispatchHubRequest records as known hub peers; a real room-domain verb's own dispatch is never gated on it at all, see dispatchHubRequest's own doc for why that is sound. connect()'s own directory-merge filter uses admitEntries below instead, not this. */
   isTrusted: (deviceHex: string) => boolean;
   /** Whether a gossiped directory entry may be merged (agent-comms#156, widened by #187 and #266): its device is trusted by id, or is itself a trusted principal's own device (agent-comms#192), or carries a membership proof a trusted principal vouches for. A gossiped advert is self-asserted, so the proof is what makes trusting a principal cover its devices; verifying one is cryptography, hence asynchronous. */
   admitEntries: (
@@ -199,19 +192,6 @@ export class HubSession {
     }
   }
 
-  /** Sends one message to a hub-discovered peer through the hub's relay pairing. */
-  async sendToPeer(peerDeviceHex: string, message: MeshMessage): Promise<void> {
-    const session = this.session;
-    if (session === undefined) {
-      throw new Error("not connected to a hub");
-    }
-    await session.sendManageRequest(
-      buildCommand(message),
-      FRAME_SCOPE,
-      hexToBytes(peerDeviceHex),
-    );
-  }
-
   /** Gossips a raw `gossip` frame carrying every given entry's own advert onto the hub, over the raw connection rather than sendGossipUpdate (which can only ever advertise this side's own single device) -- the outbound leg of agent-comms#155's gateway forwarding. relay-hub.ts registers each advert's own `device` field against the CONNECTION it arrives on, so every entry passed here becomes reachable, cross-machine, as "via this gateway" -- callers are responsible for only ever passing entries that are actually meant to be advertised (WireMeshTransport filters to local, visible-agent-bearing entries before calling this). Throws if this side isn't currently connected to a hub, matching sendToPeer's own contract -- callers gate on isConnected first. */
   async advertiseDevices(entries: readonly DirectoryEntry[]): Promise<void> {
     const connection = this.connection;
@@ -278,15 +258,15 @@ function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
 /** The slice of HubSessionDeps dispatchHubRequest actually needs. Named so its own tests, and consume()'s call site, don't repeat the same Pick inline. */
 export type HubRequestDispatchDeps = Pick<
   HubSessionDeps,
-  "isTrusted" | "events" | "handleRoomRequest" | "forwardToLocalPeer"
+  "isTrusted" | "handleRoomRequest" | "forwardToLocalPeer"
 >;
 
 /**
  * Decides what to do with one inbound relayed manage-request, keeping every downstream consumer's handle keyed by the SENDING device (request.fromDevice names it on relay-routed requests) rather than by this gateway, exactly as it already did for the legacy opaque-frame path and now also for a real room-domain verb (agent-comms#155's "remote to local" leg).
  *
- * A request with no fromDevice at all is refused before either path below ever sees it. Neither has anything sound to check against a value that isn't a real device-id: a legacy FRAME_VERB request has no security beyond the sender's own identity, and a room-domain verb's own downstream handler (room-router.ts's resolveHandle, then a capability-token check such as verifyRoomToken) calls deviceIdFromHex on whatever handle.id it's given, which throws on anything that isn't valid hex rather than answering with an ordinary unauthorized outcome. Answering unauthorized here, before that, is what keeps this a clean, fast failure for the request's own caller instead of an unhandled rejection that would kill this session's whole drain loop.
+ * A request with no fromDevice at all is refused before anything below sees it. A room-domain verb's own downstream handler (room-router.ts's resolveHandle, then a capability-token check such as verifyRoomToken) calls deviceIdFromHex on whatever handle.id it's given, which throws on anything that isn't valid hex rather than answering with an ordinary unauthorized outcome. Answering unauthorized here, before that, is what keeps this a clean, fast failure for the request's own caller instead of an unhandled rejection that would kill this session's whole drain loop.
  *
- * The legacy FRAME_VERB path (P2's opaque-payload carriage, still the only path for anything core/room doesn't yet have real semantics for) carries no security of its own beyond the identity of its sender, so it stays gated by the coarse per-device gateway allowlist (isTrusted, agent-comms#156): an untrusted sender's frame is silently dropped, matching isStateMutatingMessage's own swallow-and-ack style so it learns nothing about why. Even a trusted sender's state_sync/state_update is still filtered out before ever reaching onMessage; see isStateMutatingMessage's own doc for why (agent-comms#169's security finding).
+ * Only room-domain verbs are accepted over a relay at all. The legacy FRAME_VERB carriage (an opaque MeshMessage, which local peer sessions still use for mesh-state gossip) is refused here with unsupported_verb whoever sent it and whether or not that sender is trusted: a relayed sender has passed neither connect_request approval nor the coordinator's own membership, so it has no business feeding state_sync or state_update into this side's mesh state, and nothing on the relay path has any other use for a bare frame. Refusing the verb wholesale is the allow-list; there is no per-message-type list to keep in step with new MeshMessage variants (agent-comms#169, agent-comms#268).
  *
  * A real room-domain verb (room.send, room.join, room.notify, ...) is never gated on isTrusted at all (agent-comms#192): it is independently gated by its own room:member capability token, verified regardless of which transport path it arrived over, and already principal-aware since agent-comms#187 (device-membership-verification.ts's own chain-walk). Stacking the coarse bare-device allowlist in front of that check would be redundant, not protective, and for room.join specifically (the one deliberately ungated verb, whose own security model is a human decision) it would actively defeat the protocol's own intended design by never letting an untrusted device reach that approval step at all. onKnownPeer is still only called here for a sender isTrusted already recognises: reaching this branch has not yet had its own token verified (that happens inside handleRoomRequest/forwardToLocalPeer), so hubPeersKnown stays "gateway-trusted hub peers", never "every device that has sent a syntactically valid room-domain request".
  *
@@ -300,33 +280,22 @@ export async function dispatchHubRequest(options: {
   hubAddress?: string | undefined;
 }): Promise<void> {
   const { request, ownDeviceHex, deps, onKnownPeer, hubAddress } = options;
+  if (request.command.verb === FRAME_VERB) {
+    await request
+      .respond({ result: "error", code: "unsupported_verb" })
+      .catch(() => undefined);
+    return;
+  }
+
   if (request.fromDevice === undefined) {
-    if (request.command.verb === FRAME_VERB) {
-      await request.respond({ result: "ok" }).catch(() => undefined);
-    } else {
-      await request
-        .respond({ result: "error", code: "unauthorized" })
-        .catch(() => undefined);
-    }
+    await request
+      .respond({ result: "error", code: "unauthorized" })
+      .catch(() => undefined);
     return;
   }
 
   const senderHex = deviceIdToHex(request.fromDevice);
   const handle: Readonly<ConnectionHandle> = { id: senderHex };
-
-  if (request.command.verb === FRAME_VERB) {
-    if (!deps.isTrusted(senderHex)) {
-      await request.respond({ result: "ok" }).catch(() => undefined);
-      return;
-    }
-    onKnownPeer(senderHex);
-    const message = extractMessage(request.command);
-    if (message !== undefined && !isStateMutatingMessage(message)) {
-      deps.events.onMessage(handle, message);
-    }
-    await request.respond({ result: "ok" }).catch(() => undefined);
-    return;
-  }
 
   if (deps.isTrusted(senderHex)) onKnownPeer(senderHex);
 
@@ -359,9 +328,4 @@ export async function dispatchHubRequest(options: {
     handle,
     hubAddress !== undefined ? { relayHubAddress: hubAddress } : {},
   );
-}
-
-/** A state_sync or state_update carries authority to directly overwrite or patch this side's own mesh state (agents, rooms, messages, deliveries) -- on an ordinary peer session that authority is meaningful because the peer already passed connect_request/introduce approval or the coordinator's own trusted mesh membership. A hub-relayed sender has passed neither, and gateway trust (agent-comms#156, dispatchHubRequest's own isTrusted gate for the legacy frame path) doesn't grant it either: being on the allowlist means "this device's traffic is worth acting on," not "this device may directly overwrite this side's mesh state" -- a strictly stronger claim no hub-relayed sender has ever been asked to prove, since the hub itself still accepts any self-generated identity with no admission control of its own (gating the hub is deliberately out of scope for agent-comms#156). Treating a trusted sender's state_sync/state_update as equally authoritative would let it inject an outcome indistinguishable from a genuine mesh event, e.g. a spoofed inbound delivery -- so this filter stays unconditional, applied even to a sender dispatchHubRequest has already let past the trust gate. Every other legacy message method this session might relay is already inert on receipt (PeerLifecycle's own handleDataMessage only reacts to these two), so filtering exactly these two is a complete fix for this specific path, not a partial one. */
-function isStateMutatingMessage(message: MeshMessage): boolean {
-  return message.method === "state_sync" || message.method === "state_update";
 }
