@@ -1,3 +1,9 @@
+## [5.2.3](https://github.com/ExaDev/agent-comms/compare/v5.2.2...v5.2.3) (2026-09-20)
+
+### Build
+
+* **deps:** bump cc-peer to 1.6.1 ([7673976](https://github.com/ExaDev/agent-comms/commit/7673976a23fed38f5571b7540c2df8ace2bd7349))
+
 ## [5.2.2](https://github.com/ExaDev/agent-comms/compare/v5.2.1...v5.2.2) (2026-09-20)
 
 ### Build
