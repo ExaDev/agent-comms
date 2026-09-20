@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
-import { realHubOverWs } from "./hub-helpers.js";
+import { realHubOverWs, TeardownStack } from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
 
 let nextPort = 22_500;
@@ -34,12 +34,10 @@ async function waitFor(
   expect(false, `timed out waiting for ${what}`).toBeTruthy();
 }
 
-const cleanups: (() => Promise<void>)[] = [];
+const cleanups = new TeardownStack();
 
 afterEach(async () => {
-  for (const close of cleanups.splice(0)) {
-    await close();
-  }
+  await cleanups.run();
 });
 
 describe("gateway trust -- deny by default", () => {

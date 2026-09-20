@@ -2,7 +2,11 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { acceptMeshSession } from "wire-mesh-core/domain/mesh-session";
-import { realHubOverWs, waitForCondition } from "./hub-helpers.js";
+import {
+  realHubOverWs,
+  TeardownStack,
+  waitForCondition,
+} from "./hub-helpers.js";
 import { generateIdentity } from "../core/identity.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import {
@@ -32,12 +36,10 @@ function noopEvents(): TransportEvents {
   };
 }
 
-const cleanups: (() => Promise<void>)[] = [];
+const cleanups = new TeardownStack();
 
 afterEach(async () => {
-  for (const close of cleanups.splice(0)) {
-    await close();
-  }
+  await cleanups.run();
 });
 
 describe("connectToHub", () => {
