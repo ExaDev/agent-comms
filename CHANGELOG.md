@@ -1,3 +1,13 @@
+## [4.5.2](https://github.com/ExaDev/agent-comms/compare/v4.5.1...v4.5.2) (2026-09-20)
+
+### Refactoring
+
+* **core:** give the room router separate local and relayed entry points ([8c2d9ca](https://github.com/ExaDev/agent-comms/commit/8c2d9caed02ba261b3216d4c81793ba01a952dee))
+
+### Tests
+
+* **core:** send raw legacy frames through a real hub to a trusting peer ([0b0c64e](https://github.com/ExaDev/agent-comms/commit/0b0c64ecabbb3a448a1880b423a6276ec5d48645))
+
 ## [4.5.1](https://github.com/ExaDev/agent-comms/compare/v4.5.0...v4.5.1) (2026-09-20)
 
 ### Bug Fixes
