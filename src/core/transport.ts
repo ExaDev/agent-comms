@@ -125,6 +125,11 @@ export interface TransportEvents {
   onRevocationAnnounce: (entry: RevocationEntry) => void;
 
   /**
+   * A device this side can now route a request to became reachable: the relay hub admitted its directory entry into this side's own view, or an operator trusted it outright. Fires for a route that appears through the hub as well as a direct peer connection, since onPeerConnected only ever covers the latter and a device fronted by a remote gateway has no local session of its own to connect. MeshStore retries anything queued for that device on this.
+   */
+  onDeviceReachable: (deviceHex: string) => void;
+
+  /**
    * A peer's gossiped self-advert carried a `presence/status` extension (wire-mesh-core's peer-advert open extension tail, re-sent periodically via sendGossipUpdate). Fires only when that key is present and a recognised AgentStatus value -- an advert with no presence extension, or an unrecognised value, is a peer that simply isn't advertising presence over this mechanism, not an error.
    */
   onPresenceAdvert: (

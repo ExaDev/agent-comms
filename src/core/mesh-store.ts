@@ -61,6 +61,7 @@ import type {
   MeshTransport,
   TransportEvents,
 } from "./transport.js";
+import { createTransportEvents } from "./transport-events.js";
 import type {
   CommsStore,
   SendRoomMessageOptions,
@@ -492,42 +493,13 @@ export class MeshStore implements CommsStore {
 
   /** Returns the TransportEvents object that bridges should pass to the transport constructor. */
   get events(): TransportEvents {
-    return {
-      onMessage: (handle, msg) => {
-        void this.peerLifecycle.handleDataMessage(handle, msg);
-      },
-      onPeerConnected: (handle, info) => {
-        void this.peerLifecycle.handlePeerConnected(handle, info);
-      },
-      onPeerDisconnected: (handle) => {
-        this.peerLifecycle.handlePeerDisconnected(handle);
-      },
-      onIntroduction: (handle, msg) => {
-        void this.peerLifecycle.handleIntroduction(handle, msg);
-      },
-      onPeerList: (peers) => {
-        this.peerLifecycle.handlePeerList(peers);
-      },
-      onPeerJoined: (peer) => {
-        this.peerLifecycle.handlePeerJoined(peer);
-      },
-      onBecomeCoordinator: (peerList) => {
-        // A handover this side cannot honour (the outgoing coordinator's port never freed, say) leaves the mesh without a coordinator until the next crash race, which is worth reporting rather than losing as an unhandled rejection.
-        void this.peerLifecycle
-          .handleBecomeCoordinator(peerList)
-          .catch(this.reportError);
-      },
-      onConnectionRequest: (handle, request) => {
-        this.connectionApproval.handleConnectionRequest(handle, request);
-      },
-      onError: this.reportError,
-      onRevocationAnnounce: (entry) => {
-        void this.deliveryEngine.handleRevocationAnnounce(entry);
-      },
-      onPresenceAdvert: (handle, status) => {
-        this.deliveryEngine.handlePresenceAdvert(handle.id, status);
-      },
-    };
+    return createTransportEvents({
+      peerLifecycle: this.peerLifecycle,
+      connectionApproval: this.connectionApproval,
+      deliveryEngine: this.deliveryEngine,
+      roomProtocol: this.roomProtocol,
+      reportError: this.reportError,
+    });
   }
 
   /**
@@ -881,9 +853,10 @@ export class MeshStore implements CommsStore {
   // Gateway trust (agent-comms#156) -- the cross-machine trust boundary
   // -----------------------------------------------------------------------
 
-  /** Trusts a remote device-id (hex): this store's own gateway (once it becomes the coordinator) will advertise onto the hub, merge this device's gossiped directory entries, dispatch its relayed requests, and route outbound hub requests to it. See GatewayTrust's own class doc for why trust is keyed per device-id rather than per remote machine, and why it doesn't survive a restart. */
+  /** Trusts a remote device-id (hex): this store's own gateway (once it becomes the coordinator) will advertise onto the hub, merge this device's gossiped directory entries, dispatch its relayed requests, and route outbound hub requests to it. See GatewayTrust's own class doc for why trust is keyed per device-id rather than per remote machine, and why it doesn't survive a restart. Trusting a device is itself a route to it appearing, so anything queued for it is retried immediately rather than waiting out the hub's next gossip tick. */
   addTrustedGateway(deviceHex: string): void {
     this.gatewayTrust.add(deviceHex);
+    void this.roomProtocol.flushPendingRoomRequests(deviceHex);
   }
 
   /** Withdraws trust from a remote device-id (hex). A no-op if it was never trusted. */

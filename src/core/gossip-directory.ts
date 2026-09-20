@@ -2,6 +2,7 @@
  * gossip-directory — the mesh-wide gossip-directory aggregation WireMeshTransport's own listKnownDevices reads from, plus per-event directory lookups (a specific peer's presence advert). Split out purely to keep wire-mesh-transport.ts under the repo's max-lines cap, the same reason connection-approval.ts, room-router.ts, hub-session.ts, and peer-lifecycle.ts were each split from their own owning file.
  */
 
+import type { TransportEvents } from "./transport.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import type {
   AcceptedMeshSession,
@@ -37,6 +38,18 @@ export function mergeKnownDevices(
     ) {
       knownDevices.set(deviceIdHex, entry.advert);
     }
+  }
+}
+
+/** Merges a hub session's own admitted directory into knownDevices and announces each device in it as reachable. Every entry the hub hands over here has already passed admitEntries, so a device named in one is both present on the hub and trusted or vouched for by this side: exactly the moment a request queued for it becomes worth retrying, and the only such moment for a device that has no local peer session of its own to connect. */
+export function mergeAndAnnounceReachable(
+  knownDevices: Map<string, PeerAdvert>,
+  directory: readonly DirectoryEntry[],
+  events: Readonly<Pick<TransportEvents, "onDeviceReachable">>,
+): void {
+  mergeKnownDevices(knownDevices, directory);
+  for (const entry of directory) {
+    events.onDeviceReachable(deviceIdToHex(entry.device));
   }
 }
 

@@ -29,6 +29,7 @@ import {
 import {
   findPresenceAdvert,
   listKnownDevicesEntries,
+  mergeAndAnnounceReachable,
   mergeKnownDevices,
   startGossipInterval,
 } from "./gossip-directory.js";
@@ -298,7 +299,7 @@ export class WireMeshTransport implements MeshTransport {
         this.allSessions.add(session);
       },
       onDirectory: (entries) => {
-        mergeKnownDevices(this.knownDevices, entries);
+        mergeAndAnnounceReachable(this.knownDevices, entries, this.events);
       },
       handleRoomRequest: this.roomRouter.handleRelayedRequest,
       isTrusted: (deviceHex) => this.gatewayTrust.isTrusted(deviceHex),

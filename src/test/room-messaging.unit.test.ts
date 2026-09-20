@@ -28,6 +28,8 @@ const DEVICE_ID_HEX_LENGTH = 64;
 const MESSAGE_ID_BYTE_LENGTH = 16;
 const FROM_DEVICE_ID = "a".repeat(DEVICE_ID_HEX_LENGTH);
 const TO_DEVICE_ID = "b".repeat(DEVICE_ID_HEX_LENGTH);
+/** A third room member, so a fan-out test can show one member's outcome not affecting another's. */
+const OTHER_DEVICE_ID = "c".repeat(DEVICE_ID_HEX_LENGTH);
 const NOW_MS = 1_700_000_000_000;
 
 function room(overrides: Partial<Room> = {}): Room {
@@ -612,5 +614,134 @@ describe("RoomMessaging — sendDm", () => {
       unknown
     >;
     expect(params).not.toHaveProperty("streaming-behavior");
+  });
+});
+
+describe("RoomMessaging — reporting what became of a send", () => {
+  /** Makes the DM path's own token already present, so sendDm goes straight to the wire rather than running the consent flow first. */
+  function withDmToken(h: ReturnType<typeof makeHarness>): void {
+    h.resolveAgent.mockResolvedValue(agent({ visibility: "visible" }));
+    vi.mocked(loadRoomTokens).mockReturnValue({
+      [dmRoomPath(FROM_DEVICE_ID, TO_DEVICE_ID)]: FAKE_TOKEN,
+    });
+  }
+
+  it("reports a delivered DM as delivered", async () => {
+    const h = makeHarness();
+    withDmToken(h);
+    h.sendRoomRequestToMember.mockResolvedValue({ kind: "delivered" });
+
+    const sent = await h.messaging.sendDm(FROM_DEVICE_ID, TO_DEVICE_ID, "hi");
+
+    expect(sent.delivery).toEqual({ status: "delivered" });
+  });
+
+  it("reports a DM nobody answered as queued, naming why", async () => {
+    const h = makeHarness();
+    withDmToken(h);
+    h.sendRoomRequestToMember.mockResolvedValue({
+      kind: "undelivered",
+      reason: "timeout",
+    });
+
+    const sent = await h.messaging.sendDm(FROM_DEVICE_ID, TO_DEVICE_ID, "hi");
+
+    expect(sent.delivery).toEqual({ status: "queued", reason: "timeout" });
+  });
+
+  it("raises SEND_REFUSED when the recipient refuses a DM, naming its own code", async () => {
+    const h = makeHarness();
+    withDmToken(h);
+    h.sendRoomRequestToMember.mockResolvedValue({
+      kind: "refused",
+      code: "unauthorized",
+    });
+
+    await expect(
+      h.messaging.sendDm(FROM_DEVICE_ID, TO_DEVICE_ID, "hi"),
+    ).rejects.toMatchObject({
+      message: `DM to ${TO_DEVICE_ID} refused (unauthorized)`,
+      code: "SEND_REFUSED",
+    });
+  });
+
+  it("includes the refuser's own message in a refusal, when it sent one", async () => {
+    const h = makeHarness();
+    withDmToken(h);
+    h.sendRoomRequestToMember.mockResolvedValue({
+      kind: "refused",
+      code: "denied",
+      message: "not right now",
+    });
+
+    await expect(
+      h.messaging.sendDm(FROM_DEVICE_ID, TO_DEVICE_ID, "hi"),
+    ).rejects.toMatchObject({
+      message: `DM to ${TO_DEVICE_ID} refused (denied: not right now)`,
+    });
+  });
+
+  it("reports a self-DM as delivered without touching the wire", async () => {
+    const h = makeHarness();
+
+    const sent = await h.messaging.sendDm(
+      FROM_DEVICE_ID,
+      FROM_DEVICE_ID,
+      "note to self",
+    );
+
+    expect(sent.delivery).toEqual({ status: "delivered" });
+    expect(h.sendRoomRequestToMember).not.toHaveBeenCalled();
+  });
+
+  it("reports a room send's outcome per member, including a refusal", async () => {
+    const h = makeHarness();
+    h.deps.rooms.set(
+      "room-1",
+      room({ members: [FROM_DEVICE_ID, TO_DEVICE_ID, OTHER_DEVICE_ID] }),
+    );
+    h.sendRoomRequestToMember
+      .mockResolvedValueOnce({ kind: "undelivered", reason: "not_connected" })
+      .mockResolvedValueOnce({ kind: "refused", code: "unauthorized" });
+
+    const sent = await h.messaging.sendRoomMessage(
+      "room-1",
+      FROM_DEVICE_ID,
+      "hi",
+    );
+
+    expect(sent.deliveries).toEqual([
+      {
+        member: TO_DEVICE_ID,
+        delivery: { status: "queued", reason: "not_connected" },
+      },
+      {
+        member: OTHER_DEVICE_ID,
+        delivery: { status: "refused", code: "unauthorized" },
+      },
+    ]);
+  });
+
+  it("keeps sending to the rest of a room after one member refuses", async () => {
+    const h = makeHarness();
+    h.deps.rooms.set(
+      "room-1",
+      room({ members: [FROM_DEVICE_ID, TO_DEVICE_ID, OTHER_DEVICE_ID] }),
+    );
+    h.sendRoomRequestToMember
+      .mockResolvedValueOnce({ kind: "refused", code: "unauthorized" })
+      .mockResolvedValueOnce({ kind: "delivered" });
+
+    const sent = await h.messaging.sendRoomMessage(
+      "room-1",
+      FROM_DEVICE_ID,
+      "hi",
+    );
+
+    expect(h.sendRoomRequestToMember).toHaveBeenCalledTimes(2);
+    expect(sent.deliveries[1]).toEqual({
+      member: OTHER_DEVICE_ID,
+      delivery: { status: "delivered" },
+    });
   });
 });
