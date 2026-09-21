@@ -46,7 +46,7 @@ async function startNode(
   return { store, transport };
 }
 
-/** Two stores on one machine (first is the coordinator) and one store on another machine, all on one hub, with the remote store and the survivor trusting each other. */
+/** Two stores on one machine (first is the coordinator) and one store on another machine, all on one hub, with both local stores trusting the remote one and the remote one trusting the survivor. */
 async function startMachines(teardown: TeardownStack): Promise<{
   first: Node;
   second: Node;
@@ -64,6 +64,7 @@ async function startMachines(teardown: TeardownStack): Promise<{
     hub.url,
     teardown,
   );
+  first.store.addTrustedGateway(remote.store.peerId);
   second.store.addTrustedGateway(remote.store.peerId);
   remote.store.addTrustedGateway(second.store.peerId);
   await waitFor(

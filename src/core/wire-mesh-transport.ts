@@ -297,6 +297,9 @@ export class WireMeshTransport implements MeshTransport {
       trackForShutdown: (session) => {
         this.allSessions.add(session);
       },
+      untrack: (session) => {
+        this.allSessions.delete(session);
+      },
       onDirectory: (entries) => {
         mergeAndAnnounceReachable(this.knownDevices, entries, this.events);
       },
@@ -932,11 +935,12 @@ export class WireMeshTransport implements MeshTransport {
   // MeshTransport -- Hub (agent-comms#154, per-store since agent-comms#293)
   // -----------------------------------------------------------------------
 
-  joinHub(url: string): void {
+  joinHub(url: string, shouldConnect: () => boolean): void {
     if (this.hubLink !== undefined) return;
     this.hubLink = new HubLink({
       hub: this.hub,
       url,
+      shouldConnect,
       onConnected: () => {
         readvertiseGossip(this.gossipOptions());
       },
@@ -945,6 +949,10 @@ export class WireMeshTransport implements MeshTransport {
       },
     });
     this.hubLink.start();
+  }
+
+  reconsiderHub(): void {
+    this.hubLink?.reconsider();
   }
 
   // -----------------------------------------------------------------------

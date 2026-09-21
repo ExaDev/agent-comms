@@ -1,5 +1,5 @@
 /**
- * Integration tests for the gateway allowlist's own deny-by-default posture (agent-comms#156), the trust-boundary leg of the cross-machine mesh epic (#153) on top of #155's own (now trust-gated) forwarding. Same two-independent-local-meshes-over-a-real-hub harness as gateway-forwarding.integration.test.ts, but every scenario here proves the ABSENCE of forwarding/merge/routing before any trust is established, complementing that file's own coverage of the PRESENT-trust happy path.
+ * Integration tests for the gateway allowlist's own deny-by-default posture (agent-comms#156), the trust-boundary leg of the cross-machine mesh epic (#153) on top of #155's own (now trust-gated) forwarding. Same two-independent-local-meshes-over-a-real-hub harness as hub-peer-per-store.integration.test.ts, but every scenario here proves the ABSENCE of forwarding/merge/routing before any trust is established, complementing that file's own coverage of the PRESENT-trust happy path.
  */
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,7 +13,7 @@ function freshPort(): number {
   return nextPort;
 }
 
-/** Short enough that a gossip re-advertisement fires within a test's own poll budget, matching gateway-forwarding.integration.test.ts's own choice. */
+/** Short enough that a gossip re-advertisement fires within a test's own poll budget, matching hub-peer-per-store.integration.test.ts's own choice. */
 const FAST_GOSSIP_INTERVAL_MS = 50;
 
 const POLL_ATTEMPTS = 100;
@@ -66,6 +66,14 @@ describe("gateway trust -- deny by default", () => {
     });
     await b1.init();
     cleanups.push(async () => b1.shutdown());
+    await b1.registerAgent({
+      name: "observer-b1",
+      harness: "test",
+      cwd: "/test/b1",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
 
     const c1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
     await wireTestTransport(c1, {
@@ -123,6 +131,14 @@ describe("gateway trust -- deny by default", () => {
     });
     await b1.init();
     cleanups.push(async () => b1.shutdown());
+    await b1.registerAgent({
+      name: "observer-b1",
+      harness: "test",
+      cwd: "/test/b1",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
     b1.addTrustedGateway(a1.peerId);
 
     const c1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
@@ -179,6 +195,14 @@ describe("gateway trust -- deny by default", () => {
     });
     await b1.init();
     cleanups.push(async () => b1.shutdown());
+    await b1.registerAgent({
+      name: "observer-b1",
+      harness: "test",
+      cwd: "/test/b1",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
     // b1 never trusts a1 -- requestDmAccess must be refused fast, not hang out sendRoomRequest's own hub timeout.
 
     await expect(b1.requestDmAccess(a1.peerId)).rejects.toThrow(/no_route/);

@@ -308,7 +308,10 @@ describe("MeshStore — init()", () => {
 
     await store.init();
 
-    expect(transport.joinHub).toHaveBeenCalledWith("wss://hub.example.test/");
+    expect(transport.joinHub).toHaveBeenCalledWith(
+      "wss://hub.example.test/",
+      expect.any(Function),
+    );
     expect(transport.joinHub).toHaveBeenCalledTimes(1);
   });
 
@@ -320,7 +323,10 @@ describe("MeshStore — init()", () => {
     await store.init();
 
     expect(transport.connectToCoordinator).toHaveBeenCalledTimes(1);
-    expect(transport.joinHub).toHaveBeenCalledWith("wss://hub.example.test/");
+    expect(transport.joinHub).toHaveBeenCalledWith(
+      "wss://hub.example.test/",
+      expect.any(Function),
+    );
     expect(transport.joinHub).toHaveBeenCalledTimes(1);
   });
 

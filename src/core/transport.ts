@@ -263,9 +263,14 @@ export interface MeshTransport {
   }[];
 
   /**
-   * Starts holding a session of this side's own on the relay hub at the given URL, redialling with backoff whenever it drops, until shutdown (agent-comms#293: every store is its own hub peer). Returns at once: the dial runs in the background and a failed dial reaches events.onError. Optional: WireMeshTransport is the only implementation that offers it today, matching listKnownDevices' own precedent, so a caller must treat its absence as "this transport has no hub capability," never assume every MeshTransport supports it.
+   * Holds a session of this side's own on the relay hub at the given URL for as long as shouldConnect answers true, redialling with backoff whenever the hub drops it, until shutdown (agent-comms#293: every store is its own hub peer). shouldConnect is re-read periodically and on reconsiderHub, so a store with nothing to say to another machine holds no session and puts nothing on the hub. Returns at once: the dial runs in the background and a failed dial reaches events.onError. Optional: WireMeshTransport is the only implementation that offers it today, matching listKnownDevices' own precedent, so a caller must treat its absence as "this transport has no hub capability," never assume every MeshTransport supports it.
    */
-  joinHub?: (url: string) => void;
+  joinHub?: (url: string, shouldConnect: () => boolean) => void;
+
+  /**
+   * Makes the hub session re-evaluate shouldConnect now instead of at the next poll. A no-op before joinHub. Same optionality caveat as joinHub.
+   */
+  reconsiderHub?: () => void;
 
   /**
    * Asks deviceId for its own, currently-running wire-mesh-core version, live, right now rather than whatever it last gossiped (agent-comms#198's own cache-bust query_version action). Optional, same caveat as listKnownDevices/joinHub: WireMeshTransport is the only implementation that offers it today, riding wire-mesh-core's own version.get manage-command (wire-mesh#179).

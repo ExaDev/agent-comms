@@ -12,6 +12,12 @@ function freshPort(): number {
   return nextPort;
 }
 
+/** A device-id is a 64-character lowercase hex SHA-256 digest. */
+const DEVICE_ID_HEX_LENGTH = 64;
+
+/** Trusting a remote device is what makes the controller's store dial the hub. */
+const REMOTE_DEVICE_HEX = "f".repeat(DEVICE_ID_HEX_LENGTH);
+
 describe("ChatController mesh errors", () => {
   const controllers: ChatController[] = [];
 
@@ -23,7 +29,7 @@ describe("ChatController mesh errors", () => {
   });
 
   async function startController(): Promise<ChatController> {
-    // Becoming coordinator dials the hub unconditionally, and this hub URL refuses connections, so the store reports a real error.
+    // A store with an agent whose machine trusts someone dials the hub, and this hub URL refuses connections, so the store reports a real error as soon as the test trusts a remote device.
     const controller = new ChatController("errors-test", {
       coordinatorPort: freshPort(),
       hubUrl: await unreachableHubUrl(),
@@ -40,6 +46,7 @@ describe("ChatController mesh errors", () => {
     });
 
     await controller.init();
+    controller.meshStore.addTrustedGateway(REMOTE_DEVICE_HEX);
 
     await waitFor(() => errors.length > 0, "the hub dial failure is reported");
     expect(errors[0]).toBeInstanceOf(Error);
@@ -52,6 +59,7 @@ describe("ChatController mesh errors", () => {
       .mockImplementation(() => true);
 
     await controller.init();
+    controller.meshStore.addTrustedGateway(REMOTE_DEVICE_HEX);
 
     await waitFor(
       () =>

@@ -86,7 +86,7 @@ export function readMembershipProof(
   return typeof self.membership === "string" ? self.membership : undefined;
 }
 
-/** Re-sends this side's own current presence status, currently-hosted rooms, self-agent identity, and package versions, together, onto every live session's gossip self-advert -- one gossip frame per tick carrying whichever facts are actually known, rather than a separate frame per fact. Split out of wire-mesh-transport.ts's own WireMeshTransport class purely to keep that file under the repo's max-lines cap, the same reason mergeKnownDevices/findPresenceAdvert above already live here rather than there. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. Unlike presence/hostedRooms/selfAgentAdvert, the versions extension is never actually absent (this side's own agent-comms package version is always known), so every tick this function is called for sends at least that one fact -- there is no "nothing to report" case left to short-circuit on. The hub's own session (agent-comms#156) is gated separately from every ordinary local-peer session in allSessions: local mesh trust is a different layer (connect_request/introduce approval already gated it before it ever joined allSessions), but the hub session is a broadcast to every connected hub peer, trusted or not, and would otherwise leak this side's own presence/hosted-rooms/self-agent/versions advert onto the hub regardless of GatewayTrust -- so this side's own self-advert waits on the same hasAny gate. */
+/** Re-sends this side's own current presence status, currently-hosted rooms, self-agent identity, and package versions, together, onto every live session's gossip self-advert -- one gossip frame per tick carrying whichever facts are actually known, rather than a separate frame per fact. Split out of wire-mesh-transport.ts's own WireMeshTransport class purely to keep that file under the repo's max-lines cap, the same reason mergeKnownDevices/findPresenceAdvert above already live here rather than there. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. Unlike presence/hostedRooms/selfAgentAdvert, the versions extension is never actually absent (this side's own agent-comms package version is always known), so every tick this function is called for sends at least that one fact -- there is no "nothing to report" case left to short-circuit on. The hub's own session (agent-comms#156) is gated separately from every ordinary local-peer session in allSessions: local mesh trust is a different layer (connect_request/introduce approval already gated it before it ever joined allSessions), but the hub session is a broadcast to every connected hub peer, trusted or not, and would otherwise leak this side's own presence/hosted-rooms/self-agent/versions advert onto the hub regardless of GatewayTrust -- so this side's own advert waits on the same hasAny gate. It also waits for a visible agent (selfAgentAdvert is only ever defined for one): presence, hosted rooms and versions describe the agent and its process, so a hidden or unregistered store puts none of them on the hub, and a hidden agent is left with only the device advert every session opens with, which is what lets it be reached by device id. */
 export function readvertiseGossip(options: {
   allSessions: ReadonlySet<AcceptedMeshSession>;
   hub: Readonly<Pick<HubSession, "ownsSession">>;
@@ -124,7 +124,12 @@ export function readvertiseGossip(options: {
   };
   extensions[AGENT_COMMS_VERSION_GOSSIP_KEY] = versionsAdvert;
   for (const session of allSessions) {
-    if (hub.ownsSession(session) && !hasAnyTrustedGateway()) continue;
+    if (
+      hub.ownsSession(session) &&
+      (!hasAnyTrustedGateway() || selfAgentAdvert === undefined)
+    ) {
+      continue;
+    }
     session.sendGossipUpdate(extensions).catch((error: unknown) => {
       onError?.(error instanceof Error ? error : new Error(String(error)));
     });
