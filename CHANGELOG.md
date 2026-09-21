@@ -1,3 +1,17 @@
+## [8.0.2](https://github.com/ExaDev/agent-comms/compare/v8.0.1...v8.0.2) (2026-09-21)
+
+### Bug Fixes
+
+* **core:** report a gossip-discovered agent offline once its advert has gone stale ([1f25b91](https://github.com/ExaDev/agent-comms/commit/1f25b913a829ba2cc68f6a07a2386b7b7f6e1aa8))
+
+### Refactoring
+
+* **core:** split MeshStoreOptions into its own file ([565f792](https://github.com/ExaDev/agent-comms/commit/565f7925f7dc21831b1182ea54dfe8a4c1e4c010))
+
+### Documentation
+
+* document that a gossip-discovered agent's status goes stale ([a38d67a](https://github.com/ExaDev/agent-comms/commit/a38d67aabb86b128329b3fe4af1288cdad512aa8))
+
 ## [8.0.1](https://github.com/ExaDev/agent-comms/compare/v8.0.0...v8.0.1) (2026-09-21)
 
 ### Bug Fixes
