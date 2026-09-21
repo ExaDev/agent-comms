@@ -24,7 +24,7 @@ import type {
 } from "./transport.js";
 
 /**
- * Assembles this side's own best-effort view of the mesh's connection graph out of knownDevices (WireMeshTransport's own mesh-wide gossip aggregation, the identical map listKnownDevices already reads), converted to DirectoryEntry[] the same way hub-forwarding.ts's own pushHubCatchUp already does for its unrelated purpose. Device-ids are hex-encoded, never raw wire-mesh-core DeviceId bytes, matching listKnownDevices' own precedent.
+ * Assembles this side's own best-effort view of the mesh's connection graph out of knownDevices (WireMeshTransport's own mesh-wide gossip aggregation, the identical map listKnownDevices already reads), converted to DirectoryEntry[]. Device-ids are hex-encoded, never raw wire-mesh-core DeviceId bytes, matching listKnownDevices' own precedent.
  *
  * assembleTopologyGraph's own nodes list is only devices this side holds a directory entry (gossip advert) for -- its edges are deliberately "unreconciled by design" (see its own doc comment) and can name a `to`/`via` endpoint reported by another device's advert that this side has never itself gossiped with directly, so that endpoint never gets its own directory entry and is absent from nodes. A MeshGraph whose edges reference an undeclared node isn't well-formed for any consumer (a force-directed layout, a table, anything), so every edge endpoint is unioned into the returned nodes list here, not left for each consumer to work around individually.
  */

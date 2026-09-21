@@ -41,8 +41,7 @@ function fakeTransport(
     listListeners: vi.fn().mockReturnValue([]),
     shutdown: vi.fn().mockResolvedValue(undefined),
     unref: vi.fn<() => void>(),
-    connectHub: vi.fn().mockResolvedValue(undefined),
-    disconnectHub: vi.fn().mockResolvedValue(undefined),
+    joinHub: vi.fn<(url: string) => void>(),
   };
 }
 
@@ -299,21 +298,7 @@ describe("MeshStore — init()", () => {
     expect(transport.startDataServer).toHaveBeenCalledTimes(1);
   });
 
-  it("dials the default hub URL once it becomes coordinator on a fresh bind", async () => {
-    const store = new MeshStore();
-    const transport = fakeTransport();
-    vi.mocked(transport.connectToCoordinator).mockRejectedValue(
-      new Error("ECONNREFUSED"),
-    );
-    store.setTransport(transport);
-
-    await store.init();
-
-    expect(transport.connectHub).toHaveBeenCalledWith("wss://mesh.exadev.io/");
-    expect(transport.connectHub).toHaveBeenCalledTimes(1);
-  });
-
-  it("dials the constructor-supplied hub URL override instead of the default", async () => {
+  it("joins the hub it was given when it becomes coordinator on a fresh bind", async () => {
     const store = new MeshStore({ hubUrl: "wss://hub.example.test/" });
     const transport = fakeTransport();
     vi.mocked(transport.connectToCoordinator).mockRejectedValue(
@@ -323,41 +308,33 @@ describe("MeshStore — init()", () => {
 
     await store.init();
 
-    expect(transport.connectHub).toHaveBeenCalledWith(
-      "wss://hub.example.test/",
-    );
+    expect(transport.joinHub).toHaveBeenCalledWith("wss://hub.example.test/");
+    expect(transport.joinHub).toHaveBeenCalledTimes(1);
   });
 
-  it("never dials the hub when joining an existing coordinator rather than becoming one", async () => {
-    const store = new MeshStore();
+  it("joins the hub it was given when it joins an existing coordinator rather than becoming one, since reachability from other machines does not depend on the local role", async () => {
+    const store = new MeshStore({ hubUrl: "wss://hub.example.test/" });
     const transport = fakeTransport();
     store.setTransport(transport);
 
     await store.init();
 
     expect(transport.connectToCoordinator).toHaveBeenCalledTimes(1);
-    expect(transport.connectHub).not.toHaveBeenCalled();
+    expect(transport.joinHub).toHaveBeenCalledWith("wss://hub.example.test/");
+    expect(transport.joinHub).toHaveBeenCalledTimes(1);
   });
 
-  it("still succeeds locally (becomes coordinator) when the hub dial fails -- local coordinator election must not depend on hub reachability", async () => {
+  it("never contacts a hub when it was given none, and does not fall back to the production hub", async () => {
     const store = new MeshStore();
     const transport = fakeTransport();
     vi.mocked(transport.connectToCoordinator).mockRejectedValue(
       new Error("ECONNREFUSED"),
     );
-    const { connectHub } = transport;
-    if (connectHub === undefined) throw new Error("expected connectHub");
-    const hubError = new Error("hub unreachable");
-    vi.mocked(connectHub).mockRejectedValue(hubError);
     store.setTransport(transport);
-    const onError = vi.fn<(error: Error) => void>();
-    store.onError = onError;
 
-    await expect(store.init()).resolves.toBeUndefined();
+    await store.init();
 
-    expect(transport.becomeCoordinator).toHaveBeenCalledTimes(1);
-    expect(onError).toHaveBeenCalledWith(hubError);
-    expect(transport.unref).toHaveBeenCalledTimes(1);
+    expect(transport.joinHub).not.toHaveBeenCalled();
   });
 });
 
@@ -836,26 +813,5 @@ describe("MeshStore — shutdown()", () => {
     await store.shutdown();
 
     expect(broadcastSpy).not.toHaveBeenCalled();
-  });
-
-  it("drops the held hub connection when this instance had become coordinator", async () => {
-    vi.mocked(transport.connectToCoordinator).mockRejectedValue(
-      new Error("ECONNREFUSED"),
-    );
-    await store.init();
-    expect(transport.connectHub).toHaveBeenCalledTimes(1);
-
-    await store.shutdown();
-
-    expect(transport.disconnectHub).toHaveBeenCalledTimes(1);
-  });
-
-  it("never touches disconnectHub when this instance never became coordinator", async () => {
-    await store.init();
-    expect(transport.connectHub).not.toHaveBeenCalled();
-
-    await store.shutdown();
-
-    expect(transport.disconnectHub).not.toHaveBeenCalled();
   });
 });

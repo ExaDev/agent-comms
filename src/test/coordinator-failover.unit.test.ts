@@ -32,7 +32,6 @@ interface Harness {
   agents: Map<string, AgentIdentity>;
   roomStatusNotifications: { agentId: string; status: AgentStatus }[];
   staleCheckerStarts: number;
-  gatewayDials: number;
   roleChanges: number;
   errors: Error[];
 }
@@ -81,7 +80,6 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
     agents: new Map<string, AgentIdentity>(),
     roomStatusNotifications: [],
     staleCheckerStarts: 0,
-    gatewayDials: 0,
     roleChanges: 0,
     errors: [],
   };
@@ -150,11 +148,6 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
         harness.staleCheckerStarts += 1;
       },
     },
-    coordinatorGateway: {
-      onBecameCoordinator: async () => {
-        harness.gatewayDials += 1;
-      },
-    },
     onCoordinatorRoleChanged: () => {
       harness.roleChanges += 1;
     },
@@ -193,7 +186,6 @@ test("the coordinator's own disconnect makes this peer contest the coordinator p
     { host: "127.0.0.1", port: COORDINATOR_PORT },
   ]);
   expect(harness.staleCheckerStarts).toBe(1);
-  expect(harness.gatewayDials).toBe(1);
   expect(harness.roleChanges).toBe(1);
   expect(harness.errors).toEqual([]);
 });

@@ -93,7 +93,7 @@ export async function wireTestTransport(
   return resolvedSlot;
 }
 
-/** Same wiring as wireTestTransport, but also returns the constructed WireMeshTransport instance itself -- needed by any test that has to reach transport.hub directly (connectHub, hub.peers(), hub.isConnected), since MeshStore exposes no public hub-connect wrapper outside CoordinatorGateway's own becomeCoordinator flow (agent-comms#192's own hub-mode room-verb-gating tests are the first to need this, alongside the real room verb handlers store.roomVerbHandlers already wires in). */
+/** Same wiring as wireTestTransport, but also returns the constructed WireMeshTransport instance itself -- needed by any test that has to reach transport.hub directly (hub.connect, hub.peers(), hub.isConnected), since MeshStore's own join of the hub goes through the transport's joinHub (agent-comms#192's own hub-mode room-verb-gating tests are the first to need this, alongside the real room verb handlers store.roomVerbHandlers already wires in). */
 export async function wireTestTransportWithHub(
   store: MeshStore,
   options?: WireTransportOptions,

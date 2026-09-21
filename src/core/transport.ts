@@ -263,27 +263,22 @@ export interface MeshTransport {
   }[];
 
   /**
-   * Dials the relay hub at the given URL and holds the connection (agent-comms#154's own gateway role, riding this side's HubSession -- see hub-session.ts's class doc for the connection model). Optional: WireMeshTransport is the only implementation that offers it today, matching listKnownDevices' own precedent, so a caller (CoordinatorGateway) must treat its absence as "this transport has no gateway capability," never assume every MeshTransport supports it.
+   * Starts holding a session of this side's own on the relay hub at the given URL, redialling with backoff whenever it drops, until shutdown (agent-comms#293: every store is its own hub peer). Returns at once: the dial runs in the background and a failed dial reaches events.onError. Optional: WireMeshTransport is the only implementation that offers it today, matching listKnownDevices' own precedent, so a caller must treat its absence as "this transport has no hub capability," never assume every MeshTransport supports it.
    */
-  connectHub?: (url: string) => Promise<void>;
+  joinHub?: (url: string) => void;
 
   /**
-   * Drops this side's own held hub connection, if any. A no-op when none is live. Same optionality caveat as connectHub.
-   */
-  disconnectHub?: () => Promise<void>;
-
-  /**
-   * Asks deviceId for its own, currently-running wire-mesh-core version, live, right now rather than whatever it last gossiped (agent-comms#198's own cache-bust query_version action). Optional, same caveat as listKnownDevices/connectHub: WireMeshTransport is the only implementation that offers it today, riding wire-mesh-core's own version.get manage-command (wire-mesh#179).
+   * Asks deviceId for its own, currently-running wire-mesh-core version, live, right now rather than whatever it last gossiped (agent-comms#198's own cache-bust query_version action). Optional, same caveat as listKnownDevices/joinHub: WireMeshTransport is the only implementation that offers it today, riding wire-mesh-core's own version.get manage-command (wire-mesh#179).
    */
   queryVersion?: (deviceId: string) => Promise<ManageOutcome>;
 
   /**
-   * Assembles this side's own best-effort view of the mesh's connection graph (agent-comms#199) out of every device's own self-reported `topology/peers` gossip extension (wire-mesh#180) -- the cheap, possibly-stale counterpart to meshTrace's own live read. Device-ids throughout are hex strings (matching listKnownDevices' own precedent), never raw wire-mesh-core DeviceId bytes. Same optionality caveat as listKnownDevices/connectHub.
+   * Assembles this side's own best-effort view of the mesh's connection graph (agent-comms#199) out of every device's own self-reported `topology/peers` gossip extension (wire-mesh#180) -- the cheap, possibly-stale counterpart to meshTrace's own live read. Device-ids throughout are hex strings (matching listKnownDevices' own precedent), never raw wire-mesh-core DeviceId bytes. Same optionality caveat as listKnownDevices/joinHub.
    */
   meshGraph?: () => MeshGraph;
 
   /**
-   * Sends the wire-level path.trace manage-command (wire-mesh#181) to a specific device-id, direct or via the hub, and measures the real end-to-end round trip -- the live, cache-bust counterpart to meshGraph's gossiped snapshot. Resolves an error-shaped MeshTraceResult.outcome (never rejects) when targetDeviceHex is unreachable through any known path, mirroring sendRoomRequest's own not_connected convention. Same optionality caveat as listKnownDevices/connectHub.
+   * Sends the wire-level path.trace manage-command (wire-mesh#181) to a specific device-id, direct or via the hub, and measures the real end-to-end round trip -- the live, cache-bust counterpart to meshGraph's gossiped snapshot. Resolves an error-shaped MeshTraceResult.outcome (never rejects) when targetDeviceHex is unreachable through any known path, mirroring sendRoomRequest's own not_connected convention. Same optionality caveat as listKnownDevices/joinHub.
    */
   meshTrace?: (
     targetDeviceHex: string,

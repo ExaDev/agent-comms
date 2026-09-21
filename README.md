@@ -393,6 +393,8 @@ Every bridge answers SIGTERM, SIGINT and SIGHUP by marking its own agent offline
 
 ## Gateway trust and connection codes
 
+Every store holds its own session on the relay hub (`wss://mesh.exadev.io/` by default), each Claude Code session the default cc-peer front handles included, and dials it again with a growing delay whenever the hub drops it. Being reachable from another machine therefore does not depend on which store holds the local coordinator role, and a coordinator handover leaves every other store's hub session alone.
+
 Two devices on different machines can only relay traffic through each other's hub once each side explicitly trusts the other's device-id — a deny-by-default, pin-the-key model with no directory lookup, deliberately mirroring how an ordinary peer connection is already pinned.
 
 The trusted set is one file, `~/.agent-comms/gateway-trust.json`, shared by every bridge on the machine and by each session the default cc-peer front handles, so trusting a device once in any of them applies to all of them.

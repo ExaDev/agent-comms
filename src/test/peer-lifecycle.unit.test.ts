@@ -38,7 +38,6 @@ interface Harness {
   applyStateSync: ReturnType<typeof vi.fn>;
   applyPatch: ReturnType<typeof vi.fn>;
   staleAgentCheckerStart: ReturnType<typeof vi.fn>;
-  coordinatorGatewayOnBecameCoordinator: ReturnType<typeof vi.fn>;
   onCoordinatorRoleChanged: ReturnType<typeof vi.fn>;
 }
 
@@ -58,9 +57,6 @@ function makeHarness(): Harness {
   const broadcastPatch = vi.fn().mockResolvedValue(undefined);
   const staleAgentCheckerStart =
     vi.fn<PeerLifecycleDeps["staleAgentChecker"]["start"]>();
-  const coordinatorGatewayOnBecameCoordinator = vi
-    .fn<PeerLifecycleDeps["coordinatorGateway"]["onBecameCoordinator"]>()
-    .mockResolvedValue(undefined);
   const onCoordinatorRoleChanged = vi
     .fn<NonNullable<PeerLifecycleDeps["onCoordinatorRoleChanged"]>>()
     .mockResolvedValue(undefined);
@@ -80,9 +76,6 @@ function makeHarness(): Harness {
       broadcastPatch,
     },
     staleAgentChecker: { start: staleAgentCheckerStart },
-    coordinatorGateway: {
-      onBecameCoordinator: coordinatorGatewayOnBecameCoordinator,
-    },
     onCoordinatorRoleChanged,
   };
   return {
@@ -93,7 +86,6 @@ function makeHarness(): Harness {
     applyStateSync,
     applyPatch,
     staleAgentCheckerStart,
-    coordinatorGatewayOnBecameCoordinator,
     onCoordinatorRoleChanged,
   };
 }
@@ -230,7 +222,6 @@ describe("PeerLifecycle — handleBecomeCoordinator", () => {
       OWNER_ID,
     );
     expect(h.staleAgentCheckerStart).toHaveBeenCalledTimes(1);
-    expect(h.coordinatorGatewayOnBecameCoordinator).toHaveBeenCalledTimes(1);
     expect(h.onCoordinatorRoleChanged).toHaveBeenCalledTimes(1);
   });
 

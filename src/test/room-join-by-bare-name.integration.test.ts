@@ -60,7 +60,7 @@ async function connectedStore(
     visibility: "visible",
     tags: [],
   });
-  await transport.connectHub?.(hubUrl);
+  await transport.hub.connect(hubUrl);
   await waitForCondition(() => transport.hub.isConnected);
   return {
     store,

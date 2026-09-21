@@ -31,15 +31,12 @@ import {
   listKnownDevicesEntries,
   mergeAndAnnounceReachable,
   mergeKnownDevices,
+  readvertiseGossip,
   startGossipInterval,
 } from "./gossip-directory.js";
 import { directoryAdmission } from "./directory-admission.js";
-import {
-  connectHubGateway,
-  forwardAdvertsToHub,
-  makeSendToLocalPeer,
-  routeRoomRequestViaHub,
-} from "./hub-forwarding.js";
+import { routeRoomRequestViaHub } from "./hub-forwarding.js";
+import { HubLink } from "./hub-link.js";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
@@ -176,7 +173,7 @@ export class WireMeshTransport implements MeshTransport {
   private readonly coordinatorListeners = new Map<string, TrackedListener>();
   private defaultListenerId: string | undefined;
 
-  // -- The session dialled via connectToCoordinator, when this instance is not itself the coordinator -- and that same coordinator's own device-id hex, set alongside it: consumeIncoming's own allowOnBehalfOf gate (see its doc comment) compares every session's authenticated peer identity against the hex, not merely "was this the specific session connectToCoordinator itself dialled", since mesh formation's own reciprocal connectToPeer can just as easily reach this transport over an accepted connection to the identical coordinator device. The session is dropped when it closes and the hex when this side takes the coordinator role itself, so coordinatorPeerId below names a coordinator this instance genuinely still answers to.
+  // -- The session dialled via connectToCoordinator, when this instance is not itself the coordinator -- and that same coordinator's own device-id hex, set alongside it: coordinatorPeerId reports it, so PeerLifecycle can tell the coordinator's departure from an ordinary peer's. The session is dropped when it closes and the hex when this side takes the coordinator role itself, so coordinatorPeerId below names a coordinator this instance genuinely still answers to.
   private coordinatorSession: AcceptedMeshSession | undefined;
   private coordinatorDeviceHex: string | undefined;
 
@@ -241,6 +238,8 @@ export class WireMeshTransport implements MeshTransport {
   /** Reads this side's own currently-hosted public/private rooms for the next gossip re-advertisement tick, the same pull-not-push shape getCurrentPresence already established -- createRoom/destroyRoom patch MeshStore's own rooms map and let the next tick pick it up, rather than pushing an update here on every mutation. undefined when no hosted-rooms source was wired in. */
   private readonly getHostedRooms: WireMeshTransportOptions["getHostedRooms"];
   private gossipInterval: ReturnType<typeof setInterval> | undefined;
+  /** Holds this transport's session on the relay hub, once joinHub has named one. */
+  private hubLink: HubLink | undefined;
 
   /** Backs this side's own responder for an incoming data-have/data-request/data-entries frame (agent-comms#50's P5 integration) -- undefined for every existing construction site that predates this feature, in which case handleDataFrame is a no-op. Deciding when to proactively call sendDataFrame at all (the catch-up policy: which peers' logs to track, when to send an initial data-have) stays entirely the caller's own business; this field only ever backs the mechanical parts (answering a have/request, storing entries). */
   private readonly dataStorage: KeyValueStorage | undefined;
@@ -304,7 +303,6 @@ export class WireMeshTransport implements MeshTransport {
       handleRoomRequest: this.roomRouter.handleRelayedRequest,
       isTrusted: (deviceHex) => this.gatewayTrust.isTrusted(deviceHex),
       admitEntries: directoryAdmission({ gatewayTrust, verifyMembership }),
-      forwardToLocalPeer: makeSendToLocalPeer(this.peerSessions),
     });
     this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;
     this.getCurrentPresence = getCurrentPresence;
@@ -312,16 +310,23 @@ export class WireMeshTransport implements MeshTransport {
     this.dataStorage = dataStorage;
     this.getSelfAgentAdvert = getSelfAgentAdvert;
     this.gossipInterval = startGossipInterval({
+      ...this.gossipOptions(),
+      intervalMs: presenceReadvertiseIntervalMs,
+    });
+  }
+
+  /** Everything readvertiseGossip needs, read live from this transport's own fields, so the periodic tick and an on-demand readvertise (a new hub session's first advert) send the same thing. */
+  private gossipOptions(): Parameters<typeof readvertiseGossip>[0] {
+    return {
       allSessions: this.allSessions,
       hub: this.hub,
       hasAnyTrustedGateway: () => this.gatewayTrust.hasAny(),
       onError: this.events.onError,
-      getCurrentPresence,
-      getHostedRooms,
-      getSelfAgentAdvert,
+      getCurrentPresence: this.getCurrentPresence,
+      getHostedRooms: this.getHostedRooms,
+      getSelfAgentAdvert: this.getSelfAgentAdvert,
       getCcPeerVersion: () => this.getCcPeerVersion?.(),
-      intervalMs: presenceReadvertiseIntervalMs,
-    });
+    };
   }
 
   /** Sends one data-have or data-request frame directly to an already-connected peer -- the mechanical send primitive a future catch-up policy calls once it decides to (see the dataStorage field comment). Throws if this side has never received any frame from that peer yet (there is no connection to send on), matching sendManageRequest's own "no reachable session" failure mode for an unknown peer. */
@@ -511,13 +516,12 @@ export class WireMeshTransport implements MeshTransport {
     });
   }
 
-  /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch. Derives roomRouter's own allowOnBehalfOf gate itself, from whether this SPECIFIC handle's peer identity matches coordinatorDeviceHex -- never from which method established this particular session (mesh formation's reciprocal connectToPeer means the same coordinator device can just as easily reach this transport over an accepted connection as over the one connectToCoordinator itself dialled; see coordinatorDeviceHex's own field comment). A coordinator-less instance (coordinatorDeviceHex still undefined, e.g. this transport IS the coordinator) never allows it for anything. */
+  /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch. */
   private consumeIncoming(
     session: AcceptedMeshSession,
     handle: Readonly<ConnectionHandle>,
   ): void {
-    const allowOnBehalfOf = handle.id === this.coordinatorDeviceHex;
-    this.roomRouter.drainSession(session, handle, allowOnBehalfOf);
+    this.roomRouter.drainSession(session, handle);
     this.drainRevocationAnnouncements(session);
   }
 
@@ -538,12 +542,6 @@ export class WireMeshTransport implements MeshTransport {
     void (async () => {
       for await (const event of session.events) {
         mergeKnownDevices(this.knownDevices, event.directory);
-        forwardAdvertsToHub(
-          this.hub,
-          event.directory,
-          this.events.onError,
-          () => this.gatewayTrust.hasAny(),
-        );
         const presence = findPresenceAdvert(deviceIdHex, event.directory);
         if (presence !== undefined) {
           this.events.onPresenceAdvert(handle, presence);
@@ -651,7 +649,7 @@ export class WireMeshTransport implements MeshTransport {
       },
     });
     this._isCoordinator = true;
-    // This side now IS the coordinator, so it answers to no other one: leaving a departed coordinator's device-id here would keep coordinatorPeerId naming a peer whose disconnect has already been dealt with, and would keep granting that device consumeIncoming's own on-behalf-of privilege.
+    // This side now IS the coordinator, so it answers to no other one: leaving a departed coordinator's device-id here would keep coordinatorPeerId naming a peer whose disconnect has already been dealt with, and would leave a stale device-id where the coordinator role is now this side's own.
     this.coordinatorDeviceHex = undefined;
     this.coordinatorSession = undefined;
   }
@@ -931,21 +929,22 @@ export class WireMeshTransport implements MeshTransport {
   }
 
   // -----------------------------------------------------------------------
-  // MeshTransport -- Hub (gateway role, agent-comms#154)
+  // MeshTransport -- Hub (agent-comms#154, per-store since agent-comms#293)
   // -----------------------------------------------------------------------
 
-  async connectHub(url: string): Promise<void> {
-    await connectHubGateway({
+  joinHub(url: string): void {
+    if (this.hubLink !== undefined) return;
+    this.hubLink = new HubLink({
       hub: this.hub,
       url,
-      knownDevices: this.knownDevices,
-      onError: this.events.onError,
-      hasAnyTrustedGateway: () => this.gatewayTrust.hasAny(),
+      onConnected: () => {
+        readvertiseGossip(this.gossipOptions());
+      },
+      onError: (error) => {
+        this.events.onError?.(error);
+      },
     });
-  }
-
-  async disconnectHub(): Promise<void> {
-    await this.hub.disconnect();
+    this.hubLink.start();
   }
 
   // -----------------------------------------------------------------------
@@ -954,6 +953,7 @@ export class WireMeshTransport implements MeshTransport {
 
   async shutdown(): Promise<void> {
     this.shutDown = true;
+    await this.hubLink?.stop();
     // A shut-down transport holds no listener, so it is no longer the coordinator -- leaving the flag set would have a second shutdown pass try to hand the role on, and would have isCoordinator lie to anything that outlives the transport.
     this._isCoordinator = false;
     if (this.gossipInterval !== undefined) {

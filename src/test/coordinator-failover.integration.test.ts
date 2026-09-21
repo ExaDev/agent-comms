@@ -7,7 +7,7 @@ import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import type { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import type { AgentIdentity } from "../core/types.js";
-import { TeardownStack, unreachableHubUrl } from "./hub-helpers.js";
+import { TeardownStack } from "./hub-helpers.js";
 import { waitFor, wireTestTransportWithHub } from "./test-transport.js";
 
 /** Start of this file's own reserved port band -- clear of the fixed literals sibling integration tests hardcode (19878-19897) and of mesh-e2e's own randomised band (20100-20999), so a random pick here can never collide with one of those. */
@@ -26,16 +26,13 @@ interface Node {
   agentId: string;
 }
 
-/** Starts one real store on its own transport, joining (or creating) the mesh on coordinatorPort. hubUrl names a port with nothing behind it: taking the coordinator role always dials the gateway hub, and these tests are about local coordinator election rather than cross-machine relaying, so the dial is left to fail fast and be swallowed by CoordinatorGateway exactly as it is on a machine with no hub. */
+/** Starts one real store on its own transport, joining (or creating) the mesh on coordinatorPort. No hubUrl is given, so the store never contacts a hub: these tests are about local coordinator election rather than cross-machine relaying. */
 async function startNode(
   name: string,
   coordinatorPort: number,
   teardown: TeardownStack,
 ): Promise<Node> {
-  const store = new MeshStore({
-    coordinatorPort,
-    hubUrl: await unreachableHubUrl(),
-  });
+  const store = new MeshStore({ coordinatorPort });
   const { transport } = await wireTestTransportWithHub(store);
   await store.init();
   const agent = await store.registerAgent({

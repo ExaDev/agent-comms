@@ -111,7 +111,8 @@ function wsConnection(socket: WsSocket): Connection {
 }
 
 /** A real relay hub served over ws: each accepted socket is wrapped as a Connection for createRelayHub, exactly what the production Durable Object does (pre-hibernation shape). Also exposes the hub's own live-connection count, since a test asserting a client-side disconnect actually reached the far end needs an observable on the hub itself, not just the client. */
-export async function realHubOverWs(): Promise<{
+export async function realHubOverWs(options?: { port?: number }): Promise<{
+  port: number;
   url: string;
   connectionCount: () => number;
   close: () => Promise<void>;
@@ -126,7 +127,7 @@ export async function realHubOverWs(): Promise<{
     void hub.handleConnection(wsConnection(socket));
   });
   await new Promise<void>((resolve) => {
-    http.listen(0, "127.0.0.1", () => {
+    http.listen(options?.port ?? 0, "127.0.0.1", () => {
       resolve();
     });
   });
@@ -135,6 +136,7 @@ export async function realHubOverWs(): Promise<{
     throw new Error("expected a TCP listen address");
   }
   return {
+    port: address.port,
     url: `ws://127.0.0.1:${String(address.port)}/`,
     connectionCount: () => wss.clients.size,
     close: async () =>
@@ -151,7 +153,7 @@ export async function realHubOverWs(): Promise<{
   };
 }
 
-/** A ws:// URL nothing is listening on, for a test that needs its own coordinator's automatic on-takeover hub dial (CoordinatorGateway.onBecameCoordinator, wired unconditionally onto every mesh coordinator, agent-comms#154) to fail fast and leave hub.isConnected false -- rather than either genuinely dialling the real production mesh.exadev.io (DEFAULT_HUB_URL, ChatController/createBridgeMesh's own fallback when no hubUrl is given) or connecting to a real local relayHubOverWs, which would itself succeed and put the store in the connected-but-target-unreachable state, not the not-connected-at-all state a "no path exists" test wants. Binds an ephemeral TCP port and closes it immediately, so the returned URL names a real, momentarily-free port with nothing behind it -- connectWsUrl's own "error" handler fires on the resulting ECONNREFUSED near-instantly, well under its own 10s CONNECT_TIMEOUT_MS, rather than genuinely waiting out a black-holed address. */
+/** A ws:// URL nothing is listening on, for a test that hands a store or transport a hub to dial (a bridge entry point defaults to the production hub, which a hermetic test must not touch) and wants the dial to fail fast and leave hub.isConnected false. Binds an ephemeral TCP port and closes it immediately, so the returned URL names a real, momentarily-free port with nothing behind it: connectWsUrl's own "error" handler fires on the resulting ECONNREFUSED near-instantly, well under its own 10s CONNECT_TIMEOUT_MS, rather than genuinely waiting out a black-holed address. A store built directly with no hubUrl never dials at all, so it needs no URL. */
 export async function unreachableHubUrl(): Promise<string> {
   return new Promise((resolve, reject) => {
     const probe = net.createServer();
