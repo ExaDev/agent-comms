@@ -79,10 +79,10 @@ export class ChatController extends EventEmitter {
     ctrl.tool = new CommsTool(store, { discovery: store.discovery });
     ctrl.ctx = ctx;
 
-    // Push delivery events to UIs
-    store.onDelivery = (_agentId: string, event: DeliveryEvent) => {
+    // Push delivery events to UIs, alongside whatever the bridge that owns this store already does with them
+    store.addDeliveryListener((_agentId: string, event: DeliveryEvent) => {
       ctrl.emit("message", event);
-    };
+    });
 
     return ctrl;
   }
