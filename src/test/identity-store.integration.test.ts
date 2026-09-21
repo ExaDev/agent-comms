@@ -14,6 +14,7 @@ import { generateIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import {
   deleteGroupToken,
+  gatewayTrustStamp,
   loadGatewayTrust,
   loadGroupTokens,
   loadOrCreateIdentity,
@@ -109,6 +110,9 @@ const NEAR_EXPIRY_OFFSET_MS = 1000;
 const PERMISSION_BITS_MASK = 0o777;
 // Expected owner-only read/write permission bits for a persisted identity file.
 const OWNER_ONLY_RW_PERMISSIONS = 0o600;
+
+/** The one file every slot in an identity directory shares its gateway trust through. */
+const GATEWAY_TRUST_FILE = "gateway-trust.json";
 
 test("identity file is created with owner-only permissions", () => {
   const { slot, dir } = tempSlot("claude-code");
@@ -361,55 +365,45 @@ test("saveGatewayTrust persists empty sets, clearing whatever was saved before",
   expect(loadGatewayTrust(slot)).toEqual({ devices: [], principals: [] });
 });
 
-test("loadGatewayTrust reads a pre-agent-comms#187 bare-array file as devices-only, with no principals", () => {
-  const { slot, dir } = tempSlot("pi");
-  // Create the real gateway-trust file at its actual path first (its exact slugified name is an implementation detail), then overwrite its content with the bare-array shape every file written before principal-keyed trust existed actually used.
-  saveGatewayTrust(slot, [], []);
-  const file = fs
-    .readdirSync(dir)
-    .find((f) => f.startsWith("gateway-trust-") && f.endsWith(".json"));
-  if (file === undefined) throw new Error("expected a gateway-trust file");
-  fs.writeFileSync(
-    path.join(dir, file),
-    `${JSON.stringify(["aabbcc", "ddeeff"])}\n`,
-  );
-
-  expect(loadGatewayTrust(slot)).toEqual({
-    devices: ["aabbcc", "ddeeff"],
-    principals: [],
-  });
-});
-
 test("the gateway trust file is written with owner-only permissions", () => {
   const { slot, dir } = tempSlot("pi");
   saveGatewayTrust(slot, ["aabbcc"], []);
-  const file = fs
-    .readdirSync(dir)
-    .find((f) => f.startsWith("gateway-trust-") && f.endsWith(".json"));
-  expect(file, `expected a gateway-trust-*.json file in ${dir}`).toBeDefined();
+  const file = fs.readdirSync(dir).find((f) => f === GATEWAY_TRUST_FILE);
+  expect(file, `expected ${GATEWAY_TRUST_FILE} in ${dir}`).toBeDefined();
   if (file === undefined) throw new Error("expected a gateway-trust file");
   const mode = fs.statSync(path.join(dir, file)).mode & PERMISSION_BITS_MASK;
   expect(mode).toBe(OWNER_ONLY_RW_PERMISSIONS);
 });
 
-test("the gateway trust file is a sibling of the identity file, distinct per (harness, cwd)", () => {
+test("the gateway trust file is shared by every slot in an identity directory", () => {
   const { slot, dir } = tempSlot("pi");
   saveGatewayTrust(slot, ["aabbcc"], []);
-  const file = fs
-    .readdirSync(dir)
-    .find((f) => f.startsWith("gateway-trust-") && f.endsWith(".json"));
-  expect(file).toBeDefined();
-  if (file === undefined) throw new Error("expected a gateway-trust file");
-  expect(path.dirname(path.join(dir, file))).toBe(dir);
-  expect(file).toContain("pi");
+  const otherHarness: IdentitySlot = { ...slot, harness: "claude-code" };
+  const otherCwd: IdentitySlot = { ...slot, cwd: "/somewhere/else" };
+  expect(loadGatewayTrust(otherHarness).devices).toEqual(["aabbcc"]);
+  expect(loadGatewayTrust(otherCwd).devices).toEqual(["aabbcc"]);
+  expect(
+    fs.readdirSync(dir).filter((f) => f.startsWith("gateway-trust")),
+  ).toEqual([GATEWAY_TRUST_FILE]);
+});
+
+test("gatewayTrustStamp changes when the trust file is created, rewritten, or removed", () => {
+  const { slot, dir } = tempSlot("pi");
+  const absent = gatewayTrustStamp(slot);
+  saveGatewayTrust(slot, ["aabbcc"], []);
+  const created = gatewayTrustStamp(slot);
+  saveGatewayTrust(slot, ["aabbcc"], []);
+  const rewritten = gatewayTrustStamp(slot);
+  fs.rmSync(path.join(dir, GATEWAY_TRUST_FILE));
+  const stamps = [absent, created, rewritten];
+  expect(new Set(stamps).size).toBe(stamps.length);
+  expect(gatewayTrustStamp(slot)).toBe(absent);
 });
 
 test("loadGatewayTrust returns empty for a slot whose gateway trust file is corrupt", () => {
   const { slot, dir } = tempSlot("pi");
   saveGatewayTrust(slot, ["aabbcc"], []);
-  const file = fs
-    .readdirSync(dir)
-    .find((f) => f.startsWith("gateway-trust-") && f.endsWith(".json"));
+  const file = fs.readdirSync(dir).find((f) => f === GATEWAY_TRUST_FILE);
   if (file === undefined) throw new Error("expected a gateway-trust file");
   fs.writeFileSync(path.join(dir, file), "not valid json{{{");
   expect(loadGatewayTrust(slot)).toEqual({ devices: [], principals: [] });

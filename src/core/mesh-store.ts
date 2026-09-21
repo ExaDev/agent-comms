@@ -104,7 +104,7 @@ export interface MeshStoreOptions {
   readonly hubUrl?: string | undefined;
   /** How long a room.join (including a first-contact DM request) may await a human decision, on this store as the receiver and on the transport it is wired to as the sender. Defaults to ROOM_JOIN_APPROVAL_TIMEOUT_MS; a test shortens it. */
   readonly roomJoinApprovalTimeoutMs?: number | undefined;
-  /** Shared between gatewayTrust and connectionCodes -- both are per-slot persisted bootstrap state for the same trust boundary, so a single slot is this store's one notion of "which bridge instance's own disk state this is". */
+  /** Locates this store's persisted bootstrap state. The connectionCodes ledger is per slot. gatewayTrust is shared by every slot in the slot's identity directory, so all stores on a machine (each fronted session included) advertise under one operator decision. */
   readonly slot?: Readonly<IdentitySlot>;
 }
 

@@ -1,5 +1,5 @@
 /**
- * Direct unit tests for GatewayTrust -- the cross-machine trust boundary's own allowlist (agent-comms#156), tested standalone against no real transport or hub socket, mirroring coordinator-gateway.test.ts's own approach for the sibling gateway-lifecycle class. Also covers slot-based persistence (agent-comms#186): loading a previously trusted set on construction and writing it back on every add/remove.
+ * Direct unit tests for GatewayTrust -- the cross-machine trust boundary's own allowlist (agent-comms#156), tested standalone against no real transport or hub socket, mirroring coordinator-gateway.test.ts's own approach for the sibling gateway-lifecycle class. Also covers persistence (agent-comms#186) and its sharing across every store in an identity directory (agent-comms#293): loading a previously trusted set on construction, writing it back on every change, and picking up a change another instance made.
  */
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
@@ -133,14 +133,65 @@ describe("GatewayTrust persistence (agent-comms#186)", () => {
     expect(restarted.list()).toEqual(["aabbcc"]);
   });
 
-  it("two independent slots persist to distinct files and never see each other's trust", () => {
+  it("two identity directories keep separate trust", () => {
     const slotA = tempSlot("pi");
-    const slotB = tempSlot("claude-code");
+    const slotB = tempSlot("pi");
     new GatewayTrust(slotA).add("aabbcc");
 
-    const restartedB = new GatewayTrust(slotB);
+    expect(new GatewayTrust(slotB).list()).toEqual([]);
+  });
 
-    expect(restartedB.list()).toEqual([]);
+  it("stores under different harnesses share one trusted set when they share an identity directory", () => {
+    const pi = tempSlot("pi");
+    const claudeCode: IdentitySlot = { ...pi, harness: "claude-code" };
+    new GatewayTrust(pi).add("aabbcc");
+
+    expect(new GatewayTrust(claudeCode).isTrusted("aabbcc")).toBe(true);
+  });
+
+  it("a running instance sees a device another instance trusted after it was constructed", () => {
+    const slot = tempSlot("pi");
+    const running = new GatewayTrust(slot);
+    expect(running.hasAny()).toBe(false);
+
+    new GatewayTrust(slot).add("aabbcc");
+
+    expect(running.hasAny()).toBe(true);
+    expect(running.isTrusted("aabbcc")).toBe(true);
+    expect(running.isReachable("aabbcc")).toBe(true);
+  });
+
+  it("a running instance stops trusting a device another instance removed", () => {
+    const slot = tempSlot("pi");
+    const running = new GatewayTrust(slot);
+    running.add("aabbcc");
+
+    new GatewayTrust(slot).remove("aabbcc");
+
+    expect(running.isTrusted("aabbcc")).toBe(false);
+    expect(running.list()).toEqual([]);
+  });
+
+  it("a running instance sees a principal another instance trusted", () => {
+    const slot = tempSlot("pi");
+    const running = new GatewayTrust(slot);
+
+    new GatewayTrust(slot).addPrincipal("112233");
+
+    expect(running.isTrustedPrincipal("112233")).toBe(true);
+    expect(running.listPrincipals()).toEqual(["112233"]);
+  });
+
+  it("a change applies on top of another instance's earlier change instead of overwriting it", () => {
+    const slot = tempSlot("pi");
+    const first = new GatewayTrust(slot);
+    const second = new GatewayTrust(slot);
+    first.add("aabbcc");
+
+    second.add("ddeeff");
+
+    expect(first.list()).toEqual(["aabbcc", "ddeeff"]);
+    expect(new GatewayTrust(slot).list()).toEqual(["aabbcc", "ddeeff"]);
   });
 
   // Principal persistence (agent-comms#187) -- extends #186's own device-only persistence to the second, parallel principal allowlist, per #186's own issue text naming #187 as the one that decides what gets stored.
