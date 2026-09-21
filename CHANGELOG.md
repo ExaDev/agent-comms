@@ -1,3 +1,22 @@
+## [7.0.0](https://github.com/ExaDev/agent-comms/compare/v6.0.0...v7.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **core:** MeshTransport.connectHub and disconnectHub are replaced by joinHub, and
+  MeshStore contacts no hub unless given a hubUrl.
+
+### Features
+
+* **core:** connect every store to the relay hub itself ([8802722](https://github.com/ExaDev/agent-comms/commit/88027220abaef90527ca9c48e964d195f875b97a))
+
+### Bug Fixes
+
+* **core:** hold a hub session only while the store has something to say ([6cf2fa7](https://github.com/ExaDev/agent-comms/commit/6cf2fa77c1ae7a859a99147fc06e16cd5865a467))
+
+### Documentation
+
+* **core:** describe the hub connection as per store, not per coordinator ([ba41852](https://github.com/ExaDev/agent-comms/commit/ba41852597aa65851ec97e1ffdbf746be3c7e58a))
+
 ## [6.0.0](https://github.com/ExaDev/agent-comms/compare/v5.2.5...v6.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
