@@ -159,12 +159,17 @@ function slugifyCwd(cwd: string): string {
   return cwd.replace(/[\\/:*?"<>|]/g, "_");
 }
 
+/** The directory every file this module owns lives in: the slot's own override when it has one, else the per-user `.agent-comms` directory shared by every bridge on the machine. State that belongs to the machine or user rather than to one bridge slot is keyed by this alone. */
+function identityDir(location: Readonly<Pick<IdentitySlot, "dir">>): string {
+  return location.dir ?? path.join(os.homedir(), ".agent-comms");
+}
+
 function slotPaths(slot: Readonly<IdentitySlot>): {
   dir: string;
   identityFile: string;
   lockFile: string;
 } {
-  const dir = slot.dir ?? path.join(os.homedir(), ".agent-comms");
+  const dir = identityDir(slot);
   const base = `identity-${slot.harness}--${slugifyCwd(slot.cwd)}`;
   return {
     dir,
@@ -600,11 +605,11 @@ export function deleteIssuedRoomGrant(
   writeStoredIdentity(identityFile, { ...stored, issuedGrants });
 }
 
-/** A slot's own trusted-gateway allowlist (agent-comms#186) lives in its own sibling JSON file rather than inside the identity file: the trusted set has no dependency on this slot's own key material, so it doesn't share loadRoomTokens/saveRoomToken's "call loadOrCreateIdentity first" requirement, and GatewayTrust can be constructed against a slot before or independently of that slot's identity ever being loaded. */
-function gatewayTrustFilePath(slot: Readonly<IdentitySlot>): string {
-  const { dir } = slotPaths(slot);
-  const base = `gateway-trust-${slot.harness}--${slugifyCwd(slot.cwd)}`;
-  return path.join(dir, `${base}.json`);
+/** The trusted-gateway allowlist lives in one JSON file per identity directory, not per bridge slot: who may see and reach this user's agents from another machine is an operator decision about the machine, and every store on it, including each session the default cc-peer front handles, advertises itself under it. It sits beside the identity files rather than inside one, because the trusted set has no dependency on any slot's key material and GatewayTrust can be constructed before an identity is ever loaded. */
+function gatewayTrustFilePath(
+  location: Readonly<Pick<IdentitySlot, "dir">>,
+): string {
+  return path.join(identityDir(location), "gateway-trust.json");
 }
 
 /** loadGatewayTrust's own return shape: every remote device-id and every remote user-principal device-id (agent-comms#187) this slot's gateway currently trusts, each lowercase hex, in insertion order. */
@@ -613,6 +618,9 @@ export interface LoadedGatewayTrust {
   principals: string[];
 }
 
+/** What gatewayTrustStamp reports while no trust file exists. */
+const GATEWAY_TRUST_ABSENT_STAMP = "absent";
+
 function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) && value.every((entry) => typeof entry === "string")
@@ -620,18 +628,19 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 /**
- * The trusted devices and principals (agent-comms#187) a slot's gateway had persisted before this call, both empty if the slot has never saved a trusted set or its gateway trust file is missing or unparseable. Reads a pre-#187 file (a bare JSON array, agent-comms#186's own original format) as devices-only with no principals -- every gateway-trust file written before principal-keyed trust existed named only bare devices, so there is nothing to migrate, just an older, narrower shape to keep reading correctly.
+ * The trusted devices and principals (agent-comms#187) persisted for this identity directory before this call, both empty if nothing has been saved or the file is missing or unparseable.
  */
 export function loadGatewayTrust(
-  slot: Readonly<IdentitySlot>,
+  location: Readonly<Pick<IdentitySlot, "dir">>,
 ): LoadedGatewayTrust {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(gatewayTrustFilePath(slot), "utf-8"));
+    parsed = JSON.parse(
+      fs.readFileSync(gatewayTrustFilePath(location), "utf-8"),
+    );
   } catch {
     return { devices: [], principals: [] };
   }
-  if (isStringArray(parsed)) return { devices: parsed, principals: [] };
   if (typeof parsed !== "object" || parsed === null) {
     return { devices: [], principals: [] };
   }
@@ -645,24 +654,38 @@ export function loadGatewayTrust(
 }
 
 /**
- * Persists a slot's complete trusted-gateway device-id and principal-id sets (agent-comms#187 extends agent-comms#186's own original device-only persistence, per that issue's own "agent-comms#187 covers what gets stored" framing), surviving a restart the same way the identity they gate alongside does. Overwrites whatever was saved before in full: GatewayTrust always calls this with its own current list()/listPrincipals() after every add/remove/addPrincipal/removePrincipal, so there is no per-entry partial update to preserve here the way saveRoomToken preserves other rooms' tokens.
+ * Persists the complete trusted-gateway device-id and principal-id sets for this identity directory, surviving a restart. Overwrites whatever was saved before in full: GatewayTrust calls this with its own current sets after every change, having first reloaded the file if another process replaced it, so there is no per-entry partial update to preserve here.
  */
 export function saveGatewayTrust(
-  slot: Readonly<IdentitySlot>,
+  location: Readonly<Pick<IdentitySlot, "dir">>,
   devices: readonly string[],
   principals: readonly string[],
 ): void {
-  const { dir } = slotPaths(slot);
+  const dir = identityDir(location);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const stored: LoadedGatewayTrust = {
     devices: [...devices],
     principals: [...principals],
   };
   writeFileAtomic(
-    gatewayTrustFilePath(slot),
+    gatewayTrustFilePath(location),
     `${JSON.stringify(stored, null, 2)}\n`,
     OWNER_ONLY_RW_PERMISSIONS,
   );
+}
+
+/**
+ * A token that changes whenever the gateway trust file is replaced, or is created or removed, by any process: the file's inode, modification time and size, or a fixed marker while it does not exist. Every save goes through writeFileAtomic, a rename, so each write yields a new inode and the token differs even when two writes land within one timestamp tick. GatewayTrust compares it to notice that another bridge on the machine changed the shared allowlist.
+ */
+export function gatewayTrustStamp(
+  location: Readonly<Pick<IdentitySlot, "dir">>,
+): string {
+  try {
+    const stat = fs.statSync(gatewayTrustFilePath(location));
+    return `${String(stat.ino)}:${String(stat.mtimeMs)}:${String(stat.size)}`;
+  } catch {
+    return GATEWAY_TRUST_ABSENT_STAMP;
+  }
 }
 
 /** A generated connection code's own persisted record (agent-comms#188): everything ConnectionCode carries except its own nonce, which is this record's key instead of a repeated field. */

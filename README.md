@@ -395,6 +395,8 @@ Every bridge answers SIGTERM, SIGINT and SIGHUP by marking its own agent offline
 
 Two devices on different machines can only relay traffic through each other's hub once each side explicitly trusts the other's device-id — a deny-by-default, pin-the-key model with no directory lookup, deliberately mirroring how an ordinary peer connection is already pinned.
 
+The trusted set is one file, `~/.agent-comms/gateway-trust.json`, shared by every bridge on the machine and by each session the default cc-peer front handles, so trusting a device once in any of them applies to all of them.
+
 ```
 # Trust a remote device you already know the device-id for
 agent_comms({ action: "gateway_trust", device: "1a2b3c..." })
