@@ -23,7 +23,10 @@ import {
 import type { IdentitySlot } from "../../core/identity-store.js";
 import { releaseIdentityLock } from "../../core/identity-store.js";
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
-import { tryStartWebServer, getWebUrlStatus } from "../user/web/server.js";
+import {
+  tryStartBridgeWebServer,
+  getWebUrlStatus,
+} from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
 /** Length of the random suffix appended to a default `mcp-<suffix>` agent name when no explicit name is registered. */
@@ -107,7 +110,7 @@ export async function run(): Promise<void> {
   // -----------------------------------------------------------------------
 
   await store.init();
-  const webHandle = await tryStartWebServer();
+  const webHandle = await tryStartBridgeWebServer(store, "mcp");
   tool.getWebUrlStatus = () => getWebUrlStatus(webHandle);
   await mcp.connect(new StdioServerTransport());
 

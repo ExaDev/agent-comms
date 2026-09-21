@@ -127,7 +127,7 @@ export function getWebPort(handle: WebServerHandle): number | undefined {
   return typeof addr === "object" && addr ? addr.port : undefined;
 }
 
-/** Resolve a bridge's own web UI address for the CommsTool web_url action, given whatever handle (if any) that bridge's own tryStartWebServer() call produced. The single place this three-way distinction is computed, shared by every bridge's `tool.getWebUrlStatus` wiring instead of each bridge re-deriving it from a raw WebServerHandle. */
+/** Resolve a bridge's own web UI address for the CommsTool web_url action, given whatever handle (if any) that bridge's own tryStartBridgeWebServer() call produced. The single place this three-way distinction is computed, shared by every bridge's `tool.getWebUrlStatus` wiring instead of each bridge re-deriving it from a raw WebServerHandle. */
 export function getWebUrlStatus(
   handle: WebServerHandle | undefined,
 ): WebUrlStatus {
@@ -142,21 +142,23 @@ export function getWebUrlStatus(
 // ---------------------------------------------------------------------------
 
 /**
- * Start the web UI server on an OS-assigned free port.
+ * Starts the web UI for a bridge on top of the bridge's own store, so the process stays one mesh peer and one agent (the agent id is the store's peer id, before or after the agent registers). Every bridge entry point that owns a store uses this, and only the standalone dashboard command builds a controller, and so a store, of its own.
  *
- * Uses port 0 (OS-assigned) to avoid TOCTOU races when multiple bridges
- * start web servers concurrently — the OS atomically allocates a unique
- * free port for each.
- *
- * The PWA discovery path (probe from 19877) is only used when the page is
- * served from a non-local host (e.g. GitHub Pages). When served locally
- * (the common case for bridge-started servers), the browser connects via
- * location.host directly — so the port number doesn't need to be predictable.
+ * The server listens on an OS-assigned free port (port 0) to avoid TOCTOU races when multiple bridges start web servers concurrently: the OS atomically allocates a unique free port for each. The PWA discovery path (probe from 19877) is only used when the page is served from a non-local host (e.g. GitHub Pages); when served locally, the browser connects via location.host directly, so the port number doesn't need to be predictable.
  */
-export async function tryStartWebServer(
-  controller?: ChatController,
+export async function tryStartBridgeWebServer(
+  store: MeshStore,
+  harness: string,
 ): Promise<WebServerHandle | undefined> {
-  return createWebServer({ port: 0, existingController: controller });
+  return createWebServer({
+    port: 0,
+    existingController: ChatController.fromExisting(store, {
+      agentId: store.peerId,
+      harness,
+      cwd: process.cwd(),
+      pid: process.pid,
+    }),
+  });
 }
 
 /**

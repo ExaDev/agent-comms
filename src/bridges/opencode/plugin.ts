@@ -18,7 +18,7 @@ import {
 import type { IdentitySlot } from "../../core/identity-store.js";
 import { releaseIdentityLock } from "../../core/identity-store.js";
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
-import { tryStartWebServer } from "../user/web/server.js";
+import { tryStartBridgeWebServer } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
 // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us. A plugin unload has no hook here, so an unload that is not a process exit still leaves a stale lock, which self-heals via the pid probe.
@@ -67,7 +67,7 @@ export const AgentCommsPlugin = async (opts: {
   store.onError = createMeshErrorReporter();
   store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
   await store.init();
-  await tryStartWebServer();
+  await tryStartBridgeWebServer(store, "opencode");
 
   const reg = await ensureRegistered({
     cwd: process.cwd(),
