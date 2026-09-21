@@ -27,7 +27,7 @@ import {
   type RedeemConnectionCodeOptions,
   type RedeemConnectionCodeResult,
 } from "./connection-code.js";
-import type { IdentitySlot } from "./identity-store.js";
+import type { MeshStoreOptions } from "./mesh-store-options.js";
 import { DeliveryEngine } from "./delivery-engine.js";
 import { RoomProtocol } from "./room-protocol.js";
 import { RoomMessaging } from "./room-messaging.js";
@@ -43,6 +43,7 @@ import type { DeviceId } from "wire-mesh-core/generated/protocol";
 import { StaleAgentChecker } from "./stale-agent-checker.js";
 import { PeerLifecycle } from "./peer-lifecycle.js";
 import type { RoomVerbHandler } from "./room-router.js";
+import { DEFAULT_PRESENCE_STALE_AFTER_MS } from "./gossip-extensions.js";
 import type { AgentSelfAdvert, HostedRoomAdvert } from "./gossip-extensions.js";
 import {
   getPeerAgentCommsVersions,
@@ -95,18 +96,6 @@ const PEER_ID_LENGTH = 8;
 // ---------------------------------------------------------------------------
 // MeshStore
 // ---------------------------------------------------------------------------
-
-/** Construction options for MeshStore. */
-export interface MeshStoreOptions {
-  /** Localhost TCP port the coordinator role is contested on. Defaults to DEFAULT_COORDINATOR_PORT. */
-  readonly coordinatorPort?: number | undefined;
-  /** The relay hub this store holds its own session on from init until shutdown, so it is reachable from other machines whatever role it plays locally. Left out, the store never contacts a hub: only the bridge entry points name the production hub (bridge-mesh.ts), so a store built by anything else, a test included, stays local. */
-  readonly hubUrl?: string | undefined;
-  /** How long a room.join (including a first-contact DM request) may await a human decision, on this store as the receiver and on the transport it is wired to as the sender. Defaults to ROOM_JOIN_APPROVAL_TIMEOUT_MS; a test shortens it. */
-  readonly roomJoinApprovalTimeoutMs?: number | undefined;
-  /** Locates this store's persisted bootstrap state. The connectionCodes ledger is per slot. gatewayTrust is shared by every slot in the slot's identity directory, so all stores on a machine (each fronted session included) advertise under one operator decision. */
-  readonly slot?: Readonly<IdentitySlot>;
-}
 
 export class MeshStore implements CommsStore {
   peerId: string;
@@ -285,6 +274,7 @@ export class MeshStore implements CommsStore {
       coordinatorPort = DEFAULT_COORDINATOR_PORT,
       hubUrl,
       roomJoinApprovalTimeoutMs = ROOM_JOIN_APPROVAL_TIMEOUT_MS,
+      presenceStaleAfterMs = DEFAULT_PRESENCE_STALE_AFTER_MS,
       slot,
     } = options ?? {};
     this.peerId = nanoid(PEER_ID_LENGTH);
@@ -369,6 +359,7 @@ export class MeshStore implements CommsStore {
       startedAt: this.startedAt,
       getPeerId: () => this.peerId,
       requireTransport: () => this.requireTransport(),
+      presenceStaleAfterMs,
       deliveryEngine: this.deliveryEngine,
     });
 
