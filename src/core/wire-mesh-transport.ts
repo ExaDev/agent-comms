@@ -16,6 +16,7 @@ import {
 } from "./request-timeouts.js";
 import { connectWsUrl } from "./ws-dial.js";
 import { HubSession } from "./hub-session.js";
+import { PRESENCE_READVERTISE_INTERVAL_MS } from "./gossip-extensions.js";
 import { GatewayTrust, type GatewayTrustReader } from "./gateway-trust.js";
 import {
   advertisedListenerAddresses,
@@ -100,11 +101,6 @@ const SECONDS_PER_MINUTE = 60;
 const MS_PER_SECOND = 1000;
 const DEFAULT_PENDING_CONNECTION_TIMEOUT_MS =
   PENDING_CONNECTION_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
-
-/** How often this side re-sends its own presence status onto every live session's gossip self-advert. wire-mesh-core's own sendGossipUpdate deliberately owns no cadence of its own (a MeshSession only sends what it's told, when it's told) -- this is that cadence, chosen generously enough to avoid chattiness on an idle mesh while still keeping a remote peer's own picture of this agent's status fresh well within the tens-of-minutes staleness window a status change (active -\> idle -\> offline) is actually meaningful over. */
-const PRESENCE_READVERTISE_INTERVAL_SECONDS = 20;
-const PRESENCE_READVERTISE_INTERVAL_MS =
-  PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND;
 
 /** This project's own namespaced domain (registrant "exadev.io", local name "agent-comms-v1"), matching namespaced-domain-id's "<registrant>/<local-name>" shape -- registry/core-domains.md's own recommended pattern for a third party. Exported for test use only: a security test simulating a hostile client that skips connect_request needs to construct a well-formed frame under the same domain/verb/scope this transport itself listens on, rather than duplicating these as separately-maintained magic strings that could silently drift from the real values. */
 export const DOMAIN = "exadev.io/agent-comms-v1";
