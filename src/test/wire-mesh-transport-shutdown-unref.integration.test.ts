@@ -5,7 +5,10 @@
 import * as net from "node:net";
 import { test, describe, expect, vi } from "vitest";
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
-import { acceptMeshSession } from "wire-mesh-core/domain/mesh-session";
+import {
+  acceptMeshSession,
+  type AcceptedMeshSession,
+} from "wire-mesh-core/domain/mesh-session";
 import { generateIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import {
@@ -234,5 +237,83 @@ describe("WireMeshTransport unref", () => {
     expect(() => {
       transport.unref();
     }).not.toThrow();
+  });
+});
+
+/** Reaches WireMeshTransport's own private allSessions Set for a whitebox check -- TypeScript's `private` is compile-time only, and proving the coordinator port is released independently of a slow-closing session's own close() needs a real session this test can make artificially slow, which the public API has no way to hand back (see the file header for why this style of cast is the established one here). */
+function ownSessions(transport: WireMeshTransport): Set<AcceptedMeshSession> {
+  return (transport as unknown as { allSessions: Set<AcceptedMeshSession> })
+    .allSessions;
+}
+
+describe("WireMeshTransport shutdown -- coordinator listener release ordering (agent-comms#302)", () => {
+  /** A graceful coordinator handover already sends the become_coordinator message before the outgoing coordinator's own shutdown() runs (PeerLifecycle.sendCoordinatorHandover, called ahead of transport.shutdown() in MeshStore.shutdown()), so the successor can start racing to rebind the port as soon as that message arrives -- independent of, and often well before, this side finishes closing its own other sessions. The successor's own bind retries (BECOME_COORDINATOR_BIND_RETRIES/_DELAY_MS in bind-retry.ts) only tolerate a bounded amount of that gap, so shutdown() must release the coordinator's own listening port promptly rather than only after every other session has also finished closing. */
+  test("releases the coordinator listening port well before a slow-closing session's own close() resolves", async () => {
+    const identityA = generateIdentity();
+    const identityB = generateIdentity();
+    const transportA = new WireMeshTransport(noopEvents(), identityA);
+    const clientTransport = createTlsTransport({
+      certificatePem: identityB.certificate,
+      privateKeyPem: identityB.privateKey,
+    });
+    let connection:
+      Awaited<ReturnType<typeof clientTransport.connect>> | undefined;
+    try {
+      await transportA.becomeCoordinator("127.0.0.1", 0);
+      const [listener] = transportA.listListeners();
+      if (listener === undefined) throw new Error("expected a bound listener");
+      const { port } = listener;
+
+      // Any TLS-authenticated connection to the coordinator listener is tracked in allSessions immediately, before connect_request approval (handleAcceptedConnection's own quarantine-but-track behaviour) -- this test only needs A's own local session object to exist and be closeable slowly, not a fully approved peer.
+      connection = await clientTransport.connect(`127.0.0.1:${String(port)}`);
+      await waitFor(
+        () => ownSessions(transportA).size > 0,
+        "A tracks the new session",
+      );
+      const [session] = ownSessions(transportA);
+      if (session === undefined) throw new Error("expected a tracked session");
+      const SLOW_CLOSE_DELAY_MS = 200;
+      const realClose = session.close.bind(session);
+      session.close = async () => {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, SLOW_CLOSE_DELAY_MS);
+        });
+        await realClose();
+      };
+
+      const shutdownPromise = transportA.shutdown();
+
+      // Comfortably under SLOW_CLOSE_DELAY_MS -- succeeding within this bound proves the listener released independently of, not after, the slow session's own close().
+      const REBIND_TIMEOUT_MS = 100;
+      const REBIND_POLL_INTERVAL_MS = 5;
+      const deadline = Date.now() + REBIND_TIMEOUT_MS;
+      let rebound = false;
+      while (Date.now() < deadline) {
+        const probe = net.createServer();
+        const bound = await new Promise<boolean>((resolve) => {
+          probe.once("error", () => resolve(false));
+          probe.listen(port, "127.0.0.1", () => resolve(true));
+        });
+        if (bound) {
+          await new Promise<void>((resolve) => {
+            probe.close(() => {
+              resolve();
+            });
+          });
+          rebound = true;
+          break;
+        }
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, REBIND_POLL_INTERVAL_MS);
+        });
+      }
+
+      expect(rebound).toBe(true);
+
+      await shutdownPromise;
+    } finally {
+      await connection?.close().catch(() => undefined);
+      await transportA.shutdown();
+    }
   });
 });

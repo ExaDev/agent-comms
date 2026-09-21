@@ -961,9 +961,16 @@ export class WireMeshTransport implements MeshTransport {
 
   async shutdown(): Promise<void> {
     this.shutDown = true;
-    await this.hubLink?.stop();
     // A shut-down transport holds no listener, so it is no longer the coordinator -- leaving the flag set would have a second shutdown pass try to hand the role on, and would have isCoordinator lie to anything that outlives the transport.
     this._isCoordinator = false;
+
+    // Closing starts here, ahead of every other cleanup step below (agent-comms#302), but the returned promises are deliberately not awaited until the end of this method. A graceful coordinator handover sends its become_coordinator message before this shutdown() call even starts (PeerLifecycle.sendCoordinatorHandover runs first in MeshStore.shutdown()), so the successor can already be racing to rebind this exact host:port through a bounded number of retries (bind-retry.ts) that assume the port frees up promptly. Node's net.Server.close() (which tls.Server inherits unchanged) releases the OS-level bound port as soon as it's *called* -- confirmed directly against the Node version this runs on, not assumed from the API docs -- but the promise it returns resolves only once every connection already accepted through that listener has also ended, exactly the delay #302 was caused by when close() itself wasn't even invoked until after that same cleanup ran. Firing close() now and awaiting it later, once sessions are already being closed anyway, gets both: the port frees at once for the successor, and shutdown() still doesn't return until the listeners are fully torn down. Nothing new should be accepted in the meantime regardless of exactly when the listener finishes closing, since shutDown is already true and handleAcceptedConnection's own guard closes anything that slips in.
+    const dataListenerClosing = this.dataListener?.close();
+    const coordinatorListenersClosing = [
+      ...this.coordinatorListeners.values(),
+    ].map(async (tracked) => tracked.listener.close());
+
+    await this.hubLink?.stop();
     if (this.gossipInterval !== undefined) {
       clearInterval(this.gossipInterval);
       this.gossipInterval = undefined;
@@ -980,7 +987,7 @@ export class WireMeshTransport implements MeshTransport {
     }
     this.pendingConnections.clear();
 
-    // Every live session, whichever of possibly several to the same peer -- peerSessions alone would only close the last one registered under a shared key, leaving any other (e.g. the coordinator-client session to a peer this side also has a data connection to) still open and accepting, which would make the listener it belongs to wait forever for it to end.
+    // Every live session, whichever of possibly several to the same peer -- peerSessions alone would only close the last one registered under a shared key, leaving any other (e.g. the coordinator-client session to a peer this side also has a data connection to) still open.
     for (const session of this.allSessions) {
       await session.close().catch(() => undefined);
     }
@@ -988,14 +995,10 @@ export class WireMeshTransport implements MeshTransport {
     this.peerSessions.clear();
     this.coordinatorSession = undefined;
 
-    if (this.dataListener !== undefined) {
-      await this.dataListener.close();
-      this.dataListener = undefined;
-    }
-
-    for (const tracked of this.coordinatorListeners.values()) {
-      await tracked.listener.close();
-    }
+    // The two closes started right at the top of this method have had this entire method's own cleanup time to finish now that every session they were waiting on is closed -- awaiting them here should very rarely find either still pending, but shutdown() still guarantees both listeners are fully torn down before it returns.
+    await dataListenerClosing;
+    this.dataListener = undefined;
+    await Promise.all(coordinatorListenersClosing);
     this.coordinatorListeners.clear();
   }
 
