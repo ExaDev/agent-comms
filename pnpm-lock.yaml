@@ -198,8 +198,8 @@ importers:
         specifier: 2.0.0-beta.35
         version: 2.0.0-beta.35
       '@orpc/tanstack-query':
-        specifier: 2.0.0-beta.35
-        version: 2.0.0-beta.35(@tanstack/query-core@5.102.8)
+        specifier: 2.0.0-beta.36
+        version: 2.0.0-beta.36(@tanstack/query-core@5.102.8)
       '@tanstack/react-query':
         specifier: 5.102.8
         version: 5.102.8(react@19.3.0)
@@ -1985,14 +1985,20 @@ packages:
   '@orpc/client@2.0.0-beta.35':
     resolution: {integrity: sha512-r/8CNzT2+uFefA+auufc2UCX2esA6Q8WnNMUXv916kVAr4vkR4M9/dFHkOyZUW1NhI9yj6SqSdURlFrv6N+3eA==}
 
+  '@orpc/client@2.0.0-beta.36':
+    resolution: {integrity: sha512-BP1V6PRS7/7tEimYtJH8t4yTcS85mX9riUnfRLtslLayIHFIrwviw1iFY0Y/+yLwmkG+fw83k4ZQxz7/9aSF7g==}
+
   '@orpc/contract@2.0.0-beta.35':
     resolution: {integrity: sha512-NjuzRNQAhIeozt3alkOVXrXlTTzgpUo9XDAdt/FPcmSEsUyv4BgJfY19WcIpclqSWv6yO7Wp/i5f4CGmUiGG8A==}
 
-  '@orpc/json-schema@2.0.0-beta.35':
-    resolution: {integrity: sha512-1d1Jlr3aIQ5NPJOj+6j3Zd7XoZRkFp03SnVU7xs5g3x9bxJyppwjdjdXmkNY5g9UTsinrDJLgkH6FjBdEVwYcw==}
+  '@orpc/contract@2.0.0-beta.36':
+    resolution: {integrity: sha512-IZHMzNf4fwpqPCU+YYQK8hHUM7e6b6xkp295SSaE3CWHmtSlHLe2sJ+nvyXX3fZRZAEGff2L1NcmS/sGTvAZsA==}
 
-  '@orpc/openapi@2.0.0-beta.35':
-    resolution: {integrity: sha512-+EMm40VTa+pxuLD0k6v7Xlp94CcfPR6SBq3rGngl9YiIGCnGuwg2Gb6gFIqI2Inz+zY+hztV2Zux8H7BNXpb2g==}
+  '@orpc/json-schema@2.0.0-beta.36':
+    resolution: {integrity: sha512-TqxfYPZefKuIfVyGbqJiUiwFvJjv4P1XczinYLsyzSv/Aq60ZOzX3/4pNVUyZJghNaWq+siQRXsquxXBaHYu0Q==}
+
+  '@orpc/openapi@2.0.0-beta.36':
+    resolution: {integrity: sha512-Gyh3yTNy7gPnMLlPcZcE+oMtg7RczDYTBJ4NSrRKAfgMwOScZFlGJYRj/CzBHI/PYnyJ184GbehRTP0qU93+Kg==}
     peerDependencies:
       '@scalar/api-reference': '>=1.57.2'
       '@types/swagger-ui': '>=5.32.0'
@@ -2016,11 +2022,25 @@ packages:
       fastify:
         optional: true
 
+  '@orpc/server@2.0.0-beta.36':
+    resolution: {integrity: sha512-UIKgdsN9jwNhQtqXLqrzXK7dzah3WVzEEAGodancMLKm4JkUTybgjtsZAsi4bjORF4H3EkgB0WwTiK08lmw5oQ==}
+    peerDependencies:
+      crossws: '>=0.3.4'
+      fastify: '>=5.6.1'
+    peerDependenciesMeta:
+      crossws:
+        optional: true
+      fastify:
+        optional: true
+
   '@orpc/shared@2.0.0-beta.35':
     resolution: {integrity: sha512-b3CN1oHnkkC9IDN1ByTbes3PdgBdOgo7wfsyqkLgk3hgUbjZ1lwb6TiqzuKjrfSljYiEZX2TlND/sZN6YR4tFA==}
 
-  '@orpc/tanstack-query@2.0.0-beta.35':
-    resolution: {integrity: sha512-K60C+1//q0fehGQQvues5qF7m57dIVZPI4wOTTm0xLQiLIpAsWtJVs9FOfuWojAf6rwW1eAQzEPAZoSAEKipzA==}
+  '@orpc/shared@2.0.0-beta.36':
+    resolution: {integrity: sha512-TTRZg+DLqdn/jAe8MXlRq+NjN3G9YdRfHaUopnKsOAiYdm2+3zMR1GoJkrkawHof2urt0cGWmyTPHWpMQTYJYQ==}
+
+  '@orpc/tanstack-query@2.0.0-beta.36':
+    resolution: {integrity: sha512-UN/yU4qiOBiamF6FAeSgYxL/tNgUSFVPxZt1YdZM+NiOTNy7HpAbuiII62tWIS9qSHiaczzyokSUcHjm254h/Q==}
     peerDependencies:
       '@tanstack/query-core': '>=5.80.2'
 
@@ -8382,33 +8402,46 @@ snapshots:
       '@standard-server/fetch': 0.9.1
       '@standard-server/peer': 0.9.1
 
+  '@orpc/client@2.0.0-beta.36':
+    dependencies:
+      '@orpc/shared': 2.0.0-beta.36
+      '@standard-server/core': 0.9.1
+      '@standard-server/fetch': 0.9.1
+      '@standard-server/peer': 0.9.1
+
   '@orpc/contract@2.0.0-beta.35':
     dependencies:
       '@orpc/client': 2.0.0-beta.35
       '@orpc/shared': 2.0.0-beta.35
       '@standard-schema/spec': 1.1.0
 
-  '@orpc/json-schema@2.0.0-beta.35':
+  '@orpc/contract@2.0.0-beta.36':
+    dependencies:
+      '@orpc/client': 2.0.0-beta.36
+      '@orpc/shared': 2.0.0-beta.36
+      '@standard-schema/spec': 1.1.0
+
+  '@orpc/json-schema@2.0.0-beta.36':
     dependencies:
       '@openapi-spec/types': 0.1.0
-      '@orpc/client': 2.0.0-beta.35
-      '@orpc/contract': 2.0.0-beta.35
-      '@orpc/server': 2.0.0-beta.35
-      '@orpc/shared': 2.0.0-beta.35
+      '@orpc/client': 2.0.0-beta.36
+      '@orpc/contract': 2.0.0-beta.36
+      '@orpc/server': 2.0.0-beta.36
+      '@orpc/shared': 2.0.0-beta.36
       '@standard-schema/spec': 1.1.0
     transitivePeerDependencies:
       - crossws
       - fastify
 
-  '@orpc/openapi@2.0.0-beta.35':
+  '@orpc/openapi@2.0.0-beta.36':
     dependencies:
       '@openapi-spec/downgrader': 0.1.0
       '@openapi-spec/types': 0.1.0
-      '@orpc/client': 2.0.0-beta.35
-      '@orpc/contract': 2.0.0-beta.35
-      '@orpc/json-schema': 2.0.0-beta.35
-      '@orpc/server': 2.0.0-beta.35
-      '@orpc/shared': 2.0.0-beta.35
+      '@orpc/client': 2.0.0-beta.36
+      '@orpc/contract': 2.0.0-beta.36
+      '@orpc/json-schema': 2.0.0-beta.36
+      '@orpc/server': 2.0.0-beta.36
+      '@orpc/shared': 2.0.0-beta.36
       '@standard-server/core': 0.9.1
       '@standard-server/fetch': 0.9.1
       rou3: 0.9.2
@@ -8429,18 +8462,37 @@ snapshots:
       '@standard-server/peer': 0.9.1
       cookie: 2.0.1
 
+  '@orpc/server@2.0.0-beta.36':
+    dependencies:
+      '@orpc/client': 2.0.0-beta.36
+      '@orpc/contract': 2.0.0-beta.36
+      '@orpc/shared': 2.0.0-beta.36
+      '@standard-server/aws-lambda': 0.9.1
+      '@standard-server/core': 0.9.1
+      '@standard-server/fastify': 0.9.1
+      '@standard-server/fetch': 0.9.1
+      '@standard-server/node': 0.9.1
+      '@standard-server/peer': 0.9.1
+      cookie: 2.0.1
+
   '@orpc/shared@2.0.0-beta.35':
     dependencies:
       '@standard-server/shared': 0.9.1
       radash: 12.1.1
       type-fest: 5.8.0
 
-  '@orpc/tanstack-query@2.0.0-beta.35(@tanstack/query-core@5.102.8)':
+  '@orpc/shared@2.0.0-beta.36':
     dependencies:
-      '@orpc/client': 2.0.0-beta.35
-      '@orpc/contract': 2.0.0-beta.35
-      '@orpc/openapi': 2.0.0-beta.35
-      '@orpc/shared': 2.0.0-beta.35
+      '@standard-server/shared': 0.9.1
+      radash: 12.1.1
+      type-fest: 5.8.0
+
+  '@orpc/tanstack-query@2.0.0-beta.36(@tanstack/query-core@5.102.8)':
+    dependencies:
+      '@orpc/client': 2.0.0-beta.36
+      '@orpc/contract': 2.0.0-beta.36
+      '@orpc/openapi': 2.0.0-beta.36
+      '@orpc/shared': 2.0.0-beta.36
       '@tanstack/query-core': 5.102.8
     transitivePeerDependencies:
       - '@scalar/api-reference'
