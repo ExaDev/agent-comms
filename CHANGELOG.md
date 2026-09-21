@@ -1,3 +1,19 @@
+## [8.0.0](https://github.com/ExaDev/agent-comms/compare/v7.0.0...v8.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **bridge:** tryStartWebServer is removed in favour of tryStartBridgeWebServer(store, harness).
+
+### Features
+
+* **bridge:** serve each bridge's web UI from the bridge's own store ([a60793a](https://github.com/ExaDev/agent-comms/commit/a60793a630a5cfa19167b2f00857c8f969946de3))
+* **mesh-store:** let several parties observe delivery events on one store ([3576007](https://github.com/ExaDev/agent-comms/commit/3576007bf1ba945b564d8c3a271b6d40a3917af3))
+* **mesh-store:** let several parties observe state patches on one store ([1433754](https://github.com/ExaDev/agent-comms/commit/14337546e92262bfc595844de638954c75189f98))
+
+### Tests
+
+* **mesh-store:** cover patch listeners and bind a free port in the new tests ([7d7ea32](https://github.com/ExaDev/agent-comms/commit/7d7ea32289ff2acadc0ef2182d290db3c5cba18d))
+
 ## [7.0.0](https://github.com/ExaDev/agent-comms/compare/v6.0.0...v7.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
