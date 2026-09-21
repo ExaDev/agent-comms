@@ -510,9 +510,9 @@ function ensurePatchListener(
 ): void {
   if (patchListenerWiredStores.has(store)) return;
   patchListenerWiredStores.add(store);
-  store.onPatch = (patch: MeshStatePatch): void => {
+  store.addPatchListener((patch: MeshStatePatch): void => {
     publisher.publish({ kind: "state_patch", patch });
-  };
+  });
 }
 
 // ---------------------------------------------------------------------------

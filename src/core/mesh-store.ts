@@ -20,6 +20,7 @@ import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
 import { COORDINATOR_HOST } from "./mesh-store-shared.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import { GatewayTrust } from "./gateway-trust.js";
+import { ReceiverSet } from "./receiver-set.js";
 import {
   ConnectionCodeLedger,
   type GenerateConnectionCodeOptions,
@@ -227,9 +228,8 @@ export class MeshStore implements CommsStore {
     | ((agentId: string, event: DeliveryEvent) => void | Promise<void>)
     | undefined;
 
-  /** Observers added by addDeliveryListener, called after onDelivery for every delivery event. */
-  private readonly deliveryListeners = new Set<
-    (agentId: string, event: DeliveryEvent) => void | Promise<void>
+  private readonly deliveryReceivers = new ReceiverSet<
+    [agentId: string, event: DeliveryEvent]
   >();
 
   /**
@@ -238,34 +238,22 @@ export class MeshStore implements CommsStore {
   addDeliveryListener(
     listener: (agentId: string, event: DeliveryEvent) => void | Promise<void>,
   ): () => void {
-    this.deliveryListeners.add(listener);
-    return () => {
-      this.deliveryListeners.delete(listener);
-    };
-  }
-
-  /** What the delivery engine and the other collaborators call for a delivery event: onDelivery and every listener, or undefined while there are none, so they can still tell nobody is listening. */
-  private currentDeliveryHandler():
-    ((agentId: string, event: DeliveryEvent) => Promise<void>) | undefined {
-    if (this.onDelivery === undefined && this.deliveryListeners.size === 0) {
-      return undefined;
-    }
-    return async (agentId, event) => {
-      const receivers = [
-        ...(this.onDelivery !== undefined ? [this.onDelivery] : []),
-        ...this.deliveryListeners,
-      ];
-      const outcomes = await Promise.allSettled(
-        receivers.map(async (receive) => receive(agentId, event)),
-      );
-      for (const outcome of outcomes) {
-        if (outcome.status === "rejected") this.reportError(outcome.reason);
-      }
-    };
+    return this.deliveryReceivers.add(listener);
   }
 
   /** Fires for every state patch — both locally generated and remote. */
   onPatch: ((patch: MeshStatePatch) => void | Promise<void>) | undefined;
+
+  private readonly patchReceivers = new ReceiverSet<[patch: MeshStatePatch]>();
+
+  /**
+   * Observes every state patch, alongside onPatch, and returns a function that stops observing. The counterpart of addDeliveryListener: the web UI a bridge serves publishes patches from the bridge's own store, and must not take over the one assignable onPatch. A listener that throws or rejects is reported through onError and does not stop the others.
+   */
+  addPatchListener(
+    listener: (patch: MeshStatePatch) => void | Promise<void>,
+  ): () => void {
+    return this.patchReceivers.add(listener);
+  }
 
   /**
    * Fires for a transport-level error a caller may want to observe (a connection rejected for presenting a certificate that doesn't match its claimed peer ID, this store's own inability to join or create a mesh, etc). Left undefined by default (matching onDelivery/onPatch): a caller that wants visibility sets it, exactly like those two.
@@ -323,8 +311,10 @@ export class MeshStore implements CommsStore {
       getPeerId: () => this.peerId,
       requireIdentity: () => this.requireIdentity(),
       requireTransport: () => this.requireTransport(),
-      getOnDelivery: () => this.currentDeliveryHandler(),
-      getOnPatch: () => this.onPatch,
+      getOnDelivery: () =>
+        this.deliveryReceivers.handler(this.onDelivery, this.reportError),
+      getOnPatch: () =>
+        this.patchReceivers.handler(this.onPatch, this.reportError),
       isShutDown: () => this.isShutDown,
       // RoomProtocol doesn't exist yet at this point in the constructor -- this closure resolves `this.roomProtocol` lazily, only once markRead actually calls it at runtime, well after the constructor has finished.
       sendRoomRequestToMember: async (...args) =>
@@ -388,7 +378,8 @@ export class MeshStore implements CommsStore {
       startedAt: this.startedAt,
       getPeerId: () => this.peerId,
       requireTransport: () => this.requireTransport(),
-      getOnDelivery: () => this.currentDeliveryHandler(),
+      getOnDelivery: () =>
+        this.deliveryReceivers.handler(this.onDelivery, this.reportError),
       queueDelivery: (agentId, event) => {
         this.deliveryEngine.queueDelivery(agentId, event);
       },
@@ -396,7 +387,8 @@ export class MeshStore implements CommsStore {
 
     this.capabilityAskAdmission = new CapabilityAskAdmission({
       getPeerId: () => this.peerId,
-      getOnDelivery: () => this.currentDeliveryHandler(),
+      getOnDelivery: () =>
+        this.deliveryReceivers.handler(this.onDelivery, this.reportError),
       queueDelivery: (agentId, event) => {
         this.deliveryEngine.queueDelivery(agentId, event);
       },
