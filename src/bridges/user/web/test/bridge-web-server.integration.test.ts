@@ -3,7 +3,7 @@
  */
 import { afterEach, expect, it } from "vitest";
 import { MeshStore } from "../../../../core/mesh-store.js";
-import { TeardownStack } from "../../../../test/hub-helpers.js";
+import { freeLocalPort, TeardownStack } from "../../../../test/hub-helpers.js";
 import { wireTestTransport } from "../../../../test/test-transport.js";
 import { tryStartBridgeWebServer } from "../server.js";
 
@@ -13,11 +13,8 @@ afterEach(async () => {
   await cleanups.run();
 });
 
-/** A port in the range this file reserves for its own coordinator, clear of the other integration suites' fixed literals. */
-const BRIDGE_WEB_COORDINATOR_PORT = 23_990;
-
 it("serves the web UI from the bridge's own store, without adding a device or an agent to the mesh", async () => {
-  const store = new MeshStore({ coordinatorPort: BRIDGE_WEB_COORDINATOR_PORT });
+  const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
   await wireTestTransport(store);
   await store.init();
   cleanups.push(async () => store.shutdown());

@@ -242,3 +242,23 @@ export async function observeHub(url: string): Promise<HubObserver> {
     close: async () => connection.close(),
   };
 }
+
+/** A localhost TCP port nothing is listening on right now, for a test that must not collide with whatever else runs on the machine: a fixed port can already belong to another process, and a store that connects to one that accepts but never answers as a coordinator waits for it indefinitely. */
+export async function freeLocalPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address();
+      if (address === null || typeof address === "string") {
+        probe.close();
+        reject(new Error("expected a TCP listen address"));
+        return;
+      }
+      const { port } = address;
+      probe.close(() => {
+        resolve(port);
+      });
+    });
+    probe.on("error", reject);
+  });
+}
