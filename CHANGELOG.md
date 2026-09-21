@@ -1,3 +1,9 @@
+## [8.0.1](https://github.com/ExaDev/agent-comms/compare/v8.0.0...v8.0.1) (2026-09-21)
+
+### Bug Fixes
+
+* **core:** free the coordinator listener before waiting on open sessions to close ([0da6c58](https://github.com/ExaDev/agent-comms/commit/0da6c582f73da7ecd1cbf838f050565004c03f1c))
+
 ## [8.0.0](https://github.com/ExaDev/agent-comms/compare/v7.0.0...v8.0.0) (2026-09-21)
 
 ### ⚠ BREAKING CHANGES
