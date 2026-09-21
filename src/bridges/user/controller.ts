@@ -46,7 +46,7 @@ export class ChatController extends EventEmitter {
   private currentRoom: string | undefined;
   private readonly userName: string;
   private readonly coordinatorPort: number | undefined;
-  /** Overrides the hub this controller's own coordinator role dials on takeover (createBridgeMesh's own hubUrl, defaulting to DEFAULT_HUB_URL) -- every real bridge entry point wants the real public hub, but a test constructing a controller of its own wants a hermetic, deterministically-unreachable one instead of silently depending on live production infrastructure whenever its own fresh coordinator port makes it the mesh's coordinator (see hub-helpers.ts's own unreachableHubUrl). */
+  /** Overrides the hub this controller's own store dials (createBridgeMesh's own hubUrl, defaulting to DEFAULT_HUB_URL) -- every real bridge entry point wants the real public hub, but a test constructing a controller of its own wants a hermetic, deterministically-unreachable one instead of silently depending on live production infrastructure (see hub-helpers.ts's own unreachableHubUrl). */
   private readonly hubUrl: string | undefined;
 
   constructor(

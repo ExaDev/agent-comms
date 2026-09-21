@@ -20,8 +20,6 @@ import type { MeshMessage } from "../core/wire-protocol.js";
 
 const DEVICE_ID_HEX_LENGTH = 64;
 const SENDER_HEX = "a".repeat(DEVICE_ID_HEX_LENGTH);
-const OWN_HEX = "b".repeat(DEVICE_ID_HEX_LENGTH);
-const OTHER_LOCAL_PEER_HEX = "c".repeat(DEVICE_ID_HEX_LENGTH);
 
 function deviceIdBytes(hex: string): DeviceId {
   const bytes = new Uint8Array(new ArrayBuffer(hex.length / 2));
@@ -58,7 +56,6 @@ function fakeRequest(
   options: Readonly<{
     verb?: string;
     fromDevice?: string;
-    toDevice?: string;
   }>,
 ): {
   request: IncomingManageRequest;
@@ -73,9 +70,6 @@ function fakeRequest(
     ...(options.fromDevice !== undefined
       ? { fromDevice: deviceIdBytes(options.fromDevice) }
       : {}),
-    ...(options.toDevice !== undefined
-      ? { toDevice: deviceIdBytes(options.toDevice) }
-      : {}),
     respond: async (outcome: ManageOutcome): Promise<void> => {
       responses.push(outcome);
     },
@@ -89,7 +83,6 @@ function fakeDeps(
   return {
     isTrusted: () => false,
     handleRoomRequest: vi.fn().mockResolvedValue(undefined),
-    forwardToLocalPeer: () => undefined,
     ...overrides,
   };
 }
@@ -102,7 +95,6 @@ describe("dispatchHubRequest", () => {
 
     await dispatchHubRequest({
       request,
-      ownDeviceHex: OWN_HEX,
       deps,
       onKnownPeer: onKnownPeer,
     });
@@ -134,7 +126,6 @@ describe("dispatchHubRequest", () => {
 
       await dispatchHubRequest({
         request,
-        ownDeviceHex: OWN_HEX,
         deps,
         onKnownPeer,
       });
@@ -162,7 +153,6 @@ describe("dispatchHubRequest", () => {
 
     await dispatchHubRequest({
       request,
-      ownDeviceHex: OWN_HEX,
       deps,
       onKnownPeer: onKnownPeer,
     });
@@ -187,7 +177,6 @@ describe("dispatchHubRequest", () => {
 
     await dispatchHubRequest({
       request,
-      ownDeviceHex: OWN_HEX,
       deps,
       onKnownPeer: onKnownPeer,
     });
@@ -195,75 +184,16 @@ describe("dispatchHubRequest", () => {
     expect(onKnownPeer).toHaveBeenCalledWith(SENDER_HEX);
   });
 
-  it("forwards a room-domain verb addressed to a different local device via forwardToLocalPeer, stamping on-behalf-of with the true sender", async () => {
+  it("uses deviceIdToHex(request.fromDevice) as the resolved handle id for a room-domain verb ", async () => {
     const { request } = fakeRequest({
       verb: "room:member",
       fromDevice: SENDER_HEX,
-      toDevice: OTHER_LOCAL_PEER_HEX,
-    });
-    request.command.params = { verb: "room.send", text: "hi" };
-    const outcome: ManageOutcome = { result: "ok" };
-    const forwardToLocalPeer = vi
-      .fn<HubRequestDispatchDeps["forwardToLocalPeer"]>()
-      .mockReturnValue(Promise.resolve(outcome));
-    const handleRoomRequest = vi.fn().mockResolvedValue(undefined);
-    const deps = fakeDeps({
-      isTrusted: () => false,
-      forwardToLocalPeer,
-      handleRoomRequest,
-    });
-
-    await dispatchHubRequest({
-      request,
-      ownDeviceHex: OWN_HEX,
-      deps,
-      onKnownPeer: fakeOnKnownPeer(),
-    });
-
-    expect(forwardToLocalPeer).toHaveBeenCalledTimes(1);
-    const [toDeviceArg, commandArg] = forwardToLocalPeer.mock.calls[0] ?? [];
-    expect(toDeviceArg).toBe(OTHER_LOCAL_PEER_HEX);
-    expect(commandArg).toMatchObject({
-      params: { verb: "room.send", text: "hi", "on-behalf-of": SENDER_HEX },
-    });
-    expect(handleRoomRequest).not.toHaveBeenCalled();
-  });
-
-  it("falls back to handleRoomRequest when forwardToLocalPeer finds no local session for the addressed device", async () => {
-    const { request } = fakeRequest({
-      verb: "room:member",
-      fromDevice: SENDER_HEX,
-      toDevice: OTHER_LOCAL_PEER_HEX,
-    });
-    const handleRoomRequest = vi.fn().mockResolvedValue(undefined);
-    const deps = fakeDeps({
-      isTrusted: () => false,
-      forwardToLocalPeer: () => undefined,
-      handleRoomRequest,
-    });
-
-    await dispatchHubRequest({
-      request,
-      ownDeviceHex: OWN_HEX,
-      deps,
-      onKnownPeer: fakeOnKnownPeer(),
-    });
-
-    expect(handleRoomRequest).toHaveBeenCalledTimes(1);
-  });
-
-  it("uses deviceIdToHex(request.fromDevice) as the resolved handle id for a room-domain verb addressed to this side's own device", async () => {
-    const { request } = fakeRequest({
-      verb: "room:member",
-      fromDevice: SENDER_HEX,
-      toDevice: OWN_HEX,
     });
     const handleRoomRequest = vi.fn().mockResolvedValue(undefined);
     const deps = fakeDeps({ isTrusted: () => true, handleRoomRequest });
 
     await dispatchHubRequest({
       request,
-      ownDeviceHex: OWN_HEX,
       deps,
       onKnownPeer: fakeOnKnownPeer(),
     });
@@ -283,7 +213,6 @@ describe("dispatchHubRequest", () => {
 
     await dispatchHubRequest({
       request,
-      ownDeviceHex: OWN_HEX,
       deps,
       onKnownPeer: fakeOnKnownPeer(),
       hubAddress: "wss://hub.example/",
@@ -304,7 +233,6 @@ describe("dispatchHubRequest", () => {
 
     await dispatchHubRequest({
       request,
-      ownDeviceHex: OWN_HEX,
       deps,
       onKnownPeer: fakeOnKnownPeer(),
     });

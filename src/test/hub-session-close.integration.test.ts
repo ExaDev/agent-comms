@@ -29,7 +29,7 @@ test("a gateway drops its held hub connection when the hub goes away", async () 
       await store.shutdown();
     });
 
-    await transport.connectHub(hub.url);
+    await transport.hub.connect(hub.url);
     expect(transport.hub.isConnected).toBe(true);
     await waitForCondition(() => hub.connectionCount() === 1);
 

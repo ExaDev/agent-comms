@@ -50,8 +50,8 @@ async function connectedOwnerAndRequester(hubUrl: string): Promise<{
   requester.gatewayTrust.add(owner.peerId);
   expect(owner.gatewayTrust.hasAny()).toBe(false);
 
-  await ownerTransport.connectHub?.(hubUrl);
-  await requesterTransport.connectHub?.(hubUrl);
+  await ownerTransport.hub.connect(hubUrl);
+  await requesterTransport.hub.connect(hubUrl);
   // The requester's own directory surfacing the owner means the hub verified and registered the owner's advert, which a relay-connect naming the owner needs before it is routed rather than silently dropped. Being connected is not enough.
   await waitForCondition(
     () =>

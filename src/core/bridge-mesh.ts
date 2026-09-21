@@ -19,6 +19,7 @@ import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
 import { createNodeFsStorage } from "wire-mesh-core/adapters/node-fs-storage";
 import { MeshStore } from "./mesh-store.js";
+import { DEFAULT_HUB_URL } from "./mesh-store-shared.js";
 import { CommsTool } from "./tool.js";
 import { WireMeshTransport } from "./wire-mesh-transport.js";
 import { loadOrCreateIdentity, oplogDirFor } from "./identity-store.js";
@@ -39,7 +40,7 @@ export interface BridgeMeshSync extends BridgeMesh {
   attachIdentity: () => Promise<void>;
 }
 
-/** coordinatorPort/hubUrl thread straight into MeshStore's own constructor; fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup). */
+/** coordinatorPort/hubUrl thread straight into MeshStore's own constructor, hubUrl defaulting to the production hub here and nowhere below; fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup). */
 export interface BridgeMeshOptions {
   coordinatorPort?: number | undefined;
   hubUrl?: string | undefined;
@@ -66,7 +67,11 @@ export function createBridgeMeshSyncFromIdentity(
   slot: Readonly<IdentitySlot>,
   options?: BridgeMeshOptions,
 ): BridgeMeshSync {
-  const { coordinatorPort, hubUrl, fetchLatestVersion } = options ?? {};
+  const {
+    coordinatorPort,
+    hubUrl = DEFAULT_HUB_URL,
+    fetchLatestVersion,
+  } = options ?? {};
   // The user-principal identity (agent-comms#160) is shared by every bridge on this machine account -- deliberately not scoped to slot, unlike identity above. userIdentityOptions is empty (the default ~/.agent-comms location); every real bridge shares it, and only tests need an override.
   const userIdentityOptions = {};
   const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);

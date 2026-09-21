@@ -17,9 +17,8 @@ import { CommsError } from "./store.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
 import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
-import { COORDINATOR_HOST, DEFAULT_HUB_URL } from "./mesh-store-shared.js";
+import { COORDINATOR_HOST } from "./mesh-store-shared.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
-import { CoordinatorGateway } from "./coordinator-gateway.js";
 import { GatewayTrust } from "./gateway-trust.js";
 import {
   ConnectionCodeLedger,
@@ -100,7 +99,7 @@ const PEER_ID_LENGTH = 8;
 export interface MeshStoreOptions {
   /** Localhost TCP port the coordinator role is contested on. Defaults to DEFAULT_COORDINATOR_PORT. */
   readonly coordinatorPort?: number | undefined;
-  /** Remote gateway hub this store dials whenever it holds the local coordinator role. Defaults to DEFAULT_HUB_URL. */
+  /** The relay hub this store holds its own session on from init until shutdown, so it is reachable from other machines whatever role it plays locally. Left out, the store never contacts a hub: only the bridge entry points name the production hub (bridge-mesh.ts), so a store built by anything else, a test included, stays local. */
   readonly hubUrl?: string | undefined;
   /** How long a room.join (including a first-contact DM request) may await a human decision, on this store as the receiver and on the transport it is wired to as the sender. Defaults to ROOM_JOIN_APPROVAL_TIMEOUT_MS; a test shortens it. */
   readonly roomJoinApprovalTimeoutMs?: number | undefined;
@@ -112,7 +111,7 @@ export class MeshStore implements CommsStore {
   peerId: string;
   readonly startedAt: string;
   readonly coordinatorPort: number;
-  private readonly hubUrl: string;
+  private readonly hubUrl: string | undefined;
   /** Read by whoever wires this store to a transport, so both halves of a room.join agree on the approval window. */
   readonly roomJoinApprovalTimeoutMs: number;
   /** Forwards a collaborator's failure to this store's own error channel, normalising a non-Error rejection on the way so a bridge always sees one shape. An arrow field rather than a method, so every collaborator can take it as a bare callback reference. */
@@ -160,7 +159,6 @@ export class MeshStore implements CommsStore {
   private readonly connectionApproval: ConnectionApproval;
   private readonly capabilityAskAdmission: CapabilityAskAdmission;
   private readonly staleAgentChecker: StaleAgentChecker;
-  private readonly coordinatorGateway: CoordinatorGateway;
   private readonly peerLifecycle: PeerLifecycle;
 
   /** This store's own current AgentStatus, synchronously -- the value WireMeshTransport's presence re-advertisement timer reads on every tick. undefined before registerAgent has ever run (no self agent record exists yet), in which case there is nothing yet to advertise. */
@@ -221,7 +219,7 @@ export class MeshStore implements CommsStore {
   onError: ((error: Error) => void) | undefined;
 
   /**
-   * Fires whenever this store's own coordinator role changes: true right after becoming coordinator (a fresh bind in init(), or a takeover via PeerLifecycle.handleBecomeCoordinator), false right before shutdown() drops it. There is no live "lost the role to someone else while still running" case today -- CoordinatorGateway.onLostCoordinator is only ever called from shutdown(), so this callback mirrors that same lifecycle. Left undefined by default (matching onDelivery/onPatch/onError): a caller that wants to react to owning the coordinator role -- e.g. bridge-mesh.ts starting/stopping the cc-peer front (agent-comms#157), a Node/filesystem-specific capability that has no place in this transport-agnostic core -- sets it, exactly like those three.
+   * Fires whenever this store's own coordinator role changes: true right after becoming coordinator (a fresh bind in init(), or a takeover via PeerLifecycle.handleBecomeCoordinator), false right before shutdown() drops it. There is no live "lost the role to someone else while still running" case today: the role is only ever given up in shutdown(), so this callback mirrors that lifecycle. Left undefined by default (matching onDelivery/onPatch/onError): a caller that wants to react to owning the coordinator role -- e.g. bridge-mesh.ts starting/stopping the cc-peer front (agent-comms#157), a Node/filesystem-specific capability that has no place in this transport-agnostic core -- sets it, exactly like those three.
    */
   onCoordinatorRoleChanged:
     ((isCoordinator: boolean) => void | Promise<void>) | undefined;
@@ -243,7 +241,7 @@ export class MeshStore implements CommsStore {
   constructor(options?: Readonly<MeshStoreOptions>) {
     const {
       coordinatorPort = DEFAULT_COORDINATOR_PORT,
-      hubUrl = DEFAULT_HUB_URL,
+      hubUrl,
       roomJoinApprovalTimeoutMs = ROOM_JOIN_APPROVAL_TIMEOUT_MS,
       slot,
     } = options ?? {};
@@ -361,17 +359,6 @@ export class MeshStore implements CommsStore {
         this.deliveryEngine.broadcastPatch(patch),
     });
 
-    this.coordinatorGateway = new CoordinatorGateway({
-      hubUrl: this.hubUrl,
-      connectHub: async (url) => {
-        await this.requireTransport().connectHub?.(url);
-      },
-      disconnectHub: async () => {
-        await this.requireTransport().disconnectHub?.();
-      },
-      onError: this.reportError,
-    });
-
     this.peerLifecycle = new PeerLifecycle({
       peerInfo: this.peerInfo,
       agents: this.agents,
@@ -383,7 +370,6 @@ export class MeshStore implements CommsStore {
       roomProtocol: this.roomProtocol,
       deliveryEngine: this.deliveryEngine,
       staleAgentChecker: this.staleAgentChecker,
-      coordinatorGateway: this.coordinatorGateway,
       onCoordinatorRoleChanged: async () =>
         this.onCoordinatorRoleChanged?.(true),
       onError: this.reportError,
@@ -434,6 +420,8 @@ export class MeshStore implements CommsStore {
     if (this.initialised) return;
     this.initialised = true;
     await this.requireTransport().startDataServer();
+    if (this.hubUrl !== undefined)
+      this.requireTransport().joinHub?.(this.hubUrl);
 
     // Register our own peer info
     this.peerInfo.set(this.peerId, {
@@ -458,7 +446,7 @@ export class MeshStore implements CommsStore {
     } catch {
       let eaddrinuseMessage: string | undefined;
       try {
-        // The same takeover PeerLifecycle runs for a handover or a crash race: bind, adopt the peer list (only this store's own entry exists yet), start stale-agent probing, dial the gateway hub, and start whatever the coordinator role owns.
+        // The same takeover PeerLifecycle runs for a handover or a crash race: bind, adopt the peer list (only this store's own entry exists yet), start stale-agent probing, and start whatever the coordinator role owns.
         await this.peerLifecycle.handleBecomeCoordinator([]);
         connected = true;
       } catch (coordErr) {
@@ -853,7 +841,7 @@ export class MeshStore implements CommsStore {
   // Gateway trust (agent-comms#156) -- the cross-machine trust boundary
   // -----------------------------------------------------------------------
 
-  /** Trusts a remote device-id (hex): this store's own gateway (once it becomes the coordinator) will advertise onto the hub, merge this device's gossiped directory entries, dispatch its relayed requests, and route outbound hub requests to it. See GatewayTrust's own class doc for why trust is keyed per device-id rather than per remote machine, and why it doesn't survive a restart. Trusting a device is itself a route to it appearing, so anything queued for it is retried immediately rather than waiting out the hub's next gossip tick. */
+  /** Trusts a remote device-id (hex): this store will advertise itself on the hub, merge this device's gossiped directory entries, dispatch its relayed requests, and route outbound hub requests to it. The trust is shared by every store on the machine and survives a restart. See GatewayTrust's own class doc for why it is keyed per device-id rather than per remote machine. Trusting a device is itself a route to it appearing, so anything queued for it is retried immediately rather than waiting out the hub's next gossip tick. */
   addTrustedGateway(deviceHex: string): void {
     this.gatewayTrust.add(deviceHex);
     void this.roomProtocol.flushPendingRoomRequests(deviceHex);
@@ -1047,7 +1035,6 @@ export class MeshStore implements CommsStore {
     }
 
     this.staleAgentChecker.stop();
-    await this.coordinatorGateway.onLostCoordinator();
     // Graceful coordinator handover (agent-comms#170) -- a no-op unless this side currently holds the coordinator role, so this runs unconditionally rather than being gated behind an isCoordinator check duplicated here. Must run before the transport shuts down: the handoff message rides the very peer sessions shutdown() is about to close.
     await this.peerLifecycle.sendCoordinatorHandover();
     await this.onCoordinatorRoleChanged?.(false);
