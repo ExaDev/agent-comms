@@ -1,3 +1,9 @@
+## [8.0.3](https://github.com/ExaDev/agent-comms/compare/v8.0.2...v8.0.3) (2026-09-21)
+
+### Tests
+
+* reproduce a front and its real bridge sharing one identity slot ([8e23c6c](https://github.com/ExaDev/agent-comms/commit/8e23c6cd01793073fc059ce9868039abf04445b9)), references [agent-comms#299](https://github.com/agent-comms/issues/299)
+
 ## [8.0.2](https://github.com/ExaDev/agent-comms/compare/v8.0.1...v8.0.2) (2026-09-21)
 
 ### Bug Fixes
