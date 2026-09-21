@@ -10,6 +10,7 @@ import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
 import { createMemoryStorage } from "wire-mesh-core/adapters/memory-storage";
 import { loadOrCreateIdentity } from "../core/identity-store.js";
 import type { IdentitySlot } from "../core/identity-store.js";
+import type { PeerIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import type { UserIdentityOptions } from "../core/user-identity.js";
@@ -25,6 +26,8 @@ interface WireTransportOptions {
   pendingConnectionTimeoutMs?: number | undefined;
   presenceReadvertiseIntervalMs?: number | undefined;
   userIdentityOptions?: Readonly<UserIdentityOptions> | undefined;
+  /** Overrides which identity-store loader resolves this store's identity for the given slot — defaults to loadOrCreateIdentity (the real-bridge path, which takes the slot's exclusivity lock). Pass loadIdentityForFront to model the default cc-peer front's own store instead (agent-comms#299's own reproduction needs both loaders live against one slot at once, which no single wireTestTransport call could otherwise construct). */
+  identityLoader?: ((slot: Readonly<IdentitySlot>) => PeerIdentity) | undefined;
 }
 
 async function wireTransportInternal(
@@ -36,13 +39,14 @@ async function wireTransportInternal(
     pendingConnectionTimeoutMs,
     presenceReadvertiseIntervalMs,
     userIdentityOptions,
+    identityLoader = loadOrCreateIdentity,
   } = options ?? {};
   const resolvedSlot: IdentitySlot = slot ?? {
     harness: "test",
     cwd: nanoid(TEST_IDENTITY_CWD_ID_LENGTH),
     dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-identity-")),
   };
-  const identity = loadOrCreateIdentity(resolvedSlot);
+  const identity = identityLoader(resolvedSlot);
   // A fresh throwaway directory per call, matching resolvedSlot's own default: each test MeshStore represents a separate device belonging to a separate person, so it needs its own user-principal identity, never the real machine-wide ~/.agent-comms/user-identity.json a production bridge shares. A caller that needs to know this store's own principal device-id ahead of time (agent-comms#187's own principal-keyed admission tests) passes an explicit userIdentityOptions naming a directory it already loaded itself, rather than this store minting one it can never be told about afterwards.
   const resolvedUserIdentityOptions: Readonly<UserIdentityOptions> =
     userIdentityOptions ?? {
