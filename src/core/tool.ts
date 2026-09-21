@@ -231,7 +231,7 @@ export interface CommsToolOptions {
 }
 
 export class CommsTool {
-  /** Reports this bridge's own web UI address for the web_url action. Assignable post-construction, mirroring MeshStore's own onDelivery/onCoordinatorRoleChanged hooks, because the underlying web server handle isn't known until after this bridge's own tryStartWebServer() call -- which every real bridge makes after building its CommsTool, not before. Undefined (the default) means this bridge never wires web UI reporting. */
+  /** Reports this bridge's own web UI address for the web_url action. Assignable post-construction, mirroring MeshStore's own onDelivery/onCoordinatorRoleChanged hooks, because the underlying web server handle isn't known until after this bridge's own tryStartBridgeWebServer() call -- which every real bridge makes after building its CommsTool, not before. Undefined (the default) means this bridge never wires web UI reporting. */
   getWebUrlStatus?: () => WebUrlStatus;
 
   private readonly discovery: DiscoveryManager | undefined;

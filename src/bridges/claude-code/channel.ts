@@ -36,7 +36,10 @@ import {
   type IdentitySlot,
 } from "../../core/identity-store.js";
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
-import { tryStartWebServer, getWebUrlStatus } from "../user/web/server.js";
+import {
+  tryStartBridgeWebServer,
+  getWebUrlStatus,
+} from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -273,7 +276,7 @@ export async function run(): Promise<void> {
   // -----------------------------------------------------------------------
 
   await store.init();
-  const webHandle = await tryStartWebServer();
+  const webHandle = await tryStartBridgeWebServer(store, "claude-code");
   tool.getWebUrlStatus = () => getWebUrlStatus(webHandle);
   await mcp.connect(new StdioServerTransport());
 

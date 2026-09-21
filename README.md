@@ -296,7 +296,7 @@ This is opt-in and off by default: `web-console` isn't a dependency of this pack
 AGENT_COMMS_WEB_CONSOLE_DIST=/path/to/wire-mesh/ts/packages/web-console/dist npx agent-comms chat
 ```
 
-The web server (whichever port `tryStartWebServer` picked for that bridge) then also answers under `/web-console/*`. When the variable is unset, or doesn't point at a directory containing an `index.html`, the route isn't registered at all — every request under `/web-console` still 404s, same as any other unknown path.
+The web server (whichever port `tryStartBridgeWebServer` picked for that bridge) then also answers under `/web-console/*`. When the variable is unset, or doesn't point at a directory containing an `index.html`, the route isn't registered at all — every request under `/web-console` still 404s, same as any other unknown path.
 
 ## Direct messages
 

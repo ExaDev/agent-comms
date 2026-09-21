@@ -34,12 +34,11 @@ import {
 } from "../../core/identity-store.js";
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
 import {
-  tryStartWebServer,
+  tryStartBridgeWebServer,
   getWebPort,
   getWebUrlStatus,
   type WebServerHandle,
 } from "../user/web/server.js";
-import { ChatController } from "../user/controller.js";
 import { nanoid } from "../../core/nanoid.js";
 
 export default function (pi: ExtensionAPI) {
@@ -156,13 +155,7 @@ export default function (pi: ExtensionAPI) {
       projectRoom = path.basename(process.cwd());
 
       // Start web UI sharing the same mesh peer and agent identity
-      const webCtrl = ChatController.fromExisting(store, {
-        agentId,
-        harness: "pi",
-        cwd: process.cwd(),
-        pid: process.pid,
-      });
-      webHandle = await tryStartWebServer(webCtrl);
+      webHandle = await tryStartBridgeWebServer(store, "pi");
     }
 
     refreshStatus();
