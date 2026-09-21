@@ -3,12 +3,13 @@
  *
  * One mutant Stryker raises against setAgentOffline is a true equivalent, not a gap -- documented here rather than chased with a contrived test, matching stale-agent-checker.test.ts's own precedent for the identical pattern: `this.deps.agents.set(id, agent)` right after `agent.status = "offline"` re-sets the same key to the exact same object reference `this.deps.agents.get(id)` already returned, so mutating `.status` on it has already mutated what the Map holds. No test can observe removing that call.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AgentRegistry,
   type AgentRegistryDeps,
 } from "../core/agent-registry.js";
 import { CommsError } from "../core/store.js";
+import { DEFAULT_PRESENCE_STALE_AFTER_MS } from "../core/gossip-extensions.js";
 import type { AgentIdentity } from "../core/types.js";
 
 const OWNER_ID = "owner-device";
@@ -57,6 +58,7 @@ function makeHarness(peerId = OWNER_ID): Harness {
       ({ listKnownDevices: undefined }) as unknown as ReturnType<
         AgentRegistryDeps["requireTransport"]
       >,
+    presenceStaleAfterMs: DEFAULT_PRESENCE_STALE_AFTER_MS,
     deliveryEngine: {
       bump,
       broadcastPatch,
@@ -406,6 +408,132 @@ describe("AgentRegistry — listAgents", () => {
     );
     const result = await registry.listAgents("anyone-else");
     expect(result.map((a) => a.id)).toEqual(["visible-agent"]);
+  });
+});
+
+describe("AgentRegistry — gossip-discovered presence staleness (agent-comms#301)", () => {
+  const NOW_MS = new Date("2026-06-01T00:00:00.000Z").getTime();
+  const MS_PER_SECOND = 1000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW_MS);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A discovered-device advert whose snapshot-seconds is ageMs old as of NOW_MS, carrying whatever presence status (or none) the test passes. */
+  function advertAgedMs(
+    ageMs: number,
+    presenceStatus?: string,
+  ): Record<string, unknown> {
+    return {
+      "agent/self": {
+        name: "discovered-agent",
+        harness: "codex",
+        cwd: "/tmp/discovered",
+        pid: 7,
+        startedAt: "2026-02-02T00:00:00.000Z",
+        tags: [],
+        subscribedRooms: [],
+      },
+      "snapshot-seconds": Math.floor((NOW_MS - ageMs) / MS_PER_SECOND),
+      ...(presenceStatus !== undefined
+        ? { "presence/status": presenceStatus }
+        : {}),
+    };
+  }
+
+  function withKnownDevice(
+    deps: AgentRegistryDeps,
+    advert: Record<string, unknown>,
+  ): void {
+    deps.requireTransport = () =>
+      ({
+        listKnownDevices: () => [{ deviceId: "discovered-device", advert }],
+      }) as unknown as ReturnType<AgentRegistryDeps["requireTransport"]>;
+  }
+
+  it("trusts a fresh advert's own presence status", async () => {
+    const { registry, deps } = makeHarness();
+    withKnownDevice(deps, advertAgedMs(0, "busy"));
+
+    const result = await registry.listAgents("some-requester");
+    expect(result.find((a) => a.id === "discovered-device")?.status).toBe(
+      "busy",
+    );
+  });
+
+  it("still trusts the advert's own presence status exactly at the staleness boundary", async () => {
+    const { registry, deps } = makeHarness();
+    withKnownDevice(
+      deps,
+      advertAgedMs(DEFAULT_PRESENCE_STALE_AFTER_MS, "busy"),
+    );
+
+    const result = await registry.listAgents("some-requester");
+    expect(result.find((a) => a.id === "discovered-device")?.status).toBe(
+      "busy",
+    );
+  });
+
+  it("reports offline once the advert is older than the staleness window, regardless of the presence status it carried", async () => {
+    const { registry, deps } = makeHarness();
+    withKnownDevice(
+      deps,
+      advertAgedMs(DEFAULT_PRESENCE_STALE_AFTER_MS + 1, "active"),
+    );
+
+    const result = await registry.listAgents("some-requester");
+    expect(result.find((a) => a.id === "discovered-device")?.status).toBe(
+      "offline",
+    );
+  });
+
+  it("reports offline for a stale advert that never carried a presence status at all, rather than defaulting to active", async () => {
+    const { registry, deps } = makeHarness();
+    withKnownDevice(deps, advertAgedMs(DEFAULT_PRESENCE_STALE_AFTER_MS + 1));
+
+    const result = await registry.listAgents("some-requester");
+    expect(result.find((a) => a.id === "discovered-device")?.status).toBe(
+      "offline",
+    );
+  });
+
+  it("defaults a fresh advert with no presence status to active, unchanged from before agent-comms#301", async () => {
+    const { registry, deps } = makeHarness();
+    withKnownDevice(deps, advertAgedMs(0));
+
+    const result = await registry.listAgents("some-requester");
+    expect(result.find((a) => a.id === "discovered-device")?.status).toBe(
+      "active",
+    );
+  });
+
+  it("leaves staleness unjudged for an advert with no snapshot-seconds at all, trusting whatever presence status it carries", async () => {
+    const { registry, deps } = makeHarness();
+    const advert = advertAgedMs(0, "idle");
+    delete advert["snapshot-seconds"];
+    withKnownDevice(deps, advert);
+
+    const result = await registry.listAgents("some-requester");
+    expect(result.find((a) => a.id === "discovered-device")?.status).toBe(
+      "idle",
+    );
+  });
+
+  it("reads the staleness window from deps.presenceStaleAfterMs, not a hardcoded default", async () => {
+    const SHORT_STALE_AFTER_MS = 5000;
+    const { registry, deps } = makeHarness();
+    deps.presenceStaleAfterMs = SHORT_STALE_AFTER_MS;
+    withKnownDevice(deps, advertAgedMs(SHORT_STALE_AFTER_MS + 1, "active"));
+
+    const result = await registry.listAgents("some-requester");
+    expect(result.find((a) => a.id === "discovered-device")?.status).toBe(
+      "offline",
+    );
   });
 });
 

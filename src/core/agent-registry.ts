@@ -9,6 +9,9 @@ import type { AgentSelfAdvert } from "./gossip-extensions.js";
 import { AgentStatus } from "./types.js";
 import type { AgentIdentity, Visibility } from "./types.js";
 
+/** snapshot-seconds is epoch seconds (mesh-session.ts's own `Math.floor(clock.now() / 1000)`); presenceStatusFor compares it against Date.now(), which is milliseconds. */
+const MS_PER_SECOND = 1000;
+
 /** The state and collaborators AgentRegistry needs from MeshStore. agents/identityCache are direct references into MeshStore's own fields; startedAt is a readonly value copied once; deliveryEngine is the already-constructed instance, narrowed to what agent-lifecycle bookkeeping ever needs. */
 export interface AgentRegistryDeps {
   agents: Map<string, AgentIdentity>;
@@ -16,6 +19,8 @@ export interface AgentRegistryDeps {
   startedAt: string;
   getPeerId: () => string;
   requireTransport: () => MeshTransport;
+  /** How old a gossip-discovered device's own last-heard advert (its snapshot-seconds) may be before listDiscoverableAgents stops trusting whatever presence value it last carried and reports it offline instead (agent-comms#301). Defaults to DEFAULT_PRESENCE_STALE_AFTER_MS; MeshStore threads its own presenceStaleAfterMs constructor option through here. */
+  presenceStaleAfterMs: number;
   deliveryEngine: Pick<
     DeliveryEngine,
     | "bump"
@@ -194,6 +199,8 @@ export class AgentRegistry {
 
   /**
    * Every agent this store has heard gossiped by another device but never registered or otherwise locally recorded -- the read half of P3.8's eventual agent register/update/offline retirement (agent-comms#48), mirroring listRooms' own room-discovery merge (#138). Never merged into this.deps.agents: a gossip hint is not the same as a real registration, and this store has nothing else authoritative to report for it. Only ever an agent that gossiped itself as "visible" (MeshStore's own selfAgentAdvert getter never advertises a hidden or ghost agent this way), so no ghost-filtering is needed here the way listAgents' own local-agent check needs.
+   *
+   * A gossip-discovered device is never told its own advert has gone stale (agent-comms#301): nothing on the hub relays a lost connection to anyone but the two peers that held it, so the only signal this side has at all is whether the device's own last advert is still recent. A device whose snapshot-seconds is older than deps.presenceStaleAfterMs is reported offline regardless of whatever presence value that stale advert carried -- trusting a heartbeat that stopped arriving minutes ago is worse than reporting the honest "we don't know" that offline actually means here.
    */
   private listDiscoverableAgents(): readonly {
     deviceId: string;
@@ -207,17 +214,34 @@ export class AgentRegistry {
       advert: AgentSelfAdvert;
       status: AgentStatus | undefined;
     }[] = [];
+    const now = Date.now();
     for (const { deviceId, advert } of transport.listKnownDevices()) {
       const candidate = advert["agent/self"];
       if (!isAgentSelfAdvert(candidate)) continue;
-      const status = advert["presence/status"];
       result.push({
         deviceId,
         advert: candidate,
-        status: AgentStatus.is(status) ? status : undefined,
+        status: this.presenceStatusFor(advert, now),
       });
     }
     return result;
+  }
+
+  /** The status listDiscoverableAgents reports for one gossip-discovered device's own advert: offline once its snapshot-seconds is older than deps.presenceStaleAfterMs, whatever presence/status it last carried; the gossiped presence/status value when the advert is still fresh and carries one; undefined when it's fresh but never gossiped presence at all, leaving synthesiseDiscoveredAgent's own `?? "active"` to report the same "reachable, no status opinion" default this had before agent-comms#301. snapshot-seconds missing or not a finite number (an advert this malformed should not reach here in practice, since every real self-advert is signed and schema-validated before this side ever merges it, but advert itself is an untrusted `Record<string, unknown>` as far as this function's own types are concerned) leaves staleness unjudged rather than guessed at either extreme. */
+  private presenceStatusFor(
+    advert: Readonly<Record<string, unknown>>,
+    now: number,
+  ): AgentStatus | undefined {
+    const snapshotSeconds = advert["snapshot-seconds"];
+    if (
+      typeof snapshotSeconds === "number" &&
+      Number.isFinite(snapshotSeconds)
+    ) {
+      const ageMs = now - snapshotSeconds * MS_PER_SECOND;
+      if (ageMs > this.deps.presenceStaleAfterMs) return "offline";
+    }
+    const status = advert["presence/status"];
+    return AgentStatus.is(status) ? status : undefined;
   }
 
   async setAgentOffline(id: string): Promise<void> {
