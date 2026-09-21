@@ -3,6 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  HUB_LINK_POLL_INTERVAL_MS,
   HUB_RECONNECT_INITIAL_DELAY_MS,
   HUB_RECONNECT_MAX_DELAY_MS,
   HubLink,
@@ -57,7 +58,10 @@ class FakeHub implements HubLinkSession {
   }
 }
 
-function newLink(hub: FakeHub): {
+function newLink(
+  hub: FakeHub,
+  shouldConnect: () => boolean = () => true,
+): {
   link: HubLink;
   connected: () => number;
   errors: Error[];
@@ -67,6 +71,7 @@ function newLink(hub: FakeHub): {
   const link = new HubLink({
     hub,
     url: HUB_URL,
+    shouldConnect,
     onConnected: () => {
       connectedCount += 1;
     },
@@ -193,5 +198,69 @@ describe("HubLink", () => {
 
     expect(hub.isConnected).toBe(false);
     expect(hub.dials).toHaveLength(1);
+  });
+
+  it("does not dial while the store does not want a session, and dials within a poll once it does", async () => {
+    const hub = new FakeHub();
+    let wanted = false;
+    const { link } = newLink(hub, () => wanted);
+    link.start();
+    await vi.advanceTimersByTimeAsync(HUB_LINK_POLL_INTERVAL_MS * 2);
+    expect(hub.dials).toHaveLength(0);
+
+    wanted = true;
+    await vi.advanceTimersByTimeAsync(HUB_LINK_POLL_INTERVAL_MS);
+
+    expect(hub.dials).toHaveLength(1);
+    await link.stop();
+  });
+
+  it("dials at once on reconsider instead of waiting out the poll", async () => {
+    const hub = new FakeHub();
+    let wanted = false;
+    const { link } = newLink(hub, () => wanted);
+    link.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    wanted = true;
+    link.reconsider();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(hub.dials).toHaveLength(1);
+    expect(hub.isConnected).toBe(true);
+    await link.stop();
+  });
+
+  it("drops a live session when the store stops wanting one, and does not redial while it stays unwanted", async () => {
+    const hub = new FakeHub();
+    let wanted = true;
+    const { link } = newLink(hub, () => wanted);
+    link.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(hub.isConnected).toBe(true);
+
+    wanted = false;
+    link.reconsider();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(hub.isConnected).toBe(false);
+    expect(hub.disconnects).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(HUB_RECONNECT_MAX_DELAY_MS);
+    expect(hub.dials).toHaveLength(1);
+    await link.stop();
+  });
+
+  it("notices a session it no longer wants at the next poll when nobody calls reconsider", async () => {
+    const hub = new FakeHub();
+    let wanted = true;
+    const { link } = newLink(hub, () => wanted);
+    link.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    wanted = false;
+    await vi.advanceTimersByTimeAsync(HUB_LINK_POLL_INTERVAL_MS);
+
+    expect(hub.isConnected).toBe(false);
+    await link.stop();
   });
 });

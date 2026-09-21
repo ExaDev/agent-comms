@@ -148,7 +148,7 @@ export class MeshStore implements CommsStore {
   /** The cross-machine trust boundary (agent-comms#156), constructed once in the constructor below (mirroring discovery above) and shared with WireMeshTransport by every construction site (bridge-mesh.ts, test-transport.ts) that passes it into WireMeshTransport's own constructor, so store.addTrustedGateway() and the transport's own hub-forwarding/hub-session gates read the exact same set. Persists across restarts (agent-comms#186) when a slot is passed to this store's own constructor; stays in-memory only, exactly as before, for every construction site that omits one. Public so those construction sites can reach it; addTrustedGateway/removeTrustedGateway/listTrustedGateways below are the methods CommsTool actually calls through MeshOnlyFeatures. */
   readonly gatewayTrust: GatewayTrust;
 
-  /** The connection-code generate/redeem pair (agent-comms#188) bootstrapping gatewayTrust above between two devices with no existing mesh connection. Persists across restarts the same way gatewayTrust does, sharing the same slot passed to this store's own constructor. generateConnectionCode/redeemConnectionCode below are the methods CommsTool actually calls through MeshOnlyFeatures; redeemConnectionCode is also where a successful redemption's deviceId gets fed into gatewayTrust.add, the actual point of this whole bootstrap. */
+  /** The connection-code generate/redeem pair (agent-comms#188) bootstrapping gatewayTrust above between two devices with no existing mesh connection. Persists across restarts per slot, from the slot passed to this store's own constructor, whereas gatewayTrust is shared by every slot in the slot's identity directory. generateConnectionCode/redeemConnectionCode below are the methods CommsTool actually calls through MeshOnlyFeatures; redeemConnectionCode is also where a successful redemption's deviceId gets fed into gatewayTrust.add, the actual point of this whole bootstrap. */
   private readonly connectionCodes: ConnectionCodeLedger;
 
   private readonly deliveryEngine: DeliveryEngine;
@@ -196,6 +196,23 @@ export class MeshStore implements CommsStore {
       subscribedRooms: agent.subscribedRooms,
       ...this.membership.advertField(),
     };
+  }
+
+  /**
+   * Whether this store should hold a hub session right now. It has something to say to another machine only when it has an agent that is not a ghost and its machine trusts at least one remote device or principal. Until then, holding a session would put its device id on a public hub for nobody's benefit, and a ghost agent is by definition not reachable from anywhere. A hidden agent does hold one, and advertises only the device advert every session opens with, which is what lets it be reached by device id.
+   */
+  private wantsHubSession(): boolean {
+    const self = this.agents.get(this.peerId);
+    return (
+      self !== undefined &&
+      self.visibility !== "ghost" &&
+      this.gatewayTrust.hasAny()
+    );
+  }
+
+  /** Has the hub session re-evaluate wantsHubSession now, after a change to the agent or to the trust that it reads. Changes made by another process reach it within the link's poll interval instead. */
+  private reconsiderHub(): void {
+    this.requireTransport().reconsiderHub?.();
   }
 
   /** Whether the mesh has a live coordinator connection. */
@@ -420,8 +437,11 @@ export class MeshStore implements CommsStore {
     if (this.initialised) return;
     this.initialised = true;
     await this.requireTransport().startDataServer();
-    if (this.hubUrl !== undefined)
-      this.requireTransport().joinHub?.(this.hubUrl);
+    if (this.hubUrl !== undefined) {
+      this.requireTransport().joinHub?.(this.hubUrl, () =>
+        this.wantsHubSession(),
+      );
+    }
 
     // Register our own peer info
     this.peerInfo.set(this.peerId, {
@@ -524,7 +544,9 @@ export class MeshStore implements CommsStore {
     visibility: Visibility;
     tags: string[];
   }): Promise<AgentIdentity> {
-    return this.agentRegistry.registerAgent(opts);
+    const agent = await this.agentRegistry.registerAgent(opts);
+    this.reconsiderHub();
+    return agent;
   }
 
   async getAgent(id: string): Promise<AgentIdentity | undefined> {
@@ -537,7 +559,9 @@ export class MeshStore implements CommsStore {
       Pick<AgentIdentity, "name" | "visibility" | "status" | "tags" | "pid">
     >,
   ): Promise<AgentIdentity> {
-    return this.agentRegistry.updateAgent(id, patch);
+    const agent = await this.agentRegistry.updateAgent(id, patch);
+    this.reconsiderHub();
+    return agent;
   }
 
   async listAgents(requesterId: string): Promise<AgentIdentity[]> {
@@ -844,12 +868,14 @@ export class MeshStore implements CommsStore {
   /** Trusts a remote device-id (hex): this store will advertise itself on the hub, merge this device's gossiped directory entries, dispatch its relayed requests, and route outbound hub requests to it. The trust is shared by every store on the machine and survives a restart. See GatewayTrust's own class doc for why it is keyed per device-id rather than per remote machine. Trusting a device is itself a route to it appearing, so anything queued for it is retried immediately rather than waiting out the hub's next gossip tick. */
   addTrustedGateway(deviceHex: string): void {
     this.gatewayTrust.add(deviceHex);
+    this.reconsiderHub();
     void this.roomProtocol.flushPendingRoomRequests(deviceHex);
   }
 
   /** Withdraws trust from a remote device-id (hex). A no-op if it was never trusted. */
   removeTrustedGateway(deviceHex: string): void {
     this.gatewayTrust.remove(deviceHex);
+    this.reconsiderHub();
   }
 
   /** Every currently trusted remote device-id (hex). */
@@ -860,11 +886,13 @@ export class MeshStore implements CommsStore {
   /** Trusts a remote user-principal device-id (hex, agent-comms#187): a peer presenting a token whose delegation chain roots at this principal is trusted via GatewayTrust.isTrustedFor, without its own bare device-id ever needing individual trust. Entirely independent of the bare-device allowlist addTrustedGateway manages. */
   addTrustedGatewayPrincipal(deviceHex: string): void {
     this.gatewayTrust.addPrincipal(deviceHex);
+    this.reconsiderHub();
   }
 
   /** Withdraws trust from a remote user-principal device-id (hex). A no-op if it was never trusted. */
   removeTrustedGatewayPrincipal(deviceHex: string): void {
     this.gatewayTrust.removePrincipal(deviceHex);
+    this.reconsiderHub();
   }
 
   /** Every currently trusted remote user-principal device-id (hex). */
@@ -890,6 +918,7 @@ export class MeshStore implements CommsStore {
   ): Promise<RedeemConnectionCodeResult> {
     const result = await this.connectionCodes.redeem(candidate, options);
     this.gatewayTrust.add(result.deviceId);
+    this.reconsiderHub();
     return result;
   }
 

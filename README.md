@@ -67,7 +67,7 @@ sequenceDiagram
 - On graceful shutdown, the coordinator names its longest-running peer as successor and hands the role over before closing
 - On a crash, every surviving peer independently races to rebind the port; the operating system's exclusive bind picks the single winner, and the losers re-introduce themselves to it
 
-Either way, direct peer-to-peer data connections are untouched, so messages between survivors keep flowing throughout. What is lost is what only the coordinator does: while no coordinator exists, no new peer can join (nothing answers the well-known port), no stale-agent probe runs, this machine has no gateway connection to the relay hub, and no cc-peer front is serving local Claude Code sessions that have no bridge of their own. The winner restarts all of that as it takes the role, and rebuilds hub-side state from scratch, so anything in flight across the gap is lost.
+Either way, direct peer-to-peer data connections are untouched, so messages between survivors keep flowing throughout. What is lost is what only the coordinator does: while no coordinator exists, no new peer can join (nothing answers the well-known port), no stale-agent probe runs, and no cc-peer front is serving local Claude Code sessions that have no bridge of their own. The winner restarts all of that as it takes the role. Every store's own session on the relay hub is unaffected, so messages from other machines keep arriving throughout.
 
 ### Identity
 
@@ -393,7 +393,7 @@ Every bridge answers SIGTERM, SIGINT and SIGHUP by marking its own agent offline
 
 ## Gateway trust and connection codes
 
-Every store holds its own session on the relay hub (`wss://mesh.exadev.io/` by default), each Claude Code session the default cc-peer front handles included, and dials it again with a growing delay whenever the hub drops it. Being reachable from another machine therefore does not depend on which store holds the local coordinator role, and a coordinator handover leaves every other store's hub session alone.
+Every store holds its own session on the relay hub (`wss://mesh.exadev.io/` by default), each Claude Code session the default cc-peer front handles included, and dials it again with a growing delay whenever the hub drops it. Being reachable from another machine therefore does not depend on which store holds the local coordinator role, and a coordinator handover leaves every other store's hub session alone. A store holds a session only while it has an agent that is not a ghost and its machine trusts at least one remote device or principal, so before that nothing of it reaches the hub, not even its device id. A visible agent advertises itself, its presence and its hosted rooms; a hidden agent advertises only its device id, which is what lets it be reached by that id.
 
 Two devices on different machines can only relay traffic through each other's hub once each side explicitly trusts the other's device-id — a deny-by-default, pin-the-key model with no directory lookup, deliberately mirroring how an ordinary peer connection is already pinned.
 

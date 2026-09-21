@@ -51,6 +51,8 @@ export interface HubSessionDeps {
   ) => void | Promise<void>;
   /** Tracks the session for shutdown -- every session the transport ever creates, always. */
   trackForShutdown: (session: AcceptedMeshSession) => void;
+  /** Stops tracking a session that has ended, so a store that redials the hub for as long as it runs does not accumulate dead sessions the transport would keep gossiping to. */
+  untrack: (session: AcceptedMeshSession) => void;
   /** Fires with every remote (non-self) directory entry the hub's own gossip/catch-up surfaces, every time the session's directory changes (agent-comms#155's own remote-directory-merge leg) -- the transport merges these into its own mesh-wide knownDevices the same way it already merges a local peer session's directory, so a hub-learned agent surfaces in listAgents/getAgent with no separate lookup path. */
   onDirectory: (entries: readonly DirectoryEntry[]) => void;
   /** Dispatches an already-received, non-legacy-frame request (a real core/room verb: room.send, room.notify, room.join, ...) to WireMeshTransport's own roomRouter through its relayed-request entry point, which shares the room-verb dispatch a local peer session's own drainSession uses but never routes a legacy frame -- the outbound half of agent-comms#155's "remote to local" routing leg. Deferred the same lazy-`this`-capture way DeliveryEngine's own sendRoomRequestToMember closure is, since roomRouter is constructed after this class's own instance in WireMeshTransport's constructor. Declared with the identical (request, handle, origin?) shape RoomRouter.handleRequest itself has (agent-comms#216) so WireMeshTransport can keep wiring this dep as a direct method reference rather than a wrapper -- dispatchHubRequest below is what actually supplies a non-empty origin, carrying this side's own dialled hub address. */
@@ -103,6 +105,7 @@ export class HubSession {
 
   /** Forgets the held session and releases everyone waiting in whenDisconnected(). */
   private clearSession(): void {
+    if (this.session !== undefined) this.deps.untrack(this.session);
     this.session = undefined;
     this.url = undefined;
     for (const resolve of this.disconnectWaiters.splice(0)) resolve();

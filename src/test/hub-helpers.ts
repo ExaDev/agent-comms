@@ -11,7 +11,9 @@ import {
   verifyWithPublicKey,
 } from "wire-mesh-core/adapters/node-identity";
 import type { Connection } from "wire-mesh-core/ports/transport";
-import type { Frame } from "wire-mesh-core/generated/protocol";
+import type { Frame, PeerAdvert } from "wire-mesh-core/generated/protocol";
+import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
+import { connectWsUrl } from "../core/ws-dial.js";
 
 const SHUTDOWN_GRACE_MS = 250;
 const CLOSE_NORMAL = 1000; // RFC 6455 normal closure
@@ -211,4 +213,32 @@ export class TeardownStack {
       await step();
     }
   }
+}
+
+/** Everything an untrusted client of the hub can read: every advert the hub has broadcast to it, and the connection count that includes itself. */
+export interface HubObserver {
+  /** Every advert received in a gossip frame so far, in arrival order. */
+  adverts: () => readonly PeerAdvert[];
+  /** The adverts received for one device (hex), or none. */
+  advertsFor: (deviceHex: string) => readonly PeerAdvert[];
+  close: () => Promise<void>;
+}
+
+/**
+ * Connects a bare client to the hub that never gossips, presents no identity and trusts nobody, and records every advert the hub broadcasts to it. This is the view of anyone connected to a public hub, which is what a test about what a store puts on the hub has to look at: asserting on another store's directory only shows what that store chose to accept.
+ */
+export async function observeHub(url: string): Promise<HubObserver> {
+  const connection = await connectWsUrl(url);
+  const received: PeerAdvert[] = [];
+  void (async () => {
+    for await (const frame of connection.receive()) {
+      if (frame.type === "gossip") received.push(...frame.peers);
+    }
+  })();
+  return {
+    adverts: () => received,
+    advertsFor: (deviceHex) =>
+      received.filter((advert) => deviceIdToHex(advert.device) === deviceHex),
+    close: async () => connection.close(),
+  };
 }

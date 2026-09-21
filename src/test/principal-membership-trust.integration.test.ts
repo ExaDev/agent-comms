@@ -136,6 +136,7 @@ describe("principal membership trust", () => {
     const a2 = await machineStore(hub.url, a1.coordinatorPort, dirA);
     await register(a2, "a2-local-agent");
     const b1 = await machineStore(hub.url, freshPort(), dirB);
+    await register(b1, "b1-remote");
     const stranger = await machineStore(hub.url, freshPort(), dirStranger);
     await register(stranger, "stranger");
 
@@ -165,6 +166,7 @@ describe("principal membership trust", () => {
     const a2 = await machineStore(hub.url, a1.coordinatorPort, dirA);
     await register(a2, "a2-local-agent");
     const b1 = await machineStore(hub.url, freshPort(), dirB);
+    await register(b1, "b1-remote");
     a1.addTrustedGatewayPrincipal(principalOf(b1));
     a2.addTrustedGatewayPrincipal(principalOf(b1));
     b1.addTrustedGatewayPrincipal(principalOf(a1));
@@ -190,6 +192,7 @@ describe("principal membership trust", () => {
     const a2 = await machineStore(hub.url, a1.coordinatorPort, dirA);
     await register(a2, "a2-local-agent");
     const b1 = await machineStore(hub.url, freshPort(), dirB);
+    await register(b1, "b1-remote");
     a1.addTrustedGatewayPrincipal(principalOf(b1));
     a2.addTrustedGatewayPrincipal(principalOf(b1));
     // A typo ahead of the real principal: it must neither stop the hub directory merge nor block the principal after it.

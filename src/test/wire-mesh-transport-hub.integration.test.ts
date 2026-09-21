@@ -4,6 +4,7 @@
 
 import { test, describe, expect } from "vitest";
 import { generateIdentity } from "../core/identity.js";
+import { GatewayTrust } from "../core/gateway-trust.js";
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import type { TransportEvents } from "../core/transport.js";
 import {
@@ -12,8 +13,20 @@ import {
   waitForCondition,
 } from "./hub-helpers.js";
 
+/** A device-id is a 64-character lowercase hex SHA-256 digest. */
+const DEVICE_ID_HEX_LENGTH = 64;
+
 /** Long enough for HubLink's first redial delay plus a real reconnect, but short of the test timeout. */
 const HUB_RETURN_TIMEOUT_MS = 10_000;
+
+/** Gossip tick short enough for several to land inside GOSSIP_WATCH_MS. */
+const GOSSIP_TICK_MS = 50;
+
+/** How long gossip is watched after the last redial for a send to a dead session. */
+const GOSSIP_WATCH_MS = 500;
+
+/** Hub outages the transport must ride out before the watch. */
+const HUB_BOUNCES = 2;
 
 function noopEvents(): TransportEvents {
   return {
@@ -38,7 +51,7 @@ describe("WireMeshTransport joinHub", () => {
     try {
       expect(transport.hub.isConnected).toBe(false);
 
-      transport.joinHub(hub.url);
+      transport.joinHub(hub.url, () => true);
 
       await waitForCondition(() => transport.hub.isConnected);
       await waitForCondition(() => hub.connectionCount() === 1);
@@ -65,7 +78,7 @@ describe("WireMeshTransport joinHub", () => {
       generateIdentity(),
     );
     try {
-      transport.joinHub(await unreachableHubUrl());
+      transport.joinHub(await unreachableHubUrl(), () => true);
 
       expect(transport.hub.isConnected).toBe(false);
       await waitForCondition(() => errors.length > 0);
@@ -80,7 +93,7 @@ describe("WireMeshTransport joinHub", () => {
     const transport = new WireMeshTransport(noopEvents(), generateIdentity());
     let second: Awaited<ReturnType<typeof realHubOverWs>> | undefined;
     try {
-      transport.joinHub(first.url);
+      transport.joinHub(first.url, () => true);
       await waitForCondition(() => transport.hub.isConnected);
 
       await first.close();
@@ -95,6 +108,60 @@ describe("WireMeshTransport joinHub", () => {
     } finally {
       await transport.shutdown();
       await second?.close();
+    }
+  });
+
+  test("a session the hub ended is forgotten, so gossip after a redial reaches only the live session", async () => {
+    const errors: Error[] = [];
+    const trust = new GatewayTrust();
+    trust.add("f".repeat(DEVICE_ID_HEX_LENGTH));
+    const transport = new WireMeshTransport(
+      {
+        ...noopEvents(),
+        onError: (error) => {
+          errors.push(error);
+        },
+      },
+      generateIdentity(),
+      {
+        gatewayTrust: trust,
+        getCurrentPresence: () => "active",
+        getSelfAgentAdvert: () => ({
+          name: "gossip-after-redial",
+          harness: "test",
+          cwd: "/test",
+          pid: process.pid,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          tags: [],
+          subscribedRooms: [],
+        }),
+        presenceReadvertiseIntervalMs: GOSSIP_TICK_MS,
+      },
+    );
+    let hub = await realHubOverWs();
+    const { port } = hub;
+    try {
+      transport.joinHub(hub.url, () => true);
+      await waitForCondition(() => transport.hub.isConnected);
+
+      for (let bounce = 0; bounce < HUB_BOUNCES; bounce += 1) {
+        await hub.close();
+        await waitForCondition(() => !transport.hub.isConnected);
+        hub = await realHubOverWs({ port });
+        await waitForCondition(
+          () => transport.hub.isConnected,
+          HUB_RETURN_TIMEOUT_MS,
+        );
+      }
+      const errorsBeforeWatch = errors.length;
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, GOSSIP_WATCH_MS);
+      });
+
+      expect(errors.slice(errorsBeforeWatch)).toEqual([]);
+    } finally {
+      await transport.shutdown();
+      await hub.close();
     }
   });
 

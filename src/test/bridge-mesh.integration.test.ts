@@ -20,6 +20,9 @@ import {
 import { waitFor } from "./test-transport.js";
 import { realHubOverWs, waitForCondition } from "./hub-helpers.js";
 
+/** A device-id is a 64-character lowercase hex SHA-256 digest. */
+const DEVICE_ID_HEX_LENGTH = 64;
+
 // Base of the ephemeral coordinator-port range used to avoid colliding with the mesh's real well-known port.
 const TEST_COORDINATOR_PORT_BASE = 20_900;
 // Width of the randomised offset added to TEST_COORDINATOR_PORT_BASE so concurrent test runs don't collide on the same port.
@@ -106,7 +109,10 @@ test("createBridgeMeshFromIdentity wires the given identity's own device-id as p
   }
 });
 
-test("createBridgeMesh passes an explicit hubUrl through to MeshStore, dialled once the store becomes coordinator and dropped on shutdown", async () => {
+/** A remote device id to trust, so the store under test has something to say to another machine. */
+const REMOTE_DEVICE_HEX = "f".repeat(DEVICE_ID_HEX_LENGTH);
+
+test("createBridgeMesh passes an explicit hubUrl through to MeshStore, which dials it once it has an agent and trusts someone, and drops it on shutdown", async () => {
   const hub = await realHubOverWs();
   const slot = tempSlot("test-harness-hub");
   const port =
@@ -119,6 +125,17 @@ test("createBridgeMesh passes an explicit hubUrl through to MeshStore, dialled o
   try {
     await store.init();
     expect(store.connected).toBeTruthy();
+    await store.registerAgent({
+      name: "bridge-mesh-hub",
+      harness: "test-harness-hub",
+      cwd: "/test/bridge-mesh-hub",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
+    expect(hub.connectionCount()).toBe(0);
+
+    store.addTrustedGateway(REMOTE_DEVICE_HEX);
     await waitForCondition(() => hub.connectionCount() === 1);
 
     await store.shutdown();
