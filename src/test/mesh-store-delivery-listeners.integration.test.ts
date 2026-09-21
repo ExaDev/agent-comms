@@ -1,17 +1,11 @@
 /**
- * MeshStore.addDeliveryListener (agent-comms#293): several parties share one store's delivery events, a bridge's own onDelivery handler and the web UI it serves, so serving the UI does not need a second store and neither party can silence the other by assigning last.
+ * MeshStore.addDeliveryListener and addPatchListener (agent-comms#293): several parties share one store's delivery events and state patches, a bridge's own onDelivery handler and the web UI it serves, so serving the UI does not need a second store and neither party can silence the other by assigning last.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import type { DeliveryEvent } from "../core/types.js";
-import { TeardownStack } from "./hub-helpers.js";
+import { freeLocalPort, TeardownStack } from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
-
-let nextPort = 23_800;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
 
 const cleanups = new TeardownStack();
 
@@ -20,7 +14,7 @@ afterEach(async () => {
 });
 
 async function startStore(): Promise<MeshStore> {
-  const store = new MeshStore({ coordinatorPort: freshPort() });
+  const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
   await wireTestTransport(store);
   await store.init();
   cleanups.push(async () => store.shutdown());
@@ -126,5 +120,73 @@ describe("MeshStore.addDeliveryListener", () => {
 
     expect(errors).toEqual([failure, failure]);
     expect(healthy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("MeshStore.addPatchListener", () => {
+  /** Registers an agent, which produces at least one state patch on this store. */
+  async function produceAPatch(store: MeshStore, name: string): Promise<void> {
+    await store.registerAgent({
+      name,
+      harness: "test",
+      cwd: `/test/${name}`,
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
+  }
+
+  it("gives a patch to onPatch and to every listener", async () => {
+    const store = await startStore();
+    const handler = vi.fn();
+    const listener = vi.fn();
+    store.onPatch = handler;
+    store.addPatchListener(listener);
+
+    await produceAPatch(store, "patch-source");
+
+    expect(handler).toHaveBeenCalled();
+    expect(listener).toHaveBeenCalled();
+  });
+
+  it("delivers to a listener on its own when onPatch was never set, and does not let assigning onPatch silence it", async () => {
+    const store = await startStore();
+    const listener = vi.fn();
+    store.addPatchListener(listener);
+    store.onPatch = vi.fn();
+
+    await produceAPatch(store, "patch-source");
+
+    expect(listener).toHaveBeenCalled();
+  });
+
+  it("stops giving patches to a listener once it unsubscribes", async () => {
+    const store = await startStore();
+    const listener = vi.fn();
+    const unsubscribe = store.addPatchListener(listener);
+    unsubscribe();
+
+    await produceAPatch(store, "patch-source");
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("reports a listener that throws through onError and still calls the others", async () => {
+    const store = await startStore();
+    const errors: unknown[] = [];
+    store.onError = (error) => {
+      errors.push(error);
+    };
+    const failure = new Error("patch listener failed");
+    const healthy = vi.fn();
+    store.addPatchListener(() => {
+      throw failure;
+    });
+    store.addPatchListener(healthy);
+
+    await produceAPatch(store, "patch-source");
+
+    expect(errors).toContain(failure);
+    expect(healthy).toHaveBeenCalled();
   });
 });
