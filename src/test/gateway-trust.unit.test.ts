@@ -1,5 +1,5 @@
 /**
- * Direct unit tests for GatewayTrust -- the cross-machine trust boundary's own allowlist (agent-comms#156), tested standalone against no real transport or hub socket, mirroring coordinator-gateway.test.ts's own approach for the sibling gateway-lifecycle class. Also covers persistence (agent-comms#186) and its sharing across every store in an identity directory (agent-comms#293): loading a previously trusted set on construction, writing it back on every change, and picking up a change another instance made.
+ * Direct unit tests for GatewayTrust -- the cross-machine trust boundary's own allowlist (agent-comms#156), tested standalone against no real transport or hub socket, Also covers persistence (agent-comms#186) and its sharing across every store in an identity directory (agent-comms#293): loading a previously trusted set on construction, writing it back on every change, and picking up a change another instance made.
  */
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";

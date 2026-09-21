@@ -65,21 +65,21 @@ export class GatewayTrust {
     if (gatewayTrustStamp(this.location) !== this.stamp) this.load();
   }
 
-  /** Marks a remote device-id (hex, case-insensitive) as trusted: this side will merge its gossiped directory entries, dispatch its relayed requests, and route outbound hub requests to it. Idempotent. Persists the updated set when this instance was constructed with a slot. */
+  /** Marks a remote device-id (hex, case-insensitive) as trusted: this side will merge its gossiped directory entries, dispatch its relayed requests, and route outbound hub requests to it. Idempotent. Persists the updated set when this instance was constructed with a location. */
   add(deviceHex: string): void {
     this.refresh();
     this.trusted.add(deviceHex.toLowerCase());
     this.persist();
   }
 
-  /** Withdraws a previously trusted device-id (hex, case-insensitive). A no-op if it was never trusted. Mirrors FederationManager.removeTrustedFingerprint's own precedent: already-merged directory entries and in-flight requests are unaffected -- this governs future traffic only. Persists the updated set when this instance was constructed with a slot. */
+  /** Withdraws a previously trusted device-id (hex, case-insensitive). A no-op if it was never trusted. Mirrors FederationManager.removeTrustedFingerprint's own precedent: already-merged directory entries and in-flight requests are unaffected -- this governs future traffic only. Persists the updated set when this instance was constructed with a location. */
   remove(deviceHex: string): void {
     this.refresh();
     this.trusted.delete(deviceHex.toLowerCase());
     this.persist();
   }
 
-  /** Writes the complete current trusted device and principal sets back to this instance's own slot, if it was constructed with one. A no-op for the in-memory-only (no slot) case. */
+  /** Writes the complete current trusted device and principal sets back to the shared trust file, if this instance was constructed with a location. A no-op for the in-memory-only case. */
   private persist(): void {
     if (this.location === undefined) return;
     saveGatewayTrust(
@@ -144,14 +144,14 @@ export class GatewayTrust {
     );
   }
 
-  /** Marks a remote user-principal device-id (hex, case-insensitive; user-identity.ts) as trusted (agent-comms#187): a peer presenting a token whose delegation chain roots at this principal is trusted via `isTrustedFor` below, without that peer's own bare device-id ever needing individual trust. Idempotent, and entirely independent of the bare-device allowlist `add` manages. Persists the updated set when this instance was constructed with a slot. */
+  /** Marks a remote user-principal device-id (hex, case-insensitive; user-identity.ts) as trusted (agent-comms#187): a peer presenting a token whose delegation chain roots at this principal is trusted via `isTrustedFor` below, without that peer's own bare device-id ever needing individual trust. Idempotent, and entirely independent of the bare-device allowlist `add` manages. Persists the updated set when this instance was constructed with a location. */
   addPrincipal(deviceHex: string): void {
     this.refresh();
     this.trustedPrincipals.add(deviceHex.toLowerCase());
     this.persist();
   }
 
-  /** Withdraws a previously trusted principal (hex, case-insensitive). A no-op if it was never trusted. Governs future chain checks only, mirroring `remove`'s own already-merged-traffic-is-unaffected posture. Persists the updated set when this instance was constructed with a slot. */
+  /** Withdraws a previously trusted principal (hex, case-insensitive). A no-op if it was never trusted. Governs future chain checks only, mirroring `remove`'s own already-merged-traffic-is-unaffected posture. Persists the updated set when this instance was constructed with a location. */
   removePrincipal(deviceHex: string): void {
     this.refresh();
     const key = deviceHex.toLowerCase();
