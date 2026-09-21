@@ -1,3 +1,14 @@
+## [6.0.0](https://github.com/ExaDev/agent-comms/compare/v5.2.5...v6.0.0) (2026-09-21)
+
+### ⚠ BREAKING CHANGES
+
+* **core:** trust recorded in the old per-slot gateway-trust-<harness>--<cwd>.json files is
+  not read. Trust each remote device or principal again with gateway_trust.
+
+### Features
+
+* **core:** share one gateway trust list across every store on the machine ([b7663a2](https://github.com/ExaDev/agent-comms/commit/b7663a28ba53630cb64f984577cbb8500c67acb9))
+
 ## [5.2.5](https://github.com/ExaDev/agent-comms/compare/v5.2.4...v5.2.5) (2026-09-20)
 
 ### Bug Fixes
