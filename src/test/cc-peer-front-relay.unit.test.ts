@@ -13,6 +13,7 @@ import type {
   FrontRelayStore,
 } from "../bridges/cc-peer/front-relay.js";
 import type { CcPeerRosterEntryLike } from "../bridges/cc-peer/front.js";
+import type { ReplyContext } from "../bridges/cc-peer/reply-aliases.js";
 import type { CommsTool } from "../core/tool.js";
 import type { DeliveryEvent, DmMessage, RoomMessage } from "../core/types.js";
 
@@ -134,7 +135,8 @@ function refusingTool(
 }
 
 function fakeAliasDirectory(
-  nameFor: (correspondentId: string) => string = (id) => `mesh-${id}`,
+  nameFor: (correspondentId: string, context: ReplyContext) => string = (id) =>
+    `mesh-${id}`,
 ): FrontRelayAliasDirectory {
   return {
     ensure: vi.fn(nameFor),
@@ -194,7 +196,47 @@ describe("buildFrontedSessionRecord — outbound (mesh -> cc-peer)", () => {
     };
     await store.onDelivery?.("agent-1", event);
 
-    expect(aliasDirectory.ensure).toHaveBeenCalledWith("correspondent-1");
+    expect(aliasDirectory.ensure).toHaveBeenCalledWith("correspondent-1", {
+      kind: "dm",
+    });
+    expect(aliasPool.sendCalls).toEqual([
+      {
+        alias: "mesh-correspondent-1",
+        target: { pid: 222 },
+        body: expect.stringContaining("hi from the mesh"),
+      },
+    ]);
+    expect(peer.sendCalls).toEqual([]);
+  });
+
+  it("sends a room message from the correspondent's own alias, recording a room reply context naming the room it came from", async () => {
+    const store = fakeStore();
+    const peer = fakePeer();
+    const aliasPool = fakeAliasPool();
+    const aliasDirectory = fakeAliasDirectory((id) => `mesh-${id}`);
+
+    buildFrontedSessionRecord({
+      entry: rosterEntry(),
+      peerName: PEER_NAME,
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store,
+      tool: fakeTool(),
+      peer,
+      aliasPool,
+      aliasDirectory,
+    });
+
+    const event: DeliveryEvent = {
+      type: "room_message",
+      message: roomMessage({ from: "correspondent-1", room: "owner/project" }),
+    };
+    await store.onDelivery?.("agent-1", event);
+
+    expect(aliasDirectory.ensure).toHaveBeenCalledWith("correspondent-1", {
+      kind: "room",
+      room: "owner/project",
+    });
     expect(aliasPool.sendCalls).toEqual([
       {
         alias: "mesh-correspondent-1",
@@ -321,8 +363,8 @@ describe("buildFrontedSessionRecord — outbound (mesh -> cc-peer)", () => {
   });
 });
 
-describe("buildFrontedSessionRecord — alias reply (cc-peer -> mesh DM)", () => {
-  it("sends a mesh DM to the correspondent, as this session's own agent id, when a reply arrives on its alias", () => {
+describe("buildFrontedSessionRecord — alias reply, dm context (cc-peer -> mesh DM)", () => {
+  it("sends a mesh DM to the correspondent, as this session's own agent id, when a reply arrives on its alias with a dm context", () => {
     const tool = fakeTool();
     const record = buildFrontedSessionRecord({
       entry: rosterEntry({ cwd: "/tmp/my-project" }),
@@ -336,11 +378,15 @@ describe("buildFrontedSessionRecord — alias reply (cc-peer -> mesh DM)", () =>
       aliasDirectory: fakeAliasDirectory(),
     });
 
-    record.handleAliasReply("correspondent-1", {
-      from: "local-session",
-      fromName: "my-local-session",
-      body: "reply body",
-    });
+    record.handleAliasReply(
+      "correspondent-1",
+      { kind: "dm" },
+      {
+        from: "local-session",
+        fromName: "my-local-session",
+        body: "reply body",
+      },
+    );
 
     expect(tool.handleCalls).toHaveLength(1);
     expect(tool.handleCalls[0]).toEqual({
@@ -358,7 +404,7 @@ describe("buildFrontedSessionRecord — alias reply (cc-peer -> mesh DM)", () =>
     });
   });
 
-  it("tells the session when the mesh refuses the reply, rather than discarding the result", async () => {
+  it("tells the session when the mesh refuses the dm reply, rather than discarding the result", async () => {
     const peer = fakePeer();
     const record = buildFrontedSessionRecord({
       entry: rosterEntry({ pid: 555 }),
@@ -372,7 +418,11 @@ describe("buildFrontedSessionRecord — alias reply (cc-peer -> mesh DM)", () =>
       aliasDirectory: fakeAliasDirectory(),
     });
 
-    record.handleAliasReply("correspondent-1", { body: "reply body" });
+    record.handleAliasReply(
+      "correspondent-1",
+      { kind: "dm" },
+      { body: "reply body" },
+    );
 
     await vi.waitFor(() => {
       expect(peer.sendCalls).toHaveLength(1);
@@ -383,7 +433,7 @@ describe("buildFrontedSessionRecord — alias reply (cc-peer -> mesh DM)", () =>
     );
   });
 
-  it("stays quiet when the reply is delivered", async () => {
+  it("stays quiet when the dm reply is delivered", async () => {
     const peer = fakePeer();
     const tool = fakeTool();
     const record = buildFrontedSessionRecord({
@@ -398,7 +448,133 @@ describe("buildFrontedSessionRecord — alias reply (cc-peer -> mesh DM)", () =>
       aliasDirectory: fakeAliasDirectory(),
     });
 
-    record.handleAliasReply("correspondent-1", { body: "reply body" });
+    record.handleAliasReply(
+      "correspondent-1",
+      { kind: "dm" },
+      { body: "reply body" },
+    );
+
+    await vi.waitFor(() => {
+      expect(tool.handleCalls).toHaveLength(1);
+    });
+    expect(peer.sendCalls).toEqual([]);
+  });
+});
+
+describe("buildFrontedSessionRecord — alias reply, room context (cc-peer -> mesh room post) (agent-comms#289)", () => {
+  it("posts back into the room the aliased message came from, as this session's own agent id, rather than DMing the sender", () => {
+    const tool = fakeTool();
+    const record = buildFrontedSessionRecord({
+      entry: rosterEntry({ cwd: "/tmp/my-project" }),
+      peerName: PEER_NAME,
+      agentId: "agent-1",
+      roomId: "owner/my-project",
+      store: fakeStore(),
+      tool,
+      peer: fakePeer(),
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    record.handleAliasReply(
+      "correspondent-1",
+      { kind: "room", room: "owner/some-room" },
+      {
+        from: "local-session",
+        fromName: "my-local-session",
+        body: "reply body",
+      },
+    );
+
+    expect(tool.handleCalls).toHaveLength(1);
+    expect(tool.handleCalls[0]).toEqual({
+      ctx: {
+        agentId: "agent-1",
+        harness: "claude-code",
+        cwd: "/tmp/my-project",
+        pid: process.pid,
+      },
+      action: {
+        action: "send",
+        target: "owner/some-room",
+        content: "reply body",
+      },
+    });
+  });
+
+  it("posts back into the room even when it differs from the session's own default project room", () => {
+    const tool = fakeTool();
+    const record = buildFrontedSessionRecord({
+      entry: rosterEntry({ cwd: "/tmp/my-project" }),
+      peerName: PEER_NAME,
+      agentId: "agent-1",
+      roomId: "owner/my-project",
+      store: fakeStore(),
+      tool,
+      peer: fakePeer(),
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    record.handleAliasReply(
+      "correspondent-1",
+      { kind: "room", room: "owner/a-different-room" },
+      { body: "reply body" },
+    );
+
+    const call = tool.handleCalls[0] as { action: { target: string } };
+    expect(call.action.target).toBe("owner/a-different-room");
+  });
+
+  it("tells the session when the mesh refuses the room reply, naming the room rather than the sender", async () => {
+    const peer = fakePeer();
+    const record = buildFrontedSessionRecord({
+      entry: rosterEntry({ pid: 555 }),
+      peerName: PEER_NAME,
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store: fakeStore(),
+      tool: refusingTool("Not a member of owner/some-room."),
+      peer,
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    record.handleAliasReply(
+      "correspondent-1",
+      { kind: "room", room: "owner/some-room" },
+      { body: "reply body" },
+    );
+
+    await vi.waitFor(() => {
+      expect(peer.sendCalls).toHaveLength(1);
+    });
+    expect(peer.sendCalls[0]?.target).toEqual({ pid: 555 });
+    expect(peer.sendCalls[0]?.body).toBe(
+      "Reply to owner/some-room not delivered: Not a member of owner/some-room.",
+    );
+  });
+
+  it("stays quiet when the room reply is delivered", async () => {
+    const peer = fakePeer();
+    const tool = fakeTool();
+    const record = buildFrontedSessionRecord({
+      entry: rosterEntry(),
+      peerName: PEER_NAME,
+      agentId: "agent-1",
+      roomId: "owner/project",
+      store: fakeStore(),
+      tool,
+      peer,
+      aliasPool: fakeAliasPool(),
+      aliasDirectory: fakeAliasDirectory(),
+    });
+
+    record.handleAliasReply(
+      "correspondent-1",
+      { kind: "room", room: "owner/some-room" },
+      { body: "reply body" },
+    );
 
     await vi.waitFor(() => {
       expect(tool.handleCalls).toHaveLength(1);

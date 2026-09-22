@@ -72,6 +72,9 @@ interface Harness {
       CcPeerFrontDeps<StubRecord>["aliasDirectory"]["correspondentFor"]
     >
   >;
+  contextFor: ReturnType<
+    typeof vi.fn<CcPeerFrontDeps<StubRecord>["aliasDirectory"]["contextFor"]>
+  >;
 }
 
 function harness(initialRoster: readonly CcPeerRosterEntryLike[]): Harness {
@@ -92,12 +95,15 @@ function harness(initialRoster: readonly CcPeerRosterEntryLike[]): Harness {
   const correspondentFor = vi.fn<
     CcPeerFrontDeps<StubRecord>["aliasDirectory"]["correspondentFor"]
   >(() => undefined);
+  const contextFor = vi.fn<
+    CcPeerFrontDeps<StubRecord>["aliasDirectory"]["contextFor"]
+  >(() => undefined);
   const deps: CcPeerFrontDeps<StubRecord> = {
     listRoster: async () => Promise.resolve([...roster]),
     probeSlotOwner,
     attach,
     detach,
-    aliasDirectory: { correspondentFor },
+    aliasDirectory: { correspondentFor, contextFor },
     pollIntervalMs: POLL_INTERVAL_MS,
     onError,
   };
@@ -110,6 +116,7 @@ function harness(initialRoster: readonly CcPeerRosterEntryLike[]): Harness {
     probeSlotOwner,
     onError,
     correspondentFor,
+    contextFor,
   };
 }
 
@@ -331,11 +338,12 @@ describe("CcPeerFront — handleAliasMessage", () => {
     vi.useRealTimers();
   });
 
-  it("routes an alias reply to the fronted session it came from, resolving the correspondent via the alias directory", async () => {
+  it("routes an alias reply to the fronted session it came from, resolving the correspondent and dm context via the alias directory", async () => {
     const h = harness([
       rosterEntry({ pid: 1, messagingSocketPath: "/tmp/sock-1" }),
     ]);
     h.correspondentFor.mockReturnValue("correspondent-1");
+    h.contextFor.mockReturnValue({ kind: "dm" });
     h.front.start();
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
     const record = await attachResult(h.attach);
@@ -347,12 +355,37 @@ describe("CcPeerFront — handleAliasMessage", () => {
     });
 
     expect(h.correspondentFor).toHaveBeenCalledWith("mesh-correspond");
-    expect(record.handleAliasReply).toHaveBeenCalledWith("correspondent-1", {
+    expect(h.contextFor).toHaveBeenCalledWith("mesh-correspond");
+    expect(record.handleAliasReply).toHaveBeenCalledWith(
+      "correspondent-1",
+      { kind: "dm" },
+      { alias: "mesh-correspond", from: "uds:/tmp/sock-1", body: "reply body" },
+    );
+    expect(record.notifyStaleAlias).not.toHaveBeenCalled();
+    await h.front.stop();
+  });
+
+  it("routes an alias reply with a room context back to whichever room the aliased message came from", async () => {
+    const h = harness([
+      rosterEntry({ pid: 1, messagingSocketPath: "/tmp/sock-1" }),
+    ]);
+    h.correspondentFor.mockReturnValue("correspondent-1");
+    h.contextFor.mockReturnValue({ kind: "room", room: "owner/project" });
+    h.front.start();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    const record = await attachResult(h.attach);
+
+    h.front.handleAliasMessage({
       alias: "mesh-correspond",
       from: "uds:/tmp/sock-1",
       body: "reply body",
     });
-    expect(record.notifyStaleAlias).not.toHaveBeenCalled();
+
+    expect(record.handleAliasReply).toHaveBeenCalledWith(
+      "correspondent-1",
+      { kind: "room", room: "owner/project" },
+      { alias: "mesh-correspond", from: "uds:/tmp/sock-1", body: "reply body" },
+    );
     await h.front.stop();
   });
 
@@ -361,6 +394,7 @@ describe("CcPeerFront — handleAliasMessage", () => {
       rosterEntry({ pid: 1, messagingSocketPath: "/tmp/sock-1" }),
     ]);
     h.correspondentFor.mockReturnValue(undefined);
+    h.contextFor.mockReturnValue(undefined);
     h.front.start();
     await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
     const record = await attachResult(h.attach);
@@ -372,6 +406,27 @@ describe("CcPeerFront — handleAliasMessage", () => {
     });
 
     expect(record.notifyStaleAlias).toHaveBeenCalledWith("mesh-stale");
+    expect(record.handleAliasReply).not.toHaveBeenCalled();
+    await h.front.stop();
+  });
+
+  it("notifies the fronted session of a stale alias when the correspondent is known but its context is missing", async () => {
+    const h = harness([
+      rosterEntry({ pid: 1, messagingSocketPath: "/tmp/sock-1" }),
+    ]);
+    h.correspondentFor.mockReturnValue("correspondent-1");
+    h.contextFor.mockReturnValue(undefined);
+    h.front.start();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    const record = await attachResult(h.attach);
+
+    h.front.handleAliasMessage({
+      alias: "mesh-half-known",
+      from: "uds:/tmp/sock-1",
+      body: "reply body",
+    });
+
+    expect(record.notifyStaleAlias).toHaveBeenCalledWith("mesh-half-known");
     expect(record.handleAliasReply).not.toHaveBeenCalled();
     await h.front.stop();
   });
