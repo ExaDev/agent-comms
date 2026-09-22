@@ -1,3 +1,9 @@
+## [8.0.5](https://github.com/ExaDev/agent-comms/compare/v8.0.4...v8.0.5) (2026-09-22)
+
+### Build
+
+* **deps-dev:** bump typescript-eslint from 8.69.0 to 8.70.0 ([afc8c11](https://github.com/ExaDev/agent-comms/commit/afc8c11170cdc02e59f56aa07868b857ea7582a3))
+
 ## [8.0.4](https://github.com/ExaDev/agent-comms/compare/v8.0.3...v8.0.4) (2026-09-22)
 
 ### Build
