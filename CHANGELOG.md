@@ -1,3 +1,9 @@
+## [8.0.6](https://github.com/ExaDev/agent-comms/compare/v8.0.5...v8.0.6) (2026-09-22)
+
+### Build
+
+* **deps-dev:** bump eslint from 10.7.0 to 10.11.0 ([7f0eaed](https://github.com/ExaDev/agent-comms/commit/7f0eaedd5a27650530f829fa486dec47de2654bf))
+
 ## [8.0.5](https://github.com/ExaDev/agent-comms/compare/v8.0.4...v8.0.5) (2026-09-22)
 
 ### Build
