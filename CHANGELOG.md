@@ -1,3 +1,11 @@
+## [8.0.4](https://github.com/ExaDev/agent-comms/compare/v8.0.3...v8.0.4) (2026-09-22)
+
+### Build
+
+* **deps-dev:** bump conventional-changelog-conventionalcommits ([6827d2e](https://github.com/ExaDev/agent-comms/commit/6827d2e4f14e41555714d4efc3f1da12412bd81e))
+* **deps-dev:** bump tsx from 4.23.1 to 4.23.13 ([02be4f0](https://github.com/ExaDev/agent-comms/commit/02be4f07e3350c54ef5ad9e915f2333b816ba5e7))
+* **deps:** bump @orpc/tanstack-query ([19c9d49](https://github.com/ExaDev/agent-comms/commit/19c9d4951d532273573cab9b8b10410752b89b3d))
+
 ## [8.0.3](https://github.com/ExaDev/agent-comms/compare/v8.0.2...v8.0.3) (2026-09-21)
 
 ### Tests
