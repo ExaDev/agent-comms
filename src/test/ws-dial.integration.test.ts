@@ -98,10 +98,48 @@ describe("connectWsUrl", () => {
     await connection.send({ type: "ping" });
     const iterator = connection.receive()[Symbol.asyncIterator]();
     await iterator.next(); // the echo
-    // Close the server first: wss.close() itself waits for client sockets,
-    // so closing the connection first would deadlock the shutdown.
+    // Close the server first: wss.close() itself waits for client sockets, so closing the connection first would deadlock the shutdown.
     await server.close();
     const afterClose = await iterator.next();
     expect(afterClose.done).toBe(true);
+  });
+
+  // agent-comms#304: a teardown that called socket.close() and considered the connection closed at once, without waiting for the underlying WebSocket to actually leave the OPEN state, let a send() call already under way (or issued a moment later) reach the raw socket while it sat in CLOSING, surfacing as "WebSocket is not open: readyState 2 (CLOSING)" rather than a clean, expected rejection.
+  it("rejects a send issued after close() has started with a clean error, never the underlying socket's own readyState message", async () => {
+    const server = await echoServer();
+    servers.push(server);
+    const connection = await connectWsUrl(server.url);
+
+    const closing = connection.close();
+    await expect(connection.send({ type: "ping" })).rejects.toThrow(
+      "connection is closed",
+    );
+    await closing;
+  });
+
+  it("lets a send already under way when close() is called settle on its own terms instead of racing the socket's teardown", async () => {
+    const server = await echoServer();
+    servers.push(server);
+    const connection = await connectWsUrl(server.url);
+
+    // No await between send() and close(): send() has already reached socket.send() by the time close() runs, in the same synchronous tick, so this deterministically exercises the "already in flight" case rather than relying on timing.
+    const inFlight = connection.send({ type: "ping" });
+    await connection.close();
+
+    await expect(inFlight).resolves.toBeUndefined();
+    expect(server.received).toEqual([{ type: "ping" }]);
+  });
+
+  it("resolves close() only once the underlying socket has actually closed", async () => {
+    const server = await echoServer();
+    servers.push(server);
+    const connection = await connectWsUrl(server.url);
+
+    await connection.close();
+
+    // A connection that considers itself closed before the real close handshake finishes is exactly the gap #304 exploited: assert the receive stream (which only ends on the real "close" event) has already ended by the time close() resolves.
+    const iterator = connection.receive()[Symbol.asyncIterator]();
+    const next = await iterator.next();
+    expect(next.done).toBe(true);
   });
 });
