@@ -49,6 +49,10 @@ function wrapSocket(socket: WsSocket): Connection {
   }[] = [];
   let ended = false;
   let failure: Error | null = null;
+  // Set synchronously the instant close() is called, well before the socket's own readyState transitions are visible to a concurrent caller. Unlike `ended` (only true once the "close" event actually arrives, which a real close handshake delays), this flag exists purely so a send() invoked after close() has started is rejected with a clean, expected error immediately, rather than reaching socket.send() and hitting ws's own "WebSocket is not open: readyState 2 (CLOSING)" (agent-comms#304).
+  let closing = false;
+  // Every send() call still awaiting its own socket-level callback, so close() can let them settle before tearing the socket down instead of racing a send that was already under way when close() was called.
+  const pendingSends = new Set<Promise<void>>();
 
   function endAll(): void {
     ended = true;
@@ -125,10 +129,10 @@ function wrapSocket(socket: WsSocket): Connection {
 
   return {
     async send(frame: Frame): Promise<void> {
-      if (ended) {
+      if (ended || closing) {
         throw new Error("connection is closed");
       }
-      return new Promise<void>((resolve, reject) => {
+      const sent = new Promise<void>((resolve, reject) => {
         socket.send(
           new Uint8Array(encode(frame, cdeEncodeOptions)),
           (error) => {
@@ -140,11 +144,25 @@ function wrapSocket(socket: WsSocket): Connection {
           },
         );
       });
+      // Tracked from the same synchronous tick socket.send() was actually called in, so a close() that starts a moment later always sees this send if it was genuinely already under way.
+      const tracked = sent.finally(() => {
+        pendingSends.delete(tracked);
+      });
+      pendingSends.add(tracked);
+      return tracked;
     },
     receive: () => receiveStream,
     close: async () => {
-      socket.close(CLOSE_NORMAL);
-      return Promise.resolve();
+      // Reject anything sent from here on before it ever reaches the socket (the send() guard above), and let every send already in flight resolve or reject on its own terms first. Closing the socket out from under an in-flight send is what turns its own ordinary completion into a spurious "WebSocket is not open: readyState 2 (CLOSING)" (agent-comms#304).
+      closing = true;
+      await Promise.allSettled([...pendingSends]);
+      if (ended) return;
+      await new Promise<void>((resolve) => {
+        socket.once("close", () => {
+          resolve();
+        });
+        socket.close(CLOSE_NORMAL);
+      });
     },
   };
 }
