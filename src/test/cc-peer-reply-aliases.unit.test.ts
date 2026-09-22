@@ -1,10 +1,10 @@
 /**
- * Unit tests for the cc-peer front's reply-alias bookkeeping (bridges/cc-peer/reply-aliases.ts) -- alias-name derivation, the correspondent↔alias directory, and which DeliveryEvent types carry a correspondent worth aliasing, all tested purely over data with no real cc-peer/AliasPool involved.
+ * Unit tests for the cc-peer front's reply-alias bookkeeping (bridges/cc-peer/reply-aliases.ts) — alias-name derivation, the correspondent↔alias↔context directory, and which DeliveryEvent types carry a repliable target worth aliasing, all tested purely over data with no real cc-peer/AliasPool involved.
  */
 import { describe, expect, it } from "vitest";
 import {
-  correspondentForEvent,
   deriveAliasName,
+  replyTargetForEvent,
   ReplyAliasDirectory,
 } from "../bridges/cc-peer/reply-aliases.js";
 import type { DeliveryEvent, DmMessage, RoomMessage } from "../core/types.js";
@@ -51,21 +51,38 @@ describe("deriveAliasName", () => {
   });
 });
 
-describe("correspondentForEvent", () => {
-  it("returns the sender's agent id for a dm event", () => {
+describe("replyTargetForEvent", () => {
+  it("returns the sender's agent id with a dm context for a dm event", () => {
     const event: DeliveryEvent = {
       type: "dm",
       message: dmMessage({ from: "sender-id" }),
     };
-    expect(correspondentForEvent(event)).toBe("sender-id");
+    expect(replyTargetForEvent(event)).toEqual({
+      correspondentId: "sender-id",
+      context: { kind: "dm" },
+    });
   });
 
-  it("returns the sender's agent id for a room_message event", () => {
+  it("returns the sender's agent id with a room context naming the room for a room_message event", () => {
     const event: DeliveryEvent = {
       type: "room_message",
-      message: roomMessage({ from: "sender-id" }),
+      message: roomMessage({ from: "sender-id", room: "owner/project" }),
     };
-    expect(correspondentForEvent(event)).toBe("sender-id");
+    expect(replyTargetForEvent(event)).toEqual({
+      correspondentId: "sender-id",
+      context: { kind: "room", room: "owner/project" },
+    });
+  });
+
+  it("names whichever room the room_message actually came from, not a fixed default", () => {
+    const event: DeliveryEvent = {
+      type: "room_message",
+      message: roomMessage({ from: "sender-id", room: "owner/other-room" }),
+    };
+    expect(replyTargetForEvent(event)).toEqual({
+      correspondentId: "sender-id",
+      context: { kind: "room", room: "owner/other-room" },
+    });
   });
 
   it("returns undefined for an event with no single originating correspondent", () => {
@@ -74,39 +91,77 @@ describe("correspondentForEvent", () => {
       room: "owner/project",
       agent: "agent-1",
     };
-    expect(correspondentForEvent(event)).toBeUndefined();
+    expect(replyTargetForEvent(event)).toBeUndefined();
   });
 });
 
 describe("ReplyAliasDirectory", () => {
   it("mints a fresh alias name the first time a correspondent is seen", () => {
     const directory = new ReplyAliasDirectory();
-    const name = directory.ensure("correspondent-1");
+    const name = directory.ensure("correspondent-1", { kind: "dm" });
     expect(name.length).toBeGreaterThan(0);
   });
 
-  it("is idempotent: the same correspondent always maps to the same alias", () => {
+  it("is idempotent: the same correspondent always maps to the same alias name", () => {
     const directory = new ReplyAliasDirectory();
-    const first = directory.ensure("correspondent-1");
-    const second = directory.ensure("correspondent-1");
+    const first = directory.ensure("correspondent-1", { kind: "dm" });
+    const second = directory.ensure("correspondent-1", {
+      kind: "room",
+      room: "owner/project",
+    });
     expect(second).toBe(first);
   });
 
   it("gives distinct correspondents distinct alias names", () => {
     const directory = new ReplyAliasDirectory();
-    const a = directory.ensure("aaaaaaaaaaaaaaaaaaaaaaaa");
-    const b = directory.ensure("bbbbbbbbbbbbbbbbbbbbbbbb");
+    const a = directory.ensure("aaaaaaaaaaaaaaaaaaaaaaaa", { kind: "dm" });
+    const b = directory.ensure("bbbbbbbbbbbbbbbbbbbbbbbb", { kind: "dm" });
     expect(a).not.toBe(b);
   });
 
   it("resolves a minted alias name back to its correspondent id", () => {
     const directory = new ReplyAliasDirectory();
-    const name = directory.ensure("correspondent-1");
+    const name = directory.ensure("correspondent-1", { kind: "dm" });
     expect(directory.correspondentFor(name)).toBe("correspondent-1");
   });
 
   it("returns undefined for an alias name it never minted", () => {
     const directory = new ReplyAliasDirectory();
     expect(directory.correspondentFor("never-seen")).toBeUndefined();
+  });
+
+  it("resolves a minted alias name back to the context it was minted with", () => {
+    const directory = new ReplyAliasDirectory();
+    const name = directory.ensure("correspondent-1", {
+      kind: "room",
+      room: "owner/project",
+    });
+    expect(directory.contextFor(name)).toEqual({
+      kind: "room",
+      room: "owner/project",
+    });
+  });
+
+  it("returns undefined context for an alias name it never minted", () => {
+    const directory = new ReplyAliasDirectory();
+    expect(directory.contextFor("never-seen")).toBeUndefined();
+  });
+
+  it("updates the alias's own context on every call, reflecting the most recently sent event rather than the one that first minted it", () => {
+    const directory = new ReplyAliasDirectory();
+    const name = directory.ensure("correspondent-1", { kind: "dm" });
+    expect(directory.contextFor(name)).toEqual({ kind: "dm" });
+
+    directory.ensure("correspondent-1", {
+      kind: "room",
+      room: "owner/project",
+    });
+    expect(directory.contextFor(name)).toEqual({
+      kind: "room",
+      room: "owner/project",
+    });
+
+    directory.ensure("correspondent-1", { kind: "dm" });
+    expect(directory.contextFor(name)).toEqual({ kind: "dm" });
   });
 });

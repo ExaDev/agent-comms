@@ -10,6 +10,7 @@ import {
   type CcPeerRosterEntryLike,
 } from "./front.js";
 import type { IdentitySlot } from "../../core/identity-store.js";
+import type { ReplyContext } from "./reply-aliases.js";
 
 /** How often the front re-enumerates the local cc-peer roster and re-probes every currently-fronted session's own slot. */
 const DEFAULT_POLL_INTERVAL_MS = 5000;
@@ -23,9 +24,10 @@ export interface FrontedSessionRecord {
   readonly handleInbound: (
     message: Readonly<{ from?: string; fromName?: string; body: string }>,
   ) => void;
-  /** Routes a reply arriving on one of this session's own reply aliases into a mesh DM addressed to the correspondent that alias stands for, sent as this session's own device-id (agent-comms#158) -- the session-to-mesh direction for lazy per-correspondent aliases. Only called once handleAliasMessage has already resolved the alias to a known correspondent; a stale alias goes to notifyStaleAlias instead. */
+  /** Routes a reply arriving on one of this session's own reply aliases back into the mesh, sent as this session's own device-id (agent-comms#158) — the session-to-mesh direction for lazy per-correspondent aliases. A dm context sends a mesh DM addressed to the correspondent that alias stands for; a room context instead posts back into the room the aliased message was itself sent in, since a reply to a room message must return to that room rather than becoming a private DM to its sender (agent-comms#289). Only called once handleAliasMessage has already resolved the alias to a known correspondent and context; a stale alias goes to notifyStaleAlias instead. */
   readonly handleAliasReply: (
     correspondentId: string,
+    context: Readonly<ReplyContext>,
     message: Readonly<{ from?: string; fromName?: string; body: string }>,
   ) => void;
   /** Delivers a clear error back into this session when a reply arrives on an alias the directory no longer maps to any correspondent -- e.g. after a front restart, since reply aliases are ephemeral by design -- rather than silently dropping the reply. */
@@ -35,6 +37,8 @@ export interface FrontedSessionRecord {
 /** The narrow slice of ReplyAliasDirectory (reply-aliases.ts) CcPeerFront needs to resolve an inbound alias message's own correspondent -- narrowed rather than importing the class directly so front-controller.ts stays free of any construction concern, matching probeSlotOwner's own injected-function convention. */
 export interface CcPeerFrontAliasDirectory {
   correspondentFor: (aliasName: string) => string | undefined;
+  /** The reply context (dm vs. a named room) a previously-minted alias name currently carries — reply-aliases.ts's ReplyAliasDirectory.contextFor in production. Always defined whenever correspondentFor is, since both are set together by the directory's own ensure(); treated as a stale alias when either is missing. */
+  contextFor: (aliasName: string) => ReplyContext | undefined;
 }
 
 export interface CcPeerFrontDeps<TRecord extends FrontedSessionRecord> {
@@ -95,7 +99,7 @@ export class CcPeerFront<TRecord extends FrontedSessionRecord> {
     record?.handleInbound(message);
   }
 
-  /** Routes a reply arriving on a shared reply alias to whichever fronted session actually sent it -- matched the same way as handleInboundMessage, by the envelope's own socket-path convention. A message matching no fronted session is silently dropped, same as handleInboundMessage: there is nowhere for it to go, and we cannot safely address an error back to a session we do not control. Once the sending session is identified, the alias directory resolves which correspondent this reply is for; an alias the directory no longer knows about is reported back into the session as a stale-alias error rather than silently dropped, per agent-comms#158. */
+  /** Routes a reply arriving on a shared reply alias to whichever fronted session actually sent it — matched the same way as handleInboundMessage, by the envelope's own socket-path convention. A message matching no fronted session is silently dropped, same as handleInboundMessage: there is nowhere for it to go, and we cannot safely address an error back to a session we do not control. Once the sending session is identified, the alias directory resolves which correspondent this reply is for and the reply context (dm vs. room) it should return to; an alias the directory no longer knows about, or whose context is missing, is reported back into the session as a stale-alias error rather than silently dropped, per agent-comms#158. */
   handleAliasMessage(
     message: Readonly<{ alias: string; from?: string; body: string }>,
   ): void {
@@ -104,11 +108,12 @@ export class CcPeerFront<TRecord extends FrontedSessionRecord> {
     const correspondentId = this.deps.aliasDirectory.correspondentFor(
       message.alias,
     );
-    if (correspondentId === undefined) {
+    const context = this.deps.aliasDirectory.contextFor(message.alias);
+    if (correspondentId === undefined || context === undefined) {
       record.notifyStaleAlias(message.alias);
       return;
     }
-    record.handleAliasReply(correspondentId, message);
+    record.handleAliasReply(correspondentId, context, message);
   }
 
   private async tick(): Promise<void> {
