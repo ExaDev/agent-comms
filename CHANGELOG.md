@@ -1,3 +1,9 @@
+## [8.0.8](https://github.com/ExaDev/agent-comms/compare/v8.0.7...v8.0.8) (2026-09-22)
+
+### Bug Fixes
+
+* **core:** drain in-flight sends before closing a hub dial socket ([8a27ac8](https://github.com/ExaDev/agent-comms/commit/8a27ac893970ffdc5a259af491b2483d91d764ad))
+
 ## [8.0.7](https://github.com/ExaDev/agent-comms/compare/v8.0.6...v8.0.7) (2026-09-22)
 
 ### Bug Fixes
