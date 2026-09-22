@@ -1,3 +1,9 @@
+## [8.0.7](https://github.com/ExaDev/agent-comms/compare/v8.0.6...v8.0.7) (2026-09-22)
+
+### Bug Fixes
+
+* **bridge:** route a fronted session's room-message reply back into its room, not a DM to the sender ([8f1bc5d](https://github.com/ExaDev/agent-comms/commit/8f1bc5dbdd03bfdf2a56ac91ecf8af8824fa601a))
+
 ## [8.0.6](https://github.com/ExaDev/agent-comms/compare/v8.0.5...v8.0.6) (2026-09-22)
 
 ### Build
