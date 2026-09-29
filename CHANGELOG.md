@@ -1,3 +1,9 @@
+## [8.0.10](https://github.com/ExaDev/agent-comms/compare/v8.0.9...v8.0.10) (2026-09-29)
+
+### Bug Fixes
+
+* **core:** publish only what is safe for strangers through a hub ([b8e09b1](https://github.com/ExaDev/agent-comms/commit/b8e09b16ac3978511fc08c2b08c8ef555abbe192))
+
 ## [8.0.9](https://github.com/ExaDev/agent-comms/compare/v8.0.8...v8.0.9) (2026-09-29)
 
 ### Build
