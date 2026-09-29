@@ -7,7 +7,10 @@
  */
 
 import { afterEach, describe, expect, it } from "vitest";
+import { detailsShared } from "../core/agent-registry.js";
+import { buildAction } from "../core/bridge.js";
 import { MeshStore } from "../core/mesh-store.js";
+import { CommsTool } from "../core/tool.js";
 import { dmRoomPath } from "../core/room-path.js";
 import type { Visibility } from "../core/types.js";
 import { realHubOverWs, TeardownStack } from "./hub-helpers.js";
@@ -75,7 +78,7 @@ async function startStore(
 }
 
 describe("every store is its own hub peer", () => {
-  it("discovers a store that is not its machine's coordinator from another machine, with the agent's own fields", async () => {
+  it("discovers a store that is not its machine's coordinator from another machine, by name and harness but not by where it runs", async () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
@@ -110,10 +113,23 @@ describe("every store is its own hub peer", () => {
       id: a2.peerId,
       name: "a2",
       harness: "test",
-      cwd: "/test/a2",
       visibility: "visible",
-      tags: ["a2"],
     });
+    // What reached b1 travelled through a hub, so the agent's working directory, process id, tags and rooms were never sent.
+    expect(discovered).toMatchObject({ cwd: "", pid: 0, tags: [] });
+    expect(discovered !== undefined && detailsShared(discovered)).toBe(false);
+
+    const listing = await new CommsTool(b1).handle(
+      {
+        agentId: b1.peerId,
+        harness: "test",
+        cwd: "/test/b1",
+        pid: process.pid,
+      },
+      buildAction({ action: "list_agents" }),
+    );
+    expect(listing.content).toContain("(not shared)");
+    expect(listing.content).not.toContain("/test/a2");
   });
 
   it("lets a store that is not its machine's coordinator see a remote agent", async () => {

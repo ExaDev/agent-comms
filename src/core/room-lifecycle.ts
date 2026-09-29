@@ -208,7 +208,7 @@ export class RoomLifecycle {
         type: discovered.type,
         owner: discovered.ownerDeviceId,
         createdAt: "",
-        description: discovered.description,
+        description: discovered.description ?? "",
         members: [],
         invited: [],
         memberJoins: {},

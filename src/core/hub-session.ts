@@ -91,7 +91,7 @@ export class HubSession {
   }
 
   /** Whether the given session object is this side's own currently-held hub session -- lets WireMeshTransport distinguish the hub's session from an ordinary local-peer session within its own allSessions bookkeeping (agent-comms#156's own readvertiseGossip gate needs this) without this class ever exposing the raw session object itself. */
-  ownsSession(session: AcceptedMeshSession): boolean {
+  ownsSession(session: Readonly<object>): boolean {
     return this.session === session;
   }
 
