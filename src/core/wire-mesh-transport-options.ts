@@ -6,7 +6,12 @@ import type { KeyValueStorage } from "wire-mesh-core/ports/storage";
 import type { GatewayTrustReader } from "./gateway-trust.js";
 import type { RoomVerbHandler } from "./room-router.js";
 import type { AgentStatus } from "./types.js";
-import type { AgentSelfAdvert, HostedRoomAdvert } from "./gossip-extensions.js";
+import type {
+  AgentCardAdvert,
+  AgentSelfAdvert,
+  HostedRoomAdvert,
+  PublicRoomAdvert,
+} from "./gossip-extensions.js";
 
 /** roomVerbHandlers, getCurrentPresence, getHostedRooms, dataStorage, getSelfAgentAdvert, and gatewayTrust each match the field-level doc comment on the WireMeshTransport field they back; pendingConnectionTimeoutMs and presenceReadvertiseIntervalMs default to DEFAULT_PENDING_CONNECTION_TIMEOUT_MS/PRESENCE_READVERTISE_INTERVAL_MS. All eight are optional and bundled into this one options type -- a caller needing only gatewayTrust no longer has to pass `undefined` for every one before it. */
 export interface WireMeshTransportOptions {
@@ -17,8 +22,10 @@ export interface WireMeshTransportOptions {
   getCurrentPresence?: () => AgentStatus | undefined;
   presenceReadvertiseIntervalMs?: number | undefined;
   getHostedRooms?: () => readonly HostedRoomAdvert[];
+  getPublicRooms?: () => readonly PublicRoomAdvert[];
   dataStorage?: KeyValueStorage;
   getSelfAgentAdvert?: () => AgentSelfAdvert | undefined;
+  getSelfAgentCard?: () => AgentCardAdvert | undefined;
   gatewayTrust?: Readonly<GatewayTrustReader>;
   /** Checks a gossiped membership proof against a principal this side trusts (MeshStore.verifyMembership). Without it, a directory entry from a device not trusted by id is refused even when it carries a proof. */
   verifyMembership?: (

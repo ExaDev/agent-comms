@@ -75,7 +75,7 @@ async function startStore(
 }
 
 describe("every store is its own hub peer", () => {
-  it("discovers a store that is not its machine's coordinator from another machine, with the agent's own fields", async () => {
+  it("discovers a store that is not its machine's coordinator from another machine, by its card and without where it runs", async () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
@@ -110,10 +110,13 @@ describe("every store is its own hub peer", () => {
       id: a2.peerId,
       name: "a2",
       harness: "test",
-      cwd: "/test/a2",
       visibility: "visible",
       tags: ["a2"],
     });
+    // A device reached through a hub never said where it runs.
+    expect(discovered).not.toHaveProperty("cwd");
+    expect(discovered).not.toHaveProperty("pid");
+    expect(discovered).not.toHaveProperty("subscribedRooms");
   });
 
   it("lets a store that is not its machine's coordinator see a remote agent", async () => {

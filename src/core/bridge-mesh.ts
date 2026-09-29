@@ -14,6 +14,7 @@
  * The returned store's own getCcPeerVersion field starts undefined and is read live (never snapshotted) by both WireMeshTransport's gossip tick and CommsTool's whoami/update/list_agents -- front-runtime.ts and bridges/cc-peer/run.ts set it once, right after this factory returns, rather than this factory taking it as a parameter: only those two call sites ever have a value for it, so threading it through every createBridgeMesh* signature here would be dead weight on every other caller (agent-comms#198).
  */
 
+import { storeTransportOptions } from "./store-transport-options.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
@@ -80,14 +81,8 @@ export function createBridgeMeshSyncFromIdentity(
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- oplogDirFor(slot) needs only the slot, not the async identity below, so this can be constructed synchronously right here.
   const dataStorage = createNodeFsStorage({ dir: oplogDirFor(slot) });
   const transport = new WireMeshTransport(store.events, identity, {
-    roomVerbHandlers: store.roomVerbHandlers,
-    roomJoinApprovalTimeoutMs: store.roomJoinApprovalTimeoutMs,
-    verifyMembership: async (claim) => store.membership.verify(claim),
-    getCurrentPresence: () => store.selfStatus,
-    getHostedRooms: () => store.hostedRooms,
+    ...storeTransportOptions(store),
     dataStorage,
-    getSelfAgentAdvert: () => store.selfAgentAdvert,
-    gatewayTrust: store.gatewayTrust,
   });
   transport.getCcPeerVersion = () => store.getCcPeerVersion?.();
   store.setTransport(transport);

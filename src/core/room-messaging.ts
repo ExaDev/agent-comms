@@ -14,8 +14,8 @@ import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import type { RoomProtocol } from "./room-protocol.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type {
-  AgentIdentity,
   DmMessage,
+  ListedAgent,
   MessageDelivery,
   Room,
   RoomMessage,
@@ -48,7 +48,7 @@ export interface RoomMessagingDeps {
   requestDmAccess: (counterpart: string) => Promise<void>;
   /** Resolves a room id or plain room name to a real room id (RoomLifecycle.resolveRoomId), against rooms this store holds and rooms other devices advertise as hosted, so a name means the same room here as it does to join_room. Throws AMBIGUOUS_ROOM_NAME when the name is shared by more than one room. */
   resolveRoomId: (roomIdOrName: string) => string;
-  resolveAgent: (id: string) => Promise<AgentIdentity | undefined>;
+  resolveAgent: (id: string) => Promise<ListedAgent | undefined>;
 }
 
 /** RoomMessaging's own richer sendRoomMessage options, extending the public CommsStore-facing SendRoomMessageOptions with durable -- see sendRoomMessage's own doc comment for what durable means. */

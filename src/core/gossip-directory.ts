@@ -12,11 +12,15 @@ import type { PeerAdvert } from "wire-mesh-core/generated/protocol";
 import { AgentStatus } from "./types.js";
 import { getOwnPackageVersion } from "./package-version.js";
 import {
+  AGENT_CARD_GOSSIP_KEY,
   AGENT_SELF_GOSSIP_KEY,
   HOSTED_ROOMS_GOSSIP_KEY,
   PRESENCE_GOSSIP_KEY,
+  PUBLIC_ROOMS_GOSSIP_KEY,
+  type AgentCardAdvert,
   type AgentSelfAdvert,
   type HostedRoomAdvert,
+  type PublicRoomAdvert,
 } from "./gossip-extensions.js";
 import {
   AGENT_COMMS_VERSION_GOSSIP_KEY,
@@ -76,14 +80,17 @@ export function findPresenceAdvert(
   return AgentStatus.is(status) ? status : undefined;
 }
 
-/** The membership proof a peer gossiped in its agent/self advert, or undefined when it carries none. The advert is self-asserted by whichever peer sent it, so this only reads it; nothing about the proof is believed until it is verified. */
+/** The membership proof a peer gossiped, from its agent/self advert (a peer on a private link) or its agent/card advert (a peer that reached us through a hub), or undefined when it carries none. The advert is self-asserted by whichever peer sent it, so this only reads it; nothing about the proof is believed until it is verified. */
 export function readMembershipProof(
   advert: Readonly<PeerAdvert>,
 ): string | undefined {
-  const self: unknown = advert[AGENT_SELF_GOSSIP_KEY];
-  if (typeof self !== "object" || self === null) return undefined;
-  if (!("membership" in self)) return undefined;
-  return typeof self.membership === "string" ? self.membership : undefined;
+  for (const key of [AGENT_SELF_GOSSIP_KEY, AGENT_CARD_GOSSIP_KEY]) {
+    const claim: unknown = advert[key];
+    if (typeof claim !== "object" || claim === null) continue;
+    if (!("membership" in claim)) continue;
+    if (typeof claim.membership === "string") return claim.membership;
+  }
+  return undefined;
 }
 
 /** Re-sends this side's own current presence status, currently-hosted rooms, self-agent identity, and package versions, together, onto every live session's gossip self-advert -- one gossip frame per tick carrying whichever facts are actually known, rather than a separate frame per fact. Split out of wire-mesh-transport.ts's own WireMeshTransport class purely to keep that file under the repo's max-lines cap, the same reason mergeKnownDevices/findPresenceAdvert above already live here rather than there. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. Unlike presence/hostedRooms/selfAgentAdvert, the versions extension is never actually absent (this side's own agent-comms package version is always known), so every tick this function is called for sends at least that one fact -- there is no "nothing to report" case left to short-circuit on. The hub's own session (agent-comms#156) is gated separately from every ordinary local-peer session in allSessions: local mesh trust is a different layer (connect_request/introduce approval already gated it before it ever joined allSessions), but the hub session is a broadcast to every connected hub peer, trusted or not, and would otherwise leak this side's own presence/hosted-rooms/self-agent/versions advert onto the hub regardless of GatewayTrust -- so this side's own advert waits on the same hasAny gate. It also waits for a visible agent (selfAgentAdvert is only ever defined for one): presence, hosted rooms and versions describe the agent and its process, so a hidden or unregistered store puts none of them on the hub, and a hidden agent is left with only the device advert every session opens with, which is what lets it be reached by device id. */
@@ -94,7 +101,10 @@ export function readvertiseGossip(options: {
   onError: ((error: Error) => void) | undefined;
   getCurrentPresence: (() => AgentStatus | undefined) | undefined;
   getHostedRooms: (() => readonly HostedRoomAdvert[]) | undefined;
+  getPublicRooms: (() => readonly PublicRoomAdvert[]) | undefined;
   getSelfAgentAdvert: (() => AgentSelfAdvert | undefined) | undefined;
+  /** This side's card for a public hub: the only agent facts that may go on an advert a hub will hand to every client. */
+  getSelfAgentCard: (() => AgentCardAdvert | undefined) | undefined;
   /** Reads this side's own currently-running cc-peer version, when this process is fronting/bridging one -- folded into the same AGENT_COMMS_VERSION_GOSSIP_KEY advert as this side's own always-known agent-comms package version (agent-comms#198). Unlike presence/hostedRooms/selfAgentAdvert, agent-comms' own version is never genuinely absent (getOwnPackageVersion() always answers), so the versions extension is built and included unconditionally whenever this function runs at all -- there is no "no version to report" case the way there is for the other three optional facts. */
   getCcPeerVersion: (() => string | undefined) | undefined;
 }): void {
@@ -105,9 +115,12 @@ export function readvertiseGossip(options: {
     onError,
     getCurrentPresence,
     getHostedRooms,
+    getPublicRooms,
     getSelfAgentAdvert,
+    getSelfAgentCard,
     getCcPeerVersion,
   } = options;
+  // Two adverts, because two audiences: a peer on a private link is trusted with where this agent runs, while a hub hands whatever it receives to every client that connects and cannot trim it, so what goes to a hub is only the presence, card and versions below.
   const extensions: Record<string, unknown> = {};
   const status = getCurrentPresence?.();
   if (status !== undefined) extensions[PRESENCE_GOSSIP_KEY] = status;
@@ -123,16 +136,24 @@ export function readvertiseGossip(options: {
     ...(ccPeerVersion !== undefined ? { ccPeer: ccPeerVersion } : {}),
   };
   extensions[AGENT_COMMS_VERSION_GOSSIP_KEY] = versionsAdvert;
+  const card = getSelfAgentCard?.();
+  const hubExtensions: Record<string, unknown> = {};
+  if (status !== undefined) hubExtensions[PRESENCE_GOSSIP_KEY] = status;
+  if (card !== undefined) hubExtensions[AGENT_CARD_GOSSIP_KEY] = card;
+  const publicRooms = getPublicRooms?.();
+  if (publicRooms !== undefined)
+    hubExtensions[PUBLIC_ROOMS_GOSSIP_KEY] = publicRooms;
+  hubExtensions[AGENT_COMMS_VERSION_GOSSIP_KEY] = versionsAdvert;
   for (const session of allSessions) {
-    if (
-      hub.ownsSession(session) &&
-      (!hasAnyTrustedGateway() || selfAgentAdvert === undefined)
-    ) {
+    const toHub = hub.ownsSession(session);
+    if (toHub && (!hasAnyTrustedGateway() || card === undefined)) {
       continue;
     }
-    session.sendGossipUpdate(extensions).catch((error: unknown) => {
-      onError?.(error instanceof Error ? error : new Error(String(error)));
-    });
+    session
+      .sendGossipUpdate(toHub ? hubExtensions : extensions)
+      .catch((error: unknown) => {
+        onError?.(error instanceof Error ? error : new Error(String(error)));
+      });
   }
 }
 
@@ -144,7 +165,9 @@ export function startGossipInterval(options: {
   onError: ((error: Error) => void) | undefined;
   getCurrentPresence: (() => AgentStatus | undefined) | undefined;
   getHostedRooms: (() => readonly HostedRoomAdvert[]) | undefined;
+  getPublicRooms: (() => readonly PublicRoomAdvert[]) | undefined;
   getSelfAgentAdvert: (() => AgentSelfAdvert | undefined) | undefined;
+  getSelfAgentCard: (() => AgentCardAdvert | undefined) | undefined;
   getCcPeerVersion: (() => string | undefined) | undefined;
   intervalMs: number;
 }): ReturnType<typeof setInterval> | undefined {
@@ -155,14 +178,18 @@ export function startGossipInterval(options: {
     onError,
     getCurrentPresence,
     getHostedRooms,
+    getPublicRooms,
     getSelfAgentAdvert,
+    getSelfAgentCard,
     getCcPeerVersion,
     intervalMs,
   } = options;
   if (
     getCurrentPresence === undefined &&
     getHostedRooms === undefined &&
-    getSelfAgentAdvert === undefined
+    getPublicRooms === undefined &&
+    getSelfAgentAdvert === undefined &&
+    getSelfAgentCard === undefined
   ) {
     return undefined;
   }
@@ -174,7 +201,9 @@ export function startGossipInterval(options: {
       onError,
       getCurrentPresence,
       getHostedRooms,
+      getPublicRooms,
       getSelfAgentAdvert,
+      getSelfAgentCard,
       getCcPeerVersion,
     });
   }, intervalMs);

@@ -2,7 +2,10 @@
  * Direct unit tests for mergeKnownDevices, extracted from WireMeshTransport (see gossip-directory.ts's own header) -- previously only exercised indirectly through gossip-directory-aggregation.integration.test.ts's real-session harness.
  */
 import { describe, expect, it } from "vitest";
-import { mergeKnownDevices } from "../core/gossip-directory.js";
+import {
+  mergeKnownDevices,
+  readMembershipProof,
+} from "../core/gossip-directory.js";
 import type { DirectoryEntry } from "wire-mesh-core/domain/mesh-session";
 import type { PeerAdvert } from "wire-mesh-core/generated/protocol";
 import { syntheticAdvert } from "./synthetic-advert.js";
@@ -83,5 +86,37 @@ describe("mergeKnownDevices", () => {
 
     expect(knownDevices.get(DEVICE_A_HEX)?.["snapshot-seconds"]).toBe(1);
     expect(knownDevices.get(DEVICE_B_HEX)?.["snapshot-seconds"]).toBe(2);
+  });
+});
+
+describe("readMembershipProof", () => {
+  function advertWith(extensions: Record<string, unknown>): PeerAdvert {
+    return syntheticAdvert(deviceIdBytes(DEVICE_A_HEX), {
+      snapshotSeconds: 1,
+      extensions,
+    });
+  }
+
+  it("reads the proof from an agent/self advert", () => {
+    expect(
+      readMembershipProof(
+        advertWith({ "agent/self": { membership: "from-self" } }),
+      ),
+    ).toBe("from-self");
+  });
+
+  it("reads the proof from an agent/card advert", () => {
+    expect(
+      readMembershipProof(
+        advertWith({ "agent/card": { membership: "from-card" } }),
+      ),
+    ).toBe("from-card");
+  });
+
+  it("is undefined when neither advert carries one, or the value is not a string", () => {
+    expect(readMembershipProof(advertWith({}))).toBeUndefined();
+    expect(
+      readMembershipProof(advertWith({ "agent/card": { membership: 7 } })),
+    ).toBeUndefined();
   });
 });

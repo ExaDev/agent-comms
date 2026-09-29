@@ -1,5 +1,6 @@
 /** Wires a real WireMeshTransport plus a persisted identity slot onto a freshly constructed MeshStore -- the same setTransport()/setIdentity() calls every production bridge makes immediately after construction (via createBridgeMesh). MeshStore has no default transport or identity, so every test that constructs one needs this (or an equivalent explicit wiring) before init(), createRoom(), or any other transport- or identity-using method runs. */
 
+import { storeTransportOptions } from "../core/store-transport-options.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { tmpdir } from "node:os";
@@ -60,16 +61,10 @@ async function wireTransportInternal(
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- memory-backed, matching every other throwaway test identity here, rather than a real createNodeFsStorage a test would need to clean up afterwards.
   const dataStorage = createMemoryStorage();
   const transport = new WireMeshTransport(store.events, identity, {
-    roomVerbHandlers: store.roomVerbHandlers,
-    roomJoinApprovalTimeoutMs: store.roomJoinApprovalTimeoutMs,
-    verifyMembership: async (claim) => store.membership.verify(claim),
+    ...storeTransportOptions(store),
     pendingConnectionTimeoutMs,
-    getCurrentPresence: () => store.selfStatus,
     presenceReadvertiseIntervalMs,
     dataStorage,
-    getSelfAgentAdvert: () => store.selfAgentAdvert,
-    getHostedRooms: () => store.hostedRooms,
-    gatewayTrust: store.gatewayTrust,
   });
   store.setTransport(transport);
   store.setIdentity({

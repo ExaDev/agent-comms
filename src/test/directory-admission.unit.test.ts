@@ -27,16 +27,30 @@ function deviceHex(label: string): string {
   return createHash("sha256").update(label).digest("hex");
 }
 
-/** An entry whose advert carries `proof` (when given) under agent/self. */
-function entry(label: string, proof?: string): DirectoryEntry {
+/** An entry whose advert carries `proof` (when given) under the given key. */
+function entryUnder(
+  key: "agent/self" | "agent/card",
+  label: string,
+  proof: string | undefined,
+): DirectoryEntry {
   const device = deviceIdFromHex(deviceHex(label));
   const advert: PeerAdvert = syntheticAdvert(device, {
     snapshotSeconds: 1,
     extensions: {
-      "agent/self": proof === undefined ? {} : { membership: proof },
+      [key]: proof === undefined ? {} : { membership: proof },
     },
   });
   return { device, advert };
+}
+
+/** An entry whose advert carries `proof` (when given) under agent/self. */
+function entry(label: string, proof?: string): DirectoryEntry {
+  return entryUnder("agent/self", label, proof);
+}
+
+/** An entry whose advert carries `proof` under agent/card, where a device that reached us through a hub puts it. */
+function cardEntry(label: string, proof: string): DirectoryEntry {
+  return entryUnder("agent/card", label, proof);
 }
 
 type Verify = NonNullable<
@@ -99,6 +113,23 @@ describe("directoryAdmission", () => {
     expect(admitted).toHaveLength(1);
     expect(trust.isReachable(deviceHex("vouched"))).toBe(true);
     expect(trust.isTrusted(deviceHex("vouched"))).toBe(false);
+  });
+
+  it("admits a device whose proof rides in its agent card, the advert a device sends through a hub", async () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL);
+    const verifyMembership = verifier(true);
+
+    const admitted = await directoryAdmission({
+      gatewayTrust: trust,
+      verifyMembership,
+    })([cardEntry("via-hub", "proof-card")]);
+
+    expect(admitted).toHaveLength(1);
+    expect(verifyMembership).toHaveBeenCalledWith(
+      expect.objectContaining({ proof: "proof-card" }),
+    );
+    expect(trust.isReachable(deviceHex("via-hub"))).toBe(true);
   });
 
   it("tries each trusted principal in turn and stops at the one that vouches", async () => {

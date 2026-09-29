@@ -44,7 +44,18 @@ import { StaleAgentChecker } from "./stale-agent-checker.js";
 import { PeerLifecycle } from "./peer-lifecycle.js";
 import type { RoomVerbHandler } from "./room-router.js";
 import { DEFAULT_PRESENCE_STALE_AFTER_MS } from "./gossip-extensions.js";
-import type { AgentSelfAdvert, HostedRoomAdvert } from "./gossip-extensions.js";
+import type {
+  AgentCardAdvert,
+  AgentSelfAdvert,
+  HostedRoomAdvert,
+  PublicRoomAdvert,
+} from "./gossip-extensions.js";
+import {
+  buildHostedRooms,
+  buildPublicRooms,
+  buildSelfAgentAdvert,
+  buildSelfAgentCard,
+} from "./agent-adverts.js";
 import {
   getPeerAgentCommsVersions,
   getPeerWireMeshCoreVersion,
@@ -83,6 +94,7 @@ import type {
   RoomType,
   StreamingBehavior,
   Visibility,
+  ListedAgent,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -158,34 +170,28 @@ export class MeshStore implements CommsStore {
 
   /** This store's own currently-hosted public/private rooms, synchronously, in the lightweight gossip-safe shape WireMeshTransport's own hosted-rooms re-advertisement timer reads on every tick -- the write half of P3.8's room-discovery replacement for createRoom's own broadcastPatch (agent-comms#48). Secret rooms are never included (never worth advertising at all), and a room this store has merely replicated via the legacy room_upsert broadcast, rather than owns, is excluded too -- "hosted" means "this device is the one a joiner should actually reach", which only its own owner is. */
   get hostedRooms(): readonly HostedRoomAdvert[] {
-    const result: HostedRoomAdvert[] = [];
-    for (const room of this.rooms.values()) {
-      if (room.owner !== this.peerId) continue;
-      if (room.type !== "public" && room.type !== "private") continue;
-      result.push({
-        path: room.id,
-        name: room.name,
-        type: room.type,
-        description: room.description,
-      });
-    }
-    return result;
+    return buildHostedRooms(this.rooms.values(), this.peerId);
   }
 
   /** This store's own gossip-safe agent-identity advert, synchronously, in the shape WireMeshTransport's own gossip re-advertisement timer reads on every tick -- the write half of P3.8's eventual agent register/update/offline retirement (agent-comms#48). undefined before registerAgent has ever run (nothing to advertise yet), or when this agent's own visibility isn't "visible" -- gossip already reaches every connected peer regardless of mesh-approval status (see wire-mesh-transport.ts's own allSessions/quarantine comments), so advertising a hidden or ghost agent's identity this way would leak exactly what those visibility levels exist to withhold. */
   get selfAgentAdvert(): AgentSelfAdvert | undefined {
-    const agent = this.agents.get(this.peerId);
-    if (agent?.visibility !== "visible") return undefined;
-    return {
-      name: agent.name,
-      harness: agent.harness,
-      cwd: agent.cwd,
-      pid: agent.pid,
-      startedAt: agent.startedAt,
-      tags: agent.tags,
-      subscribedRooms: agent.subscribedRooms,
-      ...this.membership.advertField(),
-    };
+    return buildSelfAgentAdvert(
+      this.agents.get(this.peerId),
+      this.membership.advertField(),
+    );
+  }
+
+  /** The public rooms this store hosts, in the shape a public hub is told about them (PUBLIC_ROOMS_GOSSIP_KEY): private rooms and every description are left out. */
+  get publicRooms(): readonly PublicRoomAdvert[] {
+    return buildPublicRooms(this.hostedRooms);
+  }
+
+  /** This store's agent card, the reduced advert that goes to a public hub (AGENT_CARD_GOSSIP_KEY): the same visibility rule as selfAgentAdvert, and none of where the agent runs. */
+  get selfAgentCard(): AgentCardAdvert | undefined {
+    return buildSelfAgentCard(
+      this.agents.get(this.peerId),
+      this.membership.advertField(),
+    );
   }
 
   /**
@@ -569,7 +575,7 @@ export class MeshStore implements CommsStore {
     return agent;
   }
 
-  async getAgent(id: string): Promise<AgentIdentity | undefined> {
+  async getAgent(id: string): Promise<ListedAgent | undefined> {
     return this.agentRegistry.getAgent(id);
   }
 
@@ -584,7 +590,7 @@ export class MeshStore implements CommsStore {
     return agent;
   }
 
-  async listAgents(requesterId: string): Promise<AgentIdentity[]> {
+  async listAgents(requesterId: string): Promise<ListedAgent[]> {
     return this.agentRegistry.listAgents(requesterId);
   }
 

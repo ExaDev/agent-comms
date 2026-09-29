@@ -21,8 +21,8 @@ import {
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
 import type { CommsContext, CommsResult } from "../../core/tool.js";
 import type {
-  AgentIdentity,
   DeliveryEvent,
+  ListedAgent,
   Room,
   RoomMessage,
 } from "../../core/types.js";
@@ -304,7 +304,7 @@ export class ChatController extends EventEmitter {
   // Raw access for web API
   // -----------------------------------------------------------------------
 
-  async getAgents(): Promise<AgentIdentity[]> {
+  async getAgents(): Promise<ListedAgent[]> {
     return this.store.listAgents(this.ctx.agentId);
   }
 

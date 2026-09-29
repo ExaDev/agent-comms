@@ -242,6 +242,8 @@ export class WireMeshTransport implements MeshTransport {
 
   /** Reads this side's own gossip-safe agent-identity advert for the next gossip re-advertisement tick, the same pull-not-push shape getCurrentPresence/getHostedRooms already established. undefined when no agent-identity source was wired in, or when MeshStore's own getter decides this agent shouldn't advertise itself this way right now (e.g. not "visible", or no self-agent record yet). */
   private readonly getSelfAgentAdvert: WireMeshTransportOptions["getSelfAgentAdvert"];
+  private readonly getPublicRooms: WireMeshTransportOptions["getPublicRooms"];
+  private readonly getSelfAgentCard: WireMeshTransportOptions["getSelfAgentCard"];
 
   /** Reads this side's own currently-running cc-peer package version for the next gossip re-advertisement tick (agent-comms#198). Unlike getCurrentPresence/getHostedRooms/getSelfAgentAdvert (constructor-injected, since MeshStore already has a real value for each at construction time), this is a plain mutable field set post-construction -- bridge-mesh.ts assigns it right after building this transport, mirroring MeshStore's own onDelivery/onError/onCoordinatorRoleChanged convention, so this transport doesn't need its own constructor parameter for a fact only two of many bridges ever have. undefined for every bridge that never loads cc-peer at all. */
   getCcPeerVersion: (() => string | undefined) | undefined;
@@ -265,8 +267,10 @@ export class WireMeshTransport implements MeshTransport {
       getCurrentPresence,
       presenceReadvertiseIntervalMs = PRESENCE_READVERTISE_INTERVAL_MS,
       getHostedRooms,
+      getPublicRooms,
       dataStorage,
       getSelfAgentAdvert,
+      getSelfAgentCard,
       gatewayTrust = new GatewayTrust(),
       verifyMembership,
     } = options ?? {};
@@ -308,6 +312,8 @@ export class WireMeshTransport implements MeshTransport {
     this.getHostedRooms = getHostedRooms;
     this.dataStorage = dataStorage;
     this.getSelfAgentAdvert = getSelfAgentAdvert;
+    this.getSelfAgentCard = getSelfAgentCard;
+    this.getPublicRooms = getPublicRooms;
     this.gossipInterval = startGossipInterval({
       ...this.gossipOptions(),
       intervalMs: presenceReadvertiseIntervalMs,
@@ -324,6 +330,8 @@ export class WireMeshTransport implements MeshTransport {
       getCurrentPresence: this.getCurrentPresence,
       getHostedRooms: this.getHostedRooms,
       getSelfAgentAdvert: this.getSelfAgentAdvert,
+      getSelfAgentCard: this.getSelfAgentCard,
+      getPublicRooms: this.getPublicRooms,
       getCcPeerVersion: () => this.getCcPeerVersion?.(),
     };
   }

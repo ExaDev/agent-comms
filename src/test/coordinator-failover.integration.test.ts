@@ -6,7 +6,7 @@ import { randomInt } from "node:crypto";
 import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import type { WireMeshTransport } from "../core/wire-mesh-transport.js";
-import type { AgentIdentity } from "../core/types.js";
+import type { AgentIdentity, ListedAgent } from "../core/types.js";
 import { TeardownStack } from "./hub-helpers.js";
 import { waitFor, wireTestTransportWithHub } from "./test-transport.js";
 
@@ -50,7 +50,7 @@ async function startNode(
 }
 
 /** The agents each node can see, keyed by agent id, as that node itself would answer list_agents. */
-async function agentsOf(node: Node): Promise<Map<string, AgentIdentity>> {
+async function agentsOf(node: Node): Promise<Map<string, ListedAgent>> {
   const agents = await node.store.listAgents(node.agentId);
   return new Map(agents.map((agent) => [agent.id, agent]));
 }

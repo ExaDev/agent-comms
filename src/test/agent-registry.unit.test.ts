@@ -10,7 +10,7 @@ import {
 } from "../core/agent-registry.js";
 import { CommsError } from "../core/store.js";
 import { DEFAULT_PRESENCE_STALE_AFTER_MS } from "../core/gossip-extensions.js";
-import type { AgentIdentity } from "../core/types.js";
+import { isFullAgent, type AgentIdentity } from "../core/types.js";
 
 const OWNER_ID = "owner-device";
 const OTHER_ID = "other-device";
@@ -228,6 +228,85 @@ describe("AgentRegistry — getAgent", () => {
       }) as unknown as ReturnType<AgentRegistryDeps["requireTransport"]>;
 
     await expect(registry.getAgent("dual-known")).resolves.toEqual(local);
+  });
+});
+
+describe("AgentRegistry — agents heard about through a hub", () => {
+  function withAdvert(
+    deps: AgentRegistryDeps,
+    advert: Record<string, unknown>,
+  ): void {
+    deps.requireTransport = () =>
+      ({
+        listKnownDevices: () => [{ deviceId: "hub-device", advert }],
+      }) as unknown as ReturnType<AgentRegistryDeps["requireTransport"]>;
+  }
+
+  const card = {
+    name: "hub-agent",
+    harness: "codex",
+    startedAt: "2026-04-04T00:00:00.000Z",
+    tags: ["remote"],
+  };
+
+  it("lists a device that gossiped only a card as a reduced agent with no working directory, process id or rooms", async () => {
+    const { registry, deps } = makeHarness();
+    withAdvert(deps, { "agent/card": card, "presence/status": "busy" });
+
+    const listed = await registry.listAgents("someone");
+
+    const reduced = listed.find((a) => a.id === "hub-device");
+    expect(reduced).toEqual({
+      id: "hub-device",
+      version: 0,
+      name: "hub-agent",
+      harness: "codex",
+      startedAt: "2026-04-04T00:00:00.000Z",
+      visibility: "visible",
+      status: "busy",
+      tags: ["remote"],
+    });
+    expect(reduced === undefined ? true : isFullAgent(reduced)).toBe(false);
+  });
+
+  it("resolves a card-only device through getAgent as the same reduced record", async () => {
+    const { registry, deps } = makeHarness();
+    withAdvert(deps, { "agent/card": card });
+
+    const resolved = await registry.getAgent("hub-device");
+
+    expect(resolved).toMatchObject({ id: "hub-device", name: "hub-agent" });
+    expect(resolved === undefined ? true : isFullAgent(resolved)).toBe(false);
+  });
+
+  it("prefers the full self advert when a device gossiped both, since it was told to a peer trusted with it", async () => {
+    const { registry, deps } = makeHarness();
+    withAdvert(deps, {
+      "agent/card": card,
+      "agent/self": {
+        name: "private-name",
+        harness: "codex",
+        cwd: "/tmp/private",
+        pid: 9,
+        startedAt: "2026-04-04T00:00:00.000Z",
+        tags: [],
+        subscribedRooms: [],
+      },
+    });
+
+    const resolved = await registry.getAgent("hub-device");
+
+    expect(resolved).toMatchObject({
+      name: "private-name",
+      cwd: "/tmp/private",
+    });
+  });
+
+  it("skips a card that is malformed", async () => {
+    const { registry, deps } = makeHarness();
+    withAdvert(deps, { "agent/card": { name: "no-harness" } });
+
+    await expect(registry.getAgent("hub-device")).resolves.toBeUndefined();
   });
 });
 

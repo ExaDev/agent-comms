@@ -44,3 +44,25 @@ export interface AgentSelfAdvert {
   /** A proof that this device's user principal vouches for it (membership-proof.ts), so a peer that trusts that principal trusts this device without it being listed individually. Absent until the first proof has been minted. */
   membership?: string;
 }
+
+/** The gossip extension key the public rooms a device hosts ride under when the advert goes to a public relay hub. As with AGENT_CARD_GOSSIP_KEY it is a key of its own, distinct from HOSTED_ROOMS_GOSSIP_KEY, so a hub can admit it without admitting the fuller advert. */
+export const PUBLIC_ROOMS_GOSSIP_KEY = "room/public";
+
+/** A public room as a public hub is told about it: where to find it and what it is called. Its description and every private room are left out, since a project room's description names a working directory. */
+export interface PublicRoomAdvert {
+  path: string;
+  name: string;
+}
+
+/** The gossip extension key an agent advertises its card under when the advert goes to a public relay hub. A different key from AGENT_SELF_GOSSIP_KEY on purpose: a hub hands every advert to every connected client and cannot trim one (it is signed), so the only way to keep working directories and process ids off it is to never put them in an advert bound for it, and a hub can then admit this key alone. */
+export const AGENT_CARD_GOSSIP_KEY = "agent/card";
+
+/** What an agent tells a public hub about itself: enough to be listed and to have its device trusted, and nothing about where or how it runs. */
+export interface AgentCardAdvert {
+  name: string;
+  harness: string;
+  startedAt: string;
+  tags: string[];
+  /** A proof that this device's user principal vouches for it (membership-proof.ts), as in AgentSelfAdvert. */
+  membership?: string;
+}

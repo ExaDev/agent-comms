@@ -5,9 +5,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import {
+  AGENT_CARD_GOSSIP_KEY,
   AGENT_SELF_GOSSIP_KEY,
   HOSTED_ROOMS_GOSSIP_KEY,
   PRESENCE_GOSSIP_KEY,
+  PUBLIC_ROOMS_GOSSIP_KEY,
 } from "../core/gossip-extensions.js";
 import type { Visibility } from "../core/types.js";
 import {
@@ -67,6 +69,9 @@ async function startStore(
   }
   return store;
 }
+
+/** The working directory startStore registers a visible agent with. */
+const VISIBLE_CWD = "/test/visible";
 
 /** Trusts an arbitrary remote device, which is all it takes for a store to have something to say to another machine. */
 const SOME_REMOTE_DEVICE = "f".repeat(DEVICE_ID_HEX_LENGTH);
@@ -130,13 +135,26 @@ describe("what a store puts on the hub", () => {
     }
   });
 
-  it("advertises a visible agent and its presence once its machine trusts someone", async () => {
+  it("advertises a visible agent's card, presence and public room names once its machine trusts someone, and nothing about where it runs", async () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
     const observer = await observeHub(hub.url);
     cleanups.push(observer.close);
 
     const store = await startStore(hub.url, "visible");
+    // A project room whose description names the working directory, hosted by this store: the very thing that gave the directory away through room/hosted.
+    await store.createRoom({
+      name: "project",
+      type: "public",
+      owner: store.peerId,
+      description: `Project room for ${VISIBLE_CWD}`,
+    });
+    await store.createRoom({
+      name: "confidential",
+      type: "private",
+      owner: store.peerId,
+      description: "not for the hub",
+    });
     store.addTrustedGateway(SOME_REMOTE_DEVICE);
 
     await waitForCondition(() =>
@@ -144,10 +162,39 @@ describe("what a store puts on the hub", () => {
         .advertsFor(store.peerId)
         .some(
           (advert) =>
-            advert[AGENT_SELF_GOSSIP_KEY] !== undefined &&
-            advert[PRESENCE_GOSSIP_KEY] !== undefined,
+            advert[AGENT_CARD_GOSSIP_KEY] !== undefined &&
+            advert[PRESENCE_GOSSIP_KEY] !== undefined &&
+            advert[PUBLIC_ROOMS_GOSSIP_KEY] !== undefined,
         ),
     );
+    await sleep(SILENCE_WATCH_MS);
+
+    const adverts = observer.advertsFor(store.peerId);
+    for (const advert of adverts) {
+      expect(advert[AGENT_SELF_GOSSIP_KEY]).toBeUndefined();
+      expect(advert[HOSTED_ROOMS_GOSSIP_KEY]).toBeUndefined();
+      const publicRooms: unknown = advert[PUBLIC_ROOMS_GOSSIP_KEY];
+      if (publicRooms !== undefined) {
+        // Only the public room, and only where it is and what it is called: not the private one, not any description.
+        expect(publicRooms).toEqual([
+          { path: `${store.peerId}/project`, name: "project" },
+        ]);
+      }
+      const card: unknown = advert[AGENT_CARD_GOSSIP_KEY];
+      if (card !== undefined) {
+        expect(
+          Object.keys(card as object)
+            .filter((key) => key !== "membership")
+            .sort(),
+        ).toEqual(["harness", "name", "startedAt", "tags"]);
+      }
+      // Nothing anywhere in what the hub hands out may contain the directory, whichever field it would ride in.
+      expect(
+        JSON.stringify(advert, (_key, value: unknown) =>
+          value instanceof Uint8Array ? Array.from(value) : value,
+        ),
+      ).not.toContain(VISIBLE_CWD);
+    }
   });
 
   it("joins the hub as soon as trust is added and leaves it when the trust is withdrawn", async () => {

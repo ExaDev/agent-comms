@@ -5,9 +5,19 @@
 import { CommsError } from "./store.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { MeshTransport } from "./transport.js";
-import type { AgentSelfAdvert } from "./gossip-extensions.js";
+import {
+  AGENT_CARD_GOSSIP_KEY,
+  AGENT_SELF_GOSSIP_KEY,
+  type AgentCardAdvert,
+  type AgentSelfAdvert,
+} from "./gossip-extensions.js";
 import { AgentStatus } from "./types.js";
-import type { AgentIdentity, Visibility } from "./types.js";
+import type {
+  AgentIdentity,
+  ListedAgent,
+  RemoteAgentIdentity,
+  Visibility,
+} from "./types.js";
 
 /** snapshot-seconds is epoch seconds (mesh-session.ts's own `Math.floor(clock.now() / 1000)`); presenceStatusFor compares it against Date.now(), which is milliseconds. */
 const MS_PER_SECOND = 1000;
@@ -46,6 +56,28 @@ function isAgentSelfAdvert(value: unknown): value is AgentSelfAdvert {
     return false;
   return true;
 }
+
+/** Narrows an untrusted gossiped value (a peer's own self-asserted `agent/card`, the advert a device sends through a hub) into an AgentCardAdvert. A malformed entry is skipped by the caller, as with isAgentSelfAdvert. */
+function isAgentCardAdvert(value: unknown): value is AgentCardAdvert {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("name" in value) || typeof value.name !== "string") return false;
+  if (!("harness" in value) || typeof value.harness !== "string") return false;
+  if (!("startedAt" in value) || typeof value.startedAt !== "string")
+    return false;
+  if (!("tags" in value) || !Array.isArray(value.tags)) return false;
+  if ("membership" in value && typeof value.membership !== "string")
+    return false;
+  return true;
+}
+
+/** A device heard about through gossip, with what it told us about itself: everything on a private link, or only its card through a hub. */
+type DiscoveredDevice = {
+  deviceId: string;
+  status: AgentStatus | undefined;
+} & (
+  | { self: AgentSelfAdvert; card?: never }
+  | { card: AgentCardAdvert; self?: never }
+);
 
 export class AgentRegistry {
   constructor(private readonly deps: AgentRegistryDeps) {}
@@ -115,7 +147,7 @@ export class AgentRegistry {
   }
 
   /** Resolves an agent by id, falling back to a gossip-discovered device (see listDiscoverableAgents' own doc) not otherwise locally known -- the same merge listAgents already applies to its returned array, but for a single lookup rather than the whole list. This is what lets a caller resolve a remote, hub-learned agent (agent-comms#155) that will never appear in deps.agents at all, since nothing replicates full agent records cross-machine the way a local peer's agent_upsert broadcast does. */
-  async getAgent(id: string): Promise<AgentIdentity | undefined> {
+  async getAgent(id: string): Promise<ListedAgent | undefined> {
     await Promise.resolve();
     const known = this.deps.agents.get(id);
     if (known !== undefined) return known;
@@ -162,9 +194,9 @@ export class AgentRegistry {
     return updatedAgent;
   }
 
-  async listAgents(requesterId: string): Promise<AgentIdentity[]> {
+  async listAgents(requesterId: string): Promise<ListedAgent[]> {
     await Promise.resolve();
-    const result: AgentIdentity[] = [];
+    const result: ListedAgent[] = [];
     for (const agent of this.deps.agents.values()) {
       if (agent.visibility === "ghost" && agent.id !== requesterId) continue;
       result.push(agent);
@@ -176,24 +208,35 @@ export class AgentRegistry {
     return result;
   }
 
-  /** Builds the placeholder-shaped AgentIdentity a gossip-discovered device (never locally registered) is represented as -- shared by listAgents' own array merge and getAgent's single-lookup fallback, so both resolve an identical shape for the identical discovered device. */
-  private static synthesiseDiscoveredAgent(discovered: {
-    deviceId: string;
-    advert: AgentSelfAdvert;
-    status: AgentStatus | undefined;
-  }): AgentIdentity {
+  /** Builds the record a gossip-discovered device (never locally registered) is represented as -- shared by listAgents' own array merge and getAgent's single-lookup fallback, so both resolve an identical shape for the identical device. A device heard about over a private link has told us where it runs and gets a full record; one heard about through a hub gave only its card and gets a reduced one. */
+  private static synthesiseDiscoveredAgent(
+    discovered: Readonly<DiscoveredDevice>,
+  ): ListedAgent {
+    if (discovered.self === undefined) {
+      const reduced: RemoteAgentIdentity = {
+        id: discovered.deviceId,
+        version: 0,
+        name: discovered.card.name,
+        harness: discovered.card.harness,
+        startedAt: discovered.card.startedAt,
+        visibility: "visible",
+        status: discovered.status ?? "active",
+        tags: discovered.card.tags,
+      };
+      return reduced;
+    }
     return {
       id: discovered.deviceId,
       version: 0,
-      name: discovered.advert.name,
-      harness: discovered.advert.harness,
-      cwd: discovered.advert.cwd,
-      pid: discovered.advert.pid,
-      startedAt: discovered.advert.startedAt,
+      name: discovered.self.name,
+      harness: discovered.self.harness,
+      cwd: discovered.self.cwd,
+      pid: discovered.self.pid,
+      startedAt: discovered.self.startedAt,
       visibility: "visible",
       status: discovered.status ?? "active",
-      tags: discovered.advert.tags,
-      subscribedRooms: discovered.advert.subscribedRooms,
+      tags: discovered.self.tags,
+      subscribedRooms: discovered.self.subscribedRooms,
     };
   }
 
@@ -202,27 +245,20 @@ export class AgentRegistry {
    *
    * A gossip-discovered device is never told its own advert has gone stale (agent-comms#301): nothing on the hub relays a lost connection to anyone but the two peers that held it, so the only signal this side has at all is whether the device's own last advert is still recent. A device whose snapshot-seconds is older than deps.presenceStaleAfterMs is reported offline regardless of whatever presence value that stale advert carried -- trusting a heartbeat that stopped arriving minutes ago is worse than reporting the honest "we don't know" that offline actually means here.
    */
-  private listDiscoverableAgents(): readonly {
-    deviceId: string;
-    advert: AgentSelfAdvert;
-    status: AgentStatus | undefined;
-  }[] {
+  private listDiscoverableAgents(): readonly DiscoveredDevice[] {
     const transport = this.deps.requireTransport();
     if (transport.listKnownDevices === undefined) return [];
-    const result: {
-      deviceId: string;
-      advert: AgentSelfAdvert;
-      status: AgentStatus | undefined;
-    }[] = [];
+    const result: DiscoveredDevice[] = [];
     const now = Date.now();
     for (const { deviceId, advert } of transport.listKnownDevices()) {
-      const candidate = advert["agent/self"];
-      if (!isAgentSelfAdvert(candidate)) continue;
-      result.push({
-        deviceId,
-        advert: candidate,
-        status: this.presenceStatusFor(advert, now),
-      });
+      const status = this.presenceStatusFor(advert, now);
+      const self = advert[AGENT_SELF_GOSSIP_KEY];
+      if (isAgentSelfAdvert(self)) {
+        result.push({ deviceId, status, self });
+        continue;
+      }
+      const card = advert[AGENT_CARD_GOSSIP_KEY];
+      if (isAgentCardAdvert(card)) result.push({ deviceId, status, card });
     }
     return result;
   }

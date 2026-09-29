@@ -12,6 +12,7 @@ import type {
   AgentIdentity,
   DeliveryEvent,
   DmMessage,
+  ListedAgent,
   MessageDelivery,
   Room,
   RoomMessage,
@@ -62,14 +63,14 @@ export interface CommsStore {
       tags: string[];
     }>,
   ) => Promise<AgentIdentity>;
-  getAgent: (id: string) => Promise<AgentIdentity | undefined>;
+  getAgent: (id: string) => Promise<ListedAgent | undefined>;
   updateAgent: (
     id: string,
     patch: Partial<
       Pick<AgentIdentity, "name" | "visibility" | "status" | "tags" | "pid">
     >,
   ) => Promise<AgentIdentity>;
-  listAgents: (requesterId: string) => Promise<AgentIdentity[]>;
+  listAgents: (requesterId: string) => Promise<ListedAgent[]>;
   setAgentOffline: (id: string) => Promise<void>;
 
   // -- Rooms --

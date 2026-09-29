@@ -12,11 +12,13 @@ import type {
   AgentIdentity,
   CommsAction,
   ConnectionCode,
+  ListedAgent,
   MeshVisibility,
   NetworkInterface,
   Room,
   RoomMessage,
 } from "./types.js";
+import { isFullAgent } from "./types.js";
 import type { ListenerInfo, MeshGraph, MeshTraceResult } from "./transport.js";
 import type { CommsStore } from "./comms-store.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
@@ -61,6 +63,8 @@ import {
 
 /** Table column widths for the plain-text listing helpers below, chosen to line up with the existing aligned output. */
 const ROOM_TYPE_COLUMN_WIDTH = 7;
+/** Shown in the CWD column for an agent heard about through a hub, which never says where it runs. */
+const REMOTE_CWD_PLACEHOLDER = "(remote)";
 const AGENT_NAME_COLUMN_WIDTH = 25;
 const AGENT_HARNESS_COLUMN_WIDTH = 12;
 const AGENT_STATUS_COLUMN_WIDTH = 7;
@@ -427,7 +431,8 @@ export class CommsTool {
 
   private async whoami(ctx: Readonly<CommsContext>): Promise<CommsResult> {
     const agent = await this.store.getAgent(ctx.agentId);
-    if (!agent) return { content: "Not registered.", isError: true };
+    if (!agent || !isFullAgent(agent))
+      return { content: "Not registered.", isError: true };
     const principal = this.store.getUserPrincipalId?.();
     const lines = [
       `ID: ${agent.id}`,
@@ -581,12 +586,17 @@ export class CommsTool {
         ? `~${cwd.slice(homedir.length)}`
         : cwd;
 
-    const lines = agents.map((a: AgentIdentity) => {
+    const lines = agents.map((a: ListedAgent) => {
       const isSelf = a.id === ctx.agentId;
       const self = isSelf ? " (you)" : "";
-      const cwd = abbreviateCwd(a.cwd);
-      const rooms =
-        a.subscribedRooms.length > 0 ? a.subscribedRooms.join(", ") : "none";
+      const cwd = isFullAgent(a)
+        ? abbreviateCwd(a.cwd)
+        : REMOTE_CWD_PLACEHOLDER;
+      const rooms = !isFullAgent(a)
+        ? "unknown"
+        : a.subscribedRooms.length > 0
+          ? a.subscribedRooms.join(", ")
+          : "none";
       const versions = formatListedAgentVersions(
         this.store,
         a.id,
