@@ -47,6 +47,11 @@ async function startNode(
 }
 
 /** Two stores on one machine (first is the coordinator) and one store on another machine, all on one hub, with both local stores trusting the remote one and the remote one trusting the survivor. */
+const startedAt = Date.now();
+function mark(label: string): void {
+  console.error(`FAILOVER-DIAG +${String(Date.now() - startedAt)}ms ${label}`);
+}
+
 async function startMachines(teardown: TeardownStack): Promise<{
   first: Node;
   second: Node;
@@ -112,20 +117,26 @@ test("a surviving store keeps its own hub session and stays visible to another m
 test("a surviving store keeps its own hub session and stays visible to another machine after the coordinator is lost abruptly", async () => {
   const teardown = new TeardownStack();
   try {
+    mark("abrupt: start");
     const { first, second, remote } = await startMachines(teardown);
+    mark("abrupt: machines up");
 
     await first.transport.shutdown();
+    mark("abrupt: first shut down");
 
     await waitFor(
       () => second.transport.isCoordinator,
       "the survivor rebound the vacated coordinator port",
     );
+    mark("abrupt: survivor is coordinator");
     expect(second.transport.hub.isConnected).toBe(true);
     await waitFor(
       async () => remoteSees(remote, second.store.peerId),
       "the remote store still sees the survivor's agent",
     );
   } finally {
+    mark("abrupt: tearing down");
     await teardown.run();
+    mark("abrupt: torn down");
   }
 });
