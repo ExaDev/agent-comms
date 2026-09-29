@@ -29,18 +29,61 @@ export interface HostedRoomAdvert {
   description: string;
 }
 
+/** What a hub is told about a room: where it is and what it is called, for a public room only. The description is left out because a project room's default one names the directory it was made for. */
+export type HostedRoomSummary = Pick<
+  HostedRoomAdvert,
+  "path" | "name" | "type"
+>;
+
+/** A hosted-room advert as read off the wire: the summary always, the description only when the sender shared it. */
+export type ReceivedHostedRoomAdvert = HostedRoomSummary &
+  Partial<Pick<HostedRoomAdvert, "description">>;
+
+/** The rooms that may be advertised through a hub: public ones, reduced to their summary. */
+export function summariseHostedRooms(
+  rooms: readonly HostedRoomAdvert[],
+): HostedRoomSummary[] {
+  return rooms
+    .filter((room) => room.type === "public")
+    .map(({ path, name, type }) => ({ path, name, type }));
+}
+
 /** The domain-qualified gossip extension key this transport writes this side's own agent identity facts under -- the write half of P3.8's eventual agent register/update/offline retirement (agent-comms#48). Same namespacing convention as PRESENCE_GOSSIP_KEY/HOSTED_ROOMS_GOSSIP_KEY. */
 export const AGENT_SELF_GOSSIP_KEY = "agent/self";
 
-/** The lightweight, gossip-safe shape an agent advertises itself under: enough for a peer with no prior local record of this device to construct a real AgentIdentity-shaped discovery entry. Deliberately excludes status (already carried separately under presence/status, no need to duplicate it here) and visibility (this field is only ever populated for a "visible" agent in the first place -- see MeshStore's own selfAgentAdvert getter -- so a discovered entry's visibility is always exactly "visible" by construction, never something this advert needs to assert itself). */
-export interface AgentSelfAdvert {
+/** What an agent advertises about itself to any peer, a hub included: enough for a peer with no prior record of this device to list it, and nothing about where or how it runs. */
+export interface AgentSelfSummary {
   name: string;
   harness: string;
+  /** A proof that this device's user principal vouches for it (membership-proof.ts), so a peer that trusts that principal trusts this device without it being listed individually. Absent until the first proof has been minted. */
+  membership?: string;
+}
+
+/** What a bridge knows about itself beyond its summary, and shares only with peers it deals with directly: a hub relays what it is given to every client that connects, so none of this goes to one. */
+export interface AgentSelfDetails {
   cwd: string;
   pid: number;
   startedAt: string;
   tags: string[];
   subscribedRooms: string[];
-  /** A proof that this device's user principal vouches for it (membership-proof.ts), so a peer that trusts that principal trusts this device without it being listed individually. Absent until the first proof has been minted. */
-  membership?: string;
+}
+
+/** The lightweight, gossip-safe shape an agent advertises itself under: enough for a peer with no prior local record of this device to construct a real AgentIdentity-shaped discovery entry. Deliberately excludes status (already carried separately under presence/status, no need to duplicate it here) and visibility (this field is only ever populated for a "visible" agent in the first place -- see MeshStore's own selfAgentAdvert getter -- so a discovered entry's visibility is always exactly "visible" by construction, never something this advert needs to assert itself). */
+export interface AgentSelfAdvert extends AgentSelfSummary, AgentSelfDetails {}
+
+/** An agent advert as read off the wire: the summary always, the details only when the sender chose to share them. */
+export type ReceivedAgentSelfAdvert = AgentSelfSummary &
+  Partial<AgentSelfDetails>;
+
+/** The part of an advert that is safe to publish through a hub. */
+export function summariseAgentSelfAdvert(
+  advert: Readonly<AgentSelfAdvert>,
+): AgentSelfSummary {
+  return {
+    name: advert.name,
+    harness: advert.harness,
+    ...(advert.membership !== undefined
+      ? { membership: advert.membership }
+      : {}),
+  };
 }

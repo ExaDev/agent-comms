@@ -7,6 +7,7 @@
  *   3. Return the result string to the LLM
  */
 
+import { detailsShared } from "./agent-registry.js";
 import type {
   AgentId,
   AgentIdentity,
@@ -584,9 +585,13 @@ export class CommsTool {
     const lines = agents.map((a: AgentIdentity) => {
       const isSelf = a.id === ctx.agentId;
       const self = isSelf ? " (you)" : "";
-      const cwd = abbreviateCwd(a.cwd);
-      const rooms =
-        a.subscribedRooms.length > 0 ? a.subscribedRooms.join(", ") : "none";
+      const shared = detailsShared(a);
+      const cwd = shared ? abbreviateCwd(a.cwd) : "(not shared)";
+      const rooms = !shared
+        ? "not shared"
+        : a.subscribedRooms.length > 0
+          ? a.subscribedRooms.join(", ")
+          : "none";
       const versions = formatListedAgentVersions(
         this.store,
         a.id,

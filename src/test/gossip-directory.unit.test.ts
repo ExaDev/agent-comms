@@ -2,7 +2,15 @@
  * Direct unit tests for mergeKnownDevices, extracted from WireMeshTransport (see gossip-directory.ts's own header) -- previously only exercised indirectly through gossip-directory-aggregation.integration.test.ts's real-session harness.
  */
 import { describe, expect, it } from "vitest";
-import { mergeKnownDevices } from "../core/gossip-directory.js";
+import {
+  mergeKnownDevices,
+  readvertiseGossip,
+  type GossipSession,
+} from "../core/gossip-directory.js";
+import type {
+  AgentSelfAdvert,
+  HostedRoomAdvert,
+} from "../core/gossip-extensions.js";
 import type { DirectoryEntry } from "wire-mesh-core/domain/mesh-session";
 import type { PeerAdvert } from "wire-mesh-core/generated/protocol";
 import { syntheticAdvert } from "./synthetic-advert.js";
@@ -83,5 +91,133 @@ describe("mergeKnownDevices", () => {
 
     expect(knownDevices.get(DEVICE_A_HEX)?.["snapshot-seconds"]).toBe(1);
     expect(knownDevices.get(DEVICE_B_HEX)?.["snapshot-seconds"]).toBe(2);
+  });
+});
+
+describe("readvertiseGossip", () => {
+  const FULL_ADVERT: AgentSelfAdvert = {
+    name: "agent-a",
+    harness: "claude-code",
+    cwd: "/home/someone/project",
+    pid: 4242,
+    startedAt: "2026-01-01T00:00:00.000Z",
+    tags: ["team"],
+    subscribedRooms: ["private-room"],
+    membership: "proof",
+  };
+  const ROOMS: HostedRoomAdvert[] = [
+    {
+      path: "owner/public-room",
+      name: "public-room",
+      type: "public",
+      description: "Project room for /home/someone/project",
+    },
+    {
+      path: "owner/private-room",
+      name: "private-room",
+      type: "private",
+      description: "Project room for /home/someone/other",
+    },
+  ];
+
+  function fakeSession(): {
+    session: GossipSession;
+    sent: Record<string, unknown>[];
+  } {
+    const sent: Record<string, unknown>[] = [];
+    return {
+      sent,
+      session: {
+        sendGossipUpdate: async (extensions) => {
+          sent.push(extensions ?? {});
+          return Promise.resolve();
+        },
+      },
+    };
+  }
+
+  function advertise(
+    sessions: readonly GossipSession[],
+    hubSession: Readonly<GossipSession>,
+    overrides: Readonly<Partial<Parameters<typeof readvertiseGossip>[0]>> = {},
+  ): void {
+    readvertiseGossip({
+      allSessions: new Set(sessions),
+      hub: { ownsSession: (session) => session === hubSession },
+      hasAnyTrustedGateway: () => true,
+      onError: undefined,
+      getCurrentPresence: () => "active",
+      getHostedRooms: () => ROOMS,
+      getSelfAgentAdvert: () => FULL_ADVERT,
+      getCcPeerVersion: () => undefined,
+      ...overrides,
+    });
+  }
+
+  it("gives a directly connected peer the whole advert and every hosted room", () => {
+    const hub = fakeSession();
+    const peer = fakeSession();
+
+    advertise([hub.session, peer.session], hub.session);
+
+    expect(peer.sent[0]?.["agent/self"]).toEqual(FULL_ADVERT);
+    expect(peer.sent[0]?.["room/hosted"]).toEqual(ROOMS);
+  });
+
+  it("gives the hub the agent's summary, and nothing about where or how it runs", () => {
+    const hub = fakeSession();
+    const peer = fakeSession();
+
+    advertise([hub.session, peer.session], hub.session);
+
+    expect(hub.sent[0]?.["agent/self"]).toEqual({
+      name: "agent-a",
+      harness: "claude-code",
+      membership: "proof",
+    });
+    expect(JSON.stringify(hub.sent)).not.toContain("/home/someone");
+    expect(JSON.stringify(hub.sent)).not.toContain("4242");
+    expect(JSON.stringify(hub.sent)).not.toContain("private-room");
+  });
+
+  it("gives the hub only public rooms, by path and name", () => {
+    const hub = fakeSession();
+
+    advertise([hub.session], hub.session);
+
+    expect(hub.sent[0]?.["room/hosted"]).toEqual([
+      { path: "owner/public-room", name: "public-room", type: "public" },
+    ]);
+  });
+
+  it("still gives the hub presence and the package versions", () => {
+    const hub = fakeSession();
+
+    advertise([hub.session], hub.session);
+
+    expect(hub.sent[0]?.["presence/status"]).toBe("active");
+    expect(hub.sent[0]?.["agent-comms/version"]).toMatchObject({
+      agentComms: expect.any(String) as string,
+    });
+  });
+
+  it("sends the hub nothing while no gateway is trusted", () => {
+    const hub = fakeSession();
+
+    advertise([hub.session], hub.session, {
+      hasAnyTrustedGateway: () => false,
+    });
+
+    expect(hub.sent).toEqual([]);
+  });
+
+  it("sends the hub nothing while no agent is visible", () => {
+    const hub = fakeSession();
+
+    advertise([hub.session], hub.session, {
+      getSelfAgentAdvert: () => undefined,
+    });
+
+    expect(hub.sent).toEqual([]);
   });
 });

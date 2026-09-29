@@ -3,14 +3,18 @@
  */
 
 import { HOSTED_ROOMS_GOSSIP_KEY } from "./gossip-extensions.js";
-import type { HostedRoomAdvert } from "./gossip-extensions.js";
+import type { ReceivedHostedRoomAdvert } from "./gossip-extensions.js";
 import type { MeshTransport } from "./transport.js";
 
 /** A hosted room together with the device that advertised it. */
-export type DiscoveredRoom = HostedRoomAdvert & { ownerDeviceId: string };
+export type DiscoveredRoom = ReceivedHostedRoomAdvert & {
+  ownerDeviceId: string;
+};
 
-/** Narrows an untrusted gossiped value (a peer's own self-asserted `room/hosted` entry) into a HostedRoomAdvert. A malformed or non-conforming entry is skipped by the caller rather than treated as an error: this is a discovery hint over self-asserted data, not a security check. */
-export function isHostedRoomAdvert(value: unknown): value is HostedRoomAdvert {
+/** Narrows an untrusted gossiped value (a peer's own self-asserted `room/hosted` entry) into a ReceivedHostedRoomAdvert. A malformed or non-conforming entry is skipped by the caller rather than treated as an error: this is a discovery hint over self-asserted data, not a security check. */
+export function isHostedRoomAdvert(
+  value: unknown,
+): value is ReceivedHostedRoomAdvert {
   if (typeof value !== "object" || value === null) return false;
   if (!("path" in value) || typeof value.path !== "string") return false;
   if (!("name" in value) || typeof value.name !== "string") return false;
@@ -19,7 +23,7 @@ export function isHostedRoomAdvert(value: unknown): value is HostedRoomAdvert {
     (value.type !== "public" && value.type !== "private")
   )
     return false;
-  if (!("description" in value) || typeof value.description !== "string")
+  if ("description" in value && typeof value.description !== "string")
     return false;
   return true;
 }

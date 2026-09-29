@@ -15,6 +15,8 @@ import {
   AGENT_SELF_GOSSIP_KEY,
   HOSTED_ROOMS_GOSSIP_KEY,
   PRESENCE_GOSSIP_KEY,
+  summariseAgentSelfAdvert,
+  summariseHostedRooms,
   type AgentSelfAdvert,
   type HostedRoomAdvert,
 } from "./gossip-extensions.js";
@@ -86,10 +88,18 @@ export function readMembershipProof(
   return typeof self.membership === "string" ? self.membership : undefined;
 }
 
-/** Re-sends this side's own current presence status, currently-hosted rooms, self-agent identity, and package versions, together, onto every live session's gossip self-advert -- one gossip frame per tick carrying whichever facts are actually known, rather than a separate frame per fact. Split out of wire-mesh-transport.ts's own WireMeshTransport class purely to keep that file under the repo's max-lines cap, the same reason mergeKnownDevices/findPresenceAdvert above already live here rather than there. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. Unlike presence/hostedRooms/selfAgentAdvert, the versions extension is never actually absent (this side's own agent-comms package version is always known), so every tick this function is called for sends at least that one fact -- there is no "nothing to report" case left to short-circuit on. The hub's own session (agent-comms#156) is gated separately from every ordinary local-peer session in allSessions: local mesh trust is a different layer (connect_request/introduce approval already gated it before it ever joined allSessions), but the hub session is a broadcast to every connected hub peer, trusted or not, and would otherwise leak this side's own presence/hosted-rooms/self-agent/versions advert onto the hub regardless of GatewayTrust -- so this side's own advert waits on the same hasAny gate. It also waits for a visible agent (selfAgentAdvert is only ever defined for one): presence, hosted rooms and versions describe the agent and its process, so a hidden or unregistered store puts none of them on the hub, and a hidden agent is left with only the device advert every session opens with, which is what lets it be reached by device id. */
+/** The one thing gossip re-advertisement needs from a session: somewhere to send the extension bag. */
+export type GossipSession = Pick<AcceptedMeshSession, "sendGossipUpdate">;
+
+/** Which session, if any, is the hub's. */
+export interface HubOwnership {
+  ownsSession: (session: Readonly<GossipSession>) => boolean;
+}
+
+/** Re-sends this side's own current presence status, currently-hosted rooms, self-agent identity, and package versions, together, onto every live session's gossip self-advert -- one gossip frame per tick carrying whichever facts are actually known, rather than a separate frame per fact. Split out of wire-mesh-transport.ts's own WireMeshTransport class purely to keep that file under the repo's max-lines cap, the same reason mergeKnownDevices/findPresenceAdvert above already live here rather than there. A session that fails to send (mid-disconnect, most likely -- watchForDisconnect will independently notice and clean it up) is reported via onError and skipped, not allowed to stop the tick from reaching the rest of allSessions: a periodic broadcast to N peers is N independent operations, not one atomic unit. Unlike presence/hostedRooms/selfAgentAdvert, the versions extension is never actually absent (this side's own agent-comms package version is always known), so every tick this function is called for sends at least that one fact -- there is no "nothing to report" case left to short-circuit on. The hub's own session (agent-comms#156) is gated separately from every ordinary local-peer session in allSessions: local mesh trust is a different layer (connect_request/introduce approval already gated it before it ever joined allSessions), but the hub session is a broadcast to every connected hub peer, trusted or not, and would otherwise leak this side's own presence/hosted-rooms/self-agent/versions advert onto the hub regardless of GatewayTrust -- so this side's own advert waits on the same hasAny gate. It also waits for a visible agent (selfAgentAdvert is only ever defined for one): presence, hosted rooms and versions describe the agent and its process, so a hidden or unregistered store puts none of them on the hub, and a hidden agent is left with only the device advert every session opens with, which is what lets it be reached by device id. What the hub session does carry is reduced to what is safe to hand to strangers (presence, the agent's name, harness and membership proof, the public rooms it hosts by path and name, and the package versions): the hub relays it to every client that connects, so the working directory, process id, tags and rooms go only to peers this side is connected to directly (agent-comms#322). */
 export function readvertiseGossip(options: {
-  allSessions: ReadonlySet<AcceptedMeshSession>;
-  hub: Readonly<Pick<HubSession, "ownsSession">>;
+  allSessions: ReadonlySet<GossipSession>;
+  hub: Readonly<HubOwnership>;
   hasAnyTrustedGateway: () => boolean;
   onError: ((error: Error) => void) | undefined;
   getCurrentPresence: (() => AgentStatus | undefined) | undefined;
@@ -108,37 +118,44 @@ export function readvertiseGossip(options: {
     getSelfAgentAdvert,
     getCcPeerVersion,
   } = options;
-  const extensions: Record<string, unknown> = {};
   const status = getCurrentPresence?.();
-  if (status !== undefined) extensions[PRESENCE_GOSSIP_KEY] = status;
-  const hostedRooms = getHostedRooms?.();
-  if (hostedRooms !== undefined)
-    extensions[HOSTED_ROOMS_GOSSIP_KEY] = hostedRooms;
   const selfAgentAdvert = getSelfAgentAdvert?.();
-  if (selfAgentAdvert !== undefined)
-    extensions[AGENT_SELF_GOSSIP_KEY] = selfAgentAdvert;
   const ccPeerVersion = getCcPeerVersion?.();
   const versionsAdvert: AgentCommsVersionsAdvert = {
     agentComms: getOwnPackageVersion(),
     ...(ccPeerVersion !== undefined ? { ccPeer: ccPeerVersion } : {}),
   };
-  extensions[AGENT_COMMS_VERSION_GOSSIP_KEY] = versionsAdvert;
+  // A hub relays whatever it is given to every client that connects, so a hub session carries only what is safe for strangers: presence, the agent's summary, the public rooms it hosts (without their descriptions) and the package versions. Directly connected peers are ones this side deals with itself, and get everything.
+  const hubExtensions: Record<string, unknown> = {};
+  if (status !== undefined) hubExtensions[PRESENCE_GOSSIP_KEY] = status;
+  if (selfAgentAdvert !== undefined)
+    hubExtensions[AGENT_SELF_GOSSIP_KEY] =
+      summariseAgentSelfAdvert(selfAgentAdvert);
+  hubExtensions[AGENT_COMMS_VERSION_GOSSIP_KEY] = versionsAdvert;
+  const hostedRooms = getHostedRooms?.();
+  if (hostedRooms !== undefined)
+    hubExtensions[HOSTED_ROOMS_GOSSIP_KEY] = summariseHostedRooms(hostedRooms);
+  const peerExtensions: Record<string, unknown> = { ...hubExtensions };
+  if (hostedRooms !== undefined)
+    peerExtensions[HOSTED_ROOMS_GOSSIP_KEY] = hostedRooms;
+  if (selfAgentAdvert !== undefined)
+    peerExtensions[AGENT_SELF_GOSSIP_KEY] = selfAgentAdvert;
   for (const session of allSessions) {
-    if (
-      hub.ownsSession(session) &&
-      (!hasAnyTrustedGateway() || selfAgentAdvert === undefined)
-    ) {
+    const viaHub = hub.ownsSession(session);
+    if (viaHub && (!hasAnyTrustedGateway() || selfAgentAdvert === undefined)) {
       continue;
     }
-    session.sendGossipUpdate(extensions).catch((error: unknown) => {
-      onError?.(error instanceof Error ? error : new Error(String(error)));
-    });
+    session
+      .sendGossipUpdate(viaHub ? hubExtensions : peerExtensions)
+      .catch((error: unknown) => {
+        onError?.(error instanceof Error ? error : new Error(String(error)));
+      });
   }
 }
 
 /** Arms readvertiseGossip's own periodic tick, or does nothing at all when neither presence, hosted-rooms, nor self-agent-identity has a source -- WireMeshTransport's own constructor logic, split out here purely to keep that file under the repo's max-lines cap, the same reason mergeKnownDevices/findPresenceAdvert/readvertiseGossip above already live here rather than there. getCcPeerVersion never gates whether the interval starts at all (unlike the other three): it is only ever wired alongside getSelfAgentAdvert in real use (bridge-mesh.ts always supplies that one), so a construction site relying on getCcPeerVersion alone to start ticking isn't a real scenario worth its own branch. Unref'd immediately, matching every other timer this transport owns, so it never keeps the process alive on its own. */
 export function startGossipInterval(options: {
-  allSessions: ReadonlySet<AcceptedMeshSession>;
+  allSessions: ReadonlySet<GossipSession>;
   hub: Readonly<Pick<HubSession, "ownsSession">>;
   hasAnyTrustedGateway: () => boolean;
   onError: ((error: Error) => void) | undefined;

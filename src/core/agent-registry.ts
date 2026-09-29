@@ -5,7 +5,7 @@
 import { CommsError } from "./store.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { MeshTransport } from "./transport.js";
-import type { AgentSelfAdvert } from "./gossip-extensions.js";
+import type { ReceivedAgentSelfAdvert } from "./gossip-extensions.js";
 import { AgentStatus } from "./types.js";
 import type { AgentIdentity, Visibility } from "./types.js";
 
@@ -31,18 +31,17 @@ export interface AgentRegistryDeps {
 }
 
 /** Narrows an untrusted gossiped value (WireMeshTransport.listKnownDevices' own advert["agent/self"], self-asserted by whichever peer advertised it) into an AgentSelfAdvert -- a malformed or non-conforming entry is silently skipped rather than treated as an error, the same convention room-lifecycle.ts's own isHostedRoomAdvert already established for the identical class of gossip consumption. */
-function isAgentSelfAdvert(value: unknown): value is AgentSelfAdvert {
+function isAgentSelfAdvert(value: unknown): value is ReceivedAgentSelfAdvert {
   if (typeof value !== "object" || value === null) return false;
   if (!("name" in value) || typeof value.name !== "string") return false;
   if (!("harness" in value) || typeof value.harness !== "string") return false;
-  if (!("cwd" in value) || typeof value.cwd !== "string") return false;
-  if (!("pid" in value) || typeof value.pid !== "number") return false;
-  if (!("startedAt" in value) || typeof value.startedAt !== "string")
-    return false;
-  if (!("tags" in value) || !Array.isArray(value.tags)) return false;
-  if (!("subscribedRooms" in value) || !Array.isArray(value.subscribedRooms))
-    return false;
   if ("membership" in value && typeof value.membership !== "string")
+    return false;
+  if ("cwd" in value && typeof value.cwd !== "string") return false;
+  if ("pid" in value && typeof value.pid !== "number") return false;
+  if ("startedAt" in value && typeof value.startedAt !== "string") return false;
+  if ("tags" in value && !Array.isArray(value.tags)) return false;
+  if ("subscribedRooms" in value && !Array.isArray(value.subscribedRooms))
     return false;
   return true;
 }
@@ -179,21 +178,22 @@ export class AgentRegistry {
   /** Builds the placeholder-shaped AgentIdentity a gossip-discovered device (never locally registered) is represented as -- shared by listAgents' own array merge and getAgent's single-lookup fallback, so both resolve an identical shape for the identical discovered device. */
   private static synthesiseDiscoveredAgent(discovered: {
     deviceId: string;
-    advert: AgentSelfAdvert;
+    advert: ReceivedAgentSelfAdvert;
     status: AgentStatus | undefined;
   }): AgentIdentity {
+    // A sender that reached this side through a hub shares only its summary, so the details it withheld stay empty here. An empty cwd is what marks an agent whose details are not shared (see detailsShared); a local agent always has one.
     return {
       id: discovered.deviceId,
       version: 0,
       name: discovered.advert.name,
       harness: discovered.advert.harness,
-      cwd: discovered.advert.cwd,
-      pid: discovered.advert.pid,
-      startedAt: discovered.advert.startedAt,
+      cwd: discovered.advert.cwd ?? "",
+      pid: discovered.advert.pid ?? 0,
+      startedAt: discovered.advert.startedAt ?? "",
       visibility: "visible",
       status: discovered.status ?? "active",
-      tags: discovered.advert.tags,
-      subscribedRooms: discovered.advert.subscribedRooms,
+      tags: discovered.advert.tags ?? [],
+      subscribedRooms: discovered.advert.subscribedRooms ?? [],
     };
   }
 
@@ -204,14 +204,14 @@ export class AgentRegistry {
    */
   private listDiscoverableAgents(): readonly {
     deviceId: string;
-    advert: AgentSelfAdvert;
+    advert: ReceivedAgentSelfAdvert;
     status: AgentStatus | undefined;
   }[] {
     const transport = this.deps.requireTransport();
     if (transport.listKnownDevices === undefined) return [];
     const result: {
       deviceId: string;
-      advert: AgentSelfAdvert;
+      advert: ReceivedAgentSelfAdvert;
       status: AgentStatus | undefined;
     }[] = [];
     const now = Date.now();
@@ -263,4 +263,9 @@ export class AgentRegistry {
       });
     }
   }
+}
+
+/** Whether an agent's working directory, rooms and the rest were shared with this side. A gossip-discovered agent that reached us through a hub shares none of them, and is recorded with an empty cwd. */
+export function detailsShared(agent: Readonly<AgentIdentity>): boolean {
+  return agent.cwd !== "";
 }

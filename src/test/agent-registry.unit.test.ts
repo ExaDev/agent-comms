@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AgentRegistry,
+  detailsShared,
   type AgentRegistryDeps,
 } from "../core/agent-registry.js";
 import { CommsError } from "../core/store.js";
@@ -365,6 +366,83 @@ describe("AgentRegistry — listAgents", () => {
       tags: ["from-gossip"],
       subscribedRooms: [],
     });
+  });
+
+  it("lists an agent that came through a hub by its summary alone, and records that its details were not shared", async () => {
+    const { registry, deps } = makeHarness();
+    deps.requireTransport = () =>
+      ({
+        listKnownDevices: () => [
+          {
+            deviceId: "hub-device",
+            advert: {
+              "agent/self": { name: "hub-agent", harness: "codex" },
+              "presence/status": "idle",
+            },
+          },
+        ],
+      }) as unknown as ReturnType<AgentRegistryDeps["requireTransport"]>;
+
+    const result = await registry.listAgents("some-requester");
+    const discovered = result.find((a) => a.id === "hub-device");
+
+    expect(discovered).toMatchObject({
+      name: "hub-agent",
+      harness: "codex",
+      status: "idle",
+      cwd: "",
+      pid: 0,
+      tags: [],
+      subscribedRooms: [],
+    });
+    expect(discovered !== undefined && detailsShared(discovered)).toBe(false);
+  });
+
+  it("treats a peer's advert that shares its details as shared", async () => {
+    const { registry, deps } = makeHarness();
+    deps.requireTransport = () =>
+      ({
+        listKnownDevices: () => [
+          {
+            deviceId: "direct-device",
+            advert: {
+              "agent/self": {
+                name: "direct-agent",
+                harness: "codex",
+                cwd: "/tmp/direct",
+                pid: 9,
+                startedAt: "2026-02-02T00:00:00.000Z",
+                tags: [],
+                subscribedRooms: [],
+              },
+            },
+          },
+        ],
+      }) as unknown as ReturnType<AgentRegistryDeps["requireTransport"]>;
+
+    const result = await registry.listAgents("some-requester");
+    const discovered = result.find((a) => a.id === "direct-device");
+
+    expect(discovered !== undefined && detailsShared(discovered)).toBe(true);
+  });
+
+  it("ignores an advert whose optional details have the wrong type", async () => {
+    const { registry, deps } = makeHarness();
+    deps.requireTransport = () =>
+      ({
+        listKnownDevices: () => [
+          {
+            deviceId: "bad-device",
+            advert: {
+              "agent/self": { name: "n", harness: "h", cwd: 42 },
+            },
+          },
+        ],
+      }) as unknown as ReturnType<AgentRegistryDeps["requireTransport"]>;
+
+    const result = await registry.listAgents("some-requester");
+
+    expect(result.some((a) => a.id === "bad-device")).toBe(false);
   });
 
   it("never lets a gossip-discovered agent shadow an agent this store already knows locally", async () => {
