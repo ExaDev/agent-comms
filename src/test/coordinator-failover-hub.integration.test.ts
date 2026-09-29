@@ -41,7 +41,9 @@ async function startNode(
     tags: [],
   });
   teardown.push(async () => {
+    const begun = Date.now();
     await store.shutdown().catch(() => undefined);
+    mark(`${name} store shutdown took ${String(Date.now() - begun)}ms`);
   });
   return { store, transport };
 }
@@ -58,7 +60,11 @@ async function startMachines(teardown: TeardownStack): Promise<{
   remote: Node;
 }> {
   const hub = await realHubOverWs();
-  teardown.push(hub.close);
+  teardown.push(async () => {
+    const begun = Date.now();
+    await hub.close();
+    mark(`hub close took ${String(Date.now() - begun)}ms`);
+  });
   const port =
     HUB_FAILOVER_PORT_RANGE_START + randomInt(HUB_FAILOVER_PORT_RANGE_WIDTH);
   const first = await startNode("first", port, hub.url, teardown);
