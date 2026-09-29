@@ -19,7 +19,7 @@ import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
 import { createNodeFsStorage } from "wire-mesh-core/adapters/node-fs-storage";
 import { MeshStore } from "./mesh-store.js";
-import { DEFAULT_HUB_URL } from "./mesh-store-shared.js";
+import { resolveHubUrl } from "./mesh-store-shared.js";
 import { FIRST_CONTACT_PORT } from "./first-contact.js";
 import { CommsTool } from "./tool.js";
 import { WireMeshTransport } from "./wire-mesh-transport.js";
@@ -43,7 +43,7 @@ export interface BridgeMeshSync extends BridgeMesh {
   attachIdentity: () => Promise<void>;
 }
 
-/** coordinatorPort/hubUrl thread straight into MeshStore's own constructor, hubUrl defaulting to the production hub here and nowhere below; fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup). firstContactPort defaults to FIRST_CONTACT_PORT, the default-on coordinator-free formation presence (agent-comms#341); a bridge-level test overrides it with an OS-assigned free port so test bridges never cross-discover each other. */
+/** coordinatorPort/hubUrl thread straight into MeshStore's own constructor, hubUrl defaulting here and nowhere below to resolveHubUrl() (AGENT_COMMS_HUB_URL, else the production hub); fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup). firstContactPort defaults to FIRST_CONTACT_PORT, the default-on coordinator-free formation presence (agent-comms#341); a bridge-level test overrides it with an OS-assigned free port so test bridges never cross-discover each other. */
 export interface BridgeMeshOptions {
   coordinatorPort?: number | undefined;
   hubUrl?: string | undefined;
@@ -81,7 +81,7 @@ export function createBridgeMeshSyncFromIdentity(
 ): BridgeMeshSync {
   const {
     coordinatorPort,
-    hubUrl = DEFAULT_HUB_URL,
+    hubUrl = resolveHubUrl(),
     fetchLatestVersion,
     firstContactPort = FIRST_CONTACT_PORT,
   } = options ?? {};

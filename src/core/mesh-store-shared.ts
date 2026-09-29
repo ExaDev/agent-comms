@@ -75,8 +75,35 @@ export const PENDING_ROOM_REQUEST_TTL_MS =
 /** The coordinator's own bind host -- always loopback, since the mesh coordinator role only ever needs to be reachable from other local peers on this machine. Shared between mesh-store.ts's own init() and PeerLifecycle's handleBecomeCoordinator. */
 export const COORDINATOR_HOST = "127.0.0.1";
 
-/** The production relay hub this machine's gateway dials once it becomes the local mesh coordinator (agent-comms#154). Configuration: MeshStore's own constructor accepts an override, threaded from createBridgeMesh/createBridgeMeshSync, for tests and any future non-default deployment -- this is only the default. */
+/** The production relay hub this machine's gateway dials once it becomes the local mesh coordinator (agent-comms#154). Configuration: MeshStore's own constructor accepts an override, threaded from createBridgeMesh/createBridgeMeshSync, for tests and any future non-default deployment; a user picks a different hub for every bridge on the machine with HUB_URL_ENV_VAR (see resolveHubUrl) -- this is only the default. */
 export const DEFAULT_HUB_URL = "wss://mesh.exadev.io/";
+
+/** The environment variable that points every bridge started from this environment at a self-hosted hub (for example `npx wire-mesh`) instead of DEFAULT_HUB_URL. */
+export const HUB_URL_ENV_VAR = "AGENT_COMMS_HUB_URL";
+
+/**
+ * The hub a bridge dials when its caller passes no explicit hubUrl: HUB_URL_ENV_VAR when it is set and not blank, DEFAULT_HUB_URL otherwise.
+ *
+ * A value that is not a ws:// or wss:// URL throws rather than falling back to DEFAULT_HUB_URL: someone who set the variable meant to keep their traffic off the public hub, so silently dialling it anyway would be the worst outcome.
+ */
+export function resolveHubUrl(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  const configured = env[HUB_URL_ENV_VAR]?.trim();
+  if (configured === undefined || configured === "") return DEFAULT_HUB_URL;
+  let protocol: string;
+  try {
+    protocol = new URL(configured).protocol;
+  } catch {
+    protocol = "";
+  }
+  if (protocol !== "ws:" && protocol !== "wss:") {
+    throw new Error(
+      `${HUB_URL_ENV_VAR} must be a ws:// or wss:// URL, got "${configured}"`,
+    );
+  }
+  return configured;
+}
 
 /** Shallow-clones an entry together with its own `readBy` array, so a merged history never shares mutable array references with either input it was built from. */
 function cloneWithReadBy<T extends { readBy: string[] }>(entry: T): T {
