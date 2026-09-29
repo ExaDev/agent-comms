@@ -68,6 +68,9 @@ async function startStore(
   return store;
 }
 
+/** The working directory startStore registers a visible agent with. */
+const VISIBLE_CWD = "/test/visible";
+
 /** Trusts an arbitrary remote device, which is all it takes for a store to have something to say to another machine. */
 const SOME_REMOTE_DEVICE = "f".repeat(DEVICE_ID_HEX_LENGTH);
 
@@ -148,6 +151,63 @@ describe("what a store puts on the hub", () => {
             advert[PRESENCE_GOSSIP_KEY] !== undefined,
         ),
     );
+  });
+
+  it("puts no directory, process id, tag or private room on the hub, in any field of any advert", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+    const observer = await observeHub(hub.url);
+    cleanups.push(observer.close);
+
+    const store = await startStore(hub.url, "visible");
+    // A project room whose description names the working directory, and a private room: the things a hub must not be told.
+    await store.createRoom({
+      name: "project",
+      type: "public",
+      owner: store.peerId,
+      description: `Project room for ${VISIBLE_CWD}`,
+    });
+    await store.createRoom({
+      name: "confidential",
+      type: "private",
+      owner: store.peerId,
+      description: "not for the hub",
+    });
+    store.addTrustedGateway(SOME_REMOTE_DEVICE);
+
+    await waitForCondition(() =>
+      observer
+        .advertsFor(store.peerId)
+        .some(
+          (advert) =>
+            advert[AGENT_SELF_GOSSIP_KEY] !== undefined &&
+            advert[HOSTED_ROOMS_GOSSIP_KEY] !== undefined,
+        ),
+    );
+    await sleep(SILENCE_WATCH_MS);
+
+    for (const advert of observer.advertsFor(store.peerId)) {
+      const self: unknown = advert[AGENT_SELF_GOSSIP_KEY];
+      if (self !== undefined) {
+        expect(
+          Object.keys(self as object)
+            .filter((key) => key !== "membership")
+            .sort(),
+        ).toEqual(["harness", "name"]);
+      }
+      const hosted: unknown = advert[HOSTED_ROOMS_GOSSIP_KEY];
+      if (hosted !== undefined) {
+        expect(hosted).toEqual([
+          { path: `${store.peerId}/project`, name: "project", type: "public" },
+        ]);
+      }
+      // Whichever field it would ride in, nothing a hub hands out may contain the directory.
+      const wire = JSON.stringify(advert, (_key, value: unknown) =>
+        value instanceof Uint8Array ? Array.from(value) : value,
+      );
+      expect(wire).not.toContain(VISIBLE_CWD);
+      expect(wire).not.toContain("confidential");
+    }
   });
 
   it("joins the hub as soon as trust is added and leaves it when the trust is withdrawn", async () => {
