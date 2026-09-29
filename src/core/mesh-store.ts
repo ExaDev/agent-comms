@@ -1075,12 +1075,13 @@ export class MeshStore implements CommsStore {
     this.pendingMarkReadTimers.length = 0;
 
     const agent = this.agents.get(this.peerId);
+    // Sent first, so the notice goes out ahead of every session closing, but not waited on until the transport has shut down. A peer that cannot be told is a peer that has gone, so a failure to send it is dropped. Each peer's answer comes under the network deadline, so waiting here would spend that whole deadline on a peer that has gone without this side noticing yet; closing the sessions is what ends every wait that is still open.
+    let farewell: Promise<void> | undefined;
     if (agent) {
       agent.status = "offline";
-      await this.deliveryEngine.broadcastPatch({
-        type: "agent_offline",
-        agentId: this.peerId,
-      });
+      farewell = this.deliveryEngine
+        .broadcastPatch({ type: "agent_offline", agentId: this.peerId })
+        .catch(() => undefined);
     }
 
     this.staleAgentChecker.stop();
@@ -1088,5 +1089,6 @@ export class MeshStore implements CommsStore {
     await this.peerLifecycle.sendCoordinatorHandover();
     await this.onCoordinatorRoleChanged?.(false);
     await this.requireTransport().shutdown();
+    await farewell;
   }
 }

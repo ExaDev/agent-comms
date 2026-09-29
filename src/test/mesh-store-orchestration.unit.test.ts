@@ -675,6 +675,40 @@ describe("MeshStore — shutdown()", () => {
     expect(transport.shutdown).toHaveBeenCalledTimes(1);
   });
 
+  it("does not wait on a peer that never answers its farewell: the notice goes out first, and closing the transport is what ends the wait", async () => {
+    const agents = collaborator(store, "agents") as Map<string, unknown>;
+    agents.set(store.peerId, {
+      id: store.peerId,
+      version: 1,
+      name: "agent",
+      harness: "test",
+      cwd: "/test",
+      pid: 1,
+      startedAt: "2026-01-01T00:00:00.000Z",
+      visibility: "visible",
+      status: "active",
+      tags: [],
+      subscribedRooms: [],
+    });
+    const order: string[] = [];
+    let endFarewell: () => void = () => undefined;
+    vi.mocked(transport.broadcast).mockImplementation(async () => {
+      order.push("farewell sent");
+      return new Promise<void>((resolve) => {
+        endFarewell = resolve;
+      });
+    });
+    vi.mocked(transport.shutdown).mockImplementation(async () => {
+      order.push("transport shut down");
+      endFarewell();
+      return Promise.resolve();
+    });
+
+    await store.shutdown();
+
+    expect(order).toEqual(["farewell sent", "transport shut down"]);
+  });
+
   it("fires onCoordinatorRoleChanged(false) on shutdown, when one is set", async () => {
     const onCoordinatorRoleChanged = vi.fn<(isCoordinator: boolean) => void>();
     store.onCoordinatorRoleChanged = onCoordinatorRoleChanged;
