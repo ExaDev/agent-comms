@@ -1,3 +1,14 @@
+## [8.0.13](https://github.com/ExaDev/agent-comms/compare/v8.0.12...v8.0.13) (2026-09-29)
+
+### Bug Fixes
+
+* **core:** do not wait on a peer's answer to the farewell when shutting down ([60316ce](https://github.com/ExaDev/agent-comms/commit/60316ceb04c4a1d0b8a4020060d8f32c6bf157a7))
+
+### Build
+
+* **deps:** bump wire-mesh-core to 3.0.1 ([1cc03f4](https://github.com/ExaDev/agent-comms/commit/1cc03f45548b570fb1ea89ff557eb671f6f16b0a))
+* **deps:** bump wire-mesh-core to 3.1.0 ([26c602c](https://github.com/ExaDev/agent-comms/commit/26c602ca794a281702576ad944635638114c72b6))
+
 ## [8.0.12](https://github.com/ExaDev/agent-comms/compare/v8.0.11...v8.0.12) (2026-09-29)
 
 ### Build
