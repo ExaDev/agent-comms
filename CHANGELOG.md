@@ -1,3 +1,13 @@
+## [8.0.11](https://github.com/ExaDev/agent-comms/compare/v8.0.10...v8.0.11) (2026-09-29)
+
+### Tests
+
+* **core:** assert a real hub's clients see no directory, tag or private room ([dd084d7](https://github.com/ExaDev/agent-comms/commit/dd084d7c9fb2e91e8e233b99434c6e78718bc216))
+
+### Build
+
+* **deps:** bump wire-mesh-core to 2.1.0 ([19b3329](https://github.com/ExaDev/agent-comms/commit/19b3329f6f09f6cac2366d9c0b2ea41ac89ff1b5))
+
 ## [8.0.10](https://github.com/ExaDev/agent-comms/compare/v8.0.9...v8.0.10) (2026-09-29)
 
 ### Bug Fixes
