@@ -62,9 +62,6 @@ function isAgentCardAdvert(value: unknown): value is AgentCardAdvert {
   if (typeof value !== "object" || value === null) return false;
   if (!("name" in value) || typeof value.name !== "string") return false;
   if (!("harness" in value) || typeof value.harness !== "string") return false;
-  if (!("startedAt" in value) || typeof value.startedAt !== "string")
-    return false;
-  if (!("tags" in value) || !Array.isArray(value.tags)) return false;
   if ("membership" in value && typeof value.membership !== "string")
     return false;
   return true;
@@ -218,10 +215,8 @@ export class AgentRegistry {
         version: 0,
         name: discovered.card.name,
         harness: discovered.card.harness,
-        startedAt: discovered.card.startedAt,
         visibility: "visible",
         status: discovered.status ?? "active",
-        tags: discovered.card.tags,
       };
       return reduced;
     }

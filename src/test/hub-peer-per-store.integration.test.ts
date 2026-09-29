@@ -111,12 +111,13 @@ describe("every store is its own hub peer", () => {
       name: "a2",
       harness: "test",
       visibility: "visible",
-      tags: ["a2"],
     });
-    // A device reached through a hub never said where it runs.
+    // A device reached through a hub never said where or how it runs.
     expect(discovered).not.toHaveProperty("cwd");
     expect(discovered).not.toHaveProperty("pid");
     expect(discovered).not.toHaveProperty("subscribedRooms");
+    expect(discovered).not.toHaveProperty("tags");
+    expect(discovered).not.toHaveProperty("startedAt");
   });
 
   it("lets a store that is not its machine's coordinator see a remote agent", async () => {

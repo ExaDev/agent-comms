@@ -27,8 +27,6 @@ describe("buildSelfAgentCard", () => {
     expect(buildSelfAgentCard(agent(), {})).toEqual({
       name: "worker",
       harness: "pi",
-      startedAt: "2026-05-05T00:00:00.000Z",
-      tags: ["ci"],
     });
   });
 

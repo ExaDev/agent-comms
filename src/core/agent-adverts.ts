@@ -32,7 +32,7 @@ export function buildSelfAgentAdvert(
   };
 }
 
-/** The card carries who the agent is and the proof its device is vouched for, and deliberately nothing about where or how it runs: no working directory, process id or joined rooms. */
+/** The card carries who the agent is and the proof its device is vouched for, and deliberately nothing about where or how it runs: no working directory, process id, joined rooms, start time or tags. */
 export function buildSelfAgentCard(
   agent: Readonly<AgentIdentity> | undefined,
   membership: Readonly<Pick<AgentCardAdvert, "membership">>,
@@ -41,8 +41,6 @@ export function buildSelfAgentCard(
   return {
     name: agent.name,
     harness: agent.harness,
-    startedAt: agent.startedAt,
-    tags: agent.tags,
     ...membership,
   };
 }

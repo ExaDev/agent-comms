@@ -186,7 +186,7 @@ describe("what a store puts on the hub", () => {
           Object.keys(card as object)
             .filter((key) => key !== "membership")
             .sort(),
-        ).toEqual(["harness", "name", "startedAt", "tags"]);
+        ).toEqual(["harness", "name"]);
       }
       // Nothing anywhere in what the hub hands out may contain the directory, whichever field it would ride in.
       expect(

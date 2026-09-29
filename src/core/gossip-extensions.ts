@@ -57,12 +57,10 @@ export interface PublicRoomAdvert {
 /** The gossip extension key an agent advertises its card under when the advert goes to a public relay hub. A different key from AGENT_SELF_GOSSIP_KEY on purpose: a hub hands every advert to every connected client and cannot trim one (it is signed), so the only way to keep working directories and process ids off it is to never put them in an advert bound for it, and a hub can then admit this key alone. */
 export const AGENT_CARD_GOSSIP_KEY = "agent/card";
 
-/** What an agent tells a public hub about itself: enough to be listed and to have its device trusted, and nothing about where or how it runs. */
+/** What an agent tells a public hub about itself: its name and harness, and the proof that its device is vouched for. Nothing about where or how it runs, and no free-text labels such as tags. */
 export interface AgentCardAdvert {
   name: string;
   harness: string;
-  startedAt: string;
-  tags: string[];
   /** A proof that this device's user principal vouches for it (membership-proof.ts), as in AgentSelfAdvert. */
   membership?: string;
 }

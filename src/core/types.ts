@@ -108,11 +108,11 @@ export const AgentIdentitySchema = defineSchema(
 export type AgentIdentity = z.infer<typeof AgentIdentitySchema>;
 
 /**
- * An agent known only from what its device gossiped to a public hub: who it is and whether it is there, and nothing about where it runs. Its working directory, process id and joined rooms never leave a machine that trusts the peer, so a record of this shape has none of them, rather than carrying stand-in values a reader could mistake for real ones.
+ * An agent known only from what its device gossiped to a public hub: who it is and whether it is there, and nothing about where or how it runs. Its working directory, process id, joined rooms, start time and tags never leave a machine that trusts the peer, so a record of this shape has none of them, rather than carrying stand-in values a reader could mistake for real ones.
  */
 export type RemoteAgentIdentity = Omit<
   AgentIdentity,
-  "cwd" | "pid" | "subscribedRooms"
+  "cwd" | "pid" | "subscribedRooms" | "startedAt" | "tags"
 >;
 
 /** What listing agents returns: full records for agents this machine holds first-hand, reduced ones for agents heard about through a hub. */

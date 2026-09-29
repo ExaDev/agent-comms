@@ -242,14 +242,9 @@ describe("AgentRegistry — agents heard about through a hub", () => {
       }) as unknown as ReturnType<AgentRegistryDeps["requireTransport"]>;
   }
 
-  const card = {
-    name: "hub-agent",
-    harness: "codex",
-    startedAt: "2026-04-04T00:00:00.000Z",
-    tags: ["remote"],
-  };
+  const card = { name: "hub-agent", harness: "codex" };
 
-  it("lists a device that gossiped only a card as a reduced agent with no working directory, process id or rooms", async () => {
+  it("lists a device that gossiped only a card as a reduced agent with no working directory, process id, rooms, start time or tags", async () => {
     const { registry, deps } = makeHarness();
     withAdvert(deps, { "agent/card": card, "presence/status": "busy" });
 
@@ -261,10 +256,8 @@ describe("AgentRegistry — agents heard about through a hub", () => {
       version: 0,
       name: "hub-agent",
       harness: "codex",
-      startedAt: "2026-04-04T00:00:00.000Z",
       visibility: "visible",
       status: "busy",
-      tags: ["remote"],
     });
     expect(reduced === undefined ? true : isFullAgent(reduced)).toBe(false);
   });
