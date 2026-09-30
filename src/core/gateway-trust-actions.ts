@@ -67,7 +67,7 @@ export function gatewayTrust(
   };
 }
 
-/** Withdraws trust from action.device: from the principal allowlist (GatewayTrust.removePrincipal, agent-comms#187) when action.principal is true, from the machine allowlist (GatewayTrust.removeMachine, agent-comms#343, revoking that whole host at once) when action.machine is true, or from the bare-device allowlist (the original agent-comms#156 behaviour) otherwise. */
+/** Withdraws trust from action.device: from the principal allowlist (GatewayTrust.removePrincipal, agent-comms#187) when action.principal is true, from the machine allowlist (GatewayTrust.removeMachine, agent-comms#343, revoking every device it vouches for at once) when action.machine is true, or from the bare-device allowlist (the original agent-comms#156 behaviour) otherwise. */
 export function gatewayUntrust(
   store: Readonly<GatewayTrustStore>,
   action: CommsAction & { action: "gateway_untrust" },

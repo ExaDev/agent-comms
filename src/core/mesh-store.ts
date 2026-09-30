@@ -647,7 +647,7 @@ export class MeshStore implements CommsStore {
     return user === undefined ? undefined : deviceIdToHex(user.deviceId);
   }
 
-  /** This host's own machine id (hex, agent-comms#343): the identity every bridge on this machine shares, and the thing another machine names to trust or revoke this whole host. Undefined until this store's identity is attached. */
+  /** This store's machine id (hex, agent-comms#343): the identity every bridge this OS account runs on the host shares, and the thing another machine names to trust or revoke all of them at once. Undefined until this store's identity is attached. */
   getMachineId(): string | undefined {
     const machine = this.storeIdentity?.machineIdentity;
     return machine === undefined ? undefined : deviceIdToHex(machine.deviceId);
@@ -937,7 +937,7 @@ export class MeshStore implements CommsStore {
     this.reconsiderHub();
   }
 
-  /** Withdraws trust from a remote machine device-id (hex), and with it every device reachable only through that machine: revoking the whole host in one act. A no-op if it was never trusted. */
+  /** Withdraws trust from a remote machine device-id (hex), and with it every device reachable only through that machine: revoking every bridge that machine key vouches for in one act. A no-op if it was never trusted. */
   removeTrustedGatewayMachine(deviceHex: string): void {
     this.gatewayTrust.removeMachine(deviceHex);
     this.reconsiderHub();

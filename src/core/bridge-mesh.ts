@@ -79,7 +79,7 @@ export function createBridgeMeshSyncFromIdentity(
   // The user-principal identity (agent-comms#160) is shared by every bridge on this machine account -- deliberately not scoped to slot, unlike identity above. userIdentityOptions is empty (the default ~/.agent-comms location); every real bridge shares it, and only tests need an override.
   const userIdentityOptions = {};
   const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
-  // The machine identity (agent-comms#343) is shared by every bridge on this host, from the default ~/.agent-comms location.
+  // The machine identity (agent-comms#343) is shared by every bridge this OS account runs on the host, from the default ~/.agent-comms location.
   const machineIdentity = loadOrCreateMachineIdentity();
   const store = new MeshStore({
     coordinatorPort,
