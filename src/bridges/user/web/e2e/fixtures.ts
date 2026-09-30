@@ -8,7 +8,10 @@
 import { test as base } from "@playwright/test";
 import { createWebServer, type WebServerHandle } from "../server.js";
 import net from "node:net";
-import { unreachableHubUrl } from "../../../../test/hub-helpers.js";
+import {
+  freeLocalPort,
+  unreachableHubUrl,
+} from "../../../../test/hub-helpers.js";
 
 /** Allocate a random free port by binding to port 0. */
 async function allocFreePort(): Promise<number> {
@@ -36,7 +39,13 @@ export const test = base.extend<Fixtures>({
     // when the previous test's TLS transport hasn't released 19876 yet.
     const coordinatorPort = await allocFreePort();
     const hubUrl = await unreachableHubUrl();
-    const handle = await createWebServer({ coordinatorPort, hubUrl });
+    // First contact defaults to one machine-wide UDP port, which would let the dashboards of parallel workers discover each other and list each other's agents.
+    const firstContactPort = await freeLocalPort();
+    const handle = await createWebServer({
+      coordinatorPort,
+      firstContactPort,
+      hubUrl,
+    });
 
     // Wait for server to be listening
     await new Promise<void>((resolve) => {
