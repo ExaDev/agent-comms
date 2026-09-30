@@ -405,6 +405,8 @@ export class WireMeshTransport implements MeshTransport {
     }
 
     this.trackSession(deviceIdHex, session);
+    // Before onPeerConnected, whose handler announces the elected coordinator over this session: the announcement only goes out over a session already enrolled in the election.
+    this.consumeIncoming(session, handle, machineLocal);
     if (fireOnPeerConnected) {
       const info: PeerInfo = {
         id: deviceIdHex,
@@ -413,8 +415,6 @@ export class WireMeshTransport implements MeshTransport {
       };
       this.events.onPeerConnected(handle, info);
     }
-
-    this.consumeIncoming(session, handle, machineLocal);
     this.watchForDisconnect(session, handle, deviceIdHex);
   }
 
