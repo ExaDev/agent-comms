@@ -73,7 +73,7 @@ export async function mintGroupMembership(
 }
 
 /**
- * Mints deviceId's own group:member grant from the user principal: a root-level, non-delegable token scoped to the principal's own group (groupPath). On success, records the grant's token-id under the principal's own issued-grant store so a later removeDevice call can find it to revoke -- an admission without this bookkeeping would leave removal permanently unable to find what to revoke, so this is not optional side-book-keeping, it is what makes revocation possible at all.
+ * Mints deviceId's own group:member grant from the user principal: a root-level, non-delegable token scoped to the principal's own group (groupPath). On success, records the grant's token-id under the principal's own issued-grant store so a later removeDevice call can find it to revoke: an admission without this bookkeeping would leave removal permanently unable to find what to revoke, so this is not optional side-book-keeping, it is what makes revocation possible at all.
  */
 export async function admitDevice(
   options: Readonly<AdmitDeviceOptions>,
