@@ -32,6 +32,8 @@ function fakeTransport(
     connectToRemote: vi.fn().mockResolvedValue(undefined),
     broadcast: vi.fn().mockResolvedValue(undefined),
     broadcastRevocation: vi.fn().mockResolvedValue(undefined),
+    broadcastCoordinatorClaim: vi.fn().mockResolvedValue(undefined),
+    sendCoordinatorClaim: vi.fn().mockResolvedValue(undefined),
     sendRoomRequest: vi.fn().mockResolvedValue({
       result: "error",
       code: "not_connected",
@@ -245,7 +247,7 @@ describe("MeshStore — init()", () => {
     expect(onCoordinatorRoleChanged).not.toHaveBeenCalled();
   });
 
-  it("degrades gracefully (no throw, onError fires) when becomeCoordinator fails with EADDRINUSE", async () => {
+  it("carries on without the port (no throw, onError fires, still unrefs and holds the elected role) when becomeCoordinator fails with EADDRINUSE", async () => {
     const store = new MeshStore();
     const transport = fakeTransport();
     vi.mocked(transport.connectToCoordinator).mockRejectedValue(
@@ -270,7 +272,10 @@ describe("MeshStore — init()", () => {
     expect(message).toContain("stale process");
     expect(message).toContain("incompatible agent-comms version");
     expect(message).toContain("listen EADDRINUSE: address already in use");
-    expect(transport.unref).not.toHaveBeenCalled();
+    // Nothing answered on the port, so the store is alone as far as it can tell: it keeps running for first contact and holds the coordinator role itself (agent-comms#341) rather than running without a mesh.
+    expect(transport.unref).toHaveBeenCalledTimes(1);
+    expect(store.holdsCoordinatorRole).toBe(true);
+    expect(transport.broadcastCoordinatorClaim).toHaveBeenCalledTimes(1);
   });
 
   it("rethrows a becomeCoordinator failure that isn't EADDRINUSE", async () => {
@@ -663,7 +668,11 @@ describe("MeshStore — shutdown()", () => {
     store.setTransport(transport);
   });
 
-  it("stops the stale-agent checker and shuts down the transport", async () => {
+  it("stops the stale-agent checker the elected role started and shuts down the transport", async () => {
+    vi.mocked(transport.connectToCoordinator).mockRejectedValue(
+      new Error("ECONNREFUSED"),
+    );
+    await store.init();
     const staleAgentChecker = collaborator(store, "staleAgentChecker") as {
       stop: ReturnType<typeof vi.fn>;
     };
@@ -709,14 +718,28 @@ describe("MeshStore — shutdown()", () => {
     expect(order).toEqual(["farewell sent", "transport shut down"]);
   });
 
-  it("fires onCoordinatorRoleChanged(false) on shutdown, when one is set", async () => {
+  it("fires onCoordinatorRoleChanged(false) on shutdown when this store holds the elected role", async () => {
+    vi.mocked(transport.connectToCoordinator).mockRejectedValue(
+      new Error("ECONNREFUSED"),
+    );
     const onCoordinatorRoleChanged = vi.fn<(isCoordinator: boolean) => void>();
     store.onCoordinatorRoleChanged = onCoordinatorRoleChanged;
+    await store.init();
 
     await store.shutdown();
 
-    expect(onCoordinatorRoleChanged).toHaveBeenCalledTimes(1);
-    expect(onCoordinatorRoleChanged).toHaveBeenCalledWith(false);
+    expect(onCoordinatorRoleChanged.mock.calls).toEqual([[true], [false]]);
+    expect(store.holdsCoordinatorRole).toBe(false);
+  });
+
+  it("fires no onCoordinatorRoleChanged on shutdown for a store that never held the elected role", async () => {
+    const onCoordinatorRoleChanged = vi.fn<(isCoordinator: boolean) => void>();
+    store.onCoordinatorRoleChanged = onCoordinatorRoleChanged;
+    await store.init();
+
+    await store.shutdown();
+
+    expect(onCoordinatorRoleChanged).not.toHaveBeenCalled();
   });
 
   it("hands the coordinator role to the longest-running remaining peer before shutting down the transport (agent-comms#170)", async () => {

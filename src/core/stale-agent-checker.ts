@@ -1,5 +1,5 @@
 /**
- * StaleAgentChecker — coordinator-only periodic liveness probe over every registered agent's own PID, marking a dead process's agent offline and, separately, purging agent records that have sat offline past a fixed threshold. Split out of MeshStore purely to keep mesh-store.ts under the repo's max-lines cap; owns its own probe-interval timer exclusively (nothing outside this class ever reads or writes it).
+ * StaleAgentChecker — periodic liveness probe, run only by the elected coordinator (agent-comms#341), over every registered agent's own PID, marking a dead process's agent offline and, separately, purging agent records that have sat offline past a fixed threshold. Split out of MeshStore purely to keep mesh-store.ts under the repo's max-lines cap; owns its own probe-interval timer exclusively (nothing outside this class ever reads or writes it).
  */
 
 import type { AgentIdentity, AgentStatus, DeliveryEvent } from "./types.js";
@@ -15,7 +15,7 @@ export interface StaleAgentCheckerDeps {
   broadcastPatch: (patch: MeshStatePatch) => Promise<void>;
 }
 
-/** How often the coordinator probes registered agent PIDs for liveness. */
+/** How often the elected coordinator probes registered agent PIDs for liveness. */
 const PROBE_INTERVAL_MS = 5000;
 
 /** How long an agent may sit "offline" before its record is purged entirely, to prevent indefinite accumulation. */
@@ -30,7 +30,7 @@ export class StaleAgentChecker {
 
   constructor(private readonly deps: StaleAgentCheckerDeps) {}
 
-  /** Starts the periodic probe (coordinator-only). No-op if already running. */
+  /** Starts the periodic probe (while this store holds the elected coordinator role). No-op if already running. */
   start(): void {
     if (this.timer) return;
     this.timer = setInterval(() => {

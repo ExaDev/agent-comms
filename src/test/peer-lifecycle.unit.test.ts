@@ -37,8 +37,12 @@ interface Harness {
   flushPendingRoomRequests: ReturnType<typeof vi.fn>;
   applyStateSync: ReturnType<typeof vi.fn>;
   applyPatch: ReturnType<typeof vi.fn>;
-  staleAgentCheckerStart: ReturnType<typeof vi.fn>;
-  onCoordinatorRoleChanged: ReturnType<typeof vi.fn>;
+  coordinatorRole: {
+    claimIfVacant: ReturnType<typeof vi.fn>;
+    announceTo: ReturnType<typeof vi.fn>;
+    handleDeparture: ReturnType<typeof vi.fn>;
+    isHolder: ReturnType<typeof vi.fn>;
+  };
 }
 
 function makeHarness(): Harness {
@@ -55,11 +59,12 @@ function makeHarness(): Harness {
   const applyPatch = vi.fn().mockResolvedValue(undefined);
   const notifyRoomsOfStatus = vi.fn().mockResolvedValue(undefined);
   const broadcastPatch = vi.fn().mockResolvedValue(undefined);
-  const staleAgentCheckerStart =
-    vi.fn<PeerLifecycleDeps["staleAgentChecker"]["start"]>();
-  const onCoordinatorRoleChanged = vi
-    .fn<NonNullable<PeerLifecycleDeps["onCoordinatorRoleChanged"]>>()
-    .mockResolvedValue(undefined);
+  const coordinatorRole = {
+    claimIfVacant: vi.fn().mockResolvedValue(undefined),
+    announceTo: vi.fn().mockResolvedValue(undefined),
+    handleDeparture: vi.fn().mockResolvedValue(undefined),
+    isHolder: vi.fn().mockReturnValue(false),
+  };
   const deps: PeerLifecycleDeps = {
     peerInfo: new Map(),
     agents: new Map(),
@@ -75,8 +80,7 @@ function makeHarness(): Harness {
       notifyRoomsOfStatus,
       broadcastPatch,
     },
-    staleAgentChecker: { start: staleAgentCheckerStart },
-    onCoordinatorRoleChanged,
+    coordinatorRole,
   };
   return {
     deps,
@@ -85,8 +89,7 @@ function makeHarness(): Harness {
     flushPendingRoomRequests,
     applyStateSync,
     applyPatch,
-    staleAgentCheckerStart,
-    onCoordinatorRoleChanged,
+    coordinatorRole,
   };
 }
 
@@ -216,7 +219,7 @@ describe("PeerLifecycle — handleDataMessage", () => {
 });
 
 describe("PeerLifecycle — handleBecomeCoordinator", () => {
-  it("becomes coordinator, replaces the peer table with exactly the handoff list, dials every peer, and starts stale-agent probing", async () => {
+  it("takes the port listener, replaces the peer table with exactly the handoff list, dials every peer, and claims the elected role only if no incumbent is known", async () => {
     const h = makeHarness();
     h.deps.peerInfo.set("stale-peer", peerInfo("stale-peer"));
     const incoming = [peerInfo("a"), peerInfo("b")];
@@ -239,18 +242,43 @@ describe("PeerLifecycle — handleBecomeCoordinator", () => {
       incoming[1],
       OWNER_ID,
     );
-    expect(h.staleAgentCheckerStart).toHaveBeenCalledTimes(1);
-    expect(h.onCoordinatorRoleChanged).toHaveBeenCalledTimes(1);
+    expect(h.coordinatorRole.claimIfVacant).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("PeerLifecycle — announcing the elected coordinator (agent-comms#341)", () => {
+  it("announces the incumbent over every newly connected session", async () => {
+    const h = makeHarness();
+    const handle = { id: "new-peer" };
+
+    await h.lifecycle.handlePeerConnected(handle, peerInfo("new-peer"));
+
+    expect(h.coordinatorRole.announceTo).toHaveBeenCalledWith(handle);
   });
 
-  it("still becomes coordinator when onCoordinatorRoleChanged is left unset", async () => {
+  it("announces the incumbent to a peer that introduced itself through the port", async () => {
     const h = makeHarness();
-    h.deps.onCoordinatorRoleChanged = undefined;
+    const handle = { id: "joiner" };
 
-    await expect(
-      h.lifecycle.handleBecomeCoordinator([peerInfo("a")]),
-    ).resolves.toBeUndefined();
-    expect(h.transport.becomeCoordinator).toHaveBeenCalledTimes(1);
+    await h.lifecycle.handleIntroduction(handle, {
+      peerId: "joiner",
+      dataPort: 2,
+    });
+
+    expect(h.coordinatorRole.announceTo).toHaveBeenCalledWith(handle);
+  });
+
+  it("hands every departure to the elected role before anything else", async () => {
+    const h = makeHarness();
+    h.deps.peerInfo.set("gone", peerInfo("gone"));
+
+    await h.lifecycle.handlePeerDeparture("gone");
+
+    expect(h.coordinatorRole.handleDeparture).toHaveBeenCalledWith(
+      "gone",
+      expect.any(Function),
+    );
+    expect(h.deps.peerInfo.has("gone")).toBe(false);
   });
 });
 

@@ -1,5 +1,7 @@
 /**
- * PeerLifecycle — the TransportEvents callbacks around a peer's own comings and goings on the mesh: peer-list/peer-joined bookkeeping, the coordinator's own new-peer introduction handshake, post-connection state-sync, inbound data-message routing (state_sync/state_update), taking over as coordinator, and peer disconnection. Split out of mesh-store.ts to reduce it under the repo's max-lines cap.
+ * PeerLifecycle — the TransportEvents callbacks around a peer's own comings and goings on the mesh: peer-list/peer-joined bookkeeping, the well-known port holder's new-peer introduction handshake, post-connection state-sync, announcing the elected coordinator to every new session, inbound data-message routing (state_sync/state_update), taking over the well-known port listener, and peer disconnection. Split out of mesh-store.ts to reduce it under the repo's max-lines cap.
+ *
+ * Two roles are kept apart here (agent-comms#341). The well-known port listener is only the compatibility first-contact address and introduction path, and is still passed on by graceful handover and recovered by the bind race. The coordinator duties (the stale-agent probe, single-authority departure announcements, the default cc-peer front) follow the elected CoordinatorRole instead, whose holder need not be the peer that bound the port.
  */
 
 import { normaliseWireState } from "./wire-protocol.js";
@@ -13,7 +15,7 @@ import { COORDINATOR_HOST } from "./mesh-store-shared.js";
 import { startFirstContact, type FirstContact } from "./first-contact.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { RoomProtocol } from "./room-protocol.js";
-import type { StaleAgentChecker } from "./stale-agent-checker.js";
+import type { CoordinatorRole } from "./coordinator-role.js";
 import type { ConnectionHandle, MeshTransport } from "./transport.js";
 import type { AgentIdentity } from "./types.js";
 
@@ -34,9 +36,11 @@ export interface PeerLifecycleDeps {
     DeliveryEngine,
     "applyStateSync" | "applyPatch" | "notifyRoomsOfStatus" | "broadcastPatch"
   >;
-  staleAgentChecker: Pick<StaleAgentChecker, "start">;
-  /** Fires right after this side takes over as coordinator -- MeshStore's own hook for starting a coordinator-only capability that doesn't belong in the transport-agnostic core itself (e.g. the cc-peer front, agent-comms#157). Optional and left unset by most callers, mirroring MeshStore's own onDelivery/onPatch/onError callback fields. */
-  onCoordinatorRoleChanged?: (() => void | Promise<void>) | undefined;
+  /** The elected coordinator role: announced to every new session, claimed when this side takes the port listener with no incumbent known, recovered when its holder departs, and the authority retireDepartedAgent checks. */
+  coordinatorRole: Pick<
+    CoordinatorRole,
+    "claimIfVacant" | "announceTo" | "handleDeparture" | "isHolder"
+  >;
   /** Reports a failed takeover or rejoin. The crash-race path runs detached from any caller that could handle a rejection, so this is the only signal that a coordinator loss was noticed but not recovered from. */
   onError?: ((error: Error) => void) | undefined;
 }
@@ -84,6 +88,41 @@ export class PeerLifecycle {
     this.firstContact = undefined;
   }
 
+  /**
+   * init()'s single attempt at the well-known port: connect to whoever holds it, or bind it through the same takeover a handover or crash race runs (which, knowing of no elected incumbent, claims the coordinator role as the first store on this machine). If the port is occupied but unresponsive (e.g. an orphan process from a previous session), carry on without it instead of retrying: first contact still forms the mesh, and with nothing answering on the port this store is alone as far as it can tell, so it claims the coordinator role until first contact brings it a claim that supersedes its own. Retrying tls.connect after a failed handshake to a non-TLS endpoint can freeze the event loop (Node.js TLS session cache bug), so this only tries once. A bind failure other than EADDRINUSE is rethrown.
+   */
+  async joinWellKnownPort(): Promise<void> {
+    const transport = this.deps.requireTransport();
+    const port = this.deps.coordinatorPort;
+    try {
+      await transport.connectToCoordinator(
+        COORDINATOR_HOST,
+        port,
+        this.deps.getPeerId(),
+        transport.dataPort,
+      );
+      return;
+    } catch {
+      // Nothing reachable answered as the port holder; fall through to binding it.
+    }
+    try {
+      await this.handleBecomeCoordinator([]);
+      return;
+    } catch (error) {
+      if (!isAddrInUse(error)) throw error;
+      // connectToCoordinator already failed above, so whatever holds this port never answered as a reachable coordinator either. Name the actual mismatch rather than a generic "unavailable".
+      this.deps.onError?.(
+        new Error(
+          `MeshStore: could not join or create a mesh on port ${String(port)}. ` +
+            `port ${String(port)} is already in use by something that never answered as a reachable coordinator -- a stale process from a previous run, or an incompatible agent-comms version. ` +
+            "agent-comms will reach other peers through first contact only until this is resolved. " +
+            `(${describe(error)})`,
+        ),
+      );
+    }
+    await this.deps.coordinatorRole.claimIfVacant();
+  }
+
   handlePeerList(peers: readonly PeerInfo[]): void {
     const peerId = this.deps.getPeerId();
     for (const peer of peers) {
@@ -122,6 +161,8 @@ export class PeerLifecycle {
     // Broadcast arrival to all existing peers
     const joined: MeshMessage = { method: "peer_joined", peer: newPeer };
     await this.deps.requireTransport().broadcast(joined);
+    // The joiner does not claim the coordinator role itself (MeshStore.init), so this is how it learns who holds it.
+    await this.deps.coordinatorRole.announceTo(handle);
 
     // Connect to the new peer's data server
     void this.deps
@@ -147,6 +188,7 @@ export class PeerLifecycle {
       peers: [...this.deps.peerInfo.values()],
     };
     await this.deps.requireTransport().send(handle, peerList);
+    await this.deps.coordinatorRole.announceTo(handle);
     await this.deps.roomProtocol.flushPendingRoomRequests(handle.id);
   }
 
@@ -161,6 +203,7 @@ export class PeerLifecycle {
     }
   }
 
+  /** Takes over the well-known port listener (a fresh bind in init, a graceful handover, or winning the crash race) and dials the peers named. Holding the port no longer carries the coordinator duties; the one link left is that a port holder which knows of no elected incumbent claims the role, since it is then the first on its machine as far as it can tell. */
   async handleBecomeCoordinator(peerList: readonly PeerInfo[]): Promise<void> {
     // Take over as coordinator using the data server we already have
     await this.deps
@@ -175,24 +218,26 @@ export class PeerLifecycle {
       this.deps.peerInfo.set(peer.id, peer);
       void this.deps.requireTransport().connectToPeer(peer, peerId);
     }
-    this.deps.staleAgentChecker.start();
-    await this.deps.onCoordinatorRoleChanged?.();
+    await this.deps.coordinatorRole.claimIfVacant();
   }
 
   handlePeerDisconnected(handle: Readonly<ConnectionHandle>): void {
     void this.handlePeerDeparture(handle.id);
   }
 
-  /** The awaitable form of handlePeerDisconnected, which TransportEvents forces to be synchronous. A departing peer leaves the peer list; when it was this side's own coordinator, its vacated role is contested before anything else, so whoever wins is already coordinator by the time the departed peer's agent record is retired. */
+  /** The awaitable form of handlePeerDisconnected, which TransportEvents forces to be synchronous. A departing peer leaves the peer list. When it held the elected coordinator role, the role is recovered first (the lowest surviving device-id claims at a raised term), so the new holder is already in place by the time the departed peer's agent record is retired; when it held the well-known port this side dialled, the vacated port is contested too. */
   async handlePeerDeparture(peerId: string): Promise<void> {
     this.deps.peerInfo.delete(peerId);
+    await this.deps.coordinatorRole.handleDeparture(peerId, async () =>
+      this.retireDepartedAgent(peerId),
+    );
     if (peerId === this.deps.getCoordinatorPeerId()) {
       await this.contestCoordinatorRole(peerId);
     }
     await this.retireDepartedAgent(peerId);
   }
 
-  /** Races every other surviving peer to rebind the coordinator port, which is what makes a coordinator CRASH recoverable at all: unlike the graceful handover, a killed coordinator names no successor, so each survivor contests independently and the operating system's own exclusive bind decides the single winner. The winner runs the ordinary takeover path (handleBecomeCoordinator) over the peers it still holds connections to; a loser -- the one case where the bind fails specifically because the port is already taken -- re-introduces itself to the winner so it is a full member of the new mesh again, with its own data port known to whoever joins next. Direct peer-to-peer data connections are untouched throughout, so traffic between survivors never depends on the outcome of this race. */
+  /** Races every other surviving peer to rebind the well-known port, which is what keeps the compatibility first-contact address answering after its holder CRASHES: unlike the graceful handover, a killed holder names no successor, so each survivor contests independently and the operating system's own exclusive bind decides the single winner. The winner runs the ordinary takeover path (handleBecomeCoordinator) over the peers it still holds connections to; a loser -- the one case where the bind fails specifically because the port is already taken -- re-introduces itself to the winner so it is a full member of the new mesh again, with its own data port known to whoever joins next. Direct peer-to-peer data connections are untouched throughout, so traffic between survivors never depends on the outcome of this race. */
   private async contestCoordinatorRole(
     lostCoordinatorId: string,
   ): Promise<void> {
@@ -212,7 +257,7 @@ export class PeerLifecycle {
           if (!isAddrInUse(error)) {
             this.deps.onError?.(
               new Error(
-                `PeerLifecycle: could not take over the vacated coordinator role: ${describe(error)}`,
+                `PeerLifecycle: could not take over the vacated coordinator port: ${describe(error)}`,
               ),
             );
             return;
@@ -259,9 +304,9 @@ export class PeerLifecycle {
     }
   }
 
-  /** Marks a departed peer's own agent offline and announces it, but only from the coordinator -- the same single-authority rule StaleAgentChecker's PID probe already follows, so a departure produces one announcement rather than one per surviving peer. An agent's id is its peer's id (AgentRegistry.registerAgent), so the departed peer names its own record directly; the PID probe remains the backstop for an agent whose process dies without its session closing. */
+  /** Marks a departed peer's own agent offline and announces it, but only from the elected coordinator -- the same single-authority rule StaleAgentChecker's PID probe already follows, so a departure produces one announcement rather than one per surviving peer. An agent's id is its peer's id (AgentRegistry.registerAgent), so the departed peer names its own record directly; the PID probe remains the backstop for an agent whose process dies without its session closing, and an already-offline record is left alone, so a successor that took over late announces nothing twice. */
   private async retireDepartedAgent(peerId: string): Promise<void> {
-    if (!this.deps.requireTransport().isCoordinator) return;
+    if (!this.deps.coordinatorRole.isHolder()) return;
     const agent = this.deps.agents.get(peerId);
     if (agent === undefined || agent.status === "offline") return;
     agent.status = "offline";
@@ -273,7 +318,7 @@ export class PeerLifecycle {
     });
   }
 
-  /** Graceful coordinator handover (agent-comms#170): called by MeshStore.shutdown() while the transport is still up. A no-op unless this side currently holds the coordinator role and at least one other peer remains connected -- neither condition is this class's own business to log or report on, since a solo coordinator shutting down or a non-coordinator peer shutting down are both entirely ordinary. When both hold, picks the longest-running remaining peer (the one with the earliest recorded PeerInfo.startedAt, matching the README's documented policy) as the successor and sends it become_coordinator carrying every other remaining peer -- exactly the peerList shape handleBecomeCoordinator already expects (it dials each entry itself; the successor doesn't need to be told about itself). The crash-race path (each surviving peer independently racing to rebind the coordinator port) is a separate mechanism and untouched by this method. */
+  /** Graceful handover of the well-known port listener (agent-comms#170): called by MeshStore.shutdown() while the transport is still up. The elected coordinator role needs no handover, since survivors recover it from the departure itself. A no-op unless this side currently holds the port listener and at least one other peer remains connected -- neither condition is this class's own business to log or report on, since a solo coordinator shutting down or a non-coordinator peer shutting down are both entirely ordinary. When both hold, picks the longest-running remaining peer (the one with the earliest recorded PeerInfo.startedAt, matching the README's documented policy) as the successor and sends it become_coordinator carrying every other remaining peer -- exactly the peerList shape handleBecomeCoordinator already expects (it dials each entry itself; the successor doesn't need to be told about itself). The crash-race path (each surviving peer independently racing to rebind the coordinator port) is a separate mechanism and untouched by this method. */
   async sendCoordinatorHandover(): Promise<void> {
     const transport = this.deps.requireTransport();
     if (!transport.isCoordinator) return;

@@ -27,6 +27,7 @@ function eventsRecordingPresence(
     onPeerJoined: () => undefined,
     onBecomeCoordinator: () => undefined,
     onRevocationAnnounce: () => undefined,
+    onCoordinatorClaim: () => undefined,
     onPresenceAdvert: onPresence,
     onDeviceReachable: () => undefined,
   };

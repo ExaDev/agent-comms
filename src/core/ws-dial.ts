@@ -3,7 +3,7 @@
 import { WebSocket as WsSocket } from "ws";
 import { cdeDecodeOptions, cdeEncodeOptions, decode, encode } from "cbor2";
 import { frameSchema, type Frame } from "wire-mesh-core/generated/protocol";
-import type { Connection } from "wire-mesh-core/ports/transport";
+import type { Connection, Transport } from "wire-mesh-core/ports/transport";
 
 const CONNECT_TIMEOUT_MS = 10_000;
 // RFC 6455 close codes, named rather than bare: 1000 normal closure, 1002 protocol error.
@@ -165,4 +165,26 @@ function wrapSocket(socket: WsSocket): Connection {
       });
     },
   };
+}
+
+/** Dials a remote for connectToRemote: a ws:// or wss:// URL through connectWsUrl, anything else as host:port over the given transport. Split out of wire-mesh-transport.ts to keep it under the repo's max-lines cap. */
+export async function dialRemote(
+  wireTransport: Readonly<Transport>,
+  host: string,
+  port: number,
+): Promise<Connection> {
+  // A ws:// or wss:// URL in the host position dials a WebSocket-served
+  // hub (e.g. the mesh.exadev.io cloudflare-hub) instead of raw TLS --
+  // the port is meaningless in URL form, so callers pass 0. Any other URL
+  // scheme is refused here rather than surfacing as an opaque DNS error
+  // from the TLS dial treating the whole URL as a hostname.
+  const isWsUrl = /^wss?:\/\//.test(host);
+  if (!isWsUrl && host.includes("://")) {
+    throw new Error(
+      `expected a hostname or a ws:// / wss:// URL, got "${host}"`,
+    );
+  }
+  return isWsUrl
+    ? connectWsUrl(host)
+    : wireTransport.connect(`${host}:${String(port)}`);
 }

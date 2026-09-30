@@ -1,10 +1,14 @@
 /**
- * PeerLifecycle's crash-race coordinator failover decision (agent-comms#285), exercised against fakes: which disconnects contest the vacated coordinator role, what a peer that loses the bind race does instead, and who retires a departed peer's own agent record. The real-socket counterpart lives in coordinator-failover.integration.test.ts.
+ * PeerLifecycle's failover decisions, exercised against fakes with a real CoordinatorRole: which disconnects contest the vacated well-known port (agent-comms#285), what a peer that loses the bind race does instead, how the elected coordinator role is recovered when its holder departs (agent-comms#341), and who retires a departed peer's own agent record. The real-socket counterparts live in coordinator-failover.integration.test.ts and coordinator-election.integration.test.ts.
  */
 
-import { test, expect } from "vitest";
+import { afterEach, test, expect, vi } from "vitest";
+import { deviceIdFromHex } from "wire-mesh-core/domain/device-id";
+import type { CoordinatorFrame } from "wire-mesh-core/generated/protocol";
 import { PeerLifecycle } from "../core/peer-lifecycle.js";
 import type { PeerLifecycleDeps } from "../core/peer-lifecycle.js";
+import { CoordinatorRole } from "../core/coordinator-role.js";
+import { ROOM_REQUEST_TIMEOUT_MS } from "../core/request-timeouts.js";
 import type { MeshTransport } from "../core/transport.js";
 import type { MeshStatePatch, PeerInfo } from "../core/wire-protocol.js";
 import type { AgentIdentity, AgentStatus } from "../core/types.js";
@@ -14,25 +18,28 @@ const SELF_DATA_PORT = 41_001;
 const COORDINATOR_DATA_PORT = 41_002;
 const SURVIVOR_DATA_PORT = 41_003;
 
-const SELF_ID = "self-peer";
-const COORDINATOR_ID = "coordinator-peer";
-const SURVIVOR_ID = "survivor-peer";
+const DEVICE_ID_HEX_LENGTH = 64;
+/** Device-ids in ascending order, so which survivor is the lowest is fixed per test: the departing peer sorts first, then this side, then the other survivor, unless a test swaps the last two. */
+const COORDINATOR_ID = "1".repeat(DEVICE_ID_HEX_LENGTH);
+const LOW_ID = "2".repeat(DEVICE_ID_HEX_LENGTH);
+const HIGH_ID = "3".repeat(DEVICE_ID_HEX_LENGTH);
 
 interface TransportCalls {
   becomeCoordinator: { host: string; port: number }[];
   connectToCoordinator: { port: number; peerId: string; dataPort: number }[];
   connectToPeer: string[];
   broadcasts: MeshStatePatch[];
+  claims: CoordinatorFrame[];
 }
 
 interface Harness {
   lifecycle: PeerLifecycle;
+  role: CoordinatorRole;
   calls: TransportCalls;
   peerInfo: Map<string, PeerInfo>;
   agents: Map<string, AgentIdentity>;
   roomStatusNotifications: { agentId: string; status: AgentStatus }[];
-  staleCheckerStarts: number;
-  roleChanges: number;
+  gains: number;
   errors: Error[];
 }
 
@@ -56,33 +63,37 @@ function agentRecord(id: string, status: AgentStatus): AgentIdentity {
   };
 }
 
+function claimFor(holderHex: string, term: number): CoordinatorFrame {
+  return { type: "coordinator", term, coordinator: deviceIdFromHex(holderHex) };
+}
+
 interface HarnessOptions {
-  /** Whether this side already holds the coordinator role before the disconnect arrives. */
+  /** This side's own device-id; LOW_ID unless a test needs this side not to be the lowest survivor. */
+  selfId?: string;
+  /** The other survivor's device-id. */
+  survivorId?: string;
+  /** Whether this side already holds the well-known port listener before the disconnect arrives. */
   isCoordinator?: boolean;
-  /** The coordinator this side currently answers to, as the transport reports it. */
+  /** The port holder this side currently answers to, as the transport reports it. */
   coordinatorPeerId?: string | undefined;
   /** Rejection thrown by the transport's becomeCoordinator, simulating another survivor winning the bind race. */
   bindFailure?: Error;
 }
 
 function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
+  const selfId = options.selfId ?? LOW_ID;
   const calls: TransportCalls = {
     becomeCoordinator: [],
     connectToCoordinator: [],
     connectToPeer: [],
     broadcasts: [],
+    claims: [],
   };
-  const harness: Harness = {
-    // Assigned below, once the deps it closes over exist.
-    lifecycle: undefined as unknown as PeerLifecycle,
-    calls,
-    peerInfo: new Map<string, PeerInfo>(),
-    agents: new Map<string, AgentIdentity>(),
-    roomStatusNotifications: [],
-    staleCheckerStarts: 0,
-    roleChanges: 0,
-    errors: [],
-  };
+  const peerInfo = new Map<string, PeerInfo>();
+  const agents = new Map<string, AgentIdentity>();
+  const roomStatusNotifications: Harness["roomStatusNotifications"] = [];
+  const errors: Error[] = [];
+  let gains = 0;
 
   let isCoordinator = options.isCoordinator ?? false;
   const transport: MeshTransport = {
@@ -110,6 +121,10 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
     connectToRemote: async () => {},
     broadcast: async () => {},
     broadcastRevocation: async () => {},
+    broadcastCoordinatorClaim: async (frame) => {
+      calls.claims.push(frame);
+    },
+    sendCoordinatorClaim: async () => {},
     sendRoomRequest: async () => ({ result: "ok" }),
     addListener: async () => "listener",
     removeListener: async () => {},
@@ -118,11 +133,24 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
     unref: () => {},
   };
 
+  const role = new CoordinatorRole({
+    getPeerId: () => selfId,
+    livePeerIds: () => peerInfo.keys(),
+    requireTransport: () => transport,
+    onGained: async () => {
+      gains += 1;
+    },
+    onLost: async () => {},
+    onError: (error) => {
+      errors.push(error instanceof Error ? error : new Error(String(error)));
+    },
+  });
+
   const deps: PeerLifecycleDeps = {
-    peerInfo: harness.peerInfo,
-    agents: harness.agents,
+    peerInfo,
+    agents,
     coordinatorPort: COORDINATOR_PORT,
-    getPeerId: () => SELF_ID,
+    getPeerId: () => selfId,
     getCoordinatorPeerId: () => transport.coordinatorPeerId,
     requireTransport: () => transport,
     serialise: () => ({
@@ -137,108 +165,127 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
       applyStateSync: () => {},
       applyPatch: async () => {},
       notifyRoomsOfStatus: async (agentId, status) => {
-        harness.roomStatusNotifications.push({ agentId, status });
+        roomStatusNotifications.push({ agentId, status });
       },
       broadcastPatch: async (patch) => {
         calls.broadcasts.push(patch);
       },
     },
-    staleAgentChecker: {
-      start: () => {
-        harness.staleCheckerStarts += 1;
-      },
-    },
-    onCoordinatorRoleChanged: () => {
-      harness.roleChanges += 1;
-    },
+    coordinatorRole: role,
     onError: (error) => {
-      harness.errors.push(error);
+      errors.push(error);
     },
   };
 
-  harness.lifecycle = new PeerLifecycle(deps);
-  return harness;
-}
-
-/** The peer list every test starts from: this side, the coordinator that is about to die, and one other survivor. */
-function seedMesh(harness: Harness): void {
-  harness.peerInfo.set(
-    SELF_ID,
-    peer(SELF_ID, SELF_DATA_PORT, "2026-01-01T00:00:02.000Z"),
+  peerInfo.set(
+    selfId,
+    peer(selfId, SELF_DATA_PORT, "2026-01-01T00:00:02.000Z"),
   );
-  harness.peerInfo.set(
+  peerInfo.set(
     COORDINATOR_ID,
     peer(COORDINATOR_ID, COORDINATOR_DATA_PORT, "2026-01-01T00:00:00.000Z"),
   );
-  harness.peerInfo.set(
-    SURVIVOR_ID,
-    peer(SURVIVOR_ID, SURVIVOR_DATA_PORT, "2026-01-01T00:00:01.000Z"),
+  const survivorId = options.survivorId ?? HIGH_ID;
+  peerInfo.set(
+    survivorId,
+    peer(survivorId, SURVIVOR_DATA_PORT, "2026-01-01T00:00:01.000Z"),
   );
+
+  return {
+    lifecycle: new PeerLifecycle(deps),
+    role,
+    calls,
+    peerInfo,
+    agents,
+    roomStatusNotifications,
+    get gains() {
+      return gains;
+    },
+    errors,
+  };
 }
 
-test("the coordinator's own disconnect makes this peer contest the coordinator port", async () => {
+/** Makes holderHex the elected incumbent at term, as if its claim had just been gossiped to this side. */
+async function electHolder(
+  harness: Harness,
+  holderHex: string,
+  term: number,
+): Promise<void> {
+  await harness.role.handleClaim({ id: holderHex }, claimFor(holderHex, term));
+  harness.calls.claims.length = 0;
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+test("the port holder's own disconnect makes this peer contest the well-known port", async () => {
   const harness = makeHarness({ coordinatorPeerId: COORDINATOR_ID });
-  seedMesh(harness);
 
   await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
 
   expect(harness.calls.becomeCoordinator).toEqual([
     { host: "127.0.0.1", port: COORDINATOR_PORT },
   ]);
-  expect(harness.staleCheckerStarts).toBe(1);
-  expect(harness.roleChanges).toBe(1);
   expect(harness.errors).toEqual([]);
 });
 
-test("taking over keeps this peer's own entry and drops the dead coordinator's", async () => {
+test("winning the vacated port does not by itself carry the coordinator duties while another live peer holds the elected role", async () => {
   const harness = makeHarness({ coordinatorPeerId: COORDINATOR_ID });
-  seedMesh(harness);
+  await electHolder(harness, HIGH_ID, 0);
 
   await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
 
-  expect([...harness.peerInfo.keys()].sort()).toEqual(
-    [SELF_ID, SURVIVOR_ID].sort(),
-  );
-  expect(harness.calls.connectToPeer).toEqual([SURVIVOR_ID]);
+  expect(harness.calls.becomeCoordinator).toHaveLength(1);
+  expect(harness.role.isHolder()).toBe(false);
+  expect(harness.gains).toBe(0);
+  expect(harness.calls.claims).toEqual([]);
 });
 
-test("an ordinary peer's disconnect never contests the coordinator role", async () => {
+test("taking over the port keeps this peer's own entry and drops the dead holder's", async () => {
   const harness = makeHarness({ coordinatorPeerId: COORDINATOR_ID });
-  seedMesh(harness);
 
-  await harness.lifecycle.handlePeerDeparture(SURVIVOR_ID);
+  await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
+
+  expect([...harness.peerInfo.keys()].sort()).toEqual([LOW_ID, HIGH_ID].sort());
+  expect(harness.calls.connectToPeer).toEqual([HIGH_ID]);
+});
+
+test("an ordinary peer's disconnect contests neither the port nor the elected role", async () => {
+  const harness = makeHarness({ coordinatorPeerId: COORDINATOR_ID });
+  await electHolder(harness, COORDINATOR_ID, 0);
+
+  await harness.lifecycle.handlePeerDeparture(HIGH_ID);
 
   expect(harness.calls.becomeCoordinator).toEqual([]);
   expect(harness.calls.connectToCoordinator).toEqual([]);
-  expect(harness.peerInfo.has(SURVIVOR_ID)).toBe(false);
+  expect(harness.calls.claims).toEqual([]);
+  expect(harness.peerInfo.has(HIGH_ID)).toBe(false);
 });
 
-test("a peer that already holds the coordinator role never contests it", async () => {
+test("a peer that already holds the port listener never contests it", async () => {
   const harness = makeHarness({
     isCoordinator: true,
     coordinatorPeerId: COORDINATOR_ID,
   });
-  seedMesh(harness);
 
   await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
 
   expect(harness.calls.becomeCoordinator).toEqual([]);
 });
 
-test("losing the bind race makes this peer rejoin under the new coordinator", async () => {
+test("losing the bind race makes this peer rejoin under the new port holder", async () => {
   const harness = makeHarness({
     coordinatorPeerId: COORDINATOR_ID,
     bindFailure: new Error("listen EADDRINUSE: address already in use"),
   });
-  seedMesh(harness);
 
   await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
 
   expect(harness.calls.becomeCoordinator).toHaveLength(1);
   expect(harness.calls.connectToCoordinator).toEqual([
-    { port: COORDINATOR_PORT, peerId: SELF_ID, dataPort: SELF_DATA_PORT },
+    { port: COORDINATOR_PORT, peerId: LOW_ID, dataPort: SELF_DATA_PORT },
   ]);
-  expect(harness.staleCheckerStarts).toBe(0);
   expect(harness.errors).toEqual([]);
 });
 
@@ -247,35 +294,94 @@ test("a bind failure that is not a port conflict is reported, not retried as a r
     coordinatorPeerId: COORDINATOR_ID,
     bindFailure: new Error("EACCES: permission denied"),
   });
-  seedMesh(harness);
 
   await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
 
   expect(harness.calls.connectToCoordinator).toEqual([]);
   expect(harness.errors.map((error) => error.message)).toEqual([
-    "PeerLifecycle: could not take over the vacated coordinator role: EACCES: permission denied",
+    "PeerLifecycle: could not take over the vacated coordinator port: EACCES: permission denied",
   ]);
 });
 
-test("the coordinator retires a departed peer's own agent record", async () => {
-  const harness = makeHarness({ isCoordinator: true });
-  seedMesh(harness);
-  harness.agents.set(SURVIVOR_ID, agentRecord(SURVIVOR_ID, "active"));
+test("the elected holder's departure makes the lowest surviving device-id claim the role at a raised term, whether or not it wins the port", async () => {
+  const harness = makeHarness({
+    coordinatorPeerId: COORDINATOR_ID,
+    bindFailure: new Error("listen EADDRINUSE: address already in use"),
+  });
+  const departedTerm = 3;
+  await electHolder(harness, COORDINATOR_ID, departedTerm);
 
-  await harness.lifecycle.handlePeerDeparture(SURVIVOR_ID);
+  await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
 
-  expect(harness.agents.get(SURVIVOR_ID)?.status).toBe("offline");
+  expect(harness.calls.claims).toEqual([claimFor(LOW_ID, departedTerm + 1)]);
+  expect(harness.role.isHolder()).toBe(true);
+  expect(harness.gains).toBe(1);
+  expect(harness.calls.becomeCoordinator).toHaveLength(1);
+});
+
+test("a survivor that is not the lowest device-id leaves the claim to the lowest one", async () => {
+  vi.useFakeTimers();
+  const harness = makeHarness({ selfId: HIGH_ID, survivorId: LOW_ID });
+  await electHolder(harness, COORDINATOR_ID, 0);
+
+  await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
+  await harness.role.handleClaim({ id: LOW_ID }, claimFor(LOW_ID, 1));
+  harness.calls.claims.length = 0;
+  await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
+
+  expect(harness.role.isHolder()).toBe(false);
+  expect(harness.role.current()).toEqual({ term: 1, holder: LOW_ID });
+  expect(harness.calls.claims).toEqual([]);
+});
+
+test("a survivor claims the role itself once the expected successor's claim never arrives, and retires the departed holder", async () => {
+  vi.useFakeTimers();
+  const harness = makeHarness({ selfId: HIGH_ID, survivorId: LOW_ID });
+  harness.agents.set(COORDINATOR_ID, agentRecord(COORDINATOR_ID, "active"));
+  await electHolder(harness, COORDINATOR_ID, 0);
+
+  await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
+  expect(harness.calls.claims).toEqual([]);
+  await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
+
+  expect(harness.calls.claims).toEqual([claimFor(HIGH_ID, 1)]);
+  expect(harness.role.isHolder()).toBe(true);
+  expect(harness.agents.get(COORDINATOR_ID)?.status).toBe("offline");
+  expect(harness.calls.broadcasts).toEqual([
+    { type: "agent_offline", agentId: COORDINATOR_ID },
+  ]);
+});
+
+test("the elected holder retires a departed peer's own agent record", async () => {
+  const harness = makeHarness();
+  await harness.role.claimIfVacant();
+  harness.agents.set(HIGH_ID, agentRecord(HIGH_ID, "active"));
+
+  await harness.lifecycle.handlePeerDeparture(HIGH_ID);
+
+  expect(harness.agents.get(HIGH_ID)?.status).toBe("offline");
   expect(harness.roomStatusNotifications).toEqual([
-    { agentId: SURVIVOR_ID, status: "offline" },
+    { agentId: HIGH_ID, status: "offline" },
   ]);
   expect(harness.calls.broadcasts).toEqual([
-    { type: "agent_offline", agentId: SURVIVOR_ID },
+    { type: "agent_offline", agentId: HIGH_ID },
   ]);
 });
 
-test("a peer that takes over retires the dead coordinator's own agent record", async () => {
+test("holding only the port listener gives no authority to retire a departed peer", async () => {
+  const harness = makeHarness({ isCoordinator: true });
+  await electHolder(harness, COORDINATOR_ID, 0);
+  harness.agents.set(HIGH_ID, agentRecord(HIGH_ID, "active"));
+
+  await harness.lifecycle.handlePeerDeparture(HIGH_ID);
+
+  expect(harness.agents.get(HIGH_ID)?.status).toBe("active");
+  expect(harness.calls.broadcasts).toEqual([]);
+});
+
+test("a peer that takes over the elected role retires the dead holder's own agent record", async () => {
   const harness = makeHarness({ coordinatorPeerId: COORDINATOR_ID });
-  seedMesh(harness);
+  await electHolder(harness, COORDINATOR_ID, 0);
   harness.agents.set(COORDINATOR_ID, agentRecord(COORDINATOR_ID, "active"));
 
   await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
@@ -286,16 +392,19 @@ test("a peer that takes over retires the dead coordinator's own agent record", a
   ]);
 });
 
-test("a peer that loses the race leaves the offline announcement to the winner", async () => {
+test("a survivor that does not take over the elected role leaves the offline announcement to the new holder, even when it wins the port", async () => {
+  vi.useFakeTimers();
   const harness = makeHarness({
+    selfId: HIGH_ID,
+    survivorId: LOW_ID,
     coordinatorPeerId: COORDINATOR_ID,
-    bindFailure: new Error("listen EADDRINUSE: address already in use"),
   });
-  seedMesh(harness);
+  await electHolder(harness, COORDINATOR_ID, 0);
   harness.agents.set(COORDINATOR_ID, agentRecord(COORDINATOR_ID, "active"));
 
   await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
 
+  expect(harness.calls.becomeCoordinator).toHaveLength(1);
   expect(harness.calls.broadcasts).toEqual([]);
   expect(harness.roomStatusNotifications).toEqual([]);
 });

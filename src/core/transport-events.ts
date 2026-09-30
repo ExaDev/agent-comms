@@ -4,6 +4,7 @@
 
 import type { TransportEvents } from "./transport.js";
 import type { ConnectionApproval } from "./connection-approval.js";
+import type { CoordinatorRole } from "./coordinator-role.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { PeerLifecycle } from "./peer-lifecycle.js";
 import type { RoomProtocol } from "./room-protocol.js";
@@ -14,6 +15,7 @@ export interface TransportEventTargets {
   connectionApproval: ConnectionApproval;
   deliveryEngine: DeliveryEngine;
   roomProtocol: RoomProtocol;
+  coordinatorRole: CoordinatorRole;
   reportError: (error: unknown) => void;
 }
 
@@ -52,6 +54,11 @@ export function createTransportEvents(
     onError: store.reportError,
     onRevocationAnnounce: (entry) => {
       void store.deliveryEngine.handleRevocationAnnounce(entry);
+    },
+    onCoordinatorClaim: (handle, frame) => {
+      void store.coordinatorRole
+        .handleClaim(handle, frame)
+        .catch(store.reportError);
     },
     onPresenceAdvert: (handle, status) => {
       store.deliveryEngine.handlePresenceAdvert(handle.id, status);

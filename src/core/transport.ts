@@ -21,6 +21,7 @@ import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
 import type {
   CapabilityScope,
   CapabilityToken,
+  CoordinatorFrame,
   ManageCommand,
   RevocationEntry,
 } from "wire-mesh-core/generated/protocol";
@@ -125,6 +126,14 @@ export interface TransportEvents {
   onRevocationAnnounce: (entry: RevocationEntry) => void;
 
   /**
+   * A peer on this machine gossiped a coordinator-frame: a term-based claim to the elected coordinator role (agent-comms#341). Fires only for sessions the transport counts as machine-local, since the duties that role carries are per machine. MeshStore evaluates it against the claim it currently accepts.
+   */
+  onCoordinatorClaim: (
+    handle: Readonly<ConnectionHandle>,
+    frame: Readonly<CoordinatorFrame>,
+  ) => void;
+
+  /**
    * A device this side can now route a request to became reachable: the relay hub admitted its directory entry into this side's own view, or an operator trusted it outright. Fires for a route that appears through the hub as well as a direct peer connection, since onPeerConnected only ever covers the latter and a device fronted by a remote gateway has no local session of its own to connect. MeshStore retries anything queued for that device on this.
    */
   onDeviceReachable: (deviceHex: string) => void;
@@ -146,7 +155,7 @@ export interface MeshTransport {
   /** The port this instance's data server is listening on (0 before startDataServer). */
   readonly dataPort: number;
 
-  /** Whether this instance is the mesh coordinator. */
+  /** Whether this instance holds the well-known coordinator port listener, the compatibility first-contact address and introduction path. Not the elected coordinator role (agent-comms#341), which is held by gossiped claim and need not be on the peer that bound the port. */
   readonly isCoordinator: boolean;
 
   /** Whether this instance has a live connection to a coordinator. */
@@ -216,6 +225,21 @@ export interface MeshTransport {
    * Announces one or more already-minted revocation-entries to every connected peer session, best-effort (an unreachable peer misses it and learns of the revocation later, if ever -- the same honest gossip-propagation-delay limit every other broadcast in this codebase already accepts).
    */
   broadcastRevocation: (entries: readonly RevocationEntry[]) => Promise<void>;
+
+  /**
+   * Gossips a coordinator-frame to every machine-local peer session, best-effort: a peer that misses it learns the incumbent from the next claim or announcement it does receive.
+   */
+  broadcastCoordinatorClaim: (
+    frame: Readonly<CoordinatorFrame>,
+  ) => Promise<void>;
+
+  /**
+   * Sends a coordinator-frame to one peer, as an announcement to a new session or an answer to a stale claim. A no-op when that peer has no machine-local session.
+   */
+  sendCoordinatorClaim: (
+    handle: Readonly<ConnectionHandle>,
+    frame: Readonly<CoordinatorFrame>,
+  ) => Promise<void>;
 
   /**
    * Sends a real core/room manage-request to a specific member's own established session, returning its outcome (e.g. a room.join request's granted-token, or a room.send's delivery receipt) rather than swallowing it the way send() does for the legacy opaque-frame path. Resolves to a not_connected error outcome if no live session to that member exists, rather than throwing -- the caller (currently room-join, and P3.5's directed fan-out once it lands) decides how to react to an unreachable member.

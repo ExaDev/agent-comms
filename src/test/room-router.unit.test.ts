@@ -21,6 +21,7 @@ function fakeEvents(): TransportEvents {
     onBecomeCoordinator: vi.fn<() => void>(),
     onError: vi.fn<() => void>(),
     onRevocationAnnounce: vi.fn<() => void>(),
+    onCoordinatorClaim: vi.fn<() => void>(),
     onPresenceAdvert: vi.fn<() => void>(),
     onDeviceReachable: vi.fn<() => void>(),
   };
