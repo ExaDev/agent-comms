@@ -60,26 +60,40 @@ class FakeHub implements HubLinkSession {
 
 function newLink(
   hub: FakeHub,
-  shouldConnect: () => boolean = () => true,
+  options: Readonly<{
+    shouldConnect?: () => boolean;
+    selectUrl?: (excluded: ReadonlySet<string>) => string;
+  }> = {},
 ): {
   link: HubLink;
   connected: () => number;
+  disconnected: () => number;
   errors: Error[];
 } {
   let connectedCount = 0;
+  let disconnectedCount = 0;
   const errors: Error[] = [];
+  const { shouldConnect = () => true, selectUrl = () => HUB_URL } = options;
   const link = new HubLink({
     hub,
-    url: HUB_URL,
+    selectUrl,
     shouldConnect,
     onConnected: () => {
       connectedCount += 1;
+    },
+    onDisconnected: () => {
+      disconnectedCount += 1;
     },
     onError: (error) => {
       errors.push(error);
     },
   });
-  return { link, connected: () => connectedCount, errors };
+  return {
+    link,
+    connected: () => connectedCount,
+    disconnected: () => disconnectedCount,
+    errors,
+  };
 }
 
 beforeEach(() => {
@@ -203,7 +217,7 @@ describe("HubLink", () => {
   it("does not dial while the store does not want a session, and dials within a poll once it does", async () => {
     const hub = new FakeHub();
     let wanted = false;
-    const { link } = newLink(hub, () => wanted);
+    const { link } = newLink(hub, { shouldConnect: () => wanted });
     link.start();
     await vi.advanceTimersByTimeAsync(HUB_LINK_POLL_INTERVAL_MS * 2);
     expect(hub.dials).toHaveLength(0);
@@ -218,7 +232,7 @@ describe("HubLink", () => {
   it("dials at once on reconsider instead of waiting out the poll", async () => {
     const hub = new FakeHub();
     let wanted = false;
-    const { link } = newLink(hub, () => wanted);
+    const { link } = newLink(hub, { shouldConnect: () => wanted });
     link.start();
     await vi.advanceTimersByTimeAsync(0);
 
@@ -234,7 +248,7 @@ describe("HubLink", () => {
   it("drops a live session when the store stops wanting one, and does not redial while it stays unwanted", async () => {
     const hub = new FakeHub();
     let wanted = true;
-    const { link } = newLink(hub, () => wanted);
+    const { link } = newLink(hub, { shouldConnect: () => wanted });
     link.start();
     await vi.advanceTimersByTimeAsync(0);
     expect(hub.isConnected).toBe(true);
@@ -253,7 +267,7 @@ describe("HubLink", () => {
   it("notices a session it no longer wants at the next poll when nobody calls reconsider", async () => {
     const hub = new FakeHub();
     let wanted = true;
-    const { link } = newLink(hub, () => wanted);
+    const { link } = newLink(hub, { shouldConnect: () => wanted });
     link.start();
     await vi.advanceTimersByTimeAsync(0);
 
@@ -261,6 +275,50 @@ describe("HubLink", () => {
     await vi.advanceTimersByTimeAsync(HUB_LINK_POLL_INTERVAL_MS);
 
     expect(hub.isConnected).toBe(false);
+    await link.stop();
+  });
+
+  it("dials whichever hub selection names, and moves a held session as soon as selection prefers another (agent-comms#342)", async () => {
+    const hub = new FakeHub();
+    const relayUrl = "ws://127.0.0.1:4100/";
+    let preferred = HUB_URL;
+    const { link, disconnected } = newLink(hub, {
+      selectUrl: () => preferred,
+    });
+
+    link.start();
+    await vi.advanceTimersByTimeAsync(0);
+    preferred = relayUrl;
+    await vi.advanceTimersByTimeAsync(HUB_LINK_POLL_INTERVAL_MS);
+
+    expect(hub.dials).toEqual([HUB_URL, relayUrl]);
+    expect(hub.disconnects).toBe(1);
+    expect(disconnected()).toBe(1);
+    await link.stop();
+  });
+
+  it("excludes a relay whose dial failed from selection until the redial ceiling has passed, then tries it again", async () => {
+    const hub = new FakeHub();
+    const relayUrl = "ws://127.0.0.1:4100/";
+    const exclusionsSeen: string[][] = [];
+    const { link } = newLink(hub, {
+      selectUrl: (excluded) => {
+        exclusionsSeen.push([...excluded]);
+        return excluded.has(relayUrl) ? HUB_URL : relayUrl;
+      },
+    });
+    hub.failNextDials(1);
+
+    link.start();
+    await vi.advanceTimersByTimeAsync(HUB_RECONNECT_INITIAL_DELAY_MS);
+
+    expect(hub.dials).toEqual([relayUrl, HUB_URL]);
+    expect(exclusionsSeen[1]).toEqual([relayUrl]);
+
+    await vi.advanceTimersByTimeAsync(HUB_RECONNECT_MAX_DELAY_MS);
+
+    expect(exclusionsSeen.at(-1)).toEqual([]);
+    expect(hub.dials.at(-1)).toBe(relayUrl);
     await link.stop();
   });
 });
