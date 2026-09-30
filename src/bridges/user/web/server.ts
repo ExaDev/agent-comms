@@ -265,9 +265,6 @@ export async function runWeb(userName: string, port = 0): Promise<void> {
   new HandleRef(handle);
 
   handle.server.on("listening", () => {
-    const addr = handle.server.address();
-    const actualPort = typeof addr === "object" && addr ? addr.port : port;
-    console.log(`Agent Comms web UI: http://localhost:${String(actualPort)}`);
     console.log(
       `Connected as ${userName} (user) [${handle.controller.agentId}]`,
     );
