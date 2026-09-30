@@ -24,6 +24,9 @@ const DEVICE_ID_HEX_LENGTH = 64;
 const DEVICE_A = "a".repeat(DEVICE_ID_HEX_LENGTH);
 const DEVICE_B = "b".repeat(DEVICE_ID_HEX_LENGTH);
 
+/** Labels a device the way a caller would, recognisably different from its id. */
+const labelOf = (id: string): string => `label-${id}`;
+
 const MOCK_GRAPH: MeshGraph = {
   nodes: [DEVICE_A, DEVICE_B],
   edges: [{ kind: "direct", from: DEVICE_A, to: DEVICE_B }],
@@ -34,6 +37,7 @@ describe("MeshGraphView", () => {
     renderWithMantine(
       <MeshGraphView
         graph={{ nodes: [], edges: [] }}
+        label={labelOf}
         selectedDevice={undefined}
         onSelectDevice={() => {}}
       />,
@@ -47,6 +51,7 @@ describe("MeshGraphView", () => {
     renderWithMantine(
       <MeshGraphView
         graph={MOCK_GRAPH}
+        label={labelOf}
         selectedDevice={undefined}
         onSelectDevice={() => {}}
       />,
@@ -68,6 +73,7 @@ describe("MeshGraphView", () => {
     renderWithMantine(
       <MeshGraphView
         graph={MOCK_GRAPH}
+        label={labelOf}
         selectedDevice={undefined}
         onSelectDevice={(id) => {
           selected = id;
@@ -78,5 +84,18 @@ describe("MeshGraphView", () => {
       screen.getByRole("button", { name: `Device ${DEVICE_A}` }),
     );
     expect(selected).toBe(DEVICE_A);
+  });
+
+  it("labels each node with the label it is given", () => {
+    renderWithMantine(
+      <MeshGraphView
+        graph={MOCK_GRAPH}
+        label={labelOf}
+        selectedDevice={undefined}
+        onSelectDevice={() => {}}
+      />,
+    );
+    expect(screen.getByText(labelOf(DEVICE_A))).toBeInTheDocument();
+    expect(screen.getByText(labelOf(DEVICE_B))).toBeInTheDocument();
   });
 });

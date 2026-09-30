@@ -465,6 +465,9 @@ const tabRouter = {
   getMeshGraph: tabImpl.getMeshGraph.handler(async () =>
     requireOrpcClient().getMeshGraph({}),
   ),
+  getDisplayNames: tabImpl.getDisplayNames.handler(async () =>
+    requireOrpcClient().getDisplayNames({}),
+  ),
   getMeshTrace: tabImpl.getMeshTrace.handler(async ({ input }) =>
     requireOrpcClient().getMeshTrace(input),
   ),

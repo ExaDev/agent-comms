@@ -45,6 +45,13 @@ const MeshGraphSchema = z.object({
   edges: z.array(MeshGraphEdgeSchema),
 });
 
+/** One id's names, as display-name.ts's DisplayNameParts: the parts the dashboard formats with formatDisplayName. */
+const DisplayNamePartsSchema = z.object({
+  id: z.string(),
+  petname: z.string().optional(),
+  selfName: z.string().optional(),
+});
+
 const MeshTraceSideSchema = z.object({
   relayed: z.boolean(),
   hubAddress: z.string().optional(),
@@ -194,6 +201,10 @@ export const meshContract = {
 
   getMeshGraph: oc.input(z.object({})).output(MeshGraphSchema),
 
+  getDisplayNames: oc
+    .input(z.object({}))
+    .output(z.array(DisplayNamePartsSchema)),
+
   getMeshTrace: oc
     .input(z.object({ target: z.string(), timeoutMs: z.number().optional() }))
     .output(MeshTraceResultSchema),
@@ -204,6 +215,7 @@ export type MeshStatePatch = z.infer<typeof MeshStatePatchSchema>;
 export type SerialisedState = z.infer<typeof SerialisedStateSchema>;
 export type ActionResult = z.infer<typeof ActionResultSchema>;
 export type MeshGraph = z.infer<typeof MeshGraphSchema>;
+export type DisplayNamePartsWire = z.infer<typeof DisplayNamePartsSchema>;
 export type MeshTraceResult = z.infer<typeof MeshTraceResultSchema>;
 
 /** Type-only handle onto the contract's shape for building a typed client (`ContractRouterClient<MeshContract>`) without importing the contract's own runtime value -- browser code that only needs the type (mesh-worker.ts, mesh-client.ts) can `import type` this and never bundle Zod/core's schemas at all, since a type-only import is erased entirely at build time. */

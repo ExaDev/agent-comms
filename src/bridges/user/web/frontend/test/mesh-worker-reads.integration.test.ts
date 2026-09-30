@@ -114,6 +114,15 @@ describe("structured reads across the full tab -> worker -> server chain", () =>
     expect(Array.isArray(graph.edges)).toBe(true);
   });
 
+  it("getDisplayNames reaches the real server's names through both legs, including its own agent's self-asserted name", async () => {
+    const port = await startServer();
+    connect(`ws://127.0.0.1:${String(port)}/ws/mesh`);
+
+    const tab = connectTab();
+    const names = await tab.getDisplayNames({});
+    expect(names.some((parts) => parts.selfName !== undefined)).toBe(true);
+  });
+
   it("getMeshTrace reaches the real server's trace result through both legs", async () => {
     const port = await startServer();
     connect(`ws://127.0.0.1:${String(port)}/ws/mesh`);

@@ -25,6 +25,7 @@ const DEVICE_A = "a".repeat(DEVICE_ID_HEX_LENGTH);
 
 const VIEW_DEFAULTS = {
   targets: [DEVICE_A],
+  label: (id: string): string => `label-${id}`,
   selectedTarget: undefined,
   onSelectTarget: () => {},
   onTrace: () => {},
