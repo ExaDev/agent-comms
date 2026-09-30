@@ -19,6 +19,7 @@ import {
 } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
+import { loadOrCreateMachineIdentity } from "../core/machine-identity.js";
 import type { DeliveryEvent } from "../core/types.js";
 import type { PeerIdentity } from "../core/identity.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
@@ -71,6 +72,9 @@ async function makePeer(
       loadOrCreateUserIdentity(userIdentityOptions),
     ),
     userIdentityOptions,
+    machineIdentity: await toIdentityPort(
+      loadOrCreateMachineIdentity(userIdentityOptions),
+    ),
   });
   const deliveries: DeliveryEvent[] = [];
   return { store, deliveries };

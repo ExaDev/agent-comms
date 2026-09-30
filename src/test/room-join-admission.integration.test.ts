@@ -29,6 +29,7 @@ import {
 import type { IdentitySlot } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
+import { loadOrCreateMachineIdentity } from "../core/machine-identity.js";
 import type { ConnectionHandle, MeshTransport } from "../core/transport.js";
 import { wireTestTransport } from "./test-transport.js";
 
@@ -197,6 +198,9 @@ describe("joinRoom (requester side, remote path)", () => {
         loadOrCreateUserIdentity(userIdentityOptions),
       ),
       userIdentityOptions,
+      machineIdentity: await toIdentityPort(
+        loadOrCreateMachineIdentity(userIdentityOptions),
+      ),
     });
 
     const ownerId = "f".repeat(DEVICE_ID_HEX_LENGTH);

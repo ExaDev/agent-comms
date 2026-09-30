@@ -101,6 +101,7 @@ function makeHarness() {
       revocation: { record: vi.fn() } as never,
       dataStorage: {} as never,
       userIdentity: {} as never,
+      machineIdentity: {} as never,
       userIdentityOptions: {},
     }),
     requireTransport: () => transport,

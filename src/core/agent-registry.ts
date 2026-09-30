@@ -37,6 +37,7 @@ function isAgentSelfAdvert(value: unknown): value is ReceivedAgentSelfAdvert {
   if (!("harness" in value) || typeof value.harness !== "string") return false;
   if ("membership" in value && typeof value.membership !== "string")
     return false;
+  if ("machine" in value && typeof value.machine !== "string") return false;
   if ("cwd" in value && typeof value.cwd !== "string") return false;
   if ("pid" in value && typeof value.pid !== "number") return false;
   if ("startedAt" in value && typeof value.startedAt !== "string") return false;

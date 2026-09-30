@@ -318,7 +318,11 @@ describe("GatewayTrust — verified members of a trusted principal", () => {
     const trust = new GatewayTrust();
     trust.addPrincipal(PRINCIPAL);
 
-    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+    trust.noteVerifiedMember(
+      DEVICE,
+      { kind: "principal", issuer: PRINCIPAL },
+      Date.now() + ONE_HOUR_MS,
+    );
 
     expect(trust.isReachable(DEVICE)).toBe(true);
     expect(trust.isTrusted(DEVICE)).toBe(false);
@@ -330,7 +334,7 @@ describe("GatewayTrust — verified members of a trusted principal", () => {
 
     trust.noteVerifiedMember(
       DEVICE.toUpperCase(),
-      PRINCIPAL,
+      { kind: "principal", issuer: PRINCIPAL },
       Date.now() + ONE_HOUR_MS,
     );
 
@@ -340,7 +344,11 @@ describe("GatewayTrust — verified members of a trusted principal", () => {
   it("stops trusting the device the moment its principal is no longer trusted", () => {
     const trust = new GatewayTrust();
     trust.addPrincipal(PRINCIPAL);
-    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+    trust.noteVerifiedMember(
+      DEVICE,
+      { kind: "principal", issuer: PRINCIPAL },
+      Date.now() + ONE_HOUR_MS,
+    );
 
     trust.removePrincipal(PRINCIPAL);
 
@@ -350,7 +358,11 @@ describe("GatewayTrust — verified members of a trusted principal", () => {
   it("does not trust a device recorded against a principal that was never trusted", () => {
     const trust = new GatewayTrust();
 
-    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+    trust.noteVerifiedMember(
+      DEVICE,
+      { kind: "principal", issuer: PRINCIPAL },
+      Date.now() + ONE_HOUR_MS,
+    );
 
     expect(trust.isReachable(DEVICE)).toBe(false);
   });
@@ -359,7 +371,11 @@ describe("GatewayTrust — verified members of a trusted principal", () => {
     vi.useFakeTimers();
     const trust = new GatewayTrust();
     trust.addPrincipal(PRINCIPAL);
-    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+    trust.noteVerifiedMember(
+      DEVICE,
+      { kind: "principal", issuer: PRINCIPAL },
+      Date.now() + ONE_HOUR_MS,
+    );
 
     vi.advanceTimersByTime(ONE_HOUR_MS + 1);
 
@@ -370,21 +386,37 @@ describe("GatewayTrust — verified members of a trusted principal", () => {
     vi.useFakeTimers();
     const trust = new GatewayTrust();
     trust.addPrincipal(PRINCIPAL);
-    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
-    trust.noteVerifiedMember("55667788", PRINCIPAL, Date.now() + 1);
-    trust.noteVerifiedMember("99aabbcc", "ffffffff", Date.now() + ONE_HOUR_MS);
+    trust.noteVerifiedMember(
+      DEVICE,
+      { kind: "principal", issuer: PRINCIPAL },
+      Date.now() + ONE_HOUR_MS,
+    );
+    trust.noteVerifiedMember(
+      "55667788",
+      { kind: "principal", issuer: PRINCIPAL },
+      Date.now() + 1,
+    );
+    trust.noteVerifiedMember(
+      "99aabbcc",
+      { kind: "principal", issuer: "ffffffff" },
+      Date.now() + ONE_HOUR_MS,
+    );
 
     vi.advanceTimersByTime(2);
 
     expect(trust.listVerifiedMembers()).toEqual([
-      { device: DEVICE, principal: PRINCIPAL },
+      { device: DEVICE, kind: "principal", issuer: PRINCIPAL },
     ]);
   });
 
   it("does not count a verified member as a bare-device trust, so it is not persisted or listed as one", () => {
     const trust = new GatewayTrust();
     trust.addPrincipal(PRINCIPAL);
-    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+    trust.noteVerifiedMember(
+      DEVICE,
+      { kind: "principal", issuer: PRINCIPAL },
+      Date.now() + ONE_HOUR_MS,
+    );
 
     expect(trust.list()).toEqual([]);
   });
@@ -400,9 +432,17 @@ describe("GatewayTrust — verified members of a trusted principal", () => {
     vi.useFakeTimers();
     const trust = new GatewayTrust();
     trust.addPrincipal(PRINCIPAL);
-    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+    trust.noteVerifiedMember(
+      DEVICE,
+      { kind: "principal", issuer: PRINCIPAL },
+      Date.now() + ONE_HOUR_MS,
+    );
 
-    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + 1);
+    trust.noteVerifiedMember(
+      DEVICE,
+      { kind: "principal", issuer: PRINCIPAL },
+      Date.now() + 1,
+    );
     vi.advanceTimersByTime(ONE_HOUR_MS / 2);
 
     expect(trust.isReachable(DEVICE)).toBe(true);
@@ -411,11 +451,79 @@ describe("GatewayTrust — verified members of a trusted principal", () => {
   it("forgets a principal's verified members when the principal is untrusted, so trusting it again does not revive them", () => {
     const trust = new GatewayTrust();
     trust.addPrincipal(PRINCIPAL);
-    trust.noteVerifiedMember(DEVICE, PRINCIPAL, Date.now() + ONE_HOUR_MS);
+    trust.noteVerifiedMember(
+      DEVICE,
+      { kind: "principal", issuer: PRINCIPAL },
+      Date.now() + ONE_HOUR_MS,
+    );
 
     trust.removePrincipal(PRINCIPAL);
     trust.addPrincipal(PRINCIPAL);
 
     expect(trust.isReachable(DEVICE)).toBe(false);
+  });
+});
+
+describe("GatewayTrust — machine-keyed trust (agent-comms#343)", () => {
+  const MACHINE = "aabbccdd";
+  const PRINCIPAL = "eeff0011";
+  const DEVICE = "11223344";
+  const OTHER_DEVICE = "55667788";
+  const ONE_HOUR_MS = 3_600_000;
+  const machine = { kind: "machine", issuer: MACHINE } as const;
+
+  it("makes a device a trusted machine vouches for reachable, without trusting it by id", () => {
+    const trust = new GatewayTrust();
+    trust.addMachine(MACHINE);
+    trust.noteVerifiedMember(DEVICE, machine, Date.now() + ONE_HOUR_MS);
+
+    expect(trust.isReachable(DEVICE)).toBe(true);
+    expect(trust.isTrusted(DEVICE)).toBe(false);
+    expect(trust.listVerifiedMembers()).toEqual([
+      { device: DEVICE, kind: "machine", issuer: MACHINE },
+    ]);
+  });
+
+  it("does not let a machine's vouch stand in for a principal's, or the other way round", () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal(MACHINE);
+    trust.noteVerifiedMember(DEVICE, machine, Date.now() + ONE_HOUR_MS);
+
+    expect(trust.isReachable(DEVICE)).toBe(false);
+  });
+
+  it("revokes every device of a host at once when the machine is untrusted, leaving a device also trusted through its principal reachable", () => {
+    const trust = new GatewayTrust();
+    trust.addMachine(MACHINE);
+    trust.addPrincipal(PRINCIPAL);
+    trust.noteVerifiedMember(DEVICE, machine, Date.now() + ONE_HOUR_MS);
+    trust.noteVerifiedMember(OTHER_DEVICE, machine, Date.now() + ONE_HOUR_MS);
+    trust.noteVerifiedMember(
+      OTHER_DEVICE,
+      { kind: "principal", issuer: PRINCIPAL },
+      Date.now() + ONE_HOUR_MS,
+    );
+    expect(trust.isReachable(DEVICE)).toBe(true);
+
+    trust.removeMachine(MACHINE);
+
+    expect(trust.isReachable(DEVICE)).toBe(false);
+    expect(trust.isReachable(OTHER_DEVICE)).toBe(true);
+    expect(trust.listVerifiedMembers()).toEqual([
+      { device: OTHER_DEVICE, kind: "principal", issuer: PRINCIPAL },
+    ]);
+    trust.addMachine(MACHINE);
+    expect(trust.isReachable(DEVICE)).toBe(false);
+  });
+
+  it("persists trusted machines for a fresh instance, and counts one as a reason to advertise", () => {
+    const slot = tempSlot("pi");
+    new GatewayTrust(slot).addMachine(MACHINE.toUpperCase());
+
+    const restarted = new GatewayTrust(slot);
+
+    expect(restarted.listMachines()).toEqual([MACHINE]);
+    expect(restarted.listPrincipals()).toEqual([]);
+    expect(restarted.hasAny()).toBe(true);
   });
 });

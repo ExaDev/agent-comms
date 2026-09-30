@@ -5,9 +5,11 @@
  *
  * Keyed by individual device-id, not by "one entry per remote machine": wire-mesh-core's relay-hub protocol (relay-hub.ts, gossip-frame, relay-data-frame) carries no field identifying which remote gateway connection a given directory entry or relayed request actually originated from -- only the entry/request's own device-id, which may be an ordinary local peer forwarded on a remote machine's behalf rather than that machine's own coordinator. Gating per individual device-id is therefore the finest-grained, and only wire-protocol-honest, trust boundary actually implementable without a wire-mesh-core protocol change (deliberately out of scope here, matching agent-comms#156's own "gating the hub itself is out of scope" framing) -- confirmed as the intended granularity by hub-session.ts's own pre-existing isStateMutatingMessage doc comment, which already named this exact gap as "agent-comms#156's own future deliverable" of "per-peer" admission control. An operator who wants every local peer on a remote machine reachable trusts each of that machine's device-ids individually, not just its coordinator's.
  *
+ * Machine-keyed trust (agent-comms#343) is the same shape as the principal's: a machine is another grouping issuer (machine-identity.ts), so trusting one makes every device its gossiped proofs vouch for reachable, and untrusting it cuts all of them off at once, which is how a whole host is revoked in one act. Principals and machines are separate sets because they answer different questions (whose device, which host), and a device may be vouched for by one of each.
+ *
  * Principal-keyed trust (agent-comms#187): alongside the bare-device allowlist above, an operator may also trust a user-principal device-id (user-identity.ts) directly -- the root a remote peer's own dm:send-style delegation chain can terminate at, verified the same way device-membership-verification.ts already verifies a device's own group:member chain (`verifyCapabilityToken`'s chain-walk and its `rootIssuer` output). This is purely a second, parallel allowlist: `isTrusted`/`add`/`remove`/`list` keep checking only the bare-device set, unchanged, for a peer with no principal at all -- `isTrustedFor` is the additive entrypoint a caller who has already chain-verified a token uses to decide trust from that verified bearer and chain-root pair, accepting either a directly trusted device or a bearer rooted at a trusted principal. Persisted alongside the bare-device set (agent-comms#186's own persistence, extended here per that issue's own "agent-comms#187 covers what gets stored" framing): loadGatewayTrust/saveGatewayTrust now carry both sets.
  */
-import type { IdentitySlot } from "./identity-store.js";
+import type { IdentitySlot, LoadedGatewayTrust } from "./identity-store.js";
 import {
   gatewayTrustStamp,
   loadGatewayTrust,
@@ -23,16 +25,34 @@ export type GatewayTrustReader = Pick<
   | "isTrustedPrincipal"
   | "isTrustedFor"
   | "listPrincipals"
+  | "listMachines"
   | "noteVerifiedMember"
 >;
 
+/** Which kind of grouping issuer vouches for a device: its user principal or its machine. */
+export type GroupKind = "principal" | "machine";
+
+/** A grouping issuer that vouched for a device: its kind and its device-id (lowercase hex). */
+export interface Voucher {
+  kind: GroupKind;
+  issuer: string;
+}
+
+/** A device reachable only because a trusted issuer vouches for it, and that issuer. */
+export interface VerifiedMember extends Voucher {
+  device: string;
+}
+
 export class GatewayTrust {
   private readonly trusted = new Set<string>();
-  private readonly trustedPrincipals = new Set<string>();
-  /** Devices whose gossiped membership proof was verified against a trusted principal, with that principal and when the proof lapses. In memory only: a proof is short-lived and re-verified from the next advert, so nothing here is worth persisting. */
+  private readonly trustedIssuers: Readonly<Record<GroupKind, Set<string>>> = {
+    principal: new Set<string>(),
+    machine: new Set<string>(),
+  };
+  /** Devices whose gossiped membership proof was verified against a trusted issuer, keyed by memberKey (a device can hold one of each kind), with that issuer and when the proof lapses. In memory only: a proof is short-lived and re-verified from the next advert, so nothing here is worth persisting. */
   private readonly verifiedMembers = new Map<
     string,
-    { principal: string; expiresAt: number }
+    VerifiedMember & { expiresAt: number }
   >();
   private readonly location: Readonly<Pick<IdentitySlot, "dir">> | undefined;
   /** gatewayTrustStamp as of the last load or write this instance made, so refresh() can tell when another process has replaced the file since. */
@@ -50,12 +70,16 @@ export class GatewayTrust {
     this.stamp = gatewayTrustStamp(this.location);
     const loaded = loadGatewayTrust(this.location);
     this.trusted.clear();
-    this.trustedPrincipals.clear();
+    this.trustedIssuers.principal.clear();
+    this.trustedIssuers.machine.clear();
     for (const deviceHex of loaded.devices) {
       this.trusted.add(deviceHex);
     }
     for (const principalHex of loaded.principals) {
-      this.trustedPrincipals.add(principalHex);
+      this.trustedIssuers.principal.add(principalHex);
+    }
+    for (const machineHex of loaded.machines) {
+      this.trustedIssuers.machine.add(machineHex);
     }
   }
 
@@ -79,14 +103,15 @@ export class GatewayTrust {
     this.persist();
   }
 
-  /** Writes the complete current trusted device and principal sets back to the shared trust file, if this instance was constructed with a location. A no-op for the in-memory-only case. */
+  /** Writes the complete current trusted device, principal and machine sets back to the shared trust file, if this instance was constructed with a location. A no-op for the in-memory-only case. */
   private persist(): void {
     if (this.location === undefined) return;
-    saveGatewayTrust(
-      this.location,
-      [...this.trusted],
-      [...this.trustedPrincipals],
-    );
+    const trust: LoadedGatewayTrust = {
+      devices: [...this.trusted],
+      principals: [...this.trustedIssuers.principal],
+      machines: [...this.trustedIssuers.machine],
+    };
+    saveGatewayTrust(this.location, trust);
     this.stamp = gatewayTrustStamp(this.location);
   }
 
@@ -96,82 +121,116 @@ export class GatewayTrust {
     return [...this.trusted];
   }
 
-  /** Whether the given device-id (hex, case-insensitive) is trusted by id: on the bare-device allowlist. A device trusted only because a principal vouches for it (noteVerifiedMember) is not, on purpose: its proof is a claim that anyone who has read the device's gossiped advert can repeat, so it earns only what isReachable grants. */
+  /** Whether the given device-id (hex, case-insensitive) is trusted by id: on the bare-device allowlist. A device trusted only because a principal or machine vouches for it (noteVerifiedMember) is not, on purpose: its proof is a claim that anyone who has read the device's gossiped advert can repeat, so it earns only what isReachable grants. */
   isTrusted(deviceHex: string): boolean {
     this.refresh();
     return this.trusted.has(deviceHex.toLowerCase());
   }
 
-  /** Whether this side may merge the device's gossiped directory entry and route requests to it: trusted by id, or a verified member of a trusted principal. Requests routed to a device are still authenticated end to end by the session inside the relay, so a false claim can misroute one (which then fails its handshake) but not read or forge one. */
+  /** Whether this side may merge the device's gossiped directory entry and route requests to it: trusted by id, or a verified member of a trusted principal or machine. Requests routed to a device are still authenticated end to end by the session inside the relay, so a false claim can misroute one (which then fails its handshake) but not read or forge one. */
   isReachable(deviceHex: string): boolean {
     this.refresh();
     const key = deviceHex.toLowerCase();
-    return this.trusted.has(key) || this.isVerifiedMember(key);
+    return (
+      this.trusted.has(key) ||
+      this.isVerifiedMember(key, "principal") ||
+      this.isVerifiedMember(key, "machine")
+    );
   }
 
-  /** Records that deviceHex presented a membership proof, valid until expiresAt (epoch ms), verified against principalHex (agent-comms#266). From then until the proof lapses, or principalHex stops being trusted, isReachable treats the device as reachable. A later proof never shortens an earlier one's window. The caller has already verified the proof: this class does no cryptography. */
+  /** Records that deviceHex presented a membership proof, valid until expiresAt (epoch ms), verified against voucher (agent-comms#266, agent-comms#343). From then until the proof lapses, or the voucher's issuer stops being trusted, isReachable treats the device as reachable. A later proof from the same kind of issuer never shortens an earlier one's window. The caller has already verified the proof: this class does no cryptography. */
   noteVerifiedMember(
     deviceHex: string,
-    principalHex: string,
+    voucher: Readonly<Voucher>,
     expiresAt: number,
   ): void {
-    const key = deviceHex.toLowerCase();
+    const device = deviceHex.toLowerCase();
     const now = Date.now();
-    for (const [device, member] of this.verifiedMembers) {
-      if (member.expiresAt <= now) this.verifiedMembers.delete(device);
+    for (const [key, member] of this.verifiedMembers) {
+      if (member.expiresAt <= now) this.verifiedMembers.delete(key);
     }
+    const key = memberKey(device, voucher.kind);
     const existing = this.verifiedMembers.get(key);
     this.verifiedMembers.set(key, {
-      principal: principalHex.toLowerCase(),
+      device,
+      kind: voucher.kind,
+      issuer: voucher.issuer.toLowerCase(),
       expiresAt: Math.max(expiresAt, existing?.expiresAt ?? 0),
     });
   }
 
-  /** Every device currently reachable only because a trusted principal vouches for it, with that principal. Excludes proofs that have lapsed and members whose principal is no longer trusted. */
-  listVerifiedMembers(): { device: string; principal: string }[] {
+  /** Every device currently reachable because a trusted principal or machine vouches for it, once per vouching issuer. Excludes proofs that have lapsed and members whose issuer is no longer trusted. */
+  listVerifiedMembers(): VerifiedMember[] {
     this.refresh();
-    return [...this.verifiedMembers]
-      .filter(([device]) => this.isVerifiedMember(device))
-      .map(([device, member]) => ({ device, principal: member.principal }));
+    return [...this.verifiedMembers.values()]
+      .filter((member) => this.isVerifiedMember(member.device, member.kind))
+      .map(({ device, kind, issuer }) => ({ device, kind, issuer }));
   }
 
-  private isVerifiedMember(deviceKey: string): boolean {
-    const member = this.verifiedMembers.get(deviceKey);
+  private isVerifiedMember(device: string, kind: GroupKind): boolean {
+    const member = this.verifiedMembers.get(memberKey(device, kind));
     return (
       member !== undefined &&
       member.expiresAt > Date.now() &&
-      this.trustedPrincipals.has(member.principal)
+      this.trustedIssuers[kind].has(member.issuer)
     );
   }
 
-  /** Marks a remote user-principal device-id (hex, case-insensitive; user-identity.ts) as trusted (agent-comms#187): a peer presenting a token whose delegation chain roots at this principal is trusted via `isTrustedFor` below, without that peer's own bare device-id ever needing individual trust. Idempotent, and entirely independent of the bare-device allowlist `add` manages. Persists the updated set when this instance was constructed with a location. */
-  addPrincipal(deviceHex: string): void {
+  private addIssuer(kind: GroupKind, deviceHex: string): void {
     this.refresh();
-    this.trustedPrincipals.add(deviceHex.toLowerCase());
+    this.trustedIssuers[kind].add(deviceHex.toLowerCase());
     this.persist();
   }
 
-  /** Withdraws a previously trusted principal (hex, case-insensitive). A no-op if it was never trusted. Governs future chain checks only, mirroring `remove`'s own already-merged-traffic-is-unaffected posture. Persists the updated set when this instance was constructed with a location. */
-  removePrincipal(deviceHex: string): void {
+  /** Withdraws trust from one issuer and, in the same act, from every device reachable only through it. */
+  private removeIssuer(kind: GroupKind, deviceHex: string): void {
     this.refresh();
-    const key = deviceHex.toLowerCase();
-    this.trustedPrincipals.delete(key);
-    for (const [device, member] of this.verifiedMembers) {
-      if (member.principal === key) this.verifiedMembers.delete(device);
+    const issuer = deviceHex.toLowerCase();
+    this.trustedIssuers[kind].delete(issuer);
+    for (const [key, member] of this.verifiedMembers) {
+      if (member.kind === kind && member.issuer === issuer) {
+        this.verifiedMembers.delete(key);
+      }
     }
     this.persist();
+  }
+
+  /** Marks a remote user-principal device-id (hex, case-insensitive; user-identity.ts) as trusted (agent-comms#187): a peer presenting a token whose delegation chain roots at this principal is trusted via `isTrustedFor` below, without that peer's own bare device-id ever needing individual trust, and a device whose gossiped proof this principal vouches for becomes reachable. Idempotent, and entirely independent of the bare-device allowlist `add` manages. Persists the updated set when this instance was constructed with a location. */
+  addPrincipal(deviceHex: string): void {
+    this.addIssuer("principal", deviceHex);
+  }
+
+  /** Withdraws a previously trusted principal (hex, case-insensitive), and every device reachable only through it. A no-op if it was never trusted. Persists the updated set when this instance was constructed with a location. */
+  removePrincipal(deviceHex: string): void {
+    this.removeIssuer("principal", deviceHex);
   }
 
   /** Every currently trusted principal device-id, lowercase hex, in insertion order. */
   listPrincipals(): string[] {
     this.refresh();
-    return [...this.trustedPrincipals];
+    return [...this.trustedIssuers.principal];
   }
 
   /** Whether the given device-id (hex, case-insensitive) is currently trusted as a user principal. */
   isTrustedPrincipal(deviceHex: string): boolean {
     this.refresh();
-    return this.trustedPrincipals.has(deviceHex.toLowerCase());
+    return this.trustedIssuers.principal.has(deviceHex.toLowerCase());
+  }
+
+  /** Marks a remote machine device-id (hex, case-insensitive; machine-identity.ts) as trusted (agent-comms#343): every device whose gossiped proof this machine vouches for becomes reachable, without being trusted individually. Idempotent. Persists the updated set when this instance was constructed with a location. */
+  addMachine(deviceHex: string): void {
+    this.addIssuer("machine", deviceHex);
+  }
+
+  /** Withdraws a previously trusted machine (hex, case-insensitive), and in the same act every device reachable only because that machine vouched for it: revoking a whole host. A device also trusted by id or through a trusted principal stays reachable by that route. A no-op if the machine was never trusted. Persists the updated set when this instance was constructed with a location. */
+  removeMachine(deviceHex: string): void {
+    this.removeIssuer("machine", deviceHex);
+  }
+
+  /** Every currently trusted machine device-id, lowercase hex, in insertion order. */
+  listMachines(): string[] {
+    this.refresh();
+    return [...this.trustedIssuers.machine];
   }
 
   /**
@@ -182,10 +241,19 @@ export class GatewayTrust {
   }
 
   /**
-   * Whether at least one remote device or principal is currently trusted -- the outbound gossip gate. wire-mesh-core's relay-hub broadcasts a gossiped advert to every connected hub peer with no per-recipient targeting (RelayHub.handleConnection's own "re-broadcasts each gossip frame to every other connected client"), so "advertise local agents only to allowlisted remote gateways" can only be approximated at the coarse granularity this side actually controls: don't advertise anything at all until the operator has opted in by trusting at least one remote device or principal. Once true, an advertisement still reaches every hub-connected peer, trusted or not -- the per-device isTrusted()/isTrustedFor() checks above are what keep this side from ACTING on anything an untrusted peer sends back, which is the boundary that actually matters.
+   * Whether at least one remote device, principal or machine is currently trusted: the outbound gossip gate. wire-mesh-core's relay-hub broadcasts a gossiped advert to every connected hub peer with no per-recipient targeting (RelayHub.handleConnection's own "re-broadcasts each gossip frame to every other connected client"), so "advertise local agents only to allowlisted remote gateways" can only be approximated at the coarse granularity this side actually controls: don't advertise anything at all until the operator has opted in by trusting at least one remote device, principal or machine. Once true, an advertisement still reaches every hub-connected peer, trusted or not; the per-device isTrusted()/isTrustedFor() checks above are what keep this side from ACTING on anything an untrusted peer sends back, which is the boundary that actually matters.
    */
   hasAny(): boolean {
     this.refresh();
-    return this.trusted.size > 0 || this.trustedPrincipals.size > 0;
+    return (
+      this.trusted.size > 0 ||
+      this.trustedIssuers.principal.size > 0 ||
+      this.trustedIssuers.machine.size > 0
+    );
   }
+}
+
+/** verifiedMembers' key: one entry per device per kind of issuer. */
+function memberKey(device: string, kind: GroupKind): string {
+  return `${kind}:${device}`;
 }

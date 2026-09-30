@@ -8,6 +8,8 @@
  */
 
 import { detailsShared } from "./agent-registry.js";
+import { groupAgentsByMachine } from "./machine-list-groups.js";
+import type { VerifiedMember } from "./gateway-trust.js";
 import type {
   AgentId,
   AgentIdentity,
@@ -162,12 +164,19 @@ export interface MeshOnlyFeatures {
   ) => Promise<void>;
   /** This user's own principal id (hex), or undefined before this store's identity is attached. */
   getUserPrincipalId?: () => string | undefined;
+  /** This host's own machine id (hex, agent-comms#343), or undefined before this store's identity is attached. */
+  getMachineId?: () => string | undefined;
+  /** The machine (hex) of each device this side can place on one, keyed by device id. */
+  listAgentMachines?: () => Promise<Map<string, string>>;
+  addTrustedGatewayMachine?: (deviceHex: string) => void;
+  removeTrustedGatewayMachine?: (deviceHex: string) => void;
+  listTrustedGatewayMachines?: () => string[];
   /** Withdraws the dm:send grant issued for bearerId. */
   revokeAgentDmAccess?: (bearerId: string) => Promise<void>;
   removeTrustedGatewayPrincipal?: (deviceHex: string) => void;
   listTrustedGatewayPrincipals?: () => string[];
-  /** Devices trusted only because a trusted principal vouches for them (a verified membership proof), with that principal. */
-  listVerifiedMembers?: () => { device: string; principal: string }[];
+  /** Devices trusted only because a trusted principal or machine vouches for them (a verified membership proof), with that issuer. */
+  listVerifiedMembers?: () => VerifiedMember[];
   /** deviceId's own gossiped agent-comms package version, cached from whatever it last advertised -- undefined for a device this side has never heard gossip from, or one running a version that predates agent-comms#198. */
   getPeerAgentCommsVersion?: (deviceId: string) => string | undefined;
   /** deviceId's own gossiped cc-peer package version, present only while that device is actually fronting a cc-peer session or running the one-shot `bridge cc-peer` command. */
@@ -430,9 +439,11 @@ export class CommsTool {
     const agent = await this.store.getAgent(ctx.agentId);
     if (!agent) return { content: "Not registered.", isError: true };
     const principal = this.store.getUserPrincipalId?.();
+    const machine = this.store.getMachineId?.();
     const lines = [
       `ID: ${agent.id}`,
       ...(principal !== undefined ? [`Principal: ${principal}`] : []),
+      ...(machine !== undefined ? [`Machine: ${machine}`] : []),
       `Name: ${agent.name}`,
       `Harness: ${agent.harness}`,
       `Visibility: ${agent.visibility}`,
@@ -582,7 +593,7 @@ export class CommsTool {
         ? `~${cwd.slice(homedir.length)}`
         : cwd;
 
-    const lines = agents.map((a: AgentIdentity) => {
+    const describe = (a: AgentIdentity): string => {
       const isSelf = a.id === ctx.agentId;
       const self = isSelf ? " (you)" : "";
       const shared = detailsShared(a);
@@ -599,9 +610,23 @@ export class CommsTool {
         this.store.getCcPeerVersion,
       );
       return `${a.id}  ${a.name.padEnd(AGENT_NAME_COLUMN_WIDTH)} ${a.harness.padEnd(AGENT_HARNESS_COLUMN_WIDTH)} ${a.status.padEnd(AGENT_STATUS_COLUMN_WIDTH)} ${a.visibility.padEnd(AGENT_VISIBILITY_COLUMN_WIDTH)} ${cwd}${self}\n        Rooms: ${rooms}\n        Versions: ${versions}`;
-    });
+    };
+    const machines = await this.store.listAgentMachines?.();
+    const groups = groupAgentsByMachine(
+      agents,
+      machines,
+      this.store.getMachineId?.(),
+    );
+    const body = groups
+      .map((group) => {
+        const rows = group.agents.map((a) => `  ${describe(a)}`);
+        return group.heading === undefined
+          ? rows.join("\n")
+          : [`  ${group.heading}`, ...rows].join("\n");
+      })
+      .join("\n");
     return {
-      content: `Agents:\n  ID      Name                      Harness      Status  Visibility  CWD\n${lines.map((l) => `  ${l}`).join("\n")}`,
+      content: `Agents:\n  ID      Name                      Harness      Status  Visibility  CWD\n${body}`,
       isError: false,
     };
   }

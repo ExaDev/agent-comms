@@ -18,7 +18,7 @@ import {
 import { admitDevice, removeDevice } from "../core/device-membership.js";
 import {
   DEVICE_MEMBER_CAPABILITY,
-  userGroupPath,
+  groupPath,
   verifyDeviceMembership,
 } from "../core/device-membership-verification.js";
 
@@ -66,7 +66,7 @@ describe("admitDevice", () => {
       clock,
       revocation: createRevocationView(),
       expectedBearer: device.deviceId,
-      userDeviceId: user.deviceId,
+      groupIssuerId: user.deviceId,
     });
     expect(memberVerdict.ok).toBe(true);
   });
@@ -168,7 +168,7 @@ describe("removeDevice", () => {
       clock,
       revocation,
       expectedBearer: device.deviceId,
-      userDeviceId: user.deviceId,
+      groupIssuerId: user.deviceId,
     });
     expect(verdict.ok).toBe(false);
     if (!verdict.ok) expect(verdict.reason).toBe("revoked");
@@ -213,13 +213,13 @@ describe("removeDevice", () => {
       clock,
       revocation,
       expectedBearer: device.deviceId,
-      userDeviceId: user.deviceId,
+      groupIssuerId: user.deviceId,
     });
     expect(verdict.ok).toBe(true);
   });
 });
 
-describe("userGroupPath / DEVICE_MEMBER_CAPABILITY re-exports", () => {
+describe("groupPath / DEVICE_MEMBER_CAPABILITY re-exports", () => {
   it("are usable together to compute the scope a real admission grant carries", async () => {
     const { identity: user, userIdentityOptions } = await makeUser();
     const device = await toIdentityPort(generateIdentity());
@@ -239,6 +239,6 @@ describe("userGroupPath / DEVICE_MEMBER_CAPABILITY re-exports", () => {
     expect(payload).not.toBeNull();
     // The token's own scope is not re-decoded here (that is verifyDeviceMembership's job, exercised above); this asserts admitDevice used the module's own exported helpers rather than a second, independently-typed copy of the same capability/scope shape.
     expect(DEVICE_MEMBER_CAPABILITY).toBe("group:member");
-    expect(userGroupPath(user.deviceId)).toBe(deviceIdToHex(user.deviceId));
+    expect(groupPath(user.deviceId)).toBe(deviceIdToHex(user.deviceId));
   });
 });

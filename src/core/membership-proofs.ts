@@ -1,13 +1,16 @@
 /**
- * A device's own membership proof, kept fresh, and the check for other devices' proofs (agent-comms#266). Split out of MeshStore, which hands it its identity, peer id and error sink.
+ * A device's own membership proof under one grouping issuer, kept fresh, and the checks for other devices' proofs (agent-comms#266, agent-comms#343). MeshStore holds one instance per issuer, its user principal and its machine, and hands each its identity, peer id and error sink. The checks do not depend on which issuer an instance mints under, so either instance can verify or identify any proof.
  */
 
+import type { IdentityPort } from "wire-mesh-core/ports/identity";
 import { deviceIdFromHex } from "wire-mesh-core/domain/device-id";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import {
   MEMBERSHIP_PROOF_LIFETIME_MS,
+  identifyMembershipProofIssuer,
   mintMembershipProof,
   verifyMembershipProof,
+  type IdentifiedMembershipProof,
   type MembershipProofVerdict,
 } from "./membership-proof.js";
 
@@ -19,6 +22,8 @@ const REFRESH_INTERVAL_MS =
 export interface MembershipProofsDeps {
   /** Throws if the store has no identity yet. */
   getIdentity: () => MeshStoreIdentity;
+  /** The issuer this instance mints under, picked out of the store's identity: its user principal or its machine. */
+  issuerOf: (identity: Readonly<MeshStoreIdentity>) => IdentityPort;
   /** This device's own id (hex). */
   getPeerId: () => string;
   onError: (error: Error) => void;
@@ -31,9 +36,9 @@ export class MembershipProofs {
 
   constructor(private readonly deps: Readonly<MembershipProofsDeps>) {}
 
-  /** The agent/self advert field carrying this device's current proof, empty until the first has been minted. */
-  advertField(): { membership?: string } {
-    return this.proof === undefined ? {} : { membership: this.proof };
+  /** This device's current proof, undefined until the first has been minted. */
+  current(): string | undefined {
+    return this.proof;
   }
 
   /** Mints a proof now and again on an interval. A failed mint is reported and retried on the next tick; the previous proof stays until it lapses. */
@@ -51,15 +56,29 @@ export class MembershipProofs {
     this.timer = undefined;
   }
 
-  /** Whether a gossiped proof shows that principalHex vouches for deviceHex, as this node sees it: its own identity, clock and revocation view. */
+  /** Whether a gossiped proof shows that issuerHex vouches for deviceHex, as this node sees it: its own identity, clock and revocation view. */
   async verify(
-    claim: Readonly<{ proof: string; deviceHex: string; principalHex: string }>,
+    claim: Readonly<{ proof: string; deviceHex: string; issuerHex: string }>,
   ): Promise<MembershipProofVerdict> {
     const { identity, clock, revocation } = this.deps.getIdentity();
     return verifyMembershipProof({
       proof: claim.proof,
       deviceId: deviceIdFromHex(claim.deviceHex),
-      principalId: deviceIdFromHex(claim.principalHex),
+      issuerId: deviceIdFromHex(claim.issuerHex),
+      identity,
+      clock,
+      revocation,
+    });
+  }
+
+  /** Which issuer a gossiped proof shows vouching for deviceHex, as this node sees it. */
+  async identify(
+    claim: Readonly<{ proof: string; deviceHex: string }>,
+  ): Promise<IdentifiedMembershipProof> {
+    const { identity, clock, revocation } = this.deps.getIdentity();
+    return identifyMembershipProofIssuer({
+      proof: claim.proof,
+      deviceId: deviceIdFromHex(claim.deviceHex),
       identity,
       clock,
       revocation,
@@ -69,10 +88,10 @@ export class MembershipProofs {
   private refresh(): void {
     if (this.minting) return;
     this.minting = true;
-    const { userIdentity, clock } = this.deps.getIdentity();
+    const storeIdentity = this.deps.getIdentity();
     mintMembershipProof({
-      userIdentity,
-      clock,
+      issuer: this.deps.issuerOf(storeIdentity),
+      clock: storeIdentity.clock,
       deviceId: deviceIdFromHex(this.deps.getPeerId()),
     })
       .then(

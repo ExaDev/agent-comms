@@ -191,7 +191,7 @@ describe("what a store puts on the hub", () => {
       if (self !== undefined) {
         expect(
           Object.keys(self as object)
-            .filter((key) => key !== "membership")
+            .filter((key) => key !== "membership" && key !== "machine")
             .sort(),
         ).toEqual(["harness", "name"]);
       }

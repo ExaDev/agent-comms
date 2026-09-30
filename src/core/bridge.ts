@@ -126,6 +126,8 @@ export const MCP_TOOL_PARAMS = z.object({
   fingerprint: z.string().optional(),
   /** For gateway_trust/gateway_untrust (and dm_admit, where `target` names it): when true, the id names a user principal (agent-comms#187) rather than a bare remote device-id (agent-comms#193). */
   principal: z.boolean().optional(),
+  /** For gateway_trust/gateway_untrust: when true, the id names a machine (agent-comms#343), whose whole host is trusted or revoked at once. */
+  machine: z.boolean().optional(),
   /** The dm:send grant text dm_admit returned, presented by dm_use_grant. */
   grant: z.string().optional(),
   /** How long mesh_trace waits for a path.trace response before giving up (agent-comms#199). */
@@ -420,6 +422,7 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
         action: "gateway_trust",
         device: p.device,
         ...(p.principal !== undefined && { principal: p.principal }),
+        ...(p.machine !== undefined && { machine: p.machine }),
       };
     case "gateway_untrust":
       if (p.device === undefined)
@@ -428,6 +431,7 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
         action: "gateway_untrust",
         device: p.device,
         ...(p.principal !== undefined && { principal: p.principal }),
+        ...(p.machine !== undefined && { machine: p.machine }),
       };
     case "gateway_list_trusted":
       return { action: "gateway_list_trusted" };

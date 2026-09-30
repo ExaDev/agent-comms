@@ -21,20 +21,27 @@ const PRINCIPAL = "a".repeat(DEVICE_ID_HEX_LENGTH);
 /** How many times over the per-batch verification budget a flood exceeds it. */
 const FLOOD_FACTOR = 3;
 const OTHER_PRINCIPAL = "b".repeat(DEVICE_ID_HEX_LENGTH);
+const MACHINE = "c".repeat(DEVICE_ID_HEX_LENGTH);
 
 /** A stable, valid device id for a label, so each test names its devices instead of numbering them. */
 function deviceHex(label: string): string {
   return createHash("sha256").update(label).digest("hex");
 }
 
-/** An entry whose advert carries `proof` (when given) under agent/self. */
+/** An entry whose advert carries `proof` (when given) under agent/self's principal field. */
 function entry(label: string, proof?: string): DirectoryEntry {
+  return entryWith(label, proof === undefined ? {} : { membership: proof });
+}
+
+/** An entry whose agent/self advert carries exactly the given proof fields. */
+function entryWith(
+  label: string,
+  proofs: Readonly<{ membership?: string; machine?: string }>,
+): DirectoryEntry {
   const device = deviceIdFromHex(deviceHex(label));
   const advert: PeerAdvert = syntheticAdvert(device, {
     snapshotSeconds: 1,
-    extensions: {
-      "agent/self": proof === undefined ? {} : { membership: proof },
-    },
+    extensions: { "agent/self": proofs },
   });
   return { device, advert };
 }
@@ -107,7 +114,7 @@ describe("directoryAdmission", () => {
     trust.addPrincipal(PRINCIPAL);
     const verifyMembership = vi.fn<Verify>(async (claim) =>
       Promise.resolve(
-        claim.principalHex === PRINCIPAL
+        claim.issuerHex === PRINCIPAL
           ? { ok: true, expires: Date.now() + ONE_HOUR_MS }
           : { ok: false, reason: "wrong_scope_path" },
       ),
@@ -119,7 +126,11 @@ describe("directoryAdmission", () => {
 
     expect(verifyMembership).toHaveBeenCalledTimes(2);
     expect(trust.listVerifiedMembers()).toEqual([
-      { device: deviceHex("two-principals"), principal: PRINCIPAL },
+      {
+        device: deviceHex("two-principals"),
+        kind: "principal",
+        issuer: PRINCIPAL,
+      },
     ]);
   });
 
@@ -195,7 +206,7 @@ describe("directoryAdmission", () => {
     trust.addPrincipal("not-a-device-id");
     trust.addPrincipal(PRINCIPAL);
     const verifyMembership = vi.fn<Verify>(async (claim) => {
-      if (claim.principalHex === "not-a-device-id") {
+      if (claim.issuerHex === "not-a-device-id") {
         throw new Error("expected a 64-character lowercase hex string");
       }
       return Promise.resolve({ ok: true, expires: Date.now() + ONE_HOUR_MS });
@@ -252,5 +263,69 @@ describe("directoryAdmission", () => {
     })([...flood, entry("trusted-in-flood")]);
 
     expect(admitted).toHaveLength(1);
+  });
+
+  it("admits a device whose machine proof a trusted machine vouches for, recording it as a machine member", async () => {
+    const trust = new GatewayTrust();
+    trust.addMachine(MACHINE);
+    const verifyMembership = vi.fn<Verify>(async (claim) =>
+      Promise.resolve(
+        claim.proof === "machine-proof" && claim.issuerHex === MACHINE
+          ? { ok: true, expires: Date.now() + ONE_HOUR_MS }
+          : { ok: false, reason: "wrong_scope_path" },
+      ),
+    );
+
+    const admitted = await directoryAdmission({
+      gatewayTrust: trust,
+      verifyMembership,
+    })([entryWith("on-machine", { machine: "machine-proof" })]);
+
+    expect(admitted).toHaveLength(1);
+    expect(trust.listVerifiedMembers()).toEqual([
+      { device: deviceHex("on-machine"), kind: "machine", issuer: MACHINE },
+    ]);
+  });
+
+  it("checks a machine proof only against trusted machines and a principal proof only against trusted principals", async () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL);
+    const verifyMembership = verifier(true);
+
+    const admitted = await directoryAdmission({
+      gatewayTrust: trust,
+      verifyMembership,
+    })([entryWith("machine-proof-only", { machine: "machine-proof" })]);
+
+    expect(admitted).toEqual([]);
+    expect(verifyMembership).not.toHaveBeenCalled();
+  });
+
+  it("falls through to the machine proof when the principal proof is refused", async () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL);
+    trust.addMachine(MACHINE);
+    const verifyMembership = vi.fn<Verify>(async (claim) =>
+      Promise.resolve(
+        claim.issuerHex === MACHINE
+          ? { ok: true, expires: Date.now() + ONE_HOUR_MS }
+          : { ok: false, reason: "wrong_scope_path" },
+      ),
+    );
+
+    const admitted = await directoryAdmission({
+      gatewayTrust: trust,
+      verifyMembership,
+    })([
+      entryWith("both-proofs", {
+        membership: "principal-proof",
+        machine: "machine-proof",
+      }),
+    ]);
+
+    expect(admitted).toHaveLength(1);
+    expect(trust.listVerifiedMembers()).toEqual([
+      { device: deviceHex("both-proofs"), kind: "machine", issuer: MACHINE },
+    ]);
   });
 });

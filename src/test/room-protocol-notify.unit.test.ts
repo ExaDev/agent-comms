@@ -117,6 +117,7 @@ async function makeHarness(): Promise<Harness> {
       revocation: createRevocationView(),
       dataStorage: {} as never,
       userIdentity: {} as never,
+      machineIdentity: {} as never,
       userIdentityOptions: {},
     }),
     requireTransport: () =>

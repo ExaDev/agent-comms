@@ -15,6 +15,10 @@ import type { PeerIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import type { UserIdentityOptions } from "../core/user-identity.js";
+import {
+  loadOrCreateMachineIdentity,
+  type MachineIdentityOptions,
+} from "../core/machine-identity.js";
 import { nanoid } from "../core/nanoid.js";
 import type { MeshStore } from "../core/mesh-store.js";
 
@@ -27,6 +31,8 @@ interface WireTransportOptions {
   pendingConnectionTimeoutMs?: number | undefined;
   presenceReadvertiseIntervalMs?: number | undefined;
   userIdentityOptions?: Readonly<UserIdentityOptions> | undefined;
+  /** This store's machine identity location; defaults to a fresh throwaway directory, so each test store is on its own machine unless a test names a shared one. */
+  machineIdentityOptions?: Readonly<MachineIdentityOptions> | undefined;
   /** Overrides which identity-store loader resolves this store's identity for the given slot — defaults to loadOrCreateIdentity (the real-bridge path, which takes the slot's exclusivity lock). Pass loadIdentityForFront to model the default cc-peer front's own store instead (agent-comms#299's own reproduction needs both loaders live against one slot at once, which no single wireTestTransport call could otherwise construct). */
   identityLoader?: ((slot: Readonly<IdentitySlot>) => PeerIdentity) | undefined;
 }
@@ -40,6 +46,7 @@ async function wireTransportInternal(
     pendingConnectionTimeoutMs,
     presenceReadvertiseIntervalMs,
     userIdentityOptions,
+    machineIdentityOptions,
     identityLoader = loadOrCreateIdentity,
   } = options ?? {};
   const resolvedSlot: IdentitySlot = slot ?? {
@@ -56,6 +63,11 @@ async function wireTransportInternal(
       ),
     };
   const userIdentity = loadOrCreateUserIdentity(resolvedUserIdentityOptions);
+  const machineIdentity = loadOrCreateMachineIdentity(
+    machineIdentityOptions ?? {
+      dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-machine-")),
+    },
+  );
   // Every real bridge sets peerId to deviceIdToHex(identity.deviceId) before wiring the transport (createBridgeMesh) -- WireMeshTransport's own session bookkeeping is keyed by device-id, so a peer's advertised ID and the identity the other side actually authenticates the connection against must be the same value, or introduction/state-sync never recognises the peer as itself.
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- memory-backed, matching every other throwaway test identity here, rather than a real createNodeFsStorage a test would need to clean up afterwards.
@@ -81,6 +93,7 @@ async function wireTransportInternal(
     dataStorage,
     userIdentity: await toIdentityPort(userIdentity),
     userIdentityOptions: resolvedUserIdentityOptions,
+    machineIdentity: await toIdentityPort(machineIdentity),
   });
   // Surface transport-level errors instead of leaving them silent — a genuine socket failure during a test run is signal worth seeing even when the test's own assertions still pass, since it can point at a real race the assertions don't happen to catch.
   store.onError = (e) => {

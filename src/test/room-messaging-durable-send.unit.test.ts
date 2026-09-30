@@ -87,6 +87,7 @@ async function makeHarness() {
       dataStorage,
       userIdentity: ownerIdentity,
       userIdentityOptions: {},
+      machineIdentity: ownerIdentity,
     }),
     roomProtocol: {
       sendRoomRequestToMember: async () => ({ kind: "delivered" }) as const,
