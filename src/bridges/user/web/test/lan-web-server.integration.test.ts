@@ -18,7 +18,11 @@ import {
   getWebUrlStatus,
   type WebServerHandle,
 } from "../server.js";
-import { ACCESS_COOKIE_NAME, WEB_HOST_ENV } from "../web-access.js";
+import {
+  accessCookieName,
+  ownInterfaceAddresses,
+  WEB_HOST_ENV,
+} from "../web-access.js";
 
 const HTTP_OK = 200;
 const HTTP_FOUND = 302;
@@ -53,9 +57,14 @@ interface Started {
   port: number;
 }
 
-async function start(host: string | undefined): Promise<Started> {
+/** By default the server is told it has no interface addresses of its own, so a request to this machine's LAN address is treated as coming from a remote device: the real thing needs a second machine. */
+async function start(
+  host: string | undefined,
+  localClientAddresses: () => ReadonlySet<string> = () => new Set(),
+): Promise<Started> {
   const handle = await createWebServer({
     host,
+    localClientAddresses,
     coordinatorPort: await freeLocalPort(),
     hubUrl: await unreachableHubUrl(),
     beaconPort: await freeLocalPort(),
@@ -166,6 +175,24 @@ describe("default bind", () => {
   });
 });
 
+describe("Host check on loopback", () => {
+  it("rejects a loopback request whose Host names another domain, so a rebound name cannot reach the default bind", async () => {
+    const { port } = await start(undefined);
+    const reply = await call("127.0.0.1", port, {
+      headers: { host: `rebind.example:${String(port)}` },
+    });
+    expect(reply.status).toBe(HTTP_FORBIDDEN);
+  });
+
+  it("rejects a loopback request to a wildcard bind whose Host is the wildcard address", async () => {
+    const { port } = await start("0.0.0.0");
+    const reply = await call("127.0.0.1", port, {
+      headers: { host: `0.0.0.0:${String(port)}` },
+    });
+    expect(reply.status).toBe(HTTP_FORBIDDEN);
+  });
+});
+
 describe("bind beyond loopback", () => {
   it("prints the token URL on stderr and never on stdout", async () => {
     const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -243,7 +270,7 @@ describe("bind beyond loopback", () => {
       });
       expect(exchange.status).toBe(HTTP_FOUND);
       expect(exchange.headers.location).toBe("/");
-      const cookie = `${ACCESS_COOKIE_NAME}=${handle.accessToken}`;
+      const cookie = `${accessCookieName(port)}=${handle.accessToken}`;
       expect(String(exchange.headers["set-cookie"])).toContain(cookie);
       expect(await upgrade(LAN, port, { cookie })).toBe("open");
     },
@@ -263,6 +290,36 @@ describe("bind beyond loopback", () => {
         },
       });
       expect(reply.status).toBe(HTTP_FORBIDDEN);
+    },
+  );
+
+  it.skipIf(LAN === undefined)(
+    "gives a specific-address bind a web_url that answers from this machine without the token",
+    async () => {
+      if (LAN === undefined) throw new Error("unreachable");
+      const { handle, port } = await start(LAN, ownInterfaceAddresses);
+      const status = getWebUrlStatus(handle);
+      expect(status).toEqual({
+        kind: "ready",
+        url: `http://${LAN}:${String(port)}`,
+      });
+      const reply = await call(LAN, port, {});
+      expect(reply.status).toBe(HTTP_OK);
+    },
+  );
+
+  it.skipIf(LAN === undefined)(
+    "treats a non-canonical wildcard spelling as a wildcard: a LAN client with the token is admitted",
+    async () => {
+      const { handle, port } = await start("::0");
+      if (LAN === undefined || handle.accessToken === undefined) {
+        throw new Error("unreachable");
+      }
+      expect(handle.host).toBe("::");
+      const reply = await call(LAN, port, {
+        headers: { authorization: `Bearer ${handle.accessToken}` },
+      });
+      expect(reply.status).toBe(HTTP_OK);
     },
   );
 });
