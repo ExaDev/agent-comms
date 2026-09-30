@@ -174,6 +174,8 @@ export async function createWebServer(options?: {
   port?: number;
   existingController?: ChatController | undefined;
   coordinatorPort?: number | undefined;
+  /** Overrides the first-contact UDP port a fresh controller's store runs presence on -- ChatController's own firstContactPort, ignored when existingController is supplied. */
+  firstContactPort?: number | undefined;
   /** Overrides the hub a fresh controller's own coordinator role dials on takeover -- ChatController's own hubUrl, ignored when existingController is supplied since that controller already made its own choice. See ChatController's own hubUrl doc comment. */
   hubUrl?: string | undefined;
 }): Promise<WebServerHandle> {
@@ -181,11 +183,16 @@ export async function createWebServer(options?: {
     port = 0,
     existingController,
     coordinatorPort,
+    firstContactPort,
     hubUrl,
   } = options ?? {};
   const controller =
     existingController ??
-    new ChatController("Dashboard", { coordinatorPort, hubUrl });
+    new ChatController("Dashboard", {
+      coordinatorPort,
+      hubUrl,
+      firstContactPort,
+    });
   if (!existingController) {
     await controller.init();
   }

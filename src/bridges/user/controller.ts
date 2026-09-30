@@ -48,18 +48,22 @@ export class ChatController extends EventEmitter {
   private readonly coordinatorPort: number | undefined;
   /** Overrides the hub this controller's own store dials (createBridgeMesh's own hubUrl, defaulting to DEFAULT_HUB_URL) -- every real bridge entry point wants the real public hub, but a test constructing a controller of its own wants a hermetic, deterministically-unreachable one instead of silently depending on live production infrastructure (see hub-helpers.ts's own unreachableHubUrl). */
   private readonly hubUrl: string | undefined;
+  /** Overrides the UDP port this controller's own store runs first-contact presence on (createBridgeMesh's own firstContactPort, defaulting to the machine-wide well-known port). A test that runs several dashboards at once passes an OS-assigned port so they never discover each other. */
+  private readonly firstContactPort: number | undefined;
 
   constructor(
     userName: string,
     options?: {
       coordinatorPort?: number | undefined;
       hubUrl?: string | undefined;
+      firstContactPort?: number | undefined;
     },
   ) {
     super();
     this.userName = userName;
     this.coordinatorPort = options?.coordinatorPort;
     this.hubUrl = options?.hubUrl;
+    this.firstContactPort = options?.firstContactPort;
   }
 
   /**
@@ -94,6 +98,7 @@ export class ChatController extends EventEmitter {
     const { store, tool } = await createBridgeMesh(identitySlot, {
       coordinatorPort: this.coordinatorPort,
       hubUrl: this.hubUrl,
+      firstContactPort: this.firstContactPort,
     });
     this.store = store;
     this.tool = tool;
