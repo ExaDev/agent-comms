@@ -173,6 +173,7 @@ async function makeHarness(): Promise<Harness> {
       dataStorage: {} as never,
       userIdentity: {} as never,
       machineIdentity: {} as never,
+      machineIdentityOptions: {},
       userIdentityOptions: {},
     }),
     requireTransport: () =>

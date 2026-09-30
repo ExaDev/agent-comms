@@ -5,6 +5,7 @@
 import type { CommsAction } from "./types.js";
 import type { CommsResult, MeshOnlyFeatures } from "./tool.js";
 import { tryMeshAction } from "./tool.js";
+import type { Namer } from "./naming.js";
 
 /** Column width the "direct"/"relay" edge-kind label is padded to in meshGraphAction's own listing, matching tool.ts's own aligned-column convention for every other tabular action result. */
 const MESH_GRAPH_EDGE_KIND_COLUMN_WIDTH = 6;
@@ -17,9 +18,10 @@ function meshFeatureUnavailable(action: string): CommsResult {
   };
 }
 
-/** Reports every known device (nodes) and every self-reported connection edge between them (edges), assembled from the cached gossip directory -- a cheap, possibly-stale snapshot; meshTraceAction below is the live, cache-bust counterpart for one specific device. */
+/** Reports every known device (nodes, each by its full id, which mesh_trace takes, and its display name from namer) and every self-reported connection edge between them (edges, by display name), assembled from the cached gossip directory: a cheap, possibly-stale snapshot; meshTraceAction below is the live, cache-bust counterpart for one specific device. */
 export function meshGraphAction(
   store: Readonly<Pick<MeshOnlyFeatures, "meshGraph">>,
+  namer: Namer,
 ): CommsResult {
   if (!store.meshGraph) return meshFeatureUnavailable("mesh_graph");
   const graph = store.meshGraph();
@@ -28,13 +30,15 @@ export function meshGraphAction(
 
   const edgeLines = graph.edges.map((edge) => {
     const via =
-      edge.kind === "relay" && edge.via !== undefined ? ` via ${edge.via}` : "";
-    return `  ${edge.kind.padEnd(MESH_GRAPH_EDGE_KIND_COLUMN_WIDTH)} ${edge.from} -> ${edge.to}${via}`;
+      edge.kind === "relay" && edge.via !== undefined
+        ? ` via ${namer(edge.via)}`
+        : "";
+    return `  ${edge.kind.padEnd(MESH_GRAPH_EDGE_KIND_COLUMN_WIDTH)} ${namer(edge.from)} -> ${namer(edge.to)}${via}`;
   });
   const edgesBlock =
     edgeLines.length > 0 ? edgeLines.join("\n") : "  (no edges reported)";
   return {
-    content: `Mesh graph:\nNodes (${String(graph.nodes.length)}): ${graph.nodes.join(", ")}\nEdges:\n${edgesBlock}`,
+    content: `Mesh graph:\nNodes (${String(graph.nodes.length)}):\n${graph.nodes.map((node) => `  ${node}  ${namer(node)}`).join("\n")}\nEdges:\n${edgesBlock}`,
     isError: false,
   };
 }

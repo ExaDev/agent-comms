@@ -9,6 +9,14 @@
 
 import { detailsShared } from "./agent-registry.js";
 import { groupAgentsByMachine } from "./machine-list-groups.js";
+import { plainNamer, type Namer, type Naming } from "./naming.js";
+import {
+  machineName,
+  petnameClear,
+  petnameList,
+  petnameSet,
+} from "./naming-actions.js";
+import { shortId } from "./display-name.js";
 import type { VerifiedMember } from "./gateway-trust.js";
 import type {
   AgentId,
@@ -232,6 +240,8 @@ function trySyncAction(verb: string, action: () => string): CommsResult {
 export interface CommsToolOptions {
   /** Backs the mesh_discover / mesh_advertise / mesh_unadvertise actions. Undefined means this bridge wires no discovery. */
   readonly discovery?: DiscoveryManager;
+  /** Backs the petname and machine_name actions and the names every listing shows (agent-comms#345). Undefined means this bridge wires no naming, and listings show only what each subject asserts and the short id. */
+  readonly naming?: Naming;
   /** Returns the newest npm release known to be available, or undefined when none is known (no checker wired up, no successful check yet, or this bridge is already current). Wired at bridge construction time by a VersionDriftChecker (see version-check.ts) -- optional so every call site, and every test that has no interest in drift reporting, is unaffected. */
   readonly getNewerVersionIfAny?: () => string | undefined;
   /** Fetches a signer's armored PGP public key by fingerprint, used by gateway_redeem_connection_code when the caller supplies a fingerprint but not the key text itself. Defaults to the real keys.openpgp.org lookup (pgp-keyserver.ts); a test that would otherwise trigger real network I/O injects a fake resolver instead, the same reasoning bridge-mesh.ts's own fetchLatestVersion override already establishes for getNewerVersionIfAny above. */
@@ -245,6 +255,7 @@ export class CommsTool {
   getWebUrlStatus?: () => WebUrlStatus;
 
   private readonly discovery: DiscoveryManager | undefined;
+  private readonly naming: Naming | undefined;
   private readonly getNewerVersionIfAny: (() => string | undefined) | undefined;
   private readonly fetchPgpPublicKeyByFingerprintImpl: (
     fingerprint: string,
@@ -256,10 +267,12 @@ export class CommsTool {
   ) {
     const {
       discovery,
+      naming,
       getNewerVersionIfAny,
       fetchPgpPublicKeyByFingerprintImpl = fetchPgpPublicKeyByFingerprint,
     } = options ?? {};
     this.discovery = discovery;
+    this.naming = naming;
     this.getNewerVersionIfAny = getNewerVersionIfAny;
     this.fetchPgpPublicKeyByFingerprintImpl =
       fetchPgpPublicKeyByFingerprintImpl;
@@ -349,7 +362,7 @@ export class CommsTool {
         case "mesh_get_visibility":
           return meshGetVisibilityAction(this.store);
         case "mesh_graph":
-          return meshGraphAction(this.store);
+          return meshGraphAction(this.store, await this.namerFor(ctx));
         case "mesh_trace":
           return await meshTraceAction(this.store, action);
         case "gateway_trust":
@@ -357,7 +370,15 @@ export class CommsTool {
         case "gateway_untrust":
           return gatewayUntrust(this.store, action);
         case "gateway_list_trusted":
-          return gatewayListTrusted(this.store);
+          return gatewayListTrusted(this.store, await this.namerFor(ctx));
+        case "petname_set":
+          return petnameSet(this.naming, action);
+        case "petname_clear":
+          return petnameClear(this.naming, action);
+        case "petname_list":
+          return petnameList(this.naming, await this.namerFor(ctx));
+        case "machine_name":
+          return await machineName(this.naming, action);
         case "dm_admit":
           return await dmAdmit(this.store, action, ctx.agentId);
         case "dm_use_grant":
@@ -435,6 +456,13 @@ export class CommsTool {
     };
   }
 
+  /** The namer for ctx's view: petnames and known self names when naming is wired, otherwise only what each caller passes. */
+  private async namerFor(ctx: Readonly<CommsContext>): Promise<Namer> {
+    return this.naming === undefined
+      ? plainNamer
+      : this.naming.namer(ctx.agentId);
+  }
+
   private async whoami(ctx: Readonly<CommsContext>): Promise<CommsResult> {
     const agent = await this.store.getAgent(ctx.agentId);
     if (!agent) return { content: "Not registered.", isError: true };
@@ -444,6 +472,7 @@ export class CommsTool {
       `ID: ${agent.id}`,
       ...(principal !== undefined ? [`Principal: ${principal}`] : []),
       ...(machine !== undefined ? [`Machine: ${machine}`] : []),
+      ...machineNameLine(machine, await this.namerFor(ctx)),
       `Name: ${agent.name}`,
       `Harness: ${agent.harness}`,
       `Visibility: ${agent.visibility}`,
@@ -593,6 +622,7 @@ export class CommsTool {
         ? `~${cwd.slice(homedir.length)}`
         : cwd;
 
+    const namer = await this.namerFor(ctx);
     const describe = (a: AgentIdentity): string => {
       const isSelf = a.id === ctx.agentId;
       const self = isSelf ? " (you)" : "";
@@ -609,13 +639,14 @@ export class CommsTool {
         isSelf,
         this.store.getCcPeerVersion,
       );
-      return `${a.id}  ${a.name.padEnd(AGENT_NAME_COLUMN_WIDTH)} ${a.harness.padEnd(AGENT_HARNESS_COLUMN_WIDTH)} ${a.status.padEnd(AGENT_STATUS_COLUMN_WIDTH)} ${a.visibility.padEnd(AGENT_VISIBILITY_COLUMN_WIDTH)} ${cwd}${self}\n        Rooms: ${rooms}\n        Versions: ${versions}`;
+      return `${a.id}  ${namer(a.id, a.name).padEnd(AGENT_NAME_COLUMN_WIDTH)} ${a.harness.padEnd(AGENT_HARNESS_COLUMN_WIDTH)} ${a.status.padEnd(AGENT_STATUS_COLUMN_WIDTH)} ${a.visibility.padEnd(AGENT_VISIBILITY_COLUMN_WIDTH)} ${cwd}${self}\n        Rooms: ${rooms}\n        Versions: ${versions}`;
     };
     const machines = await this.store.listAgentMachines?.();
     const groups = groupAgentsByMachine(
       agents,
       machines,
       this.store.getMachineId?.(),
+      namer,
     );
     const body = groups
       .map((group) => {
@@ -835,4 +866,11 @@ export class CommsTool {
       isError: false,
     };
   }
+}
+
+/** whoami's "Machine name:" line: this machine by the display convention, only when it has a name, since the Machine line above already shows its id. */
+function machineNameLine(machine: string | undefined, namer: Namer): string[] {
+  if (machine === undefined) return [];
+  const named = namer(machine);
+  return named === shortId(machine) ? [] : [`Machine name: ${named}`];
 }

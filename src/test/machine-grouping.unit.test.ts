@@ -28,6 +28,13 @@ type Identify = (
   claim: Readonly<{ proof: string; deviceHex: string }>,
 ) => Promise<IdentifiedMembershipProof>;
 
+/** The naming deps for adverts that carry no name claim: verifying one would mean the test's fixtures are not what it says, so it fails loudly. */
+const noNames = {
+  verifyName: async () =>
+    Promise.reject(new Error("these adverts carry no name claim")),
+  getOwnMachineName: () => undefined,
+};
+
 describe("MachineGrouping", () => {
   it("reports a proof it cannot identify, leaves that device unplaced, and still places the others", async () => {
     const onError = vi.fn<(error: Error) => void>();
@@ -49,6 +56,7 @@ describe("MachineGrouping", () => {
       getPeerId: () => hex("self"),
       getMachineId: () => hex("own-machine"),
       onError,
+      ...noNames,
     });
 
     const machines = await grouping.machinesByDevice();
@@ -73,6 +81,7 @@ describe("MachineGrouping", () => {
       getPeerId: () => hex("self"),
       getMachineId: () => hex("own-machine"),
       onError: () => undefined,
+      ...noNames,
     });
 
     await grouping.machinesByDevice();

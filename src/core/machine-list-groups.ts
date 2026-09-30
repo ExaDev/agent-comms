@@ -3,6 +3,7 @@
  */
 
 import type { AgentIdentity } from "./types.js";
+import type { Namer } from "./naming.js";
 
 /** One run of listed agents and the heading above it; no heading when nothing is grouped at all. */
 export interface AgentGroup {
@@ -10,11 +11,12 @@ export interface AgentGroup {
   agents: AgentIdentity[];
 }
 
-/** agents grouped by machine, each group keeping the agents' listed order. machines maps device id to machine id (MeshStore.listAgentMachines); undefined on a store with no machine identity, in which case, as when no agent is placed on a machine, the list is one ungrouped run. */
+/** agents grouped by machine, each group keeping the agents' listed order and each heading naming its machine by the display convention (namer). machines maps device id to machine id (MeshStore.listAgentMachines); undefined on a store with no machine identity, in which case, as when no agent is placed on a machine, the list is one ungrouped run. */
 export function groupAgentsByMachine(
   agents: readonly AgentIdentity[],
   machines: ReadonlyMap<string, string> | undefined,
   ownMachine: string | undefined,
+  namer: Namer,
 ): AgentGroup[] {
   if (
     machines === undefined ||
@@ -41,7 +43,7 @@ export function groupAgentsByMachine(
       return a.localeCompare(b);
     })
     .map(([machine, members]) => ({
-      heading: `Machine ${machine}${machine === ownMachine ? " (this machine)" : ""}:`,
+      heading: `Machine ${namer(machine)}${machine === ownMachine ? " (this machine)" : ""}:`,
       agents: members,
     }));
   if (unplaced.length > 0) {

@@ -489,6 +489,20 @@ export const CommsActionSchema = defineSchema(
     }),
     z.object({ action: z.literal("gateway_list_trusted") }),
     z.object({
+      action: z.literal("petname_set"),
+      /** The device-id (hex) being labelled: an agent, a machine, a principal or any other device. */
+      device: z.string(),
+      /** The viewer's own label for it, kept only in the viewer's storage and never gossiped. */
+      name: z.string(),
+    }),
+    z.object({ action: z.literal("petname_clear"), device: z.string() }),
+    z.object({ action: z.literal("petname_list") }),
+    z.object({
+      action: z.literal("machine_name"),
+      /** The name this machine asserts for itself, signed by its machine key into every bridge's advert. Omitted clears it. */
+      name: z.string().optional(),
+    }),
+    z.object({
       action: z.literal("dm_admit"),
       target: z.string(),
       /** When true, `target` is a user principal (its whoami Principal line) rather than one device: every device of that user can then use the grant. */

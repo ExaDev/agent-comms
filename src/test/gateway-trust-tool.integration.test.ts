@@ -5,6 +5,7 @@ import { test, describe, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
+import { shortId } from "../core/display-name.js";
 import { wireTestTransport } from "./test-transport.js";
 
 const TEST_PORT = 0;
@@ -205,7 +206,7 @@ describe("CommsTool gateway trust actions", () => {
 
     expect(result.isError, result.content).toBe(false);
     expect(result.content).toContain(
-      `Devices trusted through a principal:\n  ${memberHex} (vouched for by ${PRINCIPAL_HEX})`,
+      `Devices trusted through a principal:\n  ${memberHex}  ${shortId(memberHex)} (vouched for by ${shortId(PRINCIPAL_HEX)})`,
     );
 
     await store.shutdown();
@@ -351,10 +352,10 @@ describe("buildAction gateway trust parsing", () => {
     );
     const listed = await tool.handle(ctx, { action: "gateway_list_trusted" });
     expect(listed.content).toContain(
-      `Trusted remote machines:\n  ${MACHINE_HEX}`,
+      `Trusted remote machines:\n  ${MACHINE_HEX}  ${shortId(MACHINE_HEX)}`,
     );
     expect(listed.content).toContain(
-      `Devices trusted through a machine:\n  ${memberHex} (runs on ${MACHINE_HEX})`,
+      `Devices trusted through a machine:\n  ${memberHex}  ${shortId(memberHex)} (runs on ${shortId(MACHINE_HEX)})`,
     );
 
     const untrusted = await tool.handle(ctx, {

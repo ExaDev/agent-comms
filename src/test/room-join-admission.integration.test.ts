@@ -201,6 +201,7 @@ describe("joinRoom (requester side, remote path)", () => {
       machineIdentity: await toIdentityPort(
         loadOrCreateMachineIdentity(userIdentityOptions),
       ),
+      machineIdentityOptions: userIdentityOptions,
     });
 
     const ownerId = "f".repeat(DEVICE_ID_HEX_LENGTH);

@@ -80,7 +80,10 @@ export class ChatController extends EventEmitter {
     const ctrl = new ChatController("");
     // Replace the store with the existing one
     ctrl.store = store;
-    ctrl.tool = new CommsTool(store, { discovery: store.discovery });
+    ctrl.tool = new CommsTool(store, {
+      discovery: store.discovery,
+      naming: store.naming,
+    });
     ctrl.ctx = ctx;
 
     // Push delivery events to UIs, alongside whatever the bridge that owns this store already does with them

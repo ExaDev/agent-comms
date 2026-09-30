@@ -16,7 +16,8 @@ import {
 
 /** How many times per proof lifetime the proof is re-minted, so a missed tick or two never lets the advertised proof lapse. */
 const REFRESHES_PER_LIFETIME = 3;
-const REFRESH_INTERVAL_MS =
+/** How often an advertised proof, or a name claim riding beside it, is re-minted. */
+export const PROOF_REFRESH_INTERVAL_MS =
   MEMBERSHIP_PROOF_LIFETIME_MS / REFRESHES_PER_LIFETIME;
 
 export interface MembershipProofsDeps {
@@ -47,7 +48,7 @@ export class MembershipProofs {
     this.refresh();
     this.timer = setInterval(() => {
       this.refresh();
-    }, REFRESH_INTERVAL_MS);
+    }, PROOF_REFRESH_INTERVAL_MS);
     this.timer.unref();
   }
 

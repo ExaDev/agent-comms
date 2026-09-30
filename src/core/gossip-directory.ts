@@ -134,6 +134,17 @@ export function readMembershipProof(
     : undefined;
 }
 
+/** The machine name claim a peer gossiped in its agent/self advert (name-claim.ts), or undefined when it carries none. Only read here; nothing it says is believed until it is verified against the machine its proof names. */
+export function readMachineNameClaim(
+  advert: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const self: unknown = advert[AGENT_SELF_GOSSIP_KEY];
+  if (typeof self !== "object" || self === null) return undefined;
+  return "machineName" in self && typeof self.machineName === "string"
+    ? self.machineName
+    : undefined;
+}
+
 /** The one thing gossip re-advertisement needs from a session: somewhere to send the extension bag. */
 export type GossipSession = Pick<AcceptedMeshSession, "sendGossipUpdate">;
 
