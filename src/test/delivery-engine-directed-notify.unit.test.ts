@@ -154,6 +154,7 @@ function makeHarness() {
       revocation: { record: revocationRecord } as never,
       dataStorage: {} as never,
       userIdentity: {} as never,
+      machineIdentity: {} as never,
       userIdentityOptions: {},
     }),
     requireTransport: () => transport,

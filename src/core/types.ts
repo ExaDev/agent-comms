@@ -476,12 +476,16 @@ export const CommsActionSchema = defineSchema(
       device: z.string(),
       /** When true, `device` is trusted as a user principal (GatewayTrust.addPrincipal, agent-comms#187) rather than a bare remote device-id (agent-comms#193). Omitted or false keeps the original bare-device behaviour. */
       principal: z.boolean().optional(),
+      /** When true, `device` is trusted as a machine (its whoami Machine line, GatewayTrust.addMachine, agent-comms#343): every device that machine vouches for becomes reachable. Cannot be combined with `principal`. */
+      machine: z.boolean().optional(),
     }),
     z.object({
       action: z.literal("gateway_untrust"),
       device: z.string(),
       /** When true, `device` is withdrawn from the principal allowlist (GatewayTrust.removePrincipal, agent-comms#187) rather than the bare-device one (agent-comms#193). Omitted or false keeps the original bare-device behaviour. */
       principal: z.boolean().optional(),
+      /** When true, `device` is withdrawn from the machine allowlist (GatewayTrust.removeMachine, agent-comms#343), cutting off every device reachable only through that machine in one act. Cannot be combined with `principal`. */
+      machine: z.boolean().optional(),
     }),
     z.object({ action: z.literal("gateway_list_trusted") }),
     z.object({

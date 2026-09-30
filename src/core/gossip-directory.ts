@@ -78,14 +78,24 @@ export function findPresenceAdvert(
   return AgentStatus.is(status) ? status : undefined;
 }
 
-/** The membership proof a peer gossiped in its agent/self advert, or undefined when it carries none. The advert is self-asserted by whichever peer sent it, so this only reads it; nothing about the proof is believed until it is verified. */
+/** Which agent/self field carries which issuer's proof: `membership` the user principal's, `machine` the machine's. */
+export type MembershipProofField = "membership" | "machine";
+
+/** The membership proof a peer gossiped in its agent/self advert under field, or undefined when it carries none. The advert is self-asserted by whichever peer sent it, so this only reads it; nothing about the proof is believed until it is verified. */
 export function readMembershipProof(
-  advert: Readonly<PeerAdvert>,
+  advert: Readonly<Record<string, unknown>>,
+  field: MembershipProofField,
 ): string | undefined {
   const self: unknown = advert[AGENT_SELF_GOSSIP_KEY];
   if (typeof self !== "object" || self === null) return undefined;
-  if (!("membership" in self)) return undefined;
-  return typeof self.membership === "string" ? self.membership : undefined;
+  if (field === "membership") {
+    return "membership" in self && typeof self.membership === "string"
+      ? self.membership
+      : undefined;
+  }
+  return "machine" in self && typeof self.machine === "string"
+    ? self.machine
+    : undefined;
 }
 
 /** The one thing gossip re-advertisement needs from a session: somewhere to send the extension bag. */

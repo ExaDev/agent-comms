@@ -21,9 +21,9 @@ export interface WireMeshTransportOptions {
   dataStorage?: KeyValueStorage;
   getSelfAgentAdvert?: () => AgentSelfAdvert | undefined;
   gatewayTrust?: Readonly<GatewayTrustReader>;
-  /** Checks a gossiped membership proof against a principal this side trusts (MeshStore.verifyMembership). Without it, a directory entry from a device not trusted by id is refused even when it carries a proof. */
+  /** Checks a gossiped membership proof against a principal or machine this side trusts (MembershipProofs.verify). Without it, a directory entry from a device not trusted by id is refused even when it carries a proof. */
   verifyMembership?: (
-    claim: Readonly<{ proof: string; deviceHex: string; principalHex: string }>,
+    claim: Readonly<{ proof: string; deviceHex: string; issuerHex: string }>,
   ) => Promise<{ ok: true; expires: number } | { ok: false; reason: string }>;
 }
 

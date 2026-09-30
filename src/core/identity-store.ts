@@ -612,10 +612,11 @@ function gatewayTrustFilePath(
   return path.join(identityDir(location), "gateway-trust.json");
 }
 
-/** loadGatewayTrust's own return shape: every remote device-id and every remote user-principal device-id (agent-comms#187) this slot's gateway currently trusts, each lowercase hex, in insertion order. */
+/** The persisted trusted sets: every remote device-id, every remote user-principal device-id (agent-comms#187) and every remote machine device-id (agent-comms#343) this machine's gateway currently trusts, each lowercase hex, in insertion order. */
 export interface LoadedGatewayTrust {
   devices: string[];
   principals: string[];
+  machines: string[];
 }
 
 /** What gatewayTrustStamp reports while no trust file exists. */
@@ -628,7 +629,7 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 /**
- * The trusted devices and principals (agent-comms#187) persisted for this identity directory before this call, both empty if nothing has been saved or the file is missing or unparseable.
+ * The trusted devices, principals (agent-comms#187) and machines (agent-comms#343) persisted for this identity directory before this call, each empty if nothing has been saved or the file is missing or unparseable. A file written before machines were trusted has no machines list and loads with an empty one.
  */
 export function loadGatewayTrust(
   location: Readonly<Pick<IdentitySlot, "dir">>,
@@ -639,10 +640,10 @@ export function loadGatewayTrust(
       fs.readFileSync(gatewayTrustFilePath(location), "utf-8"),
     );
   } catch {
-    return { devices: [], principals: [] };
+    return { devices: [], principals: [], machines: [] };
   }
   if (typeof parsed !== "object" || parsed === null) {
-    return { devices: [], principals: [] };
+    return { devices: [], principals: [], machines: [] };
   }
   const devices =
     "devices" in parsed && isStringArray(parsed.devices) ? parsed.devices : [];
@@ -650,22 +651,26 @@ export function loadGatewayTrust(
     "principals" in parsed && isStringArray(parsed.principals)
       ? parsed.principals
       : [];
-  return { devices, principals };
+  const machines =
+    "machines" in parsed && isStringArray(parsed.machines)
+      ? parsed.machines
+      : [];
+  return { devices, principals, machines };
 }
 
 /**
- * Persists the complete trusted-gateway device-id and principal-id sets for this identity directory, surviving a restart. Overwrites whatever was saved before in full: GatewayTrust calls this with its own current sets after every change, having first reloaded the file if another process replaced it, so there is no per-entry partial update to preserve here.
+ * Persists the complete trusted device, principal and machine sets for this identity directory, surviving a restart. Overwrites whatever was saved before in full: GatewayTrust calls this with its own current sets after every change, having first reloaded the file if another process replaced it, so there is no per-entry partial update to preserve here.
  */
 export function saveGatewayTrust(
   location: Readonly<Pick<IdentitySlot, "dir">>,
-  devices: readonly string[],
-  principals: readonly string[],
+  trust: Readonly<LoadedGatewayTrust>,
 ): void {
   const dir = identityDir(location);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const stored: LoadedGatewayTrust = {
-    devices: [...devices],
-    principals: [...principals],
+    devices: [...trust.devices],
+    principals: [...trust.principals],
+    machines: [...trust.machines],
   };
   writeFileAtomic(
     gatewayTrustFilePath(location),

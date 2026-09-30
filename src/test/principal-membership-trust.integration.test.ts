@@ -178,7 +178,8 @@ describe("principal membership trust", () => {
 
     expect(b1.listVerifiedMembers()).toContainEqual({
       device: a2.peerId,
-      principal: principalOf(a1),
+      kind: "principal",
+      issuer: principalOf(a1),
     });
   });
 

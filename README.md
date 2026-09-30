@@ -90,6 +90,8 @@ Beacons and probes go to a multicast group joined on the loopback interface (239
 
 Each bridge derives its peer ID from the device-id of its own keypair (SHA-256 of the raw public key): ECDSA P-256, self-signed, generated locally. The key material persists per bridge slot (`~/.agent-comms/identity-<harness>--<cwd>.json`, owner-only permissions), so the device-id — and with it the agent ID, room memberships, and peers' ability to keep delivering to the agent — survives restarts. Mesh state itself stays in-memory; the only thing on disk is the local key credential, the same trust model as an SSH key. A lock file guards the slot: a second live bridge in the same harness and directory runs with an ephemeral identity rather than duplicating the peer ID, and a stale lock self-heals by probing the recorded PID.
 
+Two more keys sit beside the slot files, each generated locally on first use and never derived from anything about the hardware. `~/.agent-comms/user-identity.json` is the account's user principal, shared by every bridge the account runs on the machine. `~/.agent-comms/machine-identity.json` is the machine itself, shared by every bridge on the host whoever runs it. Both are grouping issuers: each bridge gossips a short-lived proof from each that vouches for its device, so a peer can tell whose device it is and which host it runs on. `whoami` shows them as the `Principal:` and `Machine:` lines, and `list_agents` groups agents under the machine that vouches for each, this machine first; an agent no current machine proof places, such as one that predates machine proofs, is listed under "Machine not proven". Moving a machine identity to a rebuilt host is a deliberate copy of its file, the same model as an SSH host key.
+
 **Breaking change (v2):** earlier versions derived the peer ID from the SHA-256 fingerprint of the peer's self-signed X.509 certificate rather than its raw public key. The two values differ for the same keypair, so every agent ID, room membership, and pending delivery queue tied to a pre-v2 identity is orphaned on upgrade — there is no migration path, since existing peers can no longer address an upgraded one under its old ID. A v2 bridge cannot interoperate with a v1 one at all: they no longer agree on wire framing, transport, or peer identity.
 
 ## Install
@@ -441,8 +443,14 @@ agent_comms({ action: "gateway_trust", device: "1a2b3c..." })
 # Trust a person rather than one device: pass the Principal line from their whoami
 agent_comms({ action: "gateway_trust", device: "<their principal>", principal: true })
 
+# Trust a whole host: pass the Machine line from its whoami
+agent_comms({ action: "gateway_trust", device: "<their machine>", machine: true })
+
 # Stop trusting it
 agent_comms({ action: "gateway_untrust", device: "1a2b3c..." })
+
+# Revoke a whole host in one act
+agent_comms({ action: "gateway_untrust", device: "<their machine>", machine: true })
 
 # List every currently trusted device
 agent_comms({ action: "gateway_list_trusted" })
@@ -450,9 +458,11 @@ agent_comms({ action: "gateway_list_trusted" })
 
 Trusting a principal covers every device that person runs, so each of their sessions doesn't need adding one by one. Every bridge gossips a short-lived proof, signed by its account's user identity, that it belongs to that principal. A gateway that trusts the principal verifies the proof and then lets that device appear in `list_agents` and be sent requests, until the proof lapses or you untrust the principal. `gateway_list_trusted` shows such devices with the principal that vouches for each.
 
+Trusting a machine works the same way for every device on one host: each bridge's proof from its machine identity makes it reachable while the machine is trusted, and untrusting the machine cuts every device reachable only through it off at once. A device also trusted by id or through a trusted principal stays reachable by that route. Proofs ride only in a visible agent's advert, so a hidden agent reveals nothing beyond its device-id, and neither its principal nor its machine.
+
 Every advert a device gossips is signed by that device's own key, and both the hub and each receiving session check the signature before believing where it came from. That authenticates which device an entry is about, so nobody can publish or replace another device's directory entry, but what the entry says is still whatever that device chose to claim.
 
-Three limits are worth knowing. A proof says the principal vouches for a device id, not that whoever gossips it is that device: anyone connected to the hub can read and repeat one, so it is only enough to be listed and routed to, never to have relayed frames accepted as trusted, and every request to the device is still authenticated end to end. Proofs can't be revoked, only left to expire, so removing a device from an account doesn't stop it while it still holds the account's key. And a proof names the principal in the clear, so anyone on the hub can see which devices belong to the same person.
+Three limits are worth knowing. A proof says the principal or machine vouches for a device id, not that whoever gossips it is that device: anyone connected to the hub can read and repeat one, so it is only enough to be listed and routed to, never to have relayed frames accepted as trusted, and every request to the device is still authenticated end to end. Proofs can't be revoked, only left to expire, so removing a device from an account doesn't stop it while it still holds the account's key, and a host keeps vouching for its own devices while it holds its machine key. And a proof names its principal or machine in the clear, so anyone on the hub can see which devices belong to the same person and which run on the same host; making an agent hidden is how to keep that to yourself.
 
 The device-id itself normally has to be learned out of band (Slack, email, a phone call) before it can be pasted into `gateway_trust`. A connection code is a single-use, short-lived artifact that makes that hand-off itself verifiable instead of a bare, unauthenticated string:
 

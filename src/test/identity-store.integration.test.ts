@@ -325,49 +325,99 @@ test("deleteGroupToken is a no-op when nothing was saved for that group path", (
 
 test("loadGatewayTrust is empty for a slot that has never saved a trusted set", () => {
   const { slot } = tempSlot("pi");
-  expect(loadGatewayTrust(slot)).toEqual({ devices: [], principals: [] });
+  expect(loadGatewayTrust(slot)).toEqual({
+    devices: [],
+    principals: [],
+    machines: [],
+  });
 });
 
 test("loadGatewayTrust does not require an identity to have been created first, unlike loadRoomTokens/loadGroupTokens", () => {
   const { slot } = tempSlot("pi");
   expect(() => {
-    saveGatewayTrust(slot, ["aabbcc"], []);
+    saveGatewayTrust(slot, {
+      devices: ["aabbcc"],
+      principals: [],
+      machines: [],
+    });
   }).not.toThrow();
   expect(loadGatewayTrust(slot)).toEqual({
     devices: ["aabbcc"],
     principals: [],
+    machines: [],
   });
 });
 
 test("saveGatewayTrust persists the trusted device and principal sets, loadGatewayTrust reloads the same lists", () => {
   const { slot } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc", "ddeeff"], ["112233"]);
+  saveGatewayTrust(slot, {
+    devices: ["aabbcc", "ddeeff"],
+    principals: ["112233"],
+    machines: [],
+  });
   expect(loadGatewayTrust(slot)).toEqual({
     devices: ["aabbcc", "ddeeff"],
     principals: ["112233"],
+    machines: [],
   });
 });
 
 test("saveGatewayTrust overwrites the previously saved sets rather than merging with them", () => {
   const { slot } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc", "ddeeff"], ["112233"]);
-  saveGatewayTrust(slot, ["112233"], ["445566"]);
+  saveGatewayTrust(slot, {
+    devices: ["aabbcc", "ddeeff"],
+    principals: ["112233"],
+    machines: [],
+  });
+  saveGatewayTrust(slot, {
+    devices: ["112233"],
+    principals: ["445566"],
+    machines: [],
+  });
   expect(loadGatewayTrust(slot)).toEqual({
     devices: ["112233"],
     principals: ["445566"],
+    machines: [],
+  });
+});
+
+test("saveGatewayTrust persists the trusted machine set, and a file with no machines list loads with an empty one", () => {
+  const { slot, dir } = tempSlot("pi");
+  saveGatewayTrust(slot, {
+    devices: [],
+    principals: [],
+    machines: ["778899"],
+  });
+  expect(loadGatewayTrust(slot).machines).toEqual(["778899"]);
+  fs.writeFileSync(
+    path.join(dir, GATEWAY_TRUST_FILE),
+    JSON.stringify({ devices: ["aabbcc"], principals: [] }),
+  );
+  expect(loadGatewayTrust(slot)).toEqual({
+    devices: ["aabbcc"],
+    principals: [],
+    machines: [],
   });
 });
 
 test("saveGatewayTrust persists empty sets, clearing whatever was saved before", () => {
   const { slot } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc"], ["112233"]);
-  saveGatewayTrust(slot, [], []);
-  expect(loadGatewayTrust(slot)).toEqual({ devices: [], principals: [] });
+  saveGatewayTrust(slot, {
+    devices: ["aabbcc"],
+    principals: ["112233"],
+    machines: [],
+  });
+  saveGatewayTrust(slot, { devices: [], principals: [], machines: [] });
+  expect(loadGatewayTrust(slot)).toEqual({
+    devices: [],
+    principals: [],
+    machines: [],
+  });
 });
 
 test("the gateway trust file is written with owner-only permissions", () => {
   const { slot, dir } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc"], []);
+  saveGatewayTrust(slot, { devices: ["aabbcc"], principals: [], machines: [] });
   const file = fs.readdirSync(dir).find((f) => f === GATEWAY_TRUST_FILE);
   expect(file, `expected ${GATEWAY_TRUST_FILE} in ${dir}`).toBeDefined();
   if (file === undefined) throw new Error("expected a gateway-trust file");
@@ -377,7 +427,7 @@ test("the gateway trust file is written with owner-only permissions", () => {
 
 test("the gateway trust file is shared by every slot in an identity directory", () => {
   const { slot, dir } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc"], []);
+  saveGatewayTrust(slot, { devices: ["aabbcc"], principals: [], machines: [] });
   const otherHarness: IdentitySlot = { ...slot, harness: "claude-code" };
   const otherCwd: IdentitySlot = { ...slot, cwd: "/somewhere/else" };
   expect(loadGatewayTrust(otherHarness).devices).toEqual(["aabbcc"]);
@@ -390,9 +440,9 @@ test("the gateway trust file is shared by every slot in an identity directory", 
 test("gatewayTrustStamp changes when the trust file is created, rewritten, or removed", () => {
   const { slot, dir } = tempSlot("pi");
   const absent = gatewayTrustStamp(slot);
-  saveGatewayTrust(slot, ["aabbcc"], []);
+  saveGatewayTrust(slot, { devices: ["aabbcc"], principals: [], machines: [] });
   const created = gatewayTrustStamp(slot);
-  saveGatewayTrust(slot, ["aabbcc"], []);
+  saveGatewayTrust(slot, { devices: ["aabbcc"], principals: [], machines: [] });
   const rewritten = gatewayTrustStamp(slot);
   fs.rmSync(path.join(dir, GATEWAY_TRUST_FILE));
   const stamps = [absent, created, rewritten];
@@ -402,9 +452,13 @@ test("gatewayTrustStamp changes when the trust file is created, rewritten, or re
 
 test("loadGatewayTrust returns empty for a slot whose gateway trust file is corrupt", () => {
   const { slot, dir } = tempSlot("pi");
-  saveGatewayTrust(slot, ["aabbcc"], []);
+  saveGatewayTrust(slot, { devices: ["aabbcc"], principals: [], machines: [] });
   const file = fs.readdirSync(dir).find((f) => f === GATEWAY_TRUST_FILE);
   if (file === undefined) throw new Error("expected a gateway-trust file");
   fs.writeFileSync(path.join(dir, file), "not valid json{{{");
-  expect(loadGatewayTrust(slot)).toEqual({ devices: [], principals: [] });
+  expect(loadGatewayTrust(slot)).toEqual({
+    devices: [],
+    principals: [],
+    machines: [],
+  });
 });

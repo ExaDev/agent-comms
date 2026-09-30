@@ -11,6 +11,7 @@ const TEST_PORT = 0;
 const DEVICE_HEX = "aabbccdd";
 const ONE_HOUR_MS = 3_600_000;
 const PRINCIPAL_HEX = "eeff0011";
+const MACHINE_HEX = "99887766";
 
 describe("CommsTool gateway trust actions", () => {
   test("gateway_trust adds a device to the allowlist", async () => {
@@ -191,7 +192,7 @@ describe("CommsTool gateway trust actions", () => {
     store.addTrustedGatewayPrincipal(PRINCIPAL_HEX);
     store.gatewayTrust.noteVerifiedMember(
       memberHex,
-      PRINCIPAL_HEX,
+      { kind: "principal", issuer: PRINCIPAL_HEX },
       Date.now() + ONE_HOUR_MS,
     );
 
@@ -305,5 +306,95 @@ describe("buildAction gateway trust parsing", () => {
     if (action.action === "gateway_trust") {
       expect(action.principal).toBeUndefined();
     }
+  });
+
+  test("gateway_trust and gateway_untrust with machine: true add and revoke a machine, and gateway_list_trusted reports it and its devices", async () => {
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    await wireTestTransport(store);
+    await store.init();
+    const agent = await store.registerAgent({
+      name: "gateway-trust-machine-test",
+      harness: "test",
+      cwd: "/test",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
+    const tool = new CommsTool(store);
+    const ctx = {
+      agentId: agent.id,
+      harness: "test",
+      cwd: "/test",
+      pid: process.pid,
+    };
+    const memberHex = "8765432187654321";
+
+    const trusted = await tool.handle(
+      ctx,
+      buildAction({
+        action: "gateway_trust",
+        device: MACHINE_HEX,
+        machine: true,
+      }),
+    );
+    expect(trusted.isError, trusted.content).toBe(false);
+    expect(store.listTrustedGatewayMachines()).toEqual([MACHINE_HEX]);
+    expect(store.listTrustedGateways()).toEqual([]);
+    expect(store.listTrustedGatewayPrincipals()).toEqual([]);
+
+    store.gatewayTrust.noteVerifiedMember(
+      memberHex,
+      { kind: "machine", issuer: MACHINE_HEX },
+      Date.now() + ONE_HOUR_MS,
+    );
+    const listed = await tool.handle(ctx, { action: "gateway_list_trusted" });
+    expect(listed.content).toContain(
+      `Trusted remote machines:\n  ${MACHINE_HEX}`,
+    );
+    expect(listed.content).toContain(
+      `Devices trusted through a machine:\n  ${memberHex} (runs on ${MACHINE_HEX})`,
+    );
+
+    const untrusted = await tool.handle(ctx, {
+      action: "gateway_untrust",
+      device: MACHINE_HEX,
+      machine: true,
+    });
+    expect(untrusted.isError, untrusted.content).toBe(false);
+    expect(store.listTrustedGatewayMachines()).toEqual([]);
+    expect(store.gatewayTrust.isReachable(memberHex)).toBe(false);
+
+    await store.shutdown();
+  });
+
+  test("gateway_trust refuses an id named as both a principal and a machine", async () => {
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    await wireTestTransport(store);
+    await store.init();
+    const agent = await store.registerAgent({
+      name: "gateway-trust-both-test",
+      harness: "test",
+      cwd: "/test",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
+    const tool = new CommsTool(store);
+
+    const result = await tool.handle(
+      { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
+      {
+        action: "gateway_trust",
+        device: MACHINE_HEX,
+        principal: true,
+        machine: true,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(store.listTrustedGatewayMachines()).toEqual([]);
+    expect(store.listTrustedGatewayPrincipals()).toEqual([]);
+
+    await store.shutdown();
   });
 });

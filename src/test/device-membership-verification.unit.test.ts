@@ -15,7 +15,7 @@ import type { Clock } from "wire-mesh-core/ports/clock";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import {
   DEVICE_MEMBER_CAPABILITY,
-  userGroupPath,
+  groupPath,
   verifyDeviceMembership,
 } from "../core/device-membership-verification.js";
 
@@ -54,7 +54,7 @@ const EXPIRES_MS = NOW_MS + HOUR_MS;
 async function mintDeviceMemberToken(
   issuer: IdentityPort,
   bearer: IdentityPort,
-  groupPath: string,
+  scopePath: string,
   tokenId: Uint8Array<ArrayBuffer> = nextTokenId(),
 ): Promise<CapabilityToken> {
   const verdict = await mintCapabilityToken({
@@ -63,7 +63,7 @@ async function mintDeviceMemberToken(
     tokenId,
     bearer: bearer.deviceId,
     capability: DEVICE_MEMBER_CAPABILITY,
-    scope: { kind: "group", path: groupPath },
+    scope: { kind: "group", path: scopePath },
     expires: EXPIRES_MS,
     delegationsRemaining: 0,
   });
@@ -71,14 +71,14 @@ async function mintDeviceMemberToken(
   return verdict.token;
 }
 
-describe("DEVICE_MEMBER_CAPABILITY / userGroupPath", () => {
+describe("DEVICE_MEMBER_CAPABILITY / groupPath", () => {
   it("is the registered group:member capability string", () => {
     expect(DEVICE_MEMBER_CAPABILITY).toBe("group:member");
   });
 
   it("derives the group path as the user principal's own device-id hex", async () => {
     const user = await generateEs256Identity();
-    expect(userGroupPath(user.deviceId)).toBe(deviceIdToHex(user.deviceId));
+    expect(groupPath(user.deviceId)).toBe(deviceIdToHex(user.deviceId));
   });
 });
 
@@ -86,21 +86,21 @@ describe("verifyDeviceMembership", () => {
   it("accepts a token rooted at the user principal for that principal's own group", async () => {
     const user = await generateEs256Identity();
     const device = await generateEs256Identity();
-    const groupPath = userGroupPath(user.deviceId);
-    const token = await mintDeviceMemberToken(user, device, groupPath);
+    const scopePath = groupPath(user.deviceId);
+    const token = await mintDeviceMemberToken(user, device, scopePath);
 
     const verdict = await verifyDeviceMembership(token, {
       identity: user,
       clock: fixedClock(NOW_MS),
       revocation: createRevocationView(),
       expectedBearer: device.deviceId,
-      userDeviceId: user.deviceId,
+      groupIssuerId: user.deviceId,
     });
 
     expect(verdict.ok).toBe(true);
     if (verdict.ok) {
       expect(verdict.claims.capability).toBe(DEVICE_MEMBER_CAPABILITY);
-      expect(verdict.claims.scope).toEqual({ kind: "group", path: groupPath });
+      expect(verdict.claims.scope).toEqual({ kind: "group", path: scopePath });
     }
   });
 
@@ -108,16 +108,16 @@ describe("verifyDeviceMembership", () => {
     const user = await generateEs256Identity();
     const impostor = await generateEs256Identity();
     const device = await generateEs256Identity();
-    const groupPath = userGroupPath(user.deviceId);
+    const scopePath = groupPath(user.deviceId);
     // Minted by the impostor, scoped to claim it is the user's own group -- rootIssuer is the impostor, not the user, and must be refused.
-    const token = await mintDeviceMemberToken(impostor, device, groupPath);
+    const token = await mintDeviceMemberToken(impostor, device, scopePath);
 
     const verdict = await verifyDeviceMembership(token, {
       identity: user,
       clock: fixedClock(NOW_MS),
       revocation: createRevocationView(),
       expectedBearer: device.deviceId,
-      userDeviceId: user.deviceId,
+      groupIssuerId: user.deviceId,
     });
 
     expect(verdict.ok).toBe(false);
@@ -131,7 +131,7 @@ describe("verifyDeviceMembership", () => {
     const token = await mintDeviceMemberToken(
       user,
       device,
-      userGroupPath(otherUser.deviceId),
+      groupPath(otherUser.deviceId),
     );
 
     const verdict = await verifyDeviceMembership(token, {
@@ -139,7 +139,7 @@ describe("verifyDeviceMembership", () => {
       clock: fixedClock(NOW_MS),
       revocation: createRevocationView(),
       expectedBearer: device.deviceId,
-      userDeviceId: user.deviceId,
+      groupIssuerId: user.deviceId,
     });
 
     expect(verdict.ok).toBe(false);
@@ -149,14 +149,14 @@ describe("verifyDeviceMembership", () => {
   it("refuses a token with an unrelated capability even when scope kind/path line up", async () => {
     const user = await generateEs256Identity();
     const device = await generateEs256Identity();
-    const groupPath = userGroupPath(user.deviceId);
+    const scopePath = groupPath(user.deviceId);
     const verdict1 = await mintCapabilityToken({
       identity: user,
       clock: fixedClock(NOW_MS),
       tokenId: nextTokenId(),
       bearer: device.deviceId,
       capability: "exec:pty",
-      scope: { kind: "group", path: groupPath },
+      scope: { kind: "group", path: scopePath },
       expires: EXPIRES_MS,
     });
     if (!verdict1.ok) throw new Error(`mint failed: ${verdict1.reason}`);
@@ -166,7 +166,7 @@ describe("verifyDeviceMembership", () => {
       clock: fixedClock(NOW_MS),
       revocation: createRevocationView(),
       expectedBearer: device.deviceId,
-      userDeviceId: user.deviceId,
+      groupIssuerId: user.deviceId,
     });
 
     expect(verdict.ok).toBe(false);
@@ -182,7 +182,7 @@ describe("verifyDeviceMembership", () => {
       tokenId: nextTokenId(),
       bearer: device.deviceId,
       capability: DEVICE_MEMBER_CAPABILITY,
-      scope: { kind: "room", path: userGroupPath(user.deviceId) },
+      scope: { kind: "room", path: groupPath(user.deviceId) },
       expires: EXPIRES_MS,
     });
     if (!verdict1.ok) throw new Error(`mint failed: ${verdict1.reason}`);
@@ -192,7 +192,7 @@ describe("verifyDeviceMembership", () => {
       clock: fixedClock(NOW_MS),
       revocation: createRevocationView(),
       expectedBearer: device.deviceId,
-      userDeviceId: user.deviceId,
+      groupIssuerId: user.deviceId,
     });
 
     expect(verdict.ok).toBe(false);
@@ -206,7 +206,7 @@ describe("verifyDeviceMembership", () => {
     const token = await mintDeviceMemberToken(
       user,
       device,
-      userGroupPath(user.deviceId),
+      groupPath(user.deviceId),
     );
 
     const verdict = await verifyDeviceMembership(token, {
@@ -214,7 +214,7 @@ describe("verifyDeviceMembership", () => {
       clock: fixedClock(NOW_MS),
       revocation: createRevocationView(),
       expectedBearer: impostorDevice.deviceId,
-      userDeviceId: user.deviceId,
+      groupIssuerId: user.deviceId,
     });
 
     expect(verdict.ok).toBe(false);
@@ -227,7 +227,7 @@ describe("verifyDeviceMembership", () => {
     const token = await mintDeviceMemberToken(
       user,
       device,
-      userGroupPath(user.deviceId),
+      groupPath(user.deviceId),
     );
 
     const verdict = await verifyDeviceMembership(token, {
@@ -235,7 +235,7 @@ describe("verifyDeviceMembership", () => {
       clock: fixedClock(EXPIRES_MS + HOUR_MS),
       revocation: createRevocationView(),
       expectedBearer: device.deviceId,
-      userDeviceId: user.deviceId,
+      groupIssuerId: user.deviceId,
     });
 
     expect(verdict.ok).toBe(false);
@@ -249,7 +249,7 @@ describe("verifyDeviceMembership", () => {
     const token = await mintDeviceMemberToken(
       user,
       device,
-      userGroupPath(user.deviceId),
+      groupPath(user.deviceId),
       tokenId,
     );
 
@@ -266,7 +266,7 @@ describe("verifyDeviceMembership", () => {
       clock: fixedClock(NOW_MS),
       revocation,
       expectedBearer: device.deviceId,
-      userDeviceId: user.deviceId,
+      groupIssuerId: user.deviceId,
     });
 
     expect(verdict.ok).toBe(false);

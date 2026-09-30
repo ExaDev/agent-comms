@@ -9,8 +9,7 @@
  */
 
 import { bytesToHex, deviceIdToHex } from "wire-mesh-core/domain/device-id";
-import * as os from "node:os";
-import { MembershipProofs } from "./membership-proofs.js";
+import { GroupProofs } from "./group-proofs.js";
 import {
   ROOM_JOIN_APPROVAL_TIMEOUT_MS,
   ROOM_REQUEST_TIMEOUT_MS,
@@ -20,7 +19,7 @@ import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
 import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
-import { GatewayTrust } from "./gateway-trust.js";
+import { GatewayTrust, type VerifiedMember } from "./gateway-trust.js";
 import { ReceiverSet } from "./receiver-set.js";
 import {
   ConnectionCodeLedger,
@@ -36,10 +35,7 @@ import { RoomLifecycle } from "./room-lifecycle.js";
 import { AgentRegistry } from "./agent-registry.js";
 import { ConnectionApproval } from "./connection-approval.js";
 import { CapabilityAskAdmission } from "./capability-ask.js";
-import type {
-  IncomingManageRequest,
-  ManageOutcome,
-} from "wire-mesh-core/domain/mesh-session";
+import type { IncomingManageRequest } from "wire-mesh-core/domain/mesh-session";
 import type { DeviceId } from "wire-mesh-core/generated/protocol";
 import { StaleAgentChecker } from "./stale-agent-checker.js";
 import { PeerLifecycle } from "./peer-lifecycle.js";
@@ -53,7 +49,9 @@ import type { AgentSelfAdvert, HostedRoomAdvert } from "./gossip-extensions.js";
 import {
   getPeerAgentCommsVersions,
   getPeerWireMeshCoreVersion,
+  queryPeerVersion,
 } from "./peer-versions.js";
+import { listNetworkInterfaces } from "./network-interfaces.js";
 import type {
   MeshStatePatch,
   PeerInfo,
@@ -114,10 +112,12 @@ export class MeshStore implements CommsStore {
     this.onError?.(error instanceof Error ? error : new Error(String(error)));
   };
 
-  /** This device's own membership proof and the check for other devices' proofs (agent-comms#266). */
-  readonly membership = new MembershipProofs({
+  /** This device's own membership proofs under its user principal and its machine, and the checks for other devices' proofs (agent-comms#266, agent-comms#343). */
+  readonly membership = new GroupProofs({
     getIdentity: () => this.requireIdentity(),
+    peekIdentity: () => this.storeIdentity,
     getPeerId: () => this.peerId,
+    requireTransport: () => this.requireTransport(),
     onError: this.reportError,
   });
 
@@ -200,7 +200,7 @@ export class MeshStore implements CommsStore {
       startedAt: agent.startedAt,
       tags: agent.tags,
       subscribedRooms: agent.subscribedRooms,
-      ...this.membership.advertField(),
+      ...this.membership.advertFields(),
     };
   }
 
@@ -470,9 +470,14 @@ export class MeshStore implements CommsStore {
     this.membership.start();
   }
 
-  /** Every device this side trusts only because a trusted principal vouches for it, with that principal. */
-  listVerifiedMembers(): { device: string; principal: string }[] {
+  /** Every device this side trusts only because a trusted principal or machine vouches for it, with that issuer. */
+  listVerifiedMembers(): VerifiedMember[] {
     return this.gatewayTrust.listVerifiedMembers();
+  }
+
+  /** The machine (hex) of each device this side can place on one, keyed by device id (agent-comms#343): this device's own, and every gossiped device carrying a valid machine proof. Empty before this store's identity is attached. */
+  async listAgentMachines(): Promise<Map<string, string>> {
+    return this.membership.machinesByDevice();
   }
 
   /** The set identity, or throws if setIdentity() hasn't been called yet -- the single place every identity-using method reads through, mirroring requireTransport() above. */
@@ -640,6 +645,12 @@ export class MeshStore implements CommsStore {
   getUserPrincipalId(): string | undefined {
     const user = this.storeIdentity?.userIdentity;
     return user === undefined ? undefined : deviceIdToHex(user.deviceId);
+  }
+
+  /** This host's own machine id (hex, agent-comms#343): the identity every bridge on this machine shares, and the thing another machine names to trust or revoke this whole host. Undefined until this store's identity is attached. */
+  getMachineId(): string | undefined {
+    const machine = this.storeIdentity?.machineIdentity;
+    return machine === undefined ? undefined : deviceIdToHex(machine.deviceId);
   }
 
   /** Admits bearerId into this user's own DM-communication scope (agent-comms#162): mints and persists a dm:send grant, self-signed by this store's own user principal. Returns the minted token for the caller to deliver to bearerId out of band. Deliberately outside the CommsStore interface, like requestDmAccess above. Concrete-only -- reached directly by tests. delegationsRemaining defaults to 0 (non-delegable, the original behaviour); a positive value admits bearerId as a user principal capable of sub-delegating to its own devices (agent-comms#187) -- see RoomLifecycle.admitAgentForDm's own doc comment. */
@@ -920,6 +931,23 @@ export class MeshStore implements CommsStore {
     return this.gatewayTrust.listPrincipals();
   }
 
+  /** Trusts a remote machine device-id (hex, agent-comms#343): every device whose gossiped proof that machine vouches for becomes reachable without being trusted individually. */
+  addTrustedGatewayMachine(deviceHex: string): void {
+    this.gatewayTrust.addMachine(deviceHex);
+    this.reconsiderHub();
+  }
+
+  /** Withdraws trust from a remote machine device-id (hex), and with it every device reachable only through that machine: revoking the whole host in one act. A no-op if it was never trusted. */
+  removeTrustedGatewayMachine(deviceHex: string): void {
+    this.gatewayTrust.removeMachine(deviceHex);
+    this.reconsiderHub();
+  }
+
+  /** Every currently trusted remote machine device-id (hex). */
+  listTrustedGatewayMachines(): string[] {
+    return this.gatewayTrust.listMachines();
+  }
+
   // -----------------------------------------------------------------------
   // Connection codes (agent-comms#188) -- bootstrapping gateway trust with no existing mesh connection between the two devices
   // -----------------------------------------------------------------------
@@ -998,20 +1026,7 @@ export class MeshStore implements CommsStore {
   }
 
   getNetworkInterfaces(): NetworkInterface[] {
-    const interfaces = os.networkInterfaces();
-    const result: NetworkInterface[] = [];
-    for (const [name, addrs] of Object.entries(interfaces)) {
-      if (addrs === undefined) continue;
-      for (const addr of addrs) {
-        result.push({
-          name,
-          address: addr.address,
-          family: addr.family,
-          internal: addr.internal,
-        });
-      }
-    }
-    return result;
+    return listNetworkInterfaces();
   }
 
   // -----------------------------------------------------------------------
@@ -1042,21 +1057,7 @@ export class MeshStore implements CommsStore {
   async queryVersion(
     deviceId: string,
   ): Promise<{ version: string } | { error: string }> {
-    const transport = this.requireTransport();
-    if (transport.queryVersion === undefined) {
-      return {
-        error: "this transport does not support querying a peer's version",
-      };
-    }
-    const outcome: ManageOutcome = await transport.queryVersion(deviceId);
-    if (outcome.result === "error") {
-      return { error: outcome.message ?? outcome.code };
-    }
-    const version: unknown = outcome.version;
-    if (typeof version !== "string") {
-      return { error: "peer answered version.get with no version string" };
-    }
-    return { version };
+    return queryPeerVersion(this.requireTransport(), deviceId);
   }
 
   // -----------------------------------------------------------------------
