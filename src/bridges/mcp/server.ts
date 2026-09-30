@@ -19,9 +19,9 @@ import {
   drainAndFormat,
   installShutdownSignalHandlers,
   MCP_TOOL_PARAMS,
+  type BridgeMeshOptions,
 } from "../../core/index.js";
 import type { Readable } from "node:stream";
-import type { BridgeMeshOptions } from "../../core/bridge-mesh.js";
 import type { IdentitySlot } from "../../core/identity-store.js";
 import { releaseIdentityLock } from "../../core/identity-store.js";
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
