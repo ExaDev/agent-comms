@@ -1,3 +1,13 @@
+## [8.2.0](https://github.com/ExaDev/agent-comms/compare/v8.1.1...v8.2.0) (2026-09-30)
+
+### Features
+
+* **core:** form the mesh without a coordinator through default-on first contact ([11c82d5](https://github.com/ExaDev/agent-comms/commit/11c82d52a41c55772ef9ccef1b07dfabdfdf3a20)), references [#341](https://github.com/ExaDev/agent-comms/issues/341)
+
+### Documentation
+
+* describe first contact without a coordinator ([af1e0c7](https://github.com/ExaDev/agent-comms/commit/af1e0c74e85c5d9074db48d3065ea19b17665463))
+
 ## [8.1.1](https://github.com/ExaDev/agent-comms/compare/v8.1.0...v8.1.1) (2026-09-30)
 
 ### Build
