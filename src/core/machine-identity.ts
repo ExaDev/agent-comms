@@ -22,7 +22,7 @@ export function machineIdentityFile(
   return path.join(dir, "machine-identity.json");
 }
 
-/** Loads this account's machine identity for this host, creating it on first use (exclusive create, renewal in place, a corrupt file regenerated). */
+/** Loads this account's machine identity for this host, creating it on first use (exclusive create, renewal in place, an unusable file refused rather than regenerated). */
 export function loadOrCreateMachineIdentity(
   options?: Readonly<MachineIdentityOptions>,
 ): PeerIdentity {
