@@ -307,6 +307,11 @@ export interface MeshTransport {
   reconsiderHub?: () => void;
 
   /**
+   * Tells the transport whether this store holds the elected coordinator role, which makes it the one store on the machine that serves the relay role while it holds an uplink to the configured hub, and keeps its own hub session on that uplink (agent-comms#342). Same optionality caveat as joinHub.
+   */
+  setRelayEligible?: (eligible: boolean) => void;
+
+  /**
    * Asks deviceId for its own, currently-running wire-mesh-core version, live, right now rather than whatever it last gossiped (agent-comms#198's own cache-bust query_version action). Optional, same caveat as listKnownDevices/joinHub: WireMeshTransport is the only implementation that offers it today, riding wire-mesh-core's own version.get manage-command (wire-mesh#179).
    */
   queryVersion?: (deviceId: string) => Promise<ManageOutcome>;

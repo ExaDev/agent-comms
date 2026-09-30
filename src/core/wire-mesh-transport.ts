@@ -37,10 +37,11 @@ import {
 } from "./gossip-directory.js";
 import { directoryAdmission, staysAdmitted } from "./directory-admission.js";
 import { routeRoomRequestViaHub } from "./hub-forwarding.js";
-import { HubLink } from "./hub-link.js";
 import { ElectionSessions } from "./election-sessions.js";
 import { isLoopbackAddress } from "./loopback-address.js";
 import type { AgentStatus } from "./types.js";
+import { RelayRole } from "./relay-role.js";
+import { ALL_INTERFACES_HOST } from "./relay-server.js";
 import {
   DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
   expirePendingConnection,
@@ -163,6 +164,9 @@ export class WireMeshTransport implements MeshTransport {
   // -- The hub relay mode (agent-comms#151), owning its own file under the max-lines cap: see hub-session.ts for the full connection model.
   readonly hub: HubSession;
 
+  // -- Which relay the hub session is held over, and the relay this store serves while it holds the elected coordinator role and an uplink (agent-comms#342): see relay-role.ts.
+  readonly relay: RelayRole;
+
   // -- Every live session, keyed by the peer's authenticated device-id hex (== ConnectionHandle.id) -- covers coordinator-client, coordinator-accepted, and peer data sessions alike, since send()/broadcast() must reach whichever kind of session a peer happens to be reachable through. A single-slot-per-key map by construction: mesh formation genuinely establishes TWO independent sessions to the same peer (see the dataDials comment below), and the second one registered here simply overwrites the first as far as addressing goes -- fine for send()/broadcast() (either socket reaches the same peer), but NOT fine for shutdown, which must close every live session regardless of whether it's still reachable through this map. allSessions below exists specifically so shutdown never leaks the one this map's overwrite silently stopped tracking.
   private readonly peerSessions = new Map<string, AcceptedMeshSession>();
 
@@ -226,8 +230,6 @@ export class WireMeshTransport implements MeshTransport {
   /** Reads this side's own currently-hosted public/private rooms for the next gossip re-advertisement tick, the same pull-not-push shape getCurrentPresence already established -- createRoom/destroyRoom patch MeshStore's own rooms map and let the next tick pick it up, rather than pushing an update here on every mutation. undefined when no hosted-rooms source was wired in. */
   private readonly getHostedRooms: WireMeshTransportOptions["getHostedRooms"];
   private gossipInterval: ReturnType<typeof setInterval> | undefined;
-  /** Holds this transport's session on the relay hub, once joinHub has named one. */
-  private hubLink: HubLink | undefined;
 
   /** Reads this side's own gossip-safe agent-identity advert for the next gossip re-advertisement tick, the same pull-not-push shape getCurrentPresence/getHostedRooms already established. undefined when no agent-identity source was wired in, or when MeshStore's own getter decides this agent shouldn't advertise itself this way right now (e.g. not "visible", or no self-agent record yet). */
   private readonly getSelfAgentAdvert: WireMeshTransportOptions["getSelfAgentAdvert"];
@@ -259,6 +261,7 @@ export class WireMeshTransport implements MeshTransport {
       accountReplication,
       gatewayTrust = new GatewayTrust(),
       verifyMembership,
+      relayListenHost = ALL_INTERFACES_HOST,
     } = options ?? {};
     this.events = events;
     this.wireTransport = createTlsTransport({
@@ -268,6 +271,17 @@ export class WireMeshTransport implements MeshTransport {
     this.identityReady = toIdentityPort(identity);
     this.gatewayTrust = gatewayTrust;
     this.electionSessions = new ElectionSessions(events);
+    this.relay = new RelayRole({
+      listenHost: relayListenHost,
+      ownDeviceHex: deviceIdToHex(Uint8Array.from(identity.deviceId)),
+      knownDevices: this.knownDevices,
+      machineLocalPeers: this.electionSessions,
+      gatewayTrust,
+      readvertise: () => {
+        readvertiseGossip(this.gossipOptions());
+      },
+      events,
+    });
     // Built before this.hub below (roomRouter has no dependency on it) so the hub can be wired with a direct this.roomRouter.handleRelayedRequest reference rather than a lazy closure. path.trace (agent-comms#199) is always registered here, ahead of any caller-supplied roomVerbHandlers, since every real construction site wants it answered identically regardless of which room verbs it registers.
     this.roomRouter = createRoomRouter({
       events,
@@ -324,6 +338,7 @@ export class WireMeshTransport implements MeshTransport {
       getHostedRooms: this.getHostedRooms,
       getSelfAgentAdvert: this.getSelfAgentAdvert,
       getCcPeerVersion: () => this.getCcPeerVersion?.(),
+      getRelayOffer: () => this.relay.offer(),
     };
   }
 
@@ -921,23 +936,15 @@ export class WireMeshTransport implements MeshTransport {
   // -----------------------------------------------------------------------
 
   joinHub(url: string, shouldConnect: () => boolean): void {
-    if (this.hubLink !== undefined) return;
-    this.hubLink = new HubLink({
-      hub: this.hub,
-      url,
-      shouldConnect,
-      onConnected: () => {
-        readvertiseGossip(this.gossipOptions());
-      },
-      onError: (error) => {
-        this.events.onError?.(error);
-      },
-    });
-    this.hubLink.start();
+    this.relay.joinHub(this.hub, url, shouldConnect);
   }
 
   reconsiderHub(): void {
-    this.hubLink?.reconsider();
+    this.relay.reconsiderHub();
+  }
+
+  setRelayEligible(eligible: boolean): void {
+    this.relay.setEligible(eligible);
   }
 
   // -----------------------------------------------------------------------
@@ -955,7 +962,7 @@ export class WireMeshTransport implements MeshTransport {
       ...this.coordinatorListeners.values(),
     ].map(async (tracked) => tracked.listener.close());
 
-    await this.hubLink?.stop();
+    await this.relay.stop();
     if (this.gossipInterval !== undefined) {
       clearInterval(this.gossipInterval);
       this.gossipInterval = undefined;

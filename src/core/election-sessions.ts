@@ -58,6 +58,11 @@ export class ElectionSessions {
     this.enrolled.clear();
   }
 
+  /** Whether this store holds a live machine-local session with the device (hex): a full member of its local mesh on this same machine. */
+  hasPeer(deviceHex: string): boolean {
+    return this.peerIds().has(deviceHex);
+  }
+
   /** The device-ids of every peer this side has at least one enrolled session to: the peers that take part in the election with it. */
   peerIds(): ReadonlySet<string> {
     return new Set([...this.enrolled.values()].map((handle) => handle.id));
