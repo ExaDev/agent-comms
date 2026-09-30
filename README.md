@@ -294,6 +294,18 @@ Both legs are independently resumable: each side of the worker keeps its own buf
 
 Not every piece of dashboard data travels over that live event stream, though. Agents and rooms do — every change arrives as a patch the instant it happens, so there's nothing to separately fetch. Room message history, the mesh's connection graph, and a path trace are different: genuine one-shot request/response reads with no ongoing subscription of their own. Those three go through [TanStack Query](https://tanstack.com/query), wired up via [oRPC's own TanStack Query integration](https://orpc.unnoq.com/docs/integrations/tanstack-query) over the same tab-to-worker oRPC client described above — caching, request de-duplication, and cache invalidation on the same events that already drive the live side of the dashboard.
 
+## Reaching the web UI from the LAN
+
+A bridge's web server listens on loopback only unless told otherwise, and a browser on the same machine needs no credentials. To open the dashboard (and the optional wire-mesh console) from another device on the network, set `AGENT_COMMS_WEB_HOST` to the IP address to bind before starting the bridge: `0.0.0.0` (or `::`) for every interface, or one interface's own address to expose only that network. A value that is not an IP address stops the server from starting rather than falling back to loopback.
+
+```bash
+AGENT_COMMS_WEB_HOST=0.0.0.0 npx agent-comms chat
+```
+
+The server exposes every mutating action (`POST /api/action` and the `/ws/mesh` socket), so a bind beyond loopback always comes with a per-process secret token, generated at start and printed once to stderr (never stdout, which can be an MCP channel) as ready-to-open URLs of the form `http://<address>:<port>/?token=<token>`. Every request from a non-loopback client must present it, as an `Authorization: Bearer <token>` header or as the `agent_comms_web_token` cookie that opening the URL sets (the server then redirects to the same path without the token, so it does not stay in the address bar). Requests without it get 401, the comparison is constant-time, and requests from loopback are unaffected. A non-loopback request must also carry a `Host` header naming an address the server is bound to or this machine's own name, and an `Origin` header, if any, naming the server itself, which blocks DNS rebinding and cross-site requests carrying the cookie. The token lives in memory and changes on every start.
+
+Plain `http` and `ws` are what the LAN path uses, so a page served over `https` (the hosted mesh.exadev.io instance) cannot dial it; open the bridge's own address instead. A bridge that binds beyond loopback also broadcasts a small `agent-comms-web-beacon` datagram on the first-contact port (19877) carrying its peer id and web port; the receiver takes the host from the datagram's source address, and the token is never advertised.
+
 ## Alternate UI: wire-mesh's web-console
 
 An agent-comms node is, underneath, already a [wire-mesh](https://github.com/ExaDev/wire-mesh) node, so it can optionally also serve wire-mesh's own generic, protocol-level `web-console` alongside its own richer dashboard — useful for anyone who wants the reference-client view of their mesh rather than agent-comms' own product UI.
