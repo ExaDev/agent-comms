@@ -1,6 +1,7 @@
 /**
  * CommsTool's gateway-trust action handlers (agent-comms#156, extended by agent-comms#187's principal-keyed allowlist, agent-comms#193's tool-level `principal` flag and agent-comms#343's `machine` flag), split out of tool.ts to keep that file under the repo's max-lines cap, the same reason agent-registry.ts, delivery-engine.ts, and their siblings were split from mesh-store.ts. Free functions over MeshOnlyFeatures's own gateway-trust methods rather than class methods, since CommsTool owns no state of its own for this concern: every one of these is a pure translation from a CommsAction to a CommsResult against whatever store methods are present.
  */
+import { isDeviceIdHex } from "./room-path.js";
 import type { CommsAction } from "./types.js";
 import type { CommsResult, MeshOnlyFeatures } from "./tool.js";
 
@@ -27,6 +28,14 @@ function principalOrMachine(): CommsResult {
   };
 }
 
+/** The result for an id that is not a full device-id. Trusting one would persist an entry that matches no real device, principal or machine, yet still count towards hasAny and so start this side advertising on the hub. */
+function notADeviceId(device: string): CommsResult {
+  return {
+    content: `${JSON.stringify(device)} is not a device-id: pass the full 64-character hex id (whoami prints this side's).`,
+    isError: true,
+  };
+}
+
 /** Uniform "gateway trust isn't available on this store" result, mirroring tool.ts's own notMeshBacked helper for the other MeshOnlyFeatures methods. */
 function gatewayTrustUnavailable(): CommsResult {
   return {
@@ -42,6 +51,9 @@ export function gatewayTrust(
 ): CommsResult {
   if (action.principal === true && action.machine === true) {
     return principalOrMachine();
+  }
+  if (!isDeviceIdHex(action.device.toLowerCase())) {
+    return notADeviceId(action.device);
   }
   if (action.machine === true) {
     if (!store.addTrustedGatewayMachine) return gatewayTrustUnavailable();
@@ -75,6 +87,12 @@ export function gatewayUntrust(
   if (action.principal === true && action.machine === true) {
     return principalOrMachine();
   }
+  if (
+    !isDeviceIdHex(action.device.toLowerCase()) &&
+    !listedForUntrust(store, action)
+  ) {
+    return notADeviceId(action.device);
+  }
   if (action.machine === true) {
     if (!store.removeTrustedGatewayMachine) return gatewayTrustUnavailable();
     store.removeTrustedGatewayMachine(action.device);
@@ -97,6 +115,20 @@ export function gatewayUntrust(
     content: `Untrusted remote gateway device ${action.device}.`,
     isError: false,
   };
+}
+
+/** Whether action.device is already in the set gateway_untrust would remove it from, so an entry an earlier version persisted without checking its shape can still be withdrawn through the tool. */
+function listedForUntrust(
+  store: Readonly<GatewayTrustStore>,
+  action: CommsAction & { action: "gateway_untrust" },
+): boolean {
+  const listed =
+    action.machine === true
+      ? store.listTrustedGatewayMachines?.()
+      : action.principal === true
+        ? store.listTrustedGatewayPrincipals?.()
+        : store.listTrustedGateways?.();
+  return listed?.includes(action.device.toLowerCase()) === true;
 }
 
 /** Reports every currently trusted remote device-id, principal (agent-comms#187) and machine (agent-comms#343) together, and the devices reachable through a trusted principal or machine. Listing is never mutually exclusive between the sets, so, unlike gatewayTrust/gatewayUntrust above, this needs no flag of its own. */
