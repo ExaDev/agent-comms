@@ -25,7 +25,7 @@ import type {
   RoomMessage,
 } from "./types.js";
 import type { TabContract } from "./tab-contract.js";
-import type { MeshEvent } from "../contract.js";
+import type { DisplayNamePartsWire, MeshEvent } from "../contract.js";
 import { dispatchAction } from "./dispatch-action.js";
 import { isServedByBridge } from "./served-by-bridge.js";
 
@@ -78,6 +78,8 @@ function buildReadsClient(requireClient: () => TabClient) {
     ): Promise<RoomMessage[]> => requireClient().getRoomMessages(input),
     getMeshGraph: async (): Promise<MeshGraph> =>
       requireClient().getMeshGraph({}),
+    getDisplayNames: async (): Promise<DisplayNamePartsWire[]> =>
+      requireClient().getDisplayNames({}),
     getMeshTrace: async (
       input: Readonly<{ target: string; timeoutMs?: number }>,
     ): Promise<MeshTraceResult> => requireClient().getMeshTrace(input),

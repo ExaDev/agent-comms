@@ -29,6 +29,7 @@ import type { SerialisedState } from "./contract.js";
 import type { MeshEventPublisher } from "./event-publisher.js";
 import {
   getMeshGraphRead,
+  getDisplayNamesRead,
   getMeshTraceRead,
   getRoomMessagesRead,
 } from "./reads.js";
@@ -123,6 +124,10 @@ export const meshRouter = {
 
   getMeshGraph: impl.getMeshGraph.handler(({ context }) =>
     getMeshGraphRead(context.controller),
+  ),
+
+  getDisplayNames: impl.getDisplayNames.handler(async ({ context }) =>
+    getDisplayNamesRead(context.controller),
   ),
 
   getMeshTrace: impl.getMeshTrace.handler(async ({ context, input }) =>

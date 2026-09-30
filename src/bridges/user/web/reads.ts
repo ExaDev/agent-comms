@@ -6,6 +6,7 @@
 
 import type { RoomMessage } from "../../../core/types.js";
 import type { ChatController } from "../controller.js";
+import type { DisplayNameParts } from "../../../core/display-name.js";
 import type { MeshGraph, MeshTraceResult } from "./contract.js";
 
 export async function getRoomMessagesRead(
@@ -17,6 +18,13 @@ export async function getRoomMessagesRead(
 
 export function getMeshGraphRead(controller: ChatController): MeshGraph {
   return controller.meshStore.meshGraph();
+}
+
+/** Every id this bridge's viewer has a name for (a petname or a known self name), for the dashboard to label ids by the shared display convention (agent-comms#345). */
+export async function getDisplayNamesRead(
+  controller: ChatController,
+): Promise<DisplayNameParts[]> {
+  return controller.meshStore.naming.nameParts(controller.agentId);
 }
 
 export async function getMeshTraceRead(

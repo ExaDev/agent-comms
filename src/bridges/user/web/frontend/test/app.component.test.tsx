@@ -24,6 +24,7 @@ const stubQueryUtils = createTanstackQueryUtils({
   getRoomMessages: async () => new Promise<never>(() => {}),
   getMeshGraph: async () => new Promise<never>(() => {}),
   getMeshTrace: async () => new Promise<never>(() => {}),
+  getDisplayNames: async () => new Promise<never>(() => {}),
 });
 
 const APP_DEFAULTS: AppProps = {

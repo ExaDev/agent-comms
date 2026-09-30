@@ -10,10 +10,14 @@ import { useState } from "react";
 import type { MeshClient } from "../mesh-client.js";
 import { MeshGraphView } from "./MeshGraphView.js";
 import { MeshTraceView } from "./MeshTraceView.js";
+import { formatDisplayName } from "../../../../../core/display-name.js";
 
 interface MeshPanelProps {
   /** Narrowed to just the two utils this component actually uses, the same Pick-based narrowing dispatch-action.ts's ActionDispatchClient already established for the same "component/function only needs a slice of the full client" shape. */
-  queryUtils: Pick<MeshClient["queryUtils"], "getMeshGraph" | "getMeshTrace">;
+  queryUtils: Pick<
+    MeshClient["queryUtils"],
+    "getMeshGraph" | "getMeshTrace" | "getDisplayNames"
+  >;
 }
 
 export function MeshPanel({ queryUtils }: MeshPanelProps) {
@@ -22,6 +26,13 @@ export function MeshPanel({ queryUtils }: MeshPanelProps) {
   );
   const graphQuery = useQuery(queryUtils.getMeshGraph.queryOptions());
   const traceMutation = useMutation(queryUtils.getMeshTrace.mutationOptions());
+  const namesQuery = useQuery(queryUtils.getDisplayNames.queryOptions());
+  const names = new Map(
+    (namesQuery.data ?? []).map((parts) => [parts.id, parts]),
+  );
+  // An id with no entry has no petname or known self name, so its label is its short id alone.
+  const label = (id: string): string =>
+    formatDisplayName(names.get(id) ?? { id });
 
   function handleTrace(): void {
     if (selectedTarget === undefined) return;
@@ -46,6 +57,7 @@ export function MeshPanel({ queryUtils }: MeshPanelProps) {
       <Tabs.Panel value="graph">
         <MeshGraphView
           graph={graph}
+          label={label}
           selectedDevice={selectedTarget}
           onSelectDevice={setSelectedTarget}
         />
@@ -54,6 +66,7 @@ export function MeshPanel({ queryUtils }: MeshPanelProps) {
         <Stack>
           <MeshTraceView
             targets={graph.nodes}
+            label={label}
             selectedTarget={selectedTarget}
             onSelectTarget={setSelectedTarget}
             onTrace={handleTrace}

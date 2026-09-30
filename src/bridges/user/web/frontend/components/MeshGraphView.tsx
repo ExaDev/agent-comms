@@ -18,6 +18,8 @@ import type { MeshGraph } from "../types.js";
 
 interface MeshGraphViewProps {
   graph: MeshGraph;
+  /** Each node's label: its display name by the shared convention (core/display-name.ts). */
+  label: (deviceId: string) => string;
   selectedDevice: string | undefined;
   onSelectDevice: (deviceId: string) => void;
 }
@@ -38,8 +40,6 @@ const LAYOUT_HEIGHT = 400;
 const SIMULATION_TICKS = 300;
 
 const NODE_RADIUS = 10;
-/** Length of the truncated device-id hex label shown next to each node -- enough to distinguish devices at a glance without a full 64-character hash crowding the graph. */
-const LABEL_HEX_LENGTH = 8;
 /** Vertical gap between a node's own circle and its label, below NODE_RADIUS. */
 const LABEL_OFFSET = 12;
 
@@ -79,6 +79,7 @@ function resolvedNode(
 
 export function MeshGraphView({
   graph,
+  label,
   selectedDevice,
   onSelectDevice,
 }: MeshGraphViewProps) {
@@ -145,7 +146,7 @@ export function MeshGraphView({
               fontSize={10}
               fill="var(--mantine-color-text)"
             >
-              {node.id.slice(0, LABEL_HEX_LENGTH)}
+              {label(node.id)}
             </text>
           </g>
         ))}

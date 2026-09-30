@@ -11,8 +11,11 @@ import { MeshPanel } from "../components/MeshPanel.js";
 import type { MeshGraph, MeshTraceResult } from "../types.js";
 import { stubMantineJsdomGlobals } from "./jsdom-mantine-polyfills.js";
 import { renderWithMantine } from "./render-with-mantine.js";
+import { shortId } from "../../../../../core/display-name.js";
 
 const getMeshGraphMock = vi.fn<() => Promise<MeshGraph>>();
+const getDisplayNamesMock =
+  vi.fn<() => Promise<{ id: string; petname?: string; selfName?: string }[]>>();
 const getMeshTraceMock =
   vi.fn<
     (
@@ -22,6 +25,7 @@ const getMeshTraceMock =
 
 const queryUtils = createTanstackQueryUtils({
   getMeshGraph: async () => getMeshGraphMock(),
+  getDisplayNames: async () => getDisplayNamesMock(),
   getMeshTrace: async (
     input: Readonly<{ target: string; timeoutMs?: number }>,
   ) => getMeshTraceMock(input),
@@ -30,6 +34,8 @@ const queryUtils = createTanstackQueryUtils({
 beforeEach(() => {
   stubMantineJsdomGlobals();
   getMeshGraphMock.mockReset();
+  getDisplayNamesMock.mockReset();
+  getDisplayNamesMock.mockResolvedValue([]);
   getMeshTraceMock.mockReset();
 });
 
@@ -39,8 +45,6 @@ afterEach(() => {
 
 /** A device-id is a hex-encoded SHA-256 hash: 32 bytes, 64 hex characters. */
 const DEVICE_ID_HEX_LENGTH = 64;
-/** Length of the truncated device-id hex label MeshGraphView/MeshTraceView show -- matches their own LABEL_HEX_LENGTH constant. */
-const LABEL_HEX_LENGTH = 8;
 const DEVICE_A = "a".repeat(DEVICE_ID_HEX_LENGTH);
 const DEVICE_B = "b".repeat(DEVICE_ID_HEX_LENGTH);
 
@@ -98,7 +102,7 @@ describe("MeshPanel", () => {
     await user.click(screen.getByRole("combobox", { name: "Target device" }));
     await user.click(
       await screen.findByRole("option", {
-        name: DEVICE_A.slice(0, LABEL_HEX_LENGTH),
+        name: shortId(DEVICE_A),
       }),
     );
     await user.click(screen.getByRole("button", { name: "Trace" }));
@@ -106,5 +110,18 @@ describe("MeshPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("device unreachable")).toBeInTheDocument();
     });
+  });
+
+  it("labels devices by the display convention: petname, then self-asserted name, then short id", async () => {
+    getMeshGraphMock.mockResolvedValue(MOCK_GRAPH);
+    getDisplayNamesMock.mockResolvedValue([
+      { id: DEVICE_A, petname: "work laptop", selfName: "joe-mbp" },
+    ]);
+    renderWithMantine(<MeshPanel queryUtils={queryUtils} />);
+
+    expect(
+      await screen.findByText(`work laptop "joe-mbp" ${shortId(DEVICE_A)}`),
+    ).toBeInTheDocument();
+    expect(screen.getByText(shortId(DEVICE_B))).toBeInTheDocument();
   });
 });

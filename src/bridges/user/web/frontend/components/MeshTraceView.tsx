@@ -9,6 +9,8 @@ import type { MeshTraceResult } from "../types.js";
 
 interface MeshTraceViewProps {
   targets: readonly string[];
+  /** Each target's label: its display name by the shared convention (core/display-name.ts). */
+  label: (deviceId: string) => string;
   selectedTarget: string | undefined;
   onSelectTarget: (deviceId: string) => void;
   onTrace: () => void;
@@ -16,9 +18,6 @@ interface MeshTraceViewProps {
   error: string | undefined;
   result: MeshTraceResult | undefined;
 }
-
-/** Length of the truncated device-id hex label shown in the target picker -- matches MeshGraphView's own node-label truncation. */
-const LABEL_HEX_LENGTH = 8;
 
 function describeSide(side: Readonly<MeshTraceResult["local"]>): string {
   if (!side.relayed) return "direct";
@@ -29,6 +28,7 @@ function describeSide(side: Readonly<MeshTraceResult["local"]>): string {
 
 export function MeshTraceView({
   targets,
+  label,
   selectedTarget,
   onSelectTarget,
   onTrace,
@@ -38,7 +38,7 @@ export function MeshTraceView({
 }: MeshTraceViewProps) {
   const options = targets.map((id) => ({
     value: id,
-    label: id.slice(0, LABEL_HEX_LENGTH),
+    label: label(id),
   }));
 
   return (
