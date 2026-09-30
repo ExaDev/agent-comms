@@ -47,12 +47,23 @@ import {
   resolveWebConsoleDist,
   serveWebConsole,
 } from "./web-console-static.js";
-
-const WEB_HOST = "127.0.0.1";
+import {
+  accessUrls,
+  authorise,
+  generateAccessToken,
+  isWildcardHost,
+  LOOPBACK_HOST,
+  requiresAccessToken,
+  resolveWebBindHost,
+  type AccessDecision,
+  type AccessPolicy,
+} from "./web-access.js";
+import { startWebBeacon } from "./web-beacon.js";
 
 const HTTP_NO_CONTENT = 204;
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
+const HTTP_UNAUTHORIZED = 401;
 const HTTP_NOT_FOUND = 404;
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 const HTTP_NOT_IMPLEMENTED = 501;
@@ -119,6 +130,10 @@ export interface WebServerHandle {
   wss: WebSocketServer;
   pushManager: PushManager;
   publisher: MeshEventPublisher;
+  /** The address the server is bound to: loopback unless the operator opted into LAN reachability (AGENT_COMMS_WEB_HOST). */
+  host: string;
+  /** The per-process secret every non-loopback request must present. Present only when the bind is beyond loopback; never advertised. */
+  accessToken: string | undefined;
 }
 
 /** Resolve the listening port from a running web server handle, or undefined if the OS hasn't assigned one yet. */
@@ -134,7 +149,9 @@ export function getWebUrlStatus(
   if (!handle) return { kind: "not_running" };
   const port = getWebPort(handle);
   if (port === undefined || port === 0) return { kind: "pending" };
-  return { kind: "ready", url: `http://${WEB_HOST}:${String(port)}` };
+  // A wildcard bind is reachable on loopback, which needs no token; a specific non-loopback address is the only place the server listens.
+  const host = isWildcardHost(handle.host) ? LOOPBACK_HOST : handle.host;
+  return { kind: "ready", url: `http://${host}:${String(port)}` };
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +189,10 @@ export async function tryStartBridgeWebServer(
  */
 export async function createWebServer(options?: {
   port?: number;
+  /** The IP address to bind. Defaults to AGENT_COMMS_WEB_HOST, then loopback. A non-loopback address makes the server reachable from the LAN and turns on the access token (see web-access.ts). */
+  host?: string | undefined;
+  /** The UDP port the LAN beacon advertises on when the bind is beyond loopback. Defaults to the first-contact port; tests pass an OS-assigned free port. */
+  beaconPort?: number | undefined;
   existingController?: ChatController | undefined;
   coordinatorPort?: number | undefined;
   /** Overrides the first-contact UDP port a fresh controller's store runs presence on -- ChatController's own firstContactPort, ignored when existingController is supplied. */
@@ -181,6 +202,8 @@ export async function createWebServer(options?: {
 }): Promise<WebServerHandle> {
   const {
     port = 0,
+    host: requestedHost,
+    beaconPort,
     existingController,
     coordinatorPort,
     firstContactPort,
@@ -199,7 +222,19 @@ export async function createWebServer(options?: {
 
   const webConsoleDist = resolveWebConsoleDist();
 
+  const host = resolveWebBindHost(requestedHost, process.env);
+  const accessToken = requiresAccessToken(host)
+    ? generateAccessToken()
+    : undefined;
+
+  // The port is only known once the server listens (port 0 asks the OS), so the policy's port is filled in on the listening event, before any request can arrive.
+  const accessPolicy: AccessPolicy | undefined =
+    accessToken === undefined
+      ? undefined
+      : { token: accessToken, bindHost: host, port };
+
   const server = http.createServer((req, res) => {
+    if (!admitRequest(accessPolicy, req, res)) return;
     handleRequest(req, res, controller, webConsoleDist);
   });
 
@@ -214,6 +249,16 @@ export async function createWebServer(options?: {
   const rpcHandler = new RPCHandler(meshRouter);
 
   server.on("upgrade", (req, socket, head) => {
+    const decision = authorise(accessPolicy, requestOf(req));
+    if (decision.kind !== "allow") {
+      const status =
+        decision.kind === "deny" ? decision.status : HTTP_UNAUTHORIZED;
+      socket.write(
+        `HTTP/1.1 ${String(status)} ${http.STATUS_CODES[status] ?? ""}\r\n\r\n`,
+      );
+      socket.destroy();
+      return;
+    }
     if (req.url === "/ws/mesh") {
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
@@ -240,16 +285,100 @@ export async function createWebServer(options?: {
     });
   });
 
-  server.listen(port, WEB_HOST, () => {
+  server.listen(port, host, () => {
     const addr = server.address();
     const actualPort = typeof addr === "object" && addr ? addr.port : port;
     // stderr, not stdout: a stdio MCP bridge owns stdout for JSON-RPC, so any other line there is protocol noise to a strictly framed client.
-    console.error(
-      `Agent Comms web UI: http://${WEB_HOST}:${String(actualPort)}`,
-    );
+    console.error(`Agent Comms web UI: http://${host}:${String(actualPort)}`);
   });
+  if (accessPolicy !== undefined) {
+    server.once("listening", () => {
+      accessPolicy.port = listeningPort(server, port);
+      announceLanAccess(
+        server,
+        accessPolicy,
+        controller.meshStore.peerId,
+        beaconPort,
+      );
+    });
+  }
 
-  return { server, controller, wss, pushManager, publisher };
+  return { server, controller, wss, pushManager, publisher, host, accessToken };
+}
+
+function listeningPort(server: http.Server, fallback: number): number {
+  const addr = server.address();
+  return typeof addr === "object" && addr ? addr.port : fallback;
+}
+
+function requestOf(req: http.IncomingMessage): {
+  method: string;
+  url: string;
+  remoteAddress: string | undefined;
+  headers: http.IncomingHttpHeaders;
+} {
+  return {
+    method: req.method ?? "GET",
+    url: req.url ?? "/",
+    remoteAddress: req.socket.remoteAddress,
+    headers: req.headers,
+  };
+}
+
+/** Applies the access policy to an HTTP request, answering it (401, 403, or the cookie-setting redirect of the one-time URL exchange) when it is not admitted. Returns true when the request should proceed to the normal handlers. */
+function admitRequest(
+  policy: AccessPolicy | undefined,
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): boolean {
+  const decision: AccessDecision = authorise(policy, requestOf(req));
+  switch (decision.kind) {
+    case "allow":
+      return true;
+    case "exchange":
+      res.writeHead(decision.status, {
+        "Set-Cookie": decision.cookie,
+        Location: decision.location,
+        "Cache-Control": "no-store",
+      });
+      res.end();
+      return false;
+    case "deny":
+      res.writeHead(decision.status, {
+        "Content-Type": "text/plain; charset=utf-8",
+        ...(decision.status === HTTP_UNAUTHORIZED
+          ? { "WWW-Authenticate": "Bearer" }
+          : {}),
+      });
+      res.end(decision.message);
+      return false;
+    default:
+      return decision satisfies never;
+  }
+}
+
+/** Tells the operator how to open the LAN-reachable UI, and advertises its host and port (never the token) over the beacon port. The token lines go to stderr: stdout can be an MCP channel, and the token is a credential. */
+function announceLanAccess(
+  server: http.Server,
+  policy: Readonly<AccessPolicy>,
+  peerId: string,
+  beaconPort: number | undefined,
+): void {
+  console.error(
+    "Agent Comms web UI is reachable beyond loopback. Open one of these from a device on the network; the token is required for every non-loopback request:",
+  );
+  for (const url of accessUrls(policy)) console.error(`  ${url}`);
+  const beacon = startWebBeacon({
+    peerId,
+    webPort: policy.port,
+    port: beaconPort,
+    onError: (error) => {
+      console.error(`Agent Comms web UI beacon: ${error.message}`);
+    },
+  });
+  server.once("close", () => {
+    beacon.stop();
+  });
 }
 
 class HandleRef {
