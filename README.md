@@ -17,7 +17,7 @@ The project began as a filesystem-based bus (`~/.agents/bus/`), where agents rea
 
 ## How it works
 
-Each bridge instance is a peer in a TCP mesh on localhost. The first instance to start becomes the **coordinator** (port 19876). Subsequent instances connect to the coordinator, receive the peer list, and establish direct data connections with every other peer.
+Each bridge instance is a peer in a TCP mesh on localhost. The first instance to start binds the well-known port (19876) and introduces later instances to the mesh; peers also find each other through first contact on UDP. Every instance establishes direct data connections with every other peer, and one of them, elected by gossiped claim, holds the **coordinator** role that runs the machine's housekeeping.
 
 ```mermaid
 graph LR
@@ -43,7 +43,7 @@ sequenceDiagram
     participant P1 as Peer 1 (first to start)
     participant P2 as Peer 2
     participant P3 as Peer 3
-    P1->>P1: binds port 19876 → becomes coordinator
+    P1->>P1: binds port 19876 and claims the coordinator role
     P2->>P1: connect to 19876
     P1-->>P2: peer list [P1]
     P2->>P1: establish data connection
@@ -53,25 +53,35 @@ sequenceDiagram
     P3->>P2: establish data connection
     Note over P1,P3: All peers now connected directly
     rect rgb(255, 230, 230)
-        Note over P1: Coordinator is killed
+        Note over P1: Port holder and coordinator is killed
+        P2->>P3: lowest device-id claims the coordinator role at a raised term
         P2->>P2: race to bind 19876
         P3->>P3: race to bind 19876
-        Note over P2,P3: the operating system's bind picks one winner
+        Note over P2,P3: the operating system's bind picks one port winner
         P3->>P2: loser re-introduces itself to the winner
     end
 ```
 
-- **Well-known port** 19876 on localhost — the only agreed-upon constant
-- The first instance to bind it becomes coordinator
-- Coordinator handles introductions only; it is not a router
-- On graceful shutdown, the coordinator names its longest-running peer as successor and hands the role over before closing
+- **Well-known port** 19876 on localhost: the compatibility first-contact address and introduction path, not the coordinator role
+- The first instance to bind it answers every later instance that connects there with the peer list; it is not a router
+- On graceful shutdown, the port holder names its longest-running peer as successor and hands the listener over before closing
 - On a crash, every surviving peer independently races to rebind the port; the operating system's exclusive bind picks the single winner, and the losers re-introduce themselves to it
 
-Either way, direct peer-to-peer data connections are untouched, so messages between survivors keep flowing throughout. What is lost is what only the coordinator does: while no coordinator exists, no new peer can join (nothing answers the well-known port), no stale-agent probe runs, and no cc-peer front is serving local Claude Code sessions that have no bridge of their own. The winner restarts all of that as it takes the role. Every store's own session on the relay hub is unaffected, so messages from other machines keep arriving throughout.
+Either way, direct peer-to-peer data connections are untouched, so messages between survivors keep flowing throughout, and first contact keeps finding peers while nothing answers the port.
+
+The **coordinator role** is separate from the port. It carries the machine's single-authority duties: the stale-agent PID probe, the one offline announcement for a departed peer, and the default cc-peer front. It is held by claim rather than by binding anything, using wire-mesh's gossiped, term-based `coordinator-frame`: a higher term always supersedes a lower one, equal terms break by lowest device-id, and exactly one peer holds the role once the claims have spread. Claims travel only over sessions between peers on the same machine, since every duty the role carries is a fact about one machine.
+
+- A store claims the role only when it knows of no holder and is alone as far as it can tell: it bound the well-known port, or nothing on the port answered and it could not bind it either
+- Every store tells each new session which claim it accepts, so a joiner learns the holder instead of claiming over it
+- Two meshes that each elected a holder while apart (joined later by first contact, say) converge on one: the lower claim is superseded and its holder stops its duties
+- When the holder departs, the survivor with the lowest device-id claims at once at a raised term; any other survivor claims itself if no higher claim reaches it within the ordinary network deadline, which covers a successor that has gone too
+- The holder need not be the peer that bound the port, and a graceful shutdown hands on only the port listener: survivors recover the role from the departure itself
+
+While the role is vacant, between the holder's loss and the successor's claim, no stale-agent probe runs and no cc-peer front is serving local Claude Code sessions that have no bridge of their own; the new holder restarts both as it takes the role. Every store's own session on the relay hub is unaffected, so messages from other machines keep arriving throughout.
 
 ### First contact without a coordinator
 
-The coordinator is one way for peers to find each other, not the only one. Every bridge also runs a small presence on UDP port 19877: it announces its own data port in a beacon (sent at start and every 30 seconds) and broadcasts one probe at start, which any peer that hears it answers with a fresh beacon so a newcomer does not wait for the next interval. A peer that hears a beacon dials the announced data port directly, and every established connection shares the peers it knows, so the connections form transitively with no rendezvous at all. A mesh therefore forms and heals with or without a live coordinator.
+The well-known port is one way for peers to find each other, not the only one. Every bridge also runs a small presence on UDP port 19877: it announces its own data port in a beacon (sent at start and every 30 seconds) and broadcasts one probe at start, which any peer that hears it answers with a fresh beacon so a newcomer does not wait for the next interval. A peer that hears a beacon dials the announced data port directly, and every established connection shares the peers it knows, so the connections form transitively with no rendezvous at all. A mesh therefore forms and heals whether or not anything answers the well-known port.
 
 Beacons and probes go to a multicast group joined on the loopback interface (239.255.19.77) and to the limited broadcast address, never to a unicast address. Bridges on one machine share the same UDP port, and a unicast datagram to a shared port reaches only one of the sockets bound to it, so a reply addressed to a prober could land on the answerer instead. Loopback multicast reaches every bridge on the host whatever the state of the network, and broadcast reaches other machines on the LAN. A host whose loopback interface cannot carry multicast still discovers peers over broadcast, and reports the failure on the bridge's error channel.
 
@@ -168,7 +178,7 @@ One bridge process relays for exactly one local Claude Code session, the same "o
 
 ### Default cc-peer front
 
-A Claude Code session with no agent-comms bridge of its own is still reachable from the mesh: whichever bridge on the machine currently holds the mesh coordinator role fronts every local session it discovers via `cc-peer`'s own roster, using the same `(harness, cwd)` identity slot that session's own `claude-code` bridge would use if it started. Identity belongs to the slot, not to whichever process is currently serving it — the session's own bridge holds the slot when it's live; the front holds it otherwise, and yields the moment a real bridge for that slot appears, so addressing, room membership, and queued deliveries all carry over unchanged across the transition. No configuration is needed: every bridge in this repo wires the front to its own coordinator-role transitions automatically, and a machine with no local Claude Code sessions (or no `cc-peer` sockets at all) runs it as a clean no-op.
+A Claude Code session with no agent-comms bridge of its own is still reachable from the mesh: whichever bridge on the machine currently holds the elected coordinator role fronts every local session it discovers via `cc-peer`'s own roster, using the same `(harness, cwd)` identity slot that session's own `claude-code` bridge would use if it started. Identity belongs to the slot, not to whichever process is currently serving it — the session's own bridge holds the slot when it's live; the front holds it otherwise, and yields the moment a real bridge for that slot appears, so addressing, room membership, and queued deliveries all carry over unchanged across the transition. No configuration is needed: every bridge in this repo wires the front to its own coordinator-role transitions automatically, and a machine with no local Claude Code sessions (or no `cc-peer` sockets at all) runs it as a clean no-op.
 
 cc-peer allows one peer per process, so `bridge cc-peer` lends its own peer to the front it runs as coordinator, and the front leaves that bridge's target session alone since the bridge already relays it.
 
@@ -357,7 +367,7 @@ When an agent's status changes (active / idle / busy / offline), all rooms it be
 - Explicit `update` action
 - Re-registration (offline → active)
 - Graceful shutdown
-- Stale agent cleanup (coordinator PID probe)
+- Stale agent cleanup (the elected coordinator's PID probe)
 
 ## Delivery status and read receipts
 
@@ -395,9 +405,9 @@ This works for both room messages and DMs.
 
 ## Stale agent cleanup
 
-The coordinator retires an agent as soon as its peer's connection ends, marking it offline and broadcasting that to every other peer. Behind that, it also probes registered agent PIDs every 5 seconds using signal 0 (existence check), which catches an agent whose process is gone but whose socket has not closed. Either way the announcement comes from the coordinator alone, so a departure produces one status change rather than one per surviving peer; other peers are passive.
+The elected coordinator (see "Coordinator pattern") retires an agent as soon as its peer's connection ends, marking it offline and broadcasting that to every other peer. Behind that, it also probes registered agent PIDs every 5 seconds using signal 0 (existence check), which catches an agent whose process is gone but whose socket has not closed. Either way the announcement comes from the coordinator alone, so a departure produces one status change rather than one per surviving peer; other peers are passive, including whichever peer holds the well-known port. When the departed peer was the coordinator itself, its successor announces it once it has claimed the role.
 
-Every bridge answers SIGTERM, SIGINT and SIGHUP by marking its own agent offline and shutting the store down, which is what hands the coordinator role on rather than leaving the mesh to the crash race. A bridge that owns its process exits afterwards; the OpenCode plugin, which runs inside its host's process, re-raises the signal instead and leaves the decision to the host. The pi extension uses pi's own `session_shutdown` hook for the same thing.
+Every bridge answers SIGTERM, SIGINT and SIGHUP by marking its own agent offline and shutting the store down, which gives up the coordinator role if it held it and hands the well-known port listener on rather than leaving it to the crash race. A bridge that owns its process exits afterwards; the OpenCode plugin, which runs inside its host's process, re-raises the signal instead and leaves the decision to the host. The pi extension uses pi's own `session_shutdown` hook for the same thing.
 
 ## Gateway trust and connection codes
 
