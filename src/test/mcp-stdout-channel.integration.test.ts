@@ -82,14 +82,31 @@ it("writes only JSON-RPC messages to stdout and puts the web UI banner on stderr
     stderr += chunk.toString();
   });
   const answered = new Set<number>();
-  const bothAnswered = new Promise<void>((resolve, reject) => {
+  const BANNER = "Agent Comms web UI: http://127.0.0.1:";
+  let notifyStderr: () => void = () => undefined;
+  child.stderr.on("data", () => {
+    notifyStderr();
+  });
+  const bothAnsweredWithBanner = new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(
         new Error(
-          `no JSON-RPC responses within the timeout; stdout=${JSON.stringify(stdoutLines)} stderr=${stderr}`,
+          `no JSON-RPC responses and stderr banner within the timeout; stdout=${JSON.stringify(stdoutLines)} stderr=${stderr}`,
         ),
       );
     }, RESPONSE_TIMEOUT_MS);
+    // stdout and stderr are separate pipes, so the parent can see the responses before the banner written earlier: completion needs both.
+    const settleIfComplete = (): void => {
+      if (
+        answered.has(INITIALIZE_ID) &&
+        answered.has(TOOLS_LIST_ID) &&
+        stderr.includes(BANNER)
+      ) {
+        clearTimeout(timer);
+        resolve();
+      }
+    };
+    notifyStderr = settleIfComplete;
     readline.createInterface({ input: child.stdout }).on("line", (line) => {
       stdoutLines.push(line);
       try {
@@ -105,10 +122,7 @@ it("writes only JSON-RPC messages to stdout and puts the web UI banner on stderr
       } catch {
         // A non-JSON line is recorded above and fails the assertion below; the wait then ends at the timeout or the next response.
       }
-      if (answered.has(INITIALIZE_ID) && answered.has(TOOLS_LIST_ID)) {
-        clearTimeout(timer);
-        resolve();
-      }
+      settleIfComplete();
     });
   });
 
@@ -125,11 +139,11 @@ it("writes only JSON-RPC messages to stdout and puts the web UI banner on stderr
   );
   child.stdin.write(jsonRpcLine({ method: "notifications/initialized" }));
   child.stdin.write(jsonRpcLine({ id: TOOLS_LIST_ID, method: "tools/list" }));
-  await bothAnswered;
+  await bothAnsweredWithBanner;
 
   expect(stdoutLines.length).toBeGreaterThanOrEqual(2);
   for (const line of stdoutLines) {
     expect(isJsonRpcMessage(JSON.parse(line))).toBe(true);
   }
-  expect(stderr).toContain("Agent Comms web UI: http://127.0.0.1:");
+  expect(stderr).toContain(BANNER);
 });
