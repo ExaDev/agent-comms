@@ -6,8 +6,13 @@ const DEVICE_ID_HEX_PATTERN = /^[0-9a-f]{64}$/;
 const LOCAL_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 const SLUG_INVALID_RUN = /[^A-Za-z0-9_-]+/g;
 
+/** Whether value is a full device-id in its canonical text form: 64 lowercase hex characters. */
+export function isDeviceIdHex(value: string): boolean {
+  return DEVICE_ID_HEX_PATTERN.test(value);
+}
+
 function assertDeviceIdHex(value: string, label: string): void {
-  if (!DEVICE_ID_HEX_PATTERN.test(value)) {
+  if (!isDeviceIdHex(value)) {
     throw new Error(
       `expected ${label} to be a 64-character lowercase hex device-id, got ${JSON.stringify(value)}`,
     );

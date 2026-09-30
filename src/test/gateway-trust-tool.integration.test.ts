@@ -8,10 +8,12 @@ import { buildAction } from "../core/bridge.js";
 import { wireTestTransport } from "./test-transport.js";
 
 const TEST_PORT = 0;
-const DEVICE_HEX = "aabbccdd";
+/** A device-id is 64 hex characters; each fixture repeats a distinct 8-character pattern to that length. */
+const DEVICE_ID_REPEATS = 8;
+const DEVICE_HEX = "aabbccdd".repeat(DEVICE_ID_REPEATS);
 const ONE_HOUR_MS = 3_600_000;
-const PRINCIPAL_HEX = "eeff0011";
-const MACHINE_HEX = "99887766";
+const PRINCIPAL_HEX = "eeff0011".repeat(DEVICE_ID_REPEATS);
+const MACHINE_HEX = "99887766".repeat(DEVICE_ID_REPEATS);
 
 describe("CommsTool gateway trust actions", () => {
   test("gateway_trust adds a device to the allowlist", async () => {
@@ -327,7 +329,7 @@ describe("buildAction gateway trust parsing", () => {
       cwd: "/test",
       pid: process.pid,
     };
-    const memberHex = "8765432187654321";
+    const memberHex = "87654321".repeat(DEVICE_ID_REPEATS);
 
     const trusted = await tool.handle(
       ctx,
@@ -394,6 +396,64 @@ describe("buildAction gateway trust parsing", () => {
     expect(result.isError).toBe(true);
     expect(store.listTrustedGatewayMachines()).toEqual([]);
     expect(store.listTrustedGatewayPrincipals()).toEqual([]);
+
+    await store.shutdown();
+  });
+  test.each([
+    { kind: "device", flags: {} },
+    { kind: "principal", flags: { principal: true } },
+    { kind: "machine", flags: { machine: true } },
+  ])(
+    "gateway_trust refuses a $kind id that is not a full device-id and trusts nothing",
+    async ({ flags }) => {
+      const store = new MeshStore({ coordinatorPort: TEST_PORT });
+      await wireTestTransport(store);
+      await store.init();
+      const agent = await store.registerAgent({
+        name: "gateway-trust-short-id-test",
+        harness: "test",
+        cwd: "/test",
+        pid: process.pid,
+        visibility: "visible",
+        tags: [],
+      });
+      const tool = new CommsTool(store);
+
+      const result = await tool.handle(
+        { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
+        { action: "gateway_trust", device: "3a8b8ebc6dd3", ...flags },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toContain("is not a device-id");
+      expect(store.gatewayTrust.hasAny()).toBe(false);
+
+      await store.shutdown();
+    },
+  );
+
+  test("gateway_untrust still withdraws a malformed entry already in the trusted set", async () => {
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    await wireTestTransport(store);
+    await store.init();
+    const agent = await store.registerAgent({
+      name: "gateway-untrust-malformed-test",
+      harness: "test",
+      cwd: "/test",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
+    const tool = new CommsTool(store);
+    store.addTrustedGatewayMachine("typo");
+
+    const result = await tool.handle(
+      { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
+      { action: "gateway_untrust", device: "typo", machine: true },
+    );
+
+    expect(result.isError, result.content).toBe(false);
+    expect(store.listTrustedGatewayMachines()).toEqual([]);
 
     await store.shutdown();
   });
