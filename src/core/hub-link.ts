@@ -3,6 +3,8 @@
  *
  * The store decides through shouldConnect whether it wants a session at all, and a change of mind, made in this process or by another one editing the shared trust file, is picked up within a poll interval, or at once through reconsider(). A store with nothing to say to another machine (nothing trusted, no agent, or a ghost agent) holds no session, so it puts nothing on the hub, not even its device id.
  *
+ * Which hub is dialled is chosen afresh before every dial (agent-comms#342): the hub is a set of relays, ranked by relay-selection.ts, with the configured public hub as the fallback. A dial that fails, or a session the relay drops, excludes that URL from selection for the redial ceiling (the cadence an unreachable hub is retried at anyway), so a relay that has gone falls through to the next choice instead of being redialled on every pass; and a session held over one relay is moved as soon as selection prefers another.
+ *
  * The dial never blocks the caller: a bridge starting up offline must not wait out a connect timeout before it can serve its tools, and a hub that is down or restarting is an ordinary, recoverable state. Failures reach onError and the loop carries on.
  */
 
@@ -28,12 +30,14 @@ export type HubLinkSession = Pick<
 
 export interface HubLinkOptions {
   hub: Readonly<HubLinkSession>;
-  /** The hub to hold a session on. */
-  url: string;
+  /** The hub to hold a session on next, given the URLs whose last dial or session failed. Read before every dial and every poll interval while connected. */
+  selectUrl: (excluded: ReadonlySet<string>) => string;
   /** Whether the store wants a hub session right now. Read every poll interval and on reconsider(); a session held when this turns false is dropped, and none is dialled while it is false. */
   shouldConnect: () => boolean;
-  /** Called each time a session is established, after the dial resolves. WireMeshTransport uses it to advertise this store's presence at once instead of waiting for the next presence tick. */
-  onConnected: () => void;
+  /** Called each time a session is established, after the dial resolves, with the URL it was established to. WireMeshTransport uses it to advertise this store's presence at once instead of waiting for the next presence tick, and to know whether it holds an uplink to the public hub. */
+  onConnected: (url: string) => void;
+  /** Called each time an established session ends, whoever ended it. */
+  onDisconnected: () => void;
   /** Reports a failed dial. Never called for anything else. */
   onError: (error: Error) => void;
   /** Overrides HUB_RECONNECT_INITIAL_DELAY_MS, for a test that must not wait a second per redial. */
@@ -52,6 +56,8 @@ export class HubLink {
   private running: Promise<void> | undefined;
   /** Cancels the wait between dials, so stop() does not sit out a delay. */
   private wake: (() => void) | undefined;
+  /** When each URL's last dial failed or its session was dropped by the far end (epoch ms); a successful dial to a URL clears its entry. */
+  private readonly failedAt = new Map<string, number>();
 
   constructor(private readonly options: Readonly<HubLinkOptions>) {
     this.initialDelayMs =
@@ -92,12 +98,15 @@ export class HubLink {
         continue;
       }
       let sessionEnded = false;
+      const url = this.options.selectUrl(this.excludedUrls());
       try {
-        await this.options.hub.connect(this.options.url);
+        await this.options.hub.connect(url);
         if (this.options.hub.isConnected) {
           delayMs = this.initialDelayMs;
-          this.options.onConnected();
-          sessionEnded = await this.holdWhileWanted();
+          this.failedAt.delete(url);
+          this.options.onConnected(url);
+          sessionEnded = await this.holdWhileWanted(url);
+          this.options.onDisconnected();
         }
       } catch (error) {
         this.options.onError(
@@ -105,6 +114,7 @@ export class HubLink {
         );
         sessionEnded = true;
       }
+      if (sessionEnded) this.failedAt.set(url, Date.now());
       if (this.isStopped()) return;
       if (!sessionEnded) continue;
       await this.sleep(delayMs);
@@ -115,8 +125,8 @@ export class HubLink {
     }
   }
 
-  /** Holds the live session until the hub ends it, resolving true, or until the store stops wanting it, when it drops the session itself and resolves false. */
-  private async holdWhileWanted(): Promise<boolean> {
+  /** Holds the live session to url until the hub ends it, resolving true, or until the store stops wanting it or selection prefers another hub, when it drops the session itself and resolves false. */
+  private async holdWhileWanted(url: string): Promise<boolean> {
     const hubEnded = this.options.hub
       .whenDisconnected()
       .then(() => "ended" as const);
@@ -127,12 +137,26 @@ export class HubLink {
       ]);
       if (outcome === "ended") return true;
       if (this.isStopped()) return false;
-      if (!this.options.shouldConnect()) {
+      if (
+        !this.options.shouldConnect() ||
+        this.options.selectUrl(this.excludedUrls()) !== url
+      ) {
         await this.options.hub.disconnect();
         return false;
       }
     }
     return false;
+  }
+
+  /** The URLs that failed within the last redial ceiling. */
+  private excludedUrls(): ReadonlySet<string> {
+    const cutoff = Date.now() - this.maxDelayMs;
+    const excluded = new Set<string>();
+    for (const [url, at] of this.failedAt) {
+      if (at > cutoff) excluded.add(url);
+      else this.failedAt.delete(url);
+    }
+    return excluded;
   }
 
   /** Waits ms, or until reconsider() or stop() cuts it short. Each wait clears the wake handle only if it is still its own, since holdWhileWanted leaves a losing wait pending and its late end must not wipe the handle of the wait that replaced it. */
