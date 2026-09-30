@@ -55,6 +55,7 @@ export class GroupProofs {
           ? undefined
           : deviceIdToHex(identity.machineIdentity.deviceId);
       },
+      onError: deps.onError,
     });
   }
 

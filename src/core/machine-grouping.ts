@@ -1,7 +1,7 @@
 /**
  * Which machine each listed agent runs on (agent-comms#343), for list_agents' machine-grouped output. This device's own machine is known directly; every other device's is read from the machine proof in its gossiped agent/self advert and identified cryptographically (membership-proof.ts's identifyMembershipProofIssuer), so a device is grouped under a machine only when that machine's key signed a current proof for it. A device with no such proof (a hidden agent, which sends no agent/self advert, or a bridge that predates machine proofs) has no machine here.
  *
- * Grouping is display, not trust: a proof names who vouches for a device id, not that the device gossiping it is that device, so nothing here is used to authorise anything. Identifying a proof is cryptography, so verdicts are remembered per proof text until the proof lapses, and the cache is bounded.
+ * Grouping is display, not trust: a proof names who vouches for a device id, not that the device gossiping it is that device, so nothing here is used to authorise anything. Identifying a proof is cryptography, so verdicts are remembered per proof text until the proof lapses, and the cache is bounded. For the same reason a failure to identify one proof is reported and leaves that device unplaced rather than failing the listing it feeds.
  */
 
 import { readMembershipProof } from "./gossip-directory.js";
@@ -24,6 +24,8 @@ export interface MachineGroupingDeps {
   getPeerId: () => string;
   /** This host's own machine id (hex), undefined before the store's identity is attached. */
   getMachineId: () => string | undefined;
+  /** Where a proof that could not be identified at all (identify rejected) is reported. */
+  onError: (error: Error) => void;
 }
 
 interface CachedVerdict {
@@ -64,7 +66,18 @@ export class MachineGrouping {
     if (cached?.deviceHex === deviceHex && cached.until > Date.now()) {
       return cached.machine;
     }
-    const verdict = await this.deps.identify({ proof, deviceHex });
+    let verdict: IdentifiedMembershipProof;
+    try {
+      verdict = await this.deps.identify({ proof, deviceHex });
+    } catch (err) {
+      // Not remembered: the failure is in this side's own view (a revocation view that threw, say), not a verdict on the proof, so the next listing tries again.
+      this.deps.onError(
+        new Error(`could not identify the machine proof of ${deviceHex}`, {
+          cause: err,
+        }),
+      );
+      return undefined;
+    }
     this.remember(
       proof,
       verdict.ok
