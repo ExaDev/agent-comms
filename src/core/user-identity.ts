@@ -56,13 +56,13 @@ function writeStoredUserIdentity(
   writeIssuerRecord(file, stored);
 }
 
-/** Reads this principal's raw stored record, or undefined if the file is missing or unparseable. Used by the issued-grant functions below to read-modify-write only their own field, leaving the persisted key material exactly as it is. */
+/** Reads this principal's raw stored record, or undefined if the file is missing; throws if it exists but is unusable (issuer-identity-file.ts). Used by the issued-grant functions below to read-modify-write only their own field, leaving the persisted key material exactly as it is. */
 function readStoredUserIdentity(file: string): StoredUserIdentity | undefined {
   return readIssuerRecord(file, isStoredUserIdentity);
 }
 
 /**
- * Loads the persisted user-principal identity, creating it on first use (issuer-identity-file.ts: exclusive create, renewal in place that keeps the issued-grant bookkeeping, a corrupt file regenerated).
+ * Loads the persisted user-principal identity, creating it on first use (issuer-identity-file.ts: exclusive create, renewal in place that keeps the issued-grant bookkeeping, an unusable file refused rather than regenerated).
  */
 export function loadOrCreateUserIdentity(
   options?: Readonly<UserIdentityOptions>,

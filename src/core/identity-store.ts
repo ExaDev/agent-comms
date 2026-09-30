@@ -18,6 +18,7 @@ import {
   CERTIFICATE_VALIDITY_MS,
 } from "./identity.js";
 import type { PeerIdentity } from "./identity.js";
+import { writeFileAtomic } from "./atomic-file.js";
 
 /** A bridge's identity slot: one persisted identity per harness and cwd. */
 export interface IdentitySlot {
@@ -209,19 +210,6 @@ function readLockPid(lockFile: string): number | undefined {
 function isEexist(err: unknown): boolean {
   if (!(err instanceof Error) || !("code" in err)) return false;
   return err.code === "EEXIST";
-}
-
-/**
- * Writes content to filePath atomically: the full content is written to a temporary sibling file first, then renamed into place. rename() on the same filesystem is atomic, so a concurrent reader of filePath always sees either the complete previous content or the complete new content, never a truncated or partially-written file -- unlike a bare writeFileSync, whose own open(O_TRUNC)-then-write leaves a real window where a concurrent reader can observe an empty or partial file.
- */
-function writeFileAtomic(
-  filePath: string,
-  content: string,
-  mode: number,
-): void {
-  const tmpFile = `${filePath}.${String(process.pid)}.${String(Math.random()).slice(2)}.tmp`;
-  fs.writeFileSync(tmpFile, content, { encoding: "utf-8", mode });
-  fs.renameSync(tmpFile, filePath);
 }
 
 /**

@@ -63,15 +63,35 @@ test("two hosts, two directories, never share a machine identity", () => {
   expect(a.deviceId).not.toEqual(b.deviceId);
 });
 
-test("a corrupt machine identity file is replaced with a fresh key", () => {
+test("a corrupt machine identity file is refused rather than replaced, so the machine id never changes silently", () => {
   const dir = tempDir();
-  const original = loadOrCreateMachineIdentity({ dir });
+  loadOrCreateMachineIdentity({ dir });
   fs.writeFileSync(machineIdentityFile({ dir }), "not json{{");
 
-  const replaced = loadOrCreateMachineIdentity({ dir });
-
-  expect(replaced.deviceId).not.toEqual(original.deviceId);
-  expect(loadOrCreateMachineIdentity({ dir }).deviceId).toEqual(
-    replaced.deviceId,
+  expect(() => loadOrCreateMachineIdentity({ dir })).toThrow(
+    /does not hold a usable identity record/,
   );
+  expect(fs.readFileSync(machineIdentityFile({ dir }), "utf-8")).toBe(
+    "not json{{",
+  );
+});
+
+test("renewing a machine identity replaces the file atomically, so a reader never sees it partly written", () => {
+  const dir = tempDir();
+  const file = machineIdentityFile({ dir });
+  const original = loadOrCreateMachineIdentity({ dir });
+  const inodeBefore = fs.statSync(file).ino;
+  const stored: unknown = JSON.parse(fs.readFileSync(file, "utf-8"));
+  if (typeof stored !== "object" || stored === null) {
+    throw new Error("expected a stored record");
+  }
+  fs.writeFileSync(
+    file,
+    JSON.stringify({ ...stored, expiresAt: new Date(0).toISOString() }),
+  );
+
+  const renewed = loadOrCreateMachineIdentity({ dir });
+
+  expect(renewed.deviceId).toEqual(original.deviceId);
+  expect(fs.statSync(file).ino).not.toBe(inodeBefore);
 });

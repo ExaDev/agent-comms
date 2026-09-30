@@ -3,11 +3,12 @@
  *
  * The key is never derived from anything about the host (platform UUIDs, serials, hostnames): those are linkable, cloned with disk images and swapped with hardware. Moving an identity to a rebuilt host is a deliberate copy of its file, the SSH host-key model.
  *
- * Each file is written with owner-only permissions (0600) inside a 0700 directory. Fields an owning module adds beside the key material (issued-grant bookkeeping, a display name) are preserved by every write here: renewal spreads the stored record before replacing the key fields.
+ * Each file is written with owner-only permissions (0600) inside a 0700 directory, and every write is atomic (atomic-file.ts), since another bridge may be reading the file at that moment: a reader sees a complete record or none, so a file that exists but cannot be parsed is never one of this module's own writes in progress. It is refused loudly rather than replaced with a fresh key, because replacing it silently changes the issuer's id and every peer that trusted the old one loses every device it vouched for. Fields an owning module adds beside the key material (issued-grant bookkeeping, a display name) are preserved by every write here: renewal spreads the stored record before replacing the key fields.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createFileExclusive, writeFileAtomic } from "./atomic-file.js";
 import {
   generateIdentity,
   certifyKeyPair,
@@ -49,7 +50,7 @@ export function isStoredIssuerKey(value: unknown): value is StoredIssuerKey {
   );
 }
 
-/** Narrows a caught value to Node's own errno-carrying Error subtype, so a specific error code (e.g. ENOENT, EEXIST) can be checked without an `as` assertion. */
+/** Narrows a caught value to Node's own errno-carrying Error subtype, so a specific error code (e.g. ENOENT) can be checked without an `as` assertion. */
 function isErrnoException(value: unknown): value is NodeJS.ErrnoException {
   return value instanceof Error && "code" in value;
 }
@@ -64,26 +65,36 @@ function readRawFile(file: string): string | undefined {
   }
 }
 
-/** The file's parsed JSON if it satisfies guard, or undefined when the file is missing, is not JSON, or fails the guard. The owning module supplies a guard for its own full record shape. */
+/** The file's parsed record, or undefined when the file does not exist. The owning module supplies a guard for its own full record shape. Throws when the file exists but is not JSON or fails the guard (see the module comment for why that is never repaired here). */
 export function readIssuerRecord<T>(
   file: string,
   guard: (value: unknown) => value is T,
 ): T | undefined {
   const raw = readRawFile(file);
-  return raw === undefined ? undefined : parseIssuerRecord(raw, guard);
+  return raw === undefined ? undefined : parseIssuerRecord(file, raw, guard);
 }
 
 function parseIssuerRecord<T>(
+  file: string,
   raw: string,
   guard: (value: unknown) => value is T,
-): T | undefined {
+): T {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
-    return undefined;
+  } catch (err) {
+    throw unusableRecord(file, err);
   }
-  return guard(parsed) ? parsed : undefined;
+  if (!guard(parsed)) throw unusableRecord(file);
+  return parsed;
+}
+
+/** The error for an identity file that exists but holds no usable record. Moving it aside is the operator's decision, since the next load then mints a new key under a new id. */
+function unusableRecord(file: string, cause?: unknown): Error {
+  return new Error(
+    `${file} exists but does not hold a usable identity record; move it aside to mint a new key, which changes this identity's id for every peer that trusts it`,
+    { cause },
+  );
 }
 
 function serializeRecord(stored: Readonly<object>): string {
@@ -95,10 +106,7 @@ export function writeIssuerRecord(
   file: string,
   record: Readonly<StoredIssuerKey>,
 ): void {
-  fs.writeFileSync(file, serializeRecord(record), {
-    encoding: "utf-8",
-    mode: IDENTITY_FILE_MODE,
-  });
+  writeFileAtomic(file, serializeRecord(record), IDENTITY_FILE_MODE);
 }
 
 function toPeerIdentity(stored: Readonly<StoredIssuerKey>): PeerIdentity {
@@ -133,27 +141,27 @@ function renewIfNeeded(
   return renewed;
 }
 
-/** Generates a fresh identity and persists it. With exclusive set, the write uses the "wx" flag so a concurrent caller that already created the file wins outright (EEXIST) and this caller re-reads the winner's key instead of clobbering it. exclusive is false only when the file holds no usable key material (it was corrupt), so there is nothing to race over. */
-function createIssuerIdentity(file: string, exclusive: boolean): PeerIdentity {
+/** Generates a fresh identity and persists it at file, which does not exist yet. The create is exclusive, so when a concurrent caller creates the file first this caller keeps the winner's key and returns that instead of overwriting it. */
+function createIssuerIdentity(file: string): PeerIdentity {
   const identity = generateIdentity();
-  try {
-    fs.writeFileSync(file, serializeRecord(keyRecord(identity)), {
-      encoding: "utf-8",
-      mode: IDENTITY_FILE_MODE,
-      flag: exclusive ? "wx" : "w",
-    });
+  if (
+    createFileExclusive(
+      file,
+      serializeRecord(keyRecord(identity)),
+      IDENTITY_FILE_MODE,
+    )
+  ) {
     return identity;
-  } catch (err) {
-    if (exclusive && isErrnoException(err) && err.code === "EEXIST") {
-      const stored = readIssuerRecord(file, isStoredIssuerKey);
-      if (stored !== undefined) return renewIfNeeded(file, stored);
-    }
-    throw err;
   }
+  const winner = readIssuerRecord(file, isStoredIssuerKey);
+  if (winner === undefined) {
+    throw new Error(`${file} was created and removed again while loading it`);
+  }
+  return renewIfNeeded(file, winner);
 }
 
 /**
- * Loads the issuer identity persisted at file, creating it on first use. A record nearing certificate expiry is renewed in place; a missing file is created exclusively, and a corrupt or unparseable one is overwritten with a fresh key.
+ * Loads the issuer identity persisted at file, creating it on first use. A record nearing certificate expiry is renewed in place and a missing file is created exclusively. A file that exists but holds no usable record is an error, never regenerated.
  */
 export function loadOrCreateIssuerIdentity(file: string): PeerIdentity {
   fs.mkdirSync(path.dirname(file), {
@@ -161,11 +169,7 @@ export function loadOrCreateIssuerIdentity(file: string): PeerIdentity {
     mode: IDENTITY_DIR_MODE,
   });
 
-  const raw = readRawFile(file);
-  if (raw === undefined) return createIssuerIdentity(file, true);
-
-  const stored = parseIssuerRecord(raw, isStoredIssuerKey);
-  if (stored === undefined) return createIssuerIdentity(file, false);
-
+  const stored = readIssuerRecord(file, isStoredIssuerKey);
+  if (stored === undefined) return createIssuerIdentity(file);
   return renewIfNeeded(file, stored);
 }

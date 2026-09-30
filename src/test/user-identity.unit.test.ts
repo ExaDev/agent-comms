@@ -19,11 +19,20 @@ import {
 import { CERTIFICATE_VALIDITY_MS } from "../core/identity.js";
 import { randomId } from "../core/random-id.js";
 
-// node:fs's writeFileSync is wrapped (not replaced) so every test gets the real filesystem by default; only the one race test below overrides it, via mockImplementationOnce, to simulate a concurrent writer winning the exclusive create -- vi.spyOn cannot target an ESM named export directly ("Module namespace is not configurable"), so the wrap has to happen at vi.mock time instead.
+// node:fs's linkSync is wrapped (not replaced) so every test gets the real filesystem by default; only the one race test below overrides it, via mockImplementationOnce, to simulate a concurrent writer winning the exclusive create. vi.spyOn cannot target an ESM named export directly ("Module namespace is not configurable"), so the wrap has to happen at vi.mock time instead.
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof FsModule>();
-  return { ...actual, writeFileSync: vi.fn(actual.writeFileSync) };
+  return { ...actual, linkSync: vi.fn(actual.linkSync) };
 });
+
+/** The error link() raises for a name that already exists, carrying the errno code the create checks for. */
+class ExistsError extends Error {
+  readonly code = "EEXIST";
+
+  constructor() {
+    super("EEXIST: file already exists");
+  }
+}
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(tmpdir(), "agent-comms-user-identity-test-"));
@@ -89,24 +98,35 @@ test("a near-expiry identity is renewed without rotating the device-id", () => {
   expect(renewed.fingerprint).not.toBe(original.fingerprint);
 });
 
-test("a corrupt identity file is regenerated", () => {
+test("a corrupt identity file is refused and left as it is, never replaced with a fresh key", () => {
   const dir = tempDir();
   loadOrCreateUserIdentity({ dir });
   fs.writeFileSync(identityFile(dir), "{not json");
 
-  const regenerated = loadOrCreateUserIdentity({ dir });
-  expect(regenerated.fingerprint).toMatch(/^[0-9A-F]{2}(:[0-9A-F]{2})+$/);
+  expect(() => loadOrCreateUserIdentity({ dir })).toThrow(
+    /does not hold a usable identity record/,
+  );
+  expect(fs.readFileSync(identityFile(dir), "utf-8")).toBe("{not json");
+});
+
+test("an empty identity file is refused rather than regenerated, since an atomic write never leaves one behind", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  fs.writeFileSync(identityFile(dir), "");
+
+  expect(() => loadOrCreateUserIdentity({ dir })).toThrow(
+    /does not hold a usable identity record/,
+  );
 });
 
 test("losing the creation race re-reads the winner's identity instead of overwriting it", () => {
   const dir = tempDir();
   const file = identityFile(dir);
   const winner = loadOrCreateUserIdentity({ dir: tempDir() });
-  const realWriteFileSync = fs.writeFileSync;
 
-  // Simulate a second process winning the exclusive ("wx") create right before this process's own write lands: when this process attempts its create, first write the "winner's" identity for real (as the concurrent process would have -- the recursive call below falls through to the real writeFileSync once this queued override is consumed), then fail this call with EEXIST, exactly as Node's own "wx" flag would for a file that now exists. expiresAt is set a full validity period out, matching persistedRecord's own real behaviour, so this test exercises only the race-handling branch, not renewal too.
-  const writeSpy = vi.mocked(fs.writeFileSync).mockImplementationOnce(() => {
-    realWriteFileSync(
+  // Simulate a second process winning the exclusive create right before this process links its own file into place: write the winner's identity for real, as the concurrent process would have, then fail this link with EEXIST, exactly as link() does for a name that now exists. expiresAt is a full validity period out, as a real create writes it, so this test exercises only the race-handling branch, not renewal too.
+  const linkSpy = vi.mocked(fs.linkSync).mockImplementationOnce(() => {
+    fs.writeFileSync(
       file,
       `${JSON.stringify(
         {
@@ -121,16 +141,12 @@ test("losing the creation race re-reads the winner's identity instead of overwri
       )}\n`,
       { encoding: "utf-8", mode: 0o600 },
     );
-    const err = new Error(
-      "EEXIST: file already exists",
-    ) as NodeJS.ErrnoException;
-    err.code = "EEXIST";
-    throw err;
+    throw new ExistsError();
   });
 
   const loser = loadOrCreateUserIdentity({ dir });
 
-  expect(writeSpy).toHaveBeenCalled();
+  expect(linkSpy).toHaveBeenCalled();
   expect(loser.fingerprint).toBe(winner.fingerprint);
   expect(loser.deviceId).toEqual(winner.deviceId);
 });
