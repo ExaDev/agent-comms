@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { tmpdir } from "node:os";
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
+import type { TransportEvents } from "../core/transport.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
@@ -128,4 +129,26 @@ export async function waitFor(
       setTimeout(resolve, WAIT_FOR_POLL_INTERVAL_MS);
     });
   }
+}
+
+/** TransportEvents that ignore every event, with overrides for the ones a test observes: for a test driving a bare WireMeshTransport with no MeshStore behind it. */
+export function noopTransportEvents(
+  overrides: Readonly<Partial<TransportEvents>> = {},
+): TransportEvents {
+  return {
+    onMessage: () => undefined,
+    onPeerConnected: () => undefined,
+    onPeerDisconnected: () => undefined,
+    onIntroduction: () => undefined,
+    onConnectionRequest: () => undefined,
+    onPeerList: () => undefined,
+    onPeerJoined: () => undefined,
+    onBecomeCoordinator: () => undefined,
+    onRevocationAnnounce: () => undefined,
+    onCoordinatorClaim: () => undefined,
+    onElectionSessionEnrolled: () => undefined,
+    onPresenceAdvert: () => undefined,
+    onDeviceReachable: () => undefined,
+    ...overrides,
+  };
 }

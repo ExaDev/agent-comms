@@ -119,6 +119,7 @@ function fakeTransport(): MeshTransport {
     broadcastRevocation: vi.fn().mockResolvedValue(undefined),
     broadcastCoordinatorClaim: vi.fn().mockResolvedValue(undefined),
     sendCoordinatorClaim: vi.fn().mockResolvedValue(undefined),
+    electionPeerIds: () => new Set<string>(),
     sendRoomRequest: vi
       .fn()
       .mockResolvedValue({ result: "error", code: "not_connected" }),

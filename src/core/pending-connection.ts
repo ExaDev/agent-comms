@@ -1,5 +1,5 @@
 /**
- * A connect_request held open awaiting a human decision, and how long it may wait: WireMeshTransport's pending-connection bookkeeping types, split out of wire-mesh-transport.ts to keep it under the repo's max-lines cap.
+ * A connect_request held open awaiting a human decision, how long it may wait, and what happens when it waits too long: WireMeshTransport's pending-connection bookkeeping, split out of wire-mesh-transport.ts to keep it under the repo's max-lines cap.
  */
 
 import type {
@@ -30,4 +30,24 @@ export interface PendingConnection {
   resolve: (decision: ConnectionDecision) => void;
   /** Auto-rejects this request after the configured pending-connection timeout if no human decision arrives first. Cleared by acceptConnection/rejectConnection/watchForDisconnect's own disconnect path, whichever settles the request first -- an entry is only ever removed from pendingConnections once, so this timer firing after another path already resolved it is structurally impossible, not merely guarded against. */
   timeoutHandle: ReturnType<typeof setTimeout>;
+}
+
+/** Auto-rejects a connect_request that has sat unanswered past WireMeshTransport's pendingConnectionTimeoutMs: the same respond-then-resolve shape rejectConnection uses (a real error response, not a silent hang), since unlike watchForDisconnect's own cleanup path the requester's session is still very much alive and waiting to hear back. A no-op if the request was already settled by acceptConnection/rejectConnection/disconnect before this timer fired, since entries are deleted exactly once, by whichever path settles first. */
+export function expirePendingConnection(
+  pendingConnections: Map<string, PendingConnection>,
+  id: string,
+): void {
+  const pending = pendingConnections.get(id);
+  if (pending === undefined) {
+    return;
+  }
+  pendingConnections.delete(id);
+  void pending
+    .respond({
+      result: "error",
+      code: "timeout",
+      message: "no human decision within the pending-connection timeout",
+    })
+    .catch(() => undefined);
+  pending.resolve("reject");
 }

@@ -134,6 +134,11 @@ export interface TransportEvents {
   ) => void;
 
   /**
+   * A machine-local session was enrolled in the coordinator election (agent-comms#341), on either end of it: accepted on a loopback listener, or dialled at a peer's data server or the well-known port. MeshStore tells the peer at once which claim it accepts, so a joiner learns the incumbent instead of claiming over it, whichever side dialled.
+   */
+  onElectionSessionEnrolled: (handle: Readonly<ConnectionHandle>) => void;
+
+  /**
    * A device this side can now route a request to became reachable: the relay hub admitted its directory entry into this side's own view, or an operator trusted it outright. Fires for a route that appears through the hub as well as a direct peer connection, since onPeerConnected only ever covers the latter and a device fronted by a remote gateway has no local session of its own to connect. MeshStore retries anything queued for that device on this.
    */
   onDeviceReachable: (deviceHex: string) => void;
@@ -227,7 +232,7 @@ export interface MeshTransport {
   broadcastRevocation: (entries: readonly RevocationEntry[]) => Promise<void>;
 
   /**
-   * Gossips a coordinator-frame to every machine-local peer session, best-effort: a peer that misses it learns the incumbent from the next claim or announcement it does receive.
+   * Gossips a coordinator-frame to every machine-local peer session. A failed send is reported through onError rather than thrown, since it only happens on a session that is already closing.
    */
   broadcastCoordinatorClaim: (
     frame: Readonly<CoordinatorFrame>,
@@ -240,6 +245,11 @@ export interface MeshTransport {
     handle: Readonly<ConnectionHandle>,
     frame: Readonly<CoordinatorFrame>,
   ) => Promise<void>;
+
+  /**
+   * The device-ids of every peer this side has a machine-local session to, the peers that take part in the coordinator election with it. Peers reached only across machines, and peers merely named in a peer list, are not among them.
+   */
+  electionPeerIds: () => ReadonlySet<string>;
 
   /**
    * Sends a real core/room manage-request to a specific member's own established session, returning its outcome (e.g. a room.join request's granted-token, or a room.send's delivery receipt) rather than swallowing it the way send() does for the legacy opaque-frame path. Resolves to a not_connected error outcome if no live session to that member exists, rather than throwing -- the caller (currently room-join, and P3.5's directed fan-out once it lands) decides how to react to an unreachable member.

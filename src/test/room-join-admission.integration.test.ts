@@ -237,6 +237,7 @@ describe("joinRoom (requester side, remote path)", () => {
       broadcastRevocation: async () => {},
       broadcastCoordinatorClaim: async () => {},
       sendCoordinatorClaim: async () => {},
+      electionPeerIds: () => new Set<string>(),
       sendRoomRequest: async (_memberId, command, scope) => {
         capturedRoomPath = scope.path;
         expect(command.params).toEqual({ verb: "room.join" });

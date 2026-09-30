@@ -41,6 +41,7 @@ import { HubLink } from "./hub-link.js";
 import { ElectionSessions } from "./election-sessions.js";
 import {
   DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
+  expirePendingConnection,
   type ConnectionDecision,
   type PendingConnection,
 } from "./pending-connection.js";
@@ -164,7 +165,7 @@ export class WireMeshTransport implements MeshTransport {
   // -- Every live session this transport has ever created, accepted or dialled, for shutdown's own use only -- never used for addressing (peerSessions is), so it never loses track of one session to another sharing the same peer id.
   private readonly allSessions = new Set<AcceptedMeshSession>();
 
-  // -- The machine-local sessions coordinator claims travel over (agent-comms#341): see election-sessions.ts.
+  // The machine-local sessions coordinator claims travel over (agent-comms#341): see election-sessions.ts.
   private readonly electionSessions: ElectionSessions;
 
   // -- Every device-id this side has ever heard gossip from, across every session's own directory, keyed by device-id hex -- the mesh-wide aggregation P3.8's own room-discovery design and the eventual agent register/update/offline retirement both need and don't otherwise have (agent-comms#48's own 2026-09-14 investigation confirmed no such aggregation existed anywhere in this file). Merged, never cleared on disconnect: a device's last-known advert (including its own presence/status, or any future gossiped extension) stays queryable even while its session is momentarily down, the same way the legacy agents Map keeps a record after setAgentOffline rather than deleting it outright.
@@ -405,8 +406,6 @@ export class WireMeshTransport implements MeshTransport {
     }
 
     this.trackSession(deviceIdHex, session);
-    // Before onPeerConnected, whose handler announces the elected coordinator over this session: the announcement only goes out over a session already enrolled in the election.
-    this.consumeIncoming(session, handle, machineLocal);
     if (fireOnPeerConnected) {
       const info: PeerInfo = {
         id: deviceIdHex,
@@ -415,6 +414,8 @@ export class WireMeshTransport implements MeshTransport {
       };
       this.events.onPeerConnected(handle, info);
     }
+
+    this.consumeIncoming(session, handle, machineLocal);
     this.watchForDisconnect(session, handle, deviceIdHex);
   }
 
@@ -424,6 +425,8 @@ export class WireMeshTransport implements MeshTransport {
     handle: Readonly<ConnectionHandle>,
     machineLocal: boolean,
   ): void {
+    // Watched from the start, so any claim this session gossips before it introduces itself is read and dropped rather than held back and replayed once it is trusted.
+    this.electionSessions.watch(session, handle);
     void (async () => {
       let approved = false;
       for await (const request of session.incomingManageRequests) {
@@ -439,7 +442,7 @@ export class WireMeshTransport implements MeshTransport {
         }
         if (message.method === "introduce") {
           this.trackSession(handle.id, session);
-          // Trusted from here on, so its coordinator claims count; before this an unintroduced session could claim the role for itself.
+          // Trusted from here on, so its coordinator claims count from here on, and only from here on.
           if (machineLocal) this.electionSessions.enrol(session, handle);
           this.events.onIntroduction(handle, {
             peerId: handle.id,
@@ -450,7 +453,7 @@ export class WireMeshTransport implements MeshTransport {
           continue;
         }
         if (message.method === "connect_request") {
-          // Held open deliberately -- see this file's own header comment. Answered later by acceptConnection/rejectConnection, or by this.expirePendingConnection if neither happens within pendingConnectionTimeoutMs.
+          // Held open deliberately (see this file's own header comment). Answered later by acceptConnection/rejectConnection, or by expirePendingConnection if neither happens within pendingConnectionTimeoutMs.
           const decision = await new Promise<ConnectionDecision>((resolve) => {
             this.pendingConnections.set(handle.id, {
               respond: request.respond,
@@ -462,7 +465,7 @@ export class WireMeshTransport implements MeshTransport {
               resolve,
               // unref()'d so a stray pending connection (this timer failing to be cleared through some path not yet covered) can never by itself keep the process alive for up to pendingConnectionTimeoutMs after everything else is done -- confirmed necessary directly: shutdown() originally cleared every pendingConnections entry without clearing its timer, and the whole test process hung for the full default timeout before exiting.
               timeoutHandle: setTimeout(() => {
-                this.expirePendingConnection(handle.id);
+                expirePendingConnection(this.pendingConnections, handle.id);
               }, this.pendingConnectionTimeoutMs).unref(),
             });
             this.events.onConnectionRequest(handle, {
@@ -504,7 +507,7 @@ export class WireMeshTransport implements MeshTransport {
     });
   }
 
-  /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch, and, for a machine-local session, its coordinatorFrames drain for the same reason. */
+  /** Delegates the whole post-approval drain loop to roomRouter: this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch, and its coordinator-frame watch for the same reason, enrolling the session in the election only when machineLocal says it reaches this machine. */
   private consumeIncoming(
     session: AcceptedMeshSession,
     handle: Readonly<ConnectionHandle>,
@@ -512,6 +515,7 @@ export class WireMeshTransport implements MeshTransport {
   ): void {
     this.roomRouter.drainSession(session, handle);
     this.drainRevocationAnnouncements(session);
+    this.electionSessions.watch(session, handle);
     if (machineLocal) this.electionSessions.enrol(session, handle);
   }
 
@@ -562,23 +566,6 @@ export class WireMeshTransport implements MeshTransport {
     })();
   }
 
-  /** Auto-rejects a connect_request that has sat unanswered past pendingConnectionTimeoutMs -- the same respond-then-resolve shape rejectConnection uses (a real error response, not a silent hang), since unlike watchForDisconnect's own cleanup path the requester's session is still very much alive and waiting to hear back. A no-op if the request was already settled by acceptConnection/rejectConnection/disconnect before this timer fired -- entries are deleted exactly once, by whichever path settles first. */
-  private expirePendingConnection(id: string): void {
-    const pending = this.pendingConnections.get(id);
-    if (pending === undefined) {
-      return;
-    }
-    this.pendingConnections.delete(id);
-    void pending
-      .respond({
-        result: "error",
-        code: "timeout",
-        message: "no human decision within the pending-connection timeout",
-      })
-      .catch(() => undefined);
-    pending.resolve("reject");
-  }
-
   // -----------------------------------------------------------------------
   // MeshTransport -- Data server
   // -----------------------------------------------------------------------
@@ -608,6 +595,11 @@ export class WireMeshTransport implements MeshTransport {
     );
     const session = await this.openSession(connection);
     this.coordinatorSession = session;
+    // Fire-and-forget, matching the previous transport's own contract: this resolves once the introduction is sent, not once a response arrives; peer_list/peer_joined/become_coordinator arrive asynchronously via the normal dispatch path below, independent of this call's own promise. Written before the session is enrolled below, because enrolling announces the elected coordinator over it and the port holder drops any claim that reaches it ahead of the introduce.
+    void this.sendFrame(
+      session,
+      buildCommand({ method: "introduce", peerId, dataPort }),
+    ).catch(() => undefined);
     const coordinatorDeviceId = connection.peerDeviceId;
     if (coordinatorDeviceId !== undefined) {
       const handle: ConnectionHandle = {
@@ -619,11 +611,6 @@ export class WireMeshTransport implements MeshTransport {
       this.consumeIncoming(session, handle, true);
       this.watchForDisconnect(session, handle, handle.id);
     }
-    // Fire-and-forget, matching the previous transport's own contract: this resolves once the introduction is sent, not once a response arrives -- peer_list/peer_joined/become_coordinator arrive asynchronously via the normal dispatch path above, independent of this call's own promise.
-    void this.sendFrame(
-      session,
-      buildCommand({ method: "introduce", peerId, dataPort }),
-    ).catch(() => undefined);
   }
 
   // -----------------------------------------------------------------------
@@ -766,8 +753,11 @@ export class WireMeshTransport implements MeshTransport {
     handle: Readonly<ConnectionHandle>,
     frame: Readonly<CoordinatorFrame>,
   ): Promise<void> {
-    const session = this.peerSessions.get(handle.id);
-    await this.electionSessions.send(session, handle, frame);
+    await this.electionSessions.sendTo(handle.id, frame);
+  }
+
+  electionPeerIds(): ReadonlySet<string> {
+    return this.electionSessions.peerIds();
   }
 
   async sendRoomRequest(
