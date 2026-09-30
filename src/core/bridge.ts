@@ -72,6 +72,10 @@ export const MCP_TOOL_PARAMS = z.object({
     "gateway_trust",
     "gateway_untrust",
     "gateway_list_trusted",
+    "petname_set",
+    "petname_clear",
+    "petname_list",
+    "machine_name",
     "dm_admit",
     "dm_use_grant",
     "dm_revoke",
@@ -108,7 +112,7 @@ export const MCP_TOOL_PARAMS = z.object({
   capability: z.string().optional(),
   expires: z.number().optional(),
   delegationsRemaining: z.number().optional(),
-  /** A remote gateway's own device-id (hex), for gateway_trust/gateway_untrust, and for gateway_redeem_connection_code (the code's own embedded deviceId field). */
+  /** A remote gateway's own device-id (hex), for gateway_trust/gateway_untrust, for gateway_redeem_connection_code (the code's own embedded deviceId field), and the device-id petname_set/petname_clear label. */
   device: z.string().optional(),
   /** The connection code's own nonce (gateway_redeem_connection_code). */
   code: z.string().optional(),
@@ -435,6 +439,23 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       };
     case "gateway_list_trusted":
       return { action: "gateway_list_trusted" };
+    case "petname_set":
+      if (p.device === undefined)
+        throw new BuildActionError("petname_set", "device");
+      if (p.name === undefined)
+        throw new BuildActionError("petname_set", "name");
+      return { action: "petname_set", device: p.device, name: p.name };
+    case "petname_clear":
+      if (p.device === undefined)
+        throw new BuildActionError("petname_clear", "device");
+      return { action: "petname_clear", device: p.device };
+    case "petname_list":
+      return { action: "petname_list" };
+    case "machine_name":
+      return {
+        action: "machine_name",
+        ...(p.name !== undefined && { name: p.name }),
+      };
     case "dm_admit":
       if (p.target === undefined)
         throw new BuildActionError("dm_admit", "target");

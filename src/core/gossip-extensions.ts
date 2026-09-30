@@ -59,6 +59,8 @@ export interface AgentSelfSummary {
   membership?: string;
   /** A proof that this device's machine vouches for it (membership-proof.ts, agent-comms#343), so a peer can tell which devices run on the same host and one that trusts the machine trusts this device. Absent until the first proof has been minted. Like membership, it names its issuer in the clear, so it is only ever sent in this advert, which a hidden or ghost agent never sends. */
   machine?: string;
+  /** This device's machine's self display name claim (name-claim.ts, agent-comms#345), signed by the machine key, so a peer can show the name the machine chose for itself. Absent while the machine has no name. Travels with the machine proof, under the same visibility rule. */
+  machineName?: string;
 }
 
 /** What a bridge knows about itself beyond its summary, and shares only with peers it deals with directly: a hub relays what it is given to every client that connects, so none of this goes to one. */
@@ -88,5 +90,8 @@ export function summariseAgentSelfAdvert(
       ? { membership: advert.membership }
       : {}),
     ...(advert.machine !== undefined ? { machine: advert.machine } : {}),
+    ...(advert.machineName !== undefined
+      ? { machineName: advert.machineName }
+      : {}),
   };
 }

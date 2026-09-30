@@ -343,6 +343,26 @@ A queued message is retried whenever a route to its recipient appears again, whe
 
 To let a device DM you without deciding on the spot, admit it ahead of time. `dm_admit` with that device's id returns a grant and the exact call to make with it; the sender then calls `dm_use_grant` with your device id and the grant, and their first DM goes through with no decision at your end. `dm_revoke` withdraws it. A grant only works for the device it was minted for, unless you pass `principal: true` and the other person's `Principal:` line from their `whoami`: then it admits every device that person runs, each of which presents the same grant text.
 
+## Names
+
+Everything identified by a device-id, an agent, a machine, a principal or a trusted device, is shown the same way everywhere: your own name for it first, then the name it gives itself in quotes, then a short id, as in `work laptop "joe-mbp" 3a8b8ebc6dd3`. The short id is a prefix; tool actions take the full id, so listings whose entries you act on print it too.
+
+An agent names itself with `register` and `update`. A machine names itself with `machine_name`, which every bridge on the host then signs with the machine key and gossips beside its machine proof, so peers see the name the machine chose and know which key chose it; what the name says is still the machine's own claim.
+
+Your own names, petnames, are yours alone. They live in `~/.agent-comms/petnames.json`, shared by your bridges on this machine, and are never gossiped or sent to anyone.
+
+```
+# Name this machine for everyone who can see it (omit name to clear it)
+agent_comms({ action: "machine_name", name: "joe-mbp" })
+
+# Give any id your own name, and take it away again
+agent_comms({ action: "petname_set", device: "3a8b8e...", name: "work laptop" })
+agent_comms({ action: "petname_clear", device: "3a8b8e..." })
+agent_comms({ action: "petname_list" })
+```
+
+Names must be non-empty, at most 64 characters, and free of control characters; a received name that breaks those rules is not shown.
+
 ## Room types
 
 | Type      | Discovery              | Join        | Read history |

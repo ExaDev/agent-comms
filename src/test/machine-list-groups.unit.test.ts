@@ -6,6 +6,9 @@ import { describe, expect, it } from "vitest";
 import { groupAgentsByMachine } from "../core/machine-list-groups.js";
 import type { AgentIdentity } from "../core/types.js";
 
+/** Names every id as itself, so a heading shows exactly the machine id. */
+const idNamer = (id: string): string => id;
+
 function agent(id: string): AgentIdentity {
   return {
     id,
@@ -31,7 +34,7 @@ describe("groupAgentsByMachine", () => {
       ["remote-a", "aaaa"],
     ]);
 
-    const groups = groupAgentsByMachine(agents, machines, "mine");
+    const groups = groupAgentsByMachine(agents, machines, "mine", idNamer);
 
     expect(
       groups.map((group) => [group.heading, group.agents.map((a) => a.id)]),
@@ -51,7 +54,7 @@ describe("groupAgentsByMachine", () => {
       ["two", "mine"],
     ]);
 
-    const groups = groupAgentsByMachine(agents, machines, "mine");
+    const groups = groupAgentsByMachine(agents, machines, "mine", idNamer);
 
     expect(groups[0]?.agents.map((a) => a.id)).toEqual(["one", "two"]);
   });
@@ -59,11 +62,22 @@ describe("groupAgentsByMachine", () => {
   it("lists everything as one ungrouped run when no agent is placed on a machine, or the store has no machine identity", () => {
     const agents = ["a", "b"].map(agent);
 
-    expect(groupAgentsByMachine(agents, new Map(), "mine")).toEqual([
+    expect(groupAgentsByMachine(agents, new Map(), "mine", idNamer)).toEqual([
       { heading: undefined, agents },
     ]);
-    expect(groupAgentsByMachine(agents, undefined, undefined)).toEqual([
-      { heading: undefined, agents },
-    ]);
+    expect(groupAgentsByMachine(agents, undefined, undefined, idNamer)).toEqual(
+      [{ heading: undefined, agents }],
+    );
+  });
+
+  it("names each machine heading through the namer it is given", () => {
+    const groups = groupAgentsByMachine(
+      [agent("local")],
+      new Map([["local", "mine"]]),
+      "mine",
+      (id) => `laptop "${id}"`,
+    );
+
+    expect(groups[0]?.heading).toBe('Machine laptop "mine" (this machine):');
   });
 });

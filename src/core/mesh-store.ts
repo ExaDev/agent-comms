@@ -10,6 +10,8 @@
 
 import { bytesToHex, deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { GroupProofs } from "./group-proofs.js";
+import { Naming } from "./naming.js";
+import { Petnames } from "./petnames.js";
 import {
   ROOM_JOIN_APPROVAL_TIMEOUT_MS,
   ROOM_REQUEST_TIMEOUT_MS,
@@ -142,6 +144,9 @@ export class MeshStore implements CommsStore {
 
   /** The cross-machine trust boundary (agent-comms#156), constructed once in the constructor below (mirroring discovery above) and shared with WireMeshTransport by every construction site (bridge-mesh.ts, test-transport.ts) that passes it into WireMeshTransport's own constructor, so store.addTrustedGateway() and the transport's own hub-forwarding/hub-session gates read the exact same set. Persists across restarts (agent-comms#186) when a slot is passed to this store's own constructor; stays in-memory only, exactly as before, for every construction site that omits one. Public so those construction sites can reach it; addTrustedGateway/removeTrustedGateway/listTrustedGateways below are the methods CommsTool actually calls through MeshOnlyFeatures. */
   readonly gatewayTrust: GatewayTrust;
+
+  /** Petnames, this machine's own name, and the namer every listing formats ids with (agent-comms#345). Handed to CommsTool alongside discovery. Petnames live beside gatewayTrust's file when a slot is given, in memory otherwise. */
+  readonly naming: Naming;
 
   /** The connection-code generate/redeem pair (agent-comms#188) bootstrapping gatewayTrust above between two devices with no existing mesh connection. Persists across restarts per slot, from the slot passed to this store's own constructor, whereas gatewayTrust is shared by every slot in the slot's identity directory. generateConnectionCode/redeemConnectionCode below are the methods CommsTool actually calls through MeshOnlyFeatures; redeemConnectionCode is also where a successful redemption's deviceId gets fed into gatewayTrust.add, the actual point of this whole bootstrap. */
   private readonly connectionCodes: ConnectionCodeLedger;
@@ -302,6 +307,12 @@ export class MeshStore implements CommsStore {
     this.hubUrl = hubUrl;
     this.roomJoinApprovalTimeoutMs = roomJoinApprovalTimeoutMs;
     this.gatewayTrust = new GatewayTrust(slot);
+    this.naming = new Naming({
+      petnames: new Petnames(slot),
+      machineNames: async () => this.membership.machineNames(),
+      listAgents: async (requesterId) => this.listAgents(requesterId),
+      saveMachineName: async (name) => this.membership.saveMachineName(name),
+    });
     this.connectionCodes = new ConnectionCodeLedger(slot);
 
     // Discovery manager — registers available backends

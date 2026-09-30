@@ -10,6 +10,9 @@ import type { PeerIdentity } from "./identity.js";
 import {
   isStoredIssuerKey,
   loadOrCreateIssuerIdentity,
+  readIssuerRecord,
+  writeIssuerRecord,
+  type StoredIssuerKey,
 } from "./issuer-identity-file.js";
 
 export interface MachineIdentityOptions {
@@ -31,6 +34,44 @@ export function loadOrCreateMachineIdentity(
 ): PeerIdentity {
   return loadOrCreateIssuerIdentity(
     machineIdentityFile(options),
-    isStoredIssuerKey,
+    isStoredMachineIdentity,
   );
+}
+
+interface StoredMachineIdentity extends StoredIssuerKey {
+  /** The name this machine asserts for itself (agent-comms#345), signed into a name claim by the machine key whenever a bridge on the host re-advertises. Absent until someone names the machine. */
+  displayName?: string;
+}
+
+function isStoredMachineIdentity(
+  value: unknown,
+): value is StoredMachineIdentity {
+  if (!isStoredIssuerKey(value)) return false;
+  return !("displayName" in value) || typeof value.displayName === "string";
+}
+
+/** The name this machine asserts for itself, or undefined when it has none or the machine identity has not been created yet. Read from disk on every call, so a name set by any bridge on the host is seen by all of them. */
+export function loadMachineDisplayName(
+  options?: Readonly<MachineIdentityOptions>,
+): string | undefined {
+  return readIssuerRecord(machineIdentityFile(options), isStoredMachineIdentity)
+    ?.displayName;
+}
+
+/** Sets (or, given undefined, clears) the name this machine asserts for itself, keeping the key material and every other field. Throws if the machine identity has not been created yet. */
+export function saveMachineDisplayName(
+  options: Readonly<MachineIdentityOptions> | undefined,
+  displayName: string | undefined,
+): void {
+  const file = machineIdentityFile(options);
+  const stored = readIssuerRecord(file, isStoredMachineIdentity);
+  if (stored === undefined) {
+    throw new Error(
+      `no machine identity persisted yet; call loadOrCreateMachineIdentity first (${file})`,
+    );
+  }
+  const next: StoredMachineIdentity = { ...stored };
+  if (displayName === undefined) delete next.displayName;
+  else next.displayName = displayName;
+  writeIssuerRecord(file, next);
 }

@@ -80,7 +80,8 @@ export function createBridgeMeshSyncFromIdentity(
   const userIdentityOptions = {};
   const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
   // The machine identity (agent-comms#343) is shared by every bridge this OS account runs on the host, from the default ~/.agent-comms location.
-  const machineIdentity = loadOrCreateMachineIdentity();
+  const machineIdentityOptions = {};
+  const machineIdentity = loadOrCreateMachineIdentity(machineIdentityOptions);
   const store = new MeshStore({
     coordinatorPort,
     hubUrl,
@@ -109,6 +110,7 @@ export function createBridgeMeshSyncFromIdentity(
   versionChecker.start();
   const tool = new CommsTool(store, {
     discovery: store.discovery,
+    naming: store.naming,
     getNewerVersionIfAny: () => versionChecker.getNewerVersionIfAny(),
   });
   const revocation = createRevocationView();
@@ -125,6 +127,7 @@ export function createBridgeMeshSyncFromIdentity(
         userIdentity: await toIdentityPort(userIdentity),
         userIdentityOptions,
         machineIdentity: await toIdentityPort(machineIdentity),
+        machineIdentityOptions,
       });
     },
   };

@@ -4,6 +4,7 @@
 import { isDeviceIdHex } from "./room-path.js";
 import type { CommsAction } from "./types.js";
 import type { CommsResult, MeshOnlyFeatures } from "./tool.js";
+import type { Namer } from "./naming.js";
 
 /** The slice of MeshOnlyFeatures the three functions below actually need, named so this file doesn't repeat the same Pick inline at every signature. */
 export type GatewayTrustStore = Pick<
@@ -131,9 +132,10 @@ function listedForUntrust(
   return listed?.includes(action.device.toLowerCase()) === true;
 }
 
-/** Reports every currently trusted remote device-id, principal (agent-comms#187) and machine (agent-comms#343) together, and the devices reachable through a trusted principal or machine. Listing is never mutually exclusive between the sets, so, unlike gatewayTrust/gatewayUntrust above, this needs no flag of its own. */
+/** Reports every currently trusted remote device-id, principal (agent-comms#187) and machine (agent-comms#343) together, and the devices reachable through a trusted principal or machine. Listing is never mutually exclusive between the sets, so, unlike gatewayTrust/gatewayUntrust above, this needs no flag of its own. Each entry shows the full id, which gateway_untrust takes, then the display name namer gives it (agent-comms#345). */
 export function gatewayListTrusted(
   store: Readonly<GatewayTrustStore>,
+  namer: Namer,
 ): CommsResult {
   if (!store.listTrustedGateways) return gatewayTrustUnavailable();
   const devices = store.listTrustedGateways();
@@ -148,20 +150,26 @@ export function gatewayListTrusted(
       );
     }
   };
-  section("Trusted remote gateway devices", devices);
-  section("Trusted remote gateway principals", principals);
-  section("Trusted remote machines", machines);
+  const entry = (id: string): string => `${id}  ${namer(id)}`;
+  section("Trusted remote gateway devices", devices.map(entry));
+  section("Trusted remote gateway principals", principals.map(entry));
+  section("Trusted remote machines", machines.map(entry));
   section(
     "Devices trusted through a principal",
     members
       .filter((member) => member.kind === "principal")
-      .map((member) => `${member.device} (vouched for by ${member.issuer})`),
+      .map(
+        (member) =>
+          `${entry(member.device)} (vouched for by ${namer(member.issuer)})`,
+      ),
   );
   section(
     "Devices trusted through a machine",
     members
       .filter((member) => member.kind === "machine")
-      .map((member) => `${member.device} (runs on ${member.issuer})`),
+      .map(
+        (member) => `${entry(member.device)} (runs on ${namer(member.issuer)})`,
+      ),
   );
   if (sections.length === 0) {
     return {

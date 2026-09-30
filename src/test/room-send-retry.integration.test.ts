@@ -75,6 +75,7 @@ async function makePeer(
     machineIdentity: await toIdentityPort(
       loadOrCreateMachineIdentity(userIdentityOptions),
     ),
+    machineIdentityOptions: userIdentityOptions,
   });
   const deliveries: DeliveryEvent[] = [];
   return { store, deliveries };

@@ -63,10 +63,12 @@ async function wireTransportInternal(
       ),
     };
   const userIdentity = loadOrCreateUserIdentity(resolvedUserIdentityOptions);
-  const machineIdentity = loadOrCreateMachineIdentity(
+  const resolvedMachineIdentityOptions: Readonly<MachineIdentityOptions> =
     machineIdentityOptions ?? {
       dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-machine-")),
-    },
+    };
+  const machineIdentity = loadOrCreateMachineIdentity(
+    resolvedMachineIdentityOptions,
   );
   // Every real bridge sets peerId to deviceIdToHex(identity.deviceId) before wiring the transport (createBridgeMesh) -- WireMeshTransport's own session bookkeeping is keyed by device-id, so a peer's advertised ID and the identity the other side actually authenticates the connection against must be the same value, or introduction/state-sync never recognises the peer as itself.
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
@@ -94,6 +96,7 @@ async function wireTransportInternal(
     userIdentity: await toIdentityPort(userIdentity),
     userIdentityOptions: resolvedUserIdentityOptions,
     machineIdentity: await toIdentityPort(machineIdentity),
+    machineIdentityOptions: resolvedMachineIdentityOptions,
   });
   // Surface transport-level errors instead of leaving them silent — a genuine socket failure during a test run is signal worth seeing even when the test's own assertions still pass, since it can point at a real race the assertions don't happen to catch.
   store.onError = (e) => {

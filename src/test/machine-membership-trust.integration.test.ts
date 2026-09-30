@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
+import { shortId } from "../core/display-name.js";
 import { freeLocalPort, realHubOverWs, TeardownStack } from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
 
@@ -119,7 +120,7 @@ describe("machine identity", () => {
     );
     expect(whoami.content).toContain(`Machine: ${machineOf(a1)}`);
 
-    const heading = `Machine ${machineOf(a1)} (this machine):`;
+    const heading = `Machine ${shortId(machineOf(a1))} (this machine):`;
     await waitFor("a1 to place a2 on this machine", async () =>
       rowsUnder(await listAgentsText(a1), heading).includes(a2.peerId),
     );
@@ -145,7 +146,7 @@ describe("machine identity", () => {
     expect(b1.listTrustedGateways()).toEqual([]);
     expect(b1.listTrustedGatewayPrincipals()).toEqual([]);
 
-    const remoteHeading = `Machine ${machineOf(a1)}:`;
+    const remoteHeading = `Machine ${shortId(machineOf(a1))}:`;
     await waitFor(
       "b1 to list both of A's devices under A's machine",
       async () => {
