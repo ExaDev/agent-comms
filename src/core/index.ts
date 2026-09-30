@@ -21,7 +21,11 @@ export {
   createBridgeMeshFromIdentity,
   createBridgeMeshSyncFromIdentity,
 } from "./bridge-mesh.js";
-export type { BridgeMesh, BridgeMeshSync } from "./bridge-mesh.js";
+export type {
+  BridgeMesh,
+  BridgeMeshOptions,
+  BridgeMeshSync,
+} from "./bridge-mesh.js";
 export {
   loadIdentityForFront,
   probeSlotOwner,
