@@ -28,6 +28,7 @@ function eventsRecordingPresence(
     onBecomeCoordinator: () => undefined,
     onRevocationAnnounce: () => undefined,
     onCoordinatorClaim: () => undefined,
+    onElectionSessionEnrolled: () => undefined,
     onPresenceAdvert: onPresence,
     onDeviceReachable: () => undefined,
   };

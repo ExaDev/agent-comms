@@ -23,27 +23,7 @@ import type {
 } from "../core/transport.js";
 import type { MeshMessage } from "../core/wire-protocol.js";
 import type { AgentStatus } from "../core/types.js";
-import { waitFor } from "./test-transport.js";
-
-function noopEvents(
-  overrides: Readonly<Partial<TransportEvents>> = {},
-): TransportEvents {
-  return {
-    onMessage: () => undefined,
-    onPeerConnected: () => undefined,
-    onPeerDisconnected: () => undefined,
-    onIntroduction: () => undefined,
-    onConnectionRequest: () => undefined,
-    onPeerList: () => undefined,
-    onPeerJoined: () => undefined,
-    onBecomeCoordinator: () => undefined,
-    onRevocationAnnounce: () => undefined,
-    onCoordinatorClaim: () => undefined,
-    onPresenceAdvert: () => undefined,
-    onDeviceReachable: () => undefined,
-    ...overrides,
-  };
-}
+import { noopTransportEvents, waitFor } from "./test-transport.js";
 
 /** Finds a free localhost port by binding to port 0 and immediately releasing it -- used both for uniquePort()-style allocation and, when nothing is subsequently listened on it, as a guaranteed-refused dial target. */
 async function findFreePort(): Promise<number> {
@@ -89,7 +69,7 @@ describe("WireMeshTransport presence-interval construction", () => {
     const identity = generateIdentity();
     const setIntervalSpy = vi.spyOn(global, "setInterval");
     try {
-      new WireMeshTransport(noopEvents(), identity);
+      new WireMeshTransport(noopTransportEvents(), identity);
       expect(setIntervalSpy).not.toHaveBeenCalled();
     } finally {
       setIntervalSpy.mockRestore();
@@ -105,7 +85,7 @@ describe("WireMeshTransport presence-interval construction", () => {
       .mockReturnValue(fakeTimer);
     try {
       // presenceReadvertiseIntervalMs deliberately omitted: relying on the constructor's own default is the point of this test -- it proves PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND actually computes 20_000, not merely that *some* interval gets scheduled.
-      new WireMeshTransport(noopEvents(), identity, {
+      new WireMeshTransport(noopTransportEvents(), identity, {
         getCurrentPresence: () => "active",
       });
       // Mirrors WireMeshTransport's own default cadence (PRESENCE_READVERTISE_INTERVAL_SECONDS * MS_PER_SECOND).
@@ -122,7 +102,7 @@ describe("WireMeshTransport presence-interval construction", () => {
 describe("WireMeshTransport coordinator/getter state", () => {
   test("isCoordinator starts false and flips true once becomeCoordinator has bound its listener", async () => {
     const identity = generateIdentity();
-    const transport = new WireMeshTransport(noopEvents(), identity);
+    const transport = new WireMeshTransport(noopTransportEvents(), identity);
     try {
       expect(transport.isCoordinator).toBe(false);
       await transport.becomeCoordinator("127.0.0.1", 0);
@@ -138,10 +118,12 @@ describe("WireMeshTransport coordinator/getter state", () => {
     const idA = await peerId(await toIdentityPort(identityA));
     const idB = await peerId(await toIdentityPort(identityB));
 
-    const transportA = new WireMeshTransport(noopEvents(), identityA);
+    const transportA = new WireMeshTransport(noopTransportEvents(), identityA);
     const disconnects: ConnectionHandle[] = [];
     const transportB = new WireMeshTransport(
-      noopEvents({ onPeerDisconnected: (h) => void disconnects.push(h) }),
+      noopTransportEvents({
+        onPeerDisconnected: (h) => void disconnects.push(h),
+      }),
       identityB,
     );
     try {
@@ -174,7 +156,7 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
     const disconnectsSeenByA: ConnectionHandle[] = [];
     const requestsSeenByA: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({
+      noopTransportEvents({
         onConnectionRequest: (handle) => void requestsSeenByA.push(handle),
         onPeerDisconnected: (handle) => void disconnectsSeenByA.push(handle),
       }),
@@ -245,11 +227,13 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
 
     const requests: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({ onConnectionRequest: (h) => void requests.push(h) }),
+      noopTransportEvents({
+        onConnectionRequest: (h) => void requests.push(h),
+      }),
       identityA,
     );
-    const transportB = new WireMeshTransport(noopEvents(), identityB);
-    const transportC = new WireMeshTransport(noopEvents(), identityC);
+    const transportB = new WireMeshTransport(noopTransportEvents(), identityB);
+    const transportC = new WireMeshTransport(noopTransportEvents(), identityC);
     try {
       await transportA.becomeCoordinator("127.0.0.1", 0);
       const [listener] = transportA.listListeners();
@@ -313,13 +297,13 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
     const requests: ConnectionHandle[] = [];
     const messagesSeenByA: MeshMessage[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({
+      noopTransportEvents({
         onConnectionRequest: (h) => void requests.push(h),
         onMessage: (_h, m) => void messagesSeenByA.push(m),
       }),
       identityA,
     );
-    const transportB = new WireMeshTransport(noopEvents(), identityB);
+    const transportB = new WireMeshTransport(noopTransportEvents(), identityB);
     try {
       await transportA.becomeCoordinator("127.0.0.1", 0);
       const [listener] = transportA.listListeners();
@@ -368,14 +352,16 @@ describe("WireMeshTransport connect_request quarantine and disconnect handling",
     const messagesSeenByA: MeshMessage[] = [];
     const messagesSeenByB: MeshMessage[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({
+      noopTransportEvents({
         onConnectionRequest: (h) => void requests.push(h),
         onMessage: (_h, m) => void messagesSeenByA.push(m),
       }),
       identityA,
     );
     const transportB = new WireMeshTransport(
-      noopEvents({ onMessage: (_h, m) => void messagesSeenByB.push(m) }),
+      noopTransportEvents({
+        onMessage: (_h, m) => void messagesSeenByB.push(m),
+      }),
       identityB,
     );
     try {
@@ -442,11 +428,15 @@ describe("WireMeshTransport connectToPeer", () => {
     const messagesSeenByA: MeshMessage[] = [];
     const messagesSeenByB: MeshMessage[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({ onMessage: (_h, m) => void messagesSeenByA.push(m) }),
+      noopTransportEvents({
+        onMessage: (_h, m) => void messagesSeenByA.push(m),
+      }),
       identityA,
     );
     const transportB = new WireMeshTransport(
-      noopEvents({ onMessage: (_h, m) => void messagesSeenByB.push(m) }),
+      noopTransportEvents({
+        onMessage: (_h, m) => void messagesSeenByB.push(m),
+      }),
       identityB,
     );
     try {
@@ -495,9 +485,9 @@ describe("WireMeshTransport connectToPeer", () => {
     const idA = await peerId(await toIdentityPort(identityA));
 
     const errors: Error[] = [];
-    const transportA = new WireMeshTransport(noopEvents(), identityA);
+    const transportA = new WireMeshTransport(noopTransportEvents(), identityA);
     const transportB = new WireMeshTransport(
-      noopEvents({ onError: (e) => void errors.push(e) }),
+      noopTransportEvents({ onError: (e) => void errors.push(e) }),
       identityB,
     );
     try {
@@ -529,7 +519,7 @@ describe("WireMeshTransport connectToPeer", () => {
     const identityB = generateIdentity();
     const errors: Error[] = [];
     const transportB = new WireMeshTransport(
-      noopEvents({ onError: (e) => void errors.push(e) }),
+      noopTransportEvents({ onError: (e) => void errors.push(e) }),
       identityB,
     );
     try {
@@ -564,12 +554,14 @@ describe("WireMeshTransport shutdown", () => {
 
     const requests: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({ onConnectionRequest: (h) => void requests.push(h) }),
+      noopTransportEvents({
+        onConnectionRequest: (h) => void requests.push(h),
+      }),
       identityA,
       { getCurrentPresence: () => "active" },
     );
     const clearIntervalSpy = vi.spyOn(global, "clearInterval");
-    const transportB = new WireMeshTransport(noopEvents(), identityB);
+    const transportB = new WireMeshTransport(noopTransportEvents(), identityB);
     try {
       await transportA.becomeCoordinator("127.0.0.1", 0);
       const [listener] = transportA.listListeners();
@@ -618,9 +610,9 @@ describe("WireMeshTransport shutdown", () => {
     const idB = await peerId(await toIdentityPort(identityB));
 
     const disconnectsSeenByB: ConnectionHandle[] = [];
-    const transportA = new WireMeshTransport(noopEvents(), identityA);
+    const transportA = new WireMeshTransport(noopTransportEvents(), identityA);
     const transportB = new WireMeshTransport(
-      noopEvents({
+      noopTransportEvents({
         onPeerDisconnected: (h) => void disconnectsSeenByB.push(h),
       }),
       identityB,
@@ -656,13 +648,13 @@ describe("WireMeshTransport listener policy propagation into quarantine", () => 
     const introductions: { handle: ConnectionHandle }[] = [];
     const requests: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({
+      noopTransportEvents({
         onConnectionRequest: (h) => void requests.push(h),
         onIntroduction: (handle) => void introductions.push({ handle }),
       }),
       identityA,
     );
-    const transportB = new WireMeshTransport(noopEvents(), identityB);
+    const transportB = new WireMeshTransport(noopTransportEvents(), identityB);
     try {
       await transportA.becomeCoordinator("127.0.0.1", 0);
       const observePolicy: ListenerPolicy = "observe";
@@ -718,12 +710,12 @@ describe("WireMeshTransport readvertisePresence body", () => {
     const presenceSeenByB: AgentStatus[] = [];
     let currentStatus: AgentStatus | undefined;
     const SHORT_INTERVAL_MS = 40;
-    const transportA = new WireMeshTransport(noopEvents(), identityA, {
+    const transportA = new WireMeshTransport(noopTransportEvents(), identityA, {
       getCurrentPresence: () => currentStatus,
       presenceReadvertiseIntervalMs: SHORT_INTERVAL_MS,
     });
     const transportB = new WireMeshTransport(
-      noopEvents({
+      noopTransportEvents({
         onPresenceAdvert: (_h, status) => void presenceSeenByB.push(status),
       }),
       identityB,
@@ -762,7 +754,7 @@ describe("WireMeshTransport readvertisePresence body", () => {
 describe("WireMeshTransport send/sendRoomRequest to an unknown or broken peer", () => {
   test("send to a handle with no live session is a silent no-op", async () => {
     const identity = generateIdentity();
-    const transport = new WireMeshTransport(noopEvents(), identity);
+    const transport = new WireMeshTransport(noopTransportEvents(), identity);
     try {
       await expect(
         transport.send(
@@ -787,10 +779,10 @@ describe("WireMeshTransport pending-connection expiry", () => {
     const idB = await peerId(await toIdentityPort(identityB));
     const SHORT_TIMEOUT_MS = 150;
 
-    const transportA = new WireMeshTransport(noopEvents(), identityA, {
+    const transportA = new WireMeshTransport(noopTransportEvents(), identityA, {
       pendingConnectionTimeoutMs: SHORT_TIMEOUT_MS,
     });
-    const transportB = new WireMeshTransport(noopEvents(), identityB);
+    const transportB = new WireMeshTransport(noopTransportEvents(), identityB);
     try {
       await transportA.becomeCoordinator("127.0.0.1", 0);
       const [listener] = transportA.listListeners();
@@ -823,12 +815,12 @@ describe("WireMeshTransport accepting side's own disconnect wiring and dial dedu
 
     const disconnectsSeenByA: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({
+      noopTransportEvents({
         onPeerDisconnected: (h) => void disconnectsSeenByA.push(h),
       }),
       identityA,
     );
-    const transportB = new WireMeshTransport(noopEvents(), identityB);
+    const transportB = new WireMeshTransport(noopTransportEvents(), identityB);
     try {
       await transportA.startDataServer();
       await transportB.connectToPeer(
@@ -859,10 +851,12 @@ describe("WireMeshTransport accepting side's own disconnect wiring and dial dedu
     // transportA1 and transportA2 both hold identityA -- the same peer id -- but are two separate transport instances so the first can go through shutdown() (a terminal, one-way state for whichever transport calls it) while a genuinely fresh listener stands in for "the same peer, reachable again" for the second dial. transportB itself is never shut down: it's the one whose own dataDials bookkeeping this test is about.
     const connectsSeenByA: ConnectionHandle[] = [];
     const transportA1 = new WireMeshTransport(
-      noopEvents({ onPeerConnected: (h) => void connectsSeenByA.push(h) }),
+      noopTransportEvents({
+        onPeerConnected: (h) => void connectsSeenByA.push(h),
+      }),
       identityA,
     );
-    const transportB = new WireMeshTransport(noopEvents(), identityB);
+    const transportB = new WireMeshTransport(noopTransportEvents(), identityB);
     let transportA2: WireMeshTransport | undefined;
     try {
       await transportA1.startDataServer();
@@ -885,7 +879,9 @@ describe("WireMeshTransport accepting side's own disconnect wiring and dial dedu
       await delay(DEDUP_SETTLE_MS);
 
       transportA2 = new WireMeshTransport(
-        noopEvents({ onPeerConnected: (h) => void connectsSeenByA.push(h) }),
+        noopTransportEvents({
+          onPeerConnected: (h) => void connectsSeenByA.push(h),
+        }),
         identityA,
       );
       await transportA2.startDataServer();

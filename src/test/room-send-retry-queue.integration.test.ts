@@ -45,6 +45,7 @@ function fakeTransport(): {
     broadcastRevocation: async () => {},
     broadcastCoordinatorClaim: async () => {},
     sendCoordinatorClaim: async () => {},
+    electionPeerIds: () => new Set<string>(),
     sendRoomRequest: async (_memberId, command): Promise<ManageOutcome> => {
       attempts.push(command.params);
       if (!connected) {

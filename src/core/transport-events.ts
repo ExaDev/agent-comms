@@ -60,6 +60,9 @@ export function createTransportEvents(
         .handleClaim(handle, frame)
         .catch(store.reportError);
     },
+    onElectionSessionEnrolled: (handle) => {
+      void store.coordinatorRole.announceTo(handle).catch(store.reportError);
+    },
     onPresenceAdvert: (handle, status) => {
       store.deliveryEngine.handlePresenceAdvert(handle.id, status);
     },

@@ -20,27 +20,7 @@ import {
 import type { ConnectionHandle, TransportEvents } from "../core/transport.js";
 import type { AgentStatus } from "../core/types.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
-import { waitFor } from "./test-transport.js";
-
-function noopEvents(
-  overrides: Readonly<Partial<TransportEvents>> = {},
-): TransportEvents {
-  return {
-    onMessage: () => undefined,
-    onPeerConnected: () => undefined,
-    onPeerDisconnected: () => undefined,
-    onIntroduction: () => undefined,
-    onConnectionRequest: () => undefined,
-    onPeerList: () => undefined,
-    onPeerJoined: () => undefined,
-    onBecomeCoordinator: () => undefined,
-    onRevocationAnnounce: () => undefined,
-    onCoordinatorClaim: () => undefined,
-    onPresenceAdvert: () => undefined,
-    onDeviceReachable: () => undefined,
-    ...overrides,
-  };
-}
+import { noopTransportEvents, waitFor } from "./test-transport.js";
 
 async function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -64,7 +44,7 @@ const SHUTDOWN_MAP_CLEAR_COUNT = 3;
 describe("WireMeshTransport shutdown -- direct mechanism assertions", () => {
   test("shutdown clears every internal bookkeeping collection, even when all of them are already empty", async () => {
     const identity = generateIdentity();
-    const transport = new WireMeshTransport(noopEvents(), identity);
+    const transport = new WireMeshTransport(noopTransportEvents(), identity);
     const mapClearSpy = vi.spyOn(Map.prototype, "clear");
     const setClearSpy = vi.spyOn(Set.prototype, "clear");
     try {
@@ -86,7 +66,7 @@ describe("WireMeshTransport shutdown -- direct mechanism assertions", () => {
     const idB = await peerId(await toIdentityPort(identityB));
     const requestsSeenByA: ConnectionHandle[] = [];
     const transportA = new WireMeshTransport(
-      noopEvents({
+      noopTransportEvents({
         onConnectionRequest: (h) => void requestsSeenByA.push(h),
       }),
       identityA,
@@ -141,7 +121,7 @@ describe("WireMeshTransport shutdown -- direct mechanism assertions", () => {
     const identity = generateIdentity();
     const clearIntervalSpy = vi.spyOn(global, "clearInterval");
     try {
-      const transport = new WireMeshTransport(noopEvents(), identity, {
+      const transport = new WireMeshTransport(noopTransportEvents(), identity, {
         getCurrentPresence: () => "active",
       });
       clearIntervalSpy.mockClear();
@@ -156,7 +136,7 @@ describe("WireMeshTransport shutdown -- direct mechanism assertions", () => {
     const identity = generateIdentity();
     const clearIntervalSpy = vi.spyOn(global, "clearInterval");
     try {
-      const transport = new WireMeshTransport(noopEvents(), identity);
+      const transport = new WireMeshTransport(noopTransportEvents(), identity);
       clearIntervalSpy.mockClear();
       await transport.shutdown();
       expect(clearIntervalSpy).not.toHaveBeenCalled();
@@ -171,10 +151,10 @@ describe("WireMeshTransport shutdown -- direct mechanism assertions", () => {
     const idB = await peerId(await toIdentityPort(identityB));
     const SHORT_TIMEOUT_MS = 150;
 
-    const transportA = new WireMeshTransport(noopEvents(), identityA, {
+    const transportA = new WireMeshTransport(noopTransportEvents(), identityA, {
       pendingConnectionTimeoutMs: SHORT_TIMEOUT_MS,
     });
-    const transportB = new WireMeshTransport(noopEvents(), identityB);
+    const transportB = new WireMeshTransport(noopTransportEvents(), identityB);
     try {
       await transportA.becomeCoordinator("127.0.0.1", 0);
       const [listener] = transportA.listListeners();
@@ -214,7 +194,7 @@ describe("WireMeshTransport shutdown -- direct mechanism assertions", () => {
 describe("WireMeshTransport unref", () => {
   test("unrefs the data listener and every coordinator listener, not just one of them", async () => {
     const identity = generateIdentity();
-    const transport = new WireMeshTransport(noopEvents(), identity);
+    const transport = new WireMeshTransport(noopTransportEvents(), identity);
     const unrefSpy = vi.spyOn(net.Server.prototype, "unref");
     try {
       await transport.startDataServer();
@@ -234,7 +214,7 @@ describe("WireMeshTransport unref", () => {
 
   test("unref with no listeners started at all is a safe no-op, not a throw", async () => {
     const identity = generateIdentity();
-    const transport = new WireMeshTransport(noopEvents(), identity);
+    const transport = new WireMeshTransport(noopTransportEvents(), identity);
     expect(() => {
       transport.unref();
     }).not.toThrow();
@@ -252,7 +232,7 @@ describe("WireMeshTransport shutdown -- coordinator listener release ordering (a
   test("releases the coordinator listening port well before a slow-closing session's own close() resolves", async () => {
     const identityA = generateIdentity();
     const identityB = generateIdentity();
-    const transportA = new WireMeshTransport(noopEvents(), identityA);
+    const transportA = new WireMeshTransport(noopTransportEvents(), identityA);
     const clientTransport = createTlsTransport({
       certificatePem: identityB.certificate,
       privateKeyPem: identityB.privateKey,

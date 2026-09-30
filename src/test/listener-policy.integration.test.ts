@@ -355,6 +355,7 @@ describe("listener policy", () => {
       onBecomeCoordinator: () => undefined,
       onRevocationAnnounce: () => undefined,
       onCoordinatorClaim: () => undefined,
+      onElectionSessionEnrolled: () => undefined,
       onPresenceAdvert: () => undefined,
       onDeviceReachable: () => undefined,
     };

@@ -125,6 +125,7 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
       calls.claims.push(frame);
     },
     sendCoordinatorClaim: async () => {},
+    electionPeerIds: () => new Set<string>(),
     sendRoomRequest: async () => ({ result: "ok" }),
     addListener: async () => "listener",
     removeListener: async () => {},
