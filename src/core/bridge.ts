@@ -126,7 +126,7 @@ export const MCP_TOOL_PARAMS = z.object({
   fingerprint: z.string().optional(),
   /** For gateway_trust/gateway_untrust (and dm_admit, where `target` names it): when true, the id names a user principal (agent-comms#187) rather than a bare remote device-id (agent-comms#193). */
   principal: z.boolean().optional(),
-  /** For gateway_trust/gateway_untrust: when true, the id names a machine (agent-comms#343), whose whole host is trusted or revoked at once. */
+  /** For gateway_trust/gateway_untrust: when true, the id names a machine (agent-comms#343), whose devices (every bridge one OS account runs on that host) are trusted or revoked at once. */
   machine: z.boolean().optional(),
   /** The dm:send grant text dm_admit returned, presented by dm_use_grant. */
   grant: z.string().optional(),
