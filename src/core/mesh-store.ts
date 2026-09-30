@@ -400,6 +400,7 @@ export class MeshStore implements CommsStore {
       peerInfo: this.peerInfo,
       agents: this.agents,
       coordinatorPort: this.coordinatorPort,
+      firstContactPort: options?.firstContactPort,
       getPeerId: () => this.peerId,
       getCoordinatorPeerId: () => this.requireTransport().coordinatorPeerId,
       requireTransport: () => this.requireTransport(),
@@ -513,6 +514,9 @@ export class MeshStore implements CommsStore {
     }
 
     this.requireTransport().unref();
+
+    // First contact (agent-comms#341): a coordinator-free presence on this machine or LAN, owned by PeerLifecycle; a no-op unless a firstContactPort was configured, which only bridge-mesh (every real bridge's shared bootstrap) does.
+    this.peerLifecycle.startFirstContact();
   }
 
   // -----------------------------------------------------------------------
@@ -1068,6 +1072,7 @@ export class MeshStore implements CommsStore {
     if (this.isShutDown) return;
     this.isShutDown = true;
     this.membership.stop();
+    this.peerLifecycle.stopFirstContact();
     // Clear any pending markRead timers so they don't fire after the transport is shut down (which would attempt sends on closed sockets) or keep the event loop alive after process.exit().
     for (const timer of this.pendingMarkReadTimers) {
       clearTimeout(timer);

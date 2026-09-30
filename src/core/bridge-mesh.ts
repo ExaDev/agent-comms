@@ -20,6 +20,7 @@ import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
 import { createNodeFsStorage } from "wire-mesh-core/adapters/node-fs-storage";
 import { MeshStore } from "./mesh-store.js";
 import { DEFAULT_HUB_URL } from "./mesh-store-shared.js";
+import { FIRST_CONTACT_PORT } from "./first-contact.js";
 import { CommsTool } from "./tool.js";
 import { WireMeshTransport } from "./wire-mesh-transport.js";
 import { loadOrCreateIdentity, oplogDirFor } from "./identity-store.js";
@@ -40,11 +41,12 @@ export interface BridgeMeshSync extends BridgeMesh {
   attachIdentity: () => Promise<void>;
 }
 
-/** coordinatorPort/hubUrl thread straight into MeshStore's own constructor, hubUrl defaulting to the production hub here and nowhere below; fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup). */
+/** coordinatorPort/hubUrl thread straight into MeshStore's own constructor, hubUrl defaulting to the production hub here and nowhere below; fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup). firstContactPort defaults to FIRST_CONTACT_PORT, the default-on coordinator-free formation presence (agent-comms#341); a bridge-level test overrides it with an OS-assigned free port so test bridges never cross-discover each other. */
 export interface BridgeMeshOptions {
   coordinatorPort?: number | undefined;
   hubUrl?: string | undefined;
   fetchLatestVersion?: (() => Promise<string | undefined>) | undefined;
+  firstContactPort?: number | undefined;
 }
 
 /** The synchronous half of bridge construction: everything loadOrCreateIdentity's own synchronous key material makes possible. Use this directly only when the calling entry point cannot await inline (see this file's own header comment); every other caller should use createBridgeMesh below. */
@@ -71,11 +73,17 @@ export function createBridgeMeshSyncFromIdentity(
     coordinatorPort,
     hubUrl = DEFAULT_HUB_URL,
     fetchLatestVersion,
+    firstContactPort = FIRST_CONTACT_PORT,
   } = options ?? {};
   // The user-principal identity (agent-comms#160) is shared by every bridge on this machine account -- deliberately not scoped to slot, unlike identity above. userIdentityOptions is empty (the default ~/.agent-comms location); every real bridge shares it, and only tests need an override.
   const userIdentityOptions = {};
   const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
-  const store = new MeshStore({ coordinatorPort, hubUrl, slot });
+  const store = new MeshStore({
+    coordinatorPort,
+    hubUrl,
+    slot,
+    firstContactPort,
+  });
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- oplogDirFor(slot) needs only the slot, not the async identity below, so this can be constructed synchronously right here.
   const dataStorage = createNodeFsStorage({ dir: oplogDirFor(slot) });

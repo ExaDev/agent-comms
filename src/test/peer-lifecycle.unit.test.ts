@@ -142,7 +142,25 @@ describe("PeerLifecycle — handlePeerConnected", () => {
 
     await h.lifecycle.handlePeerConnected({ id: "conn-1" }, peerInfo("x"));
 
-    expect(h.transport.send).not.toHaveBeenCalled();
+    expect(h.transport.send).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ method: "state_sync" }),
+    );
+  });
+
+  it("shares every known peer over the connection as a peer_list, so the mesh forms without a coordinator's handout (agent-comms#341)", async () => {
+    const h = makeHarness();
+    const self = peerInfo(OWNER_ID);
+    const other = peerInfo("other-peer");
+    h.deps.peerInfo.set(OWNER_ID, self);
+    h.deps.peerInfo.set("other-peer", other);
+
+    await h.lifecycle.handlePeerConnected({ id: "conn-1" }, peerInfo("x"));
+
+    expect(h.transport.send).toHaveBeenCalledWith(
+      { id: "conn-1" },
+      { method: "peer_list", peers: [self, other] },
+    );
   });
 
   it("always flushes pending room requests for the connection, regardless of state", async () => {

@@ -664,7 +664,7 @@ export class WireMeshTransport implements MeshTransport {
     if (this.shutDown || this.dataDials.has(peer.id)) return;
     this.dataDials.add(peer.id);
     const connection = await this.wireTransport
-      .connect(`${COORDINATOR_HOST}:${String(peer.port)}`)
+      .connect(`${peer.host ?? COORDINATOR_HOST}:${String(peer.port)}`)
       .catch((error: unknown) => {
         const reason = error instanceof Error ? error.message : String(error);
         this.events.onError?.(
