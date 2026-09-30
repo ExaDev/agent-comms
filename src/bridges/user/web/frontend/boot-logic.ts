@@ -1,20 +1,10 @@
 /**
- * Boot logic helpers — extracted from main.tsx for testability.
+ * Boot logic helpers, extracted from main.tsx for testability.
  *
- * Determines whether the app is served from a local mesh server
- * (vs standalone PWA), and whether the user has previously connected.
+ * Determines whether the app should connect to a mesh on load: when a bridge served the page, or when the user has connected before.
  */
 
-/** Pattern matching localhost or 127.x.x.x with optional port. */
-const LOCAL_HOST_PATTERN = /^(localhost|127\.\d+\.\d+\.\d+)(:\d+)?$/;
-
-/**
- * Returns true if the given host string refers to a local server.
- * Matches localhost:port, 127.x.x.x:port, or either without a port.
- */
-export function isLocalHost(host: string): boolean {
-  return LOCAL_HOST_PATTERN.test(host);
-}
+import { isServedByBridge } from "./served-by-bridge.js";
 
 /**
  * Check whether the user has previously connected to a mesh.
@@ -22,4 +12,14 @@ export function isLocalHost(host: string): boolean {
  */
 export function hasConnectedBefore(storage: Storage): boolean {
   return storage.getItem("agent-comms-connected") === "true";
+}
+
+/**
+ * Whether to connect on load without waiting for the user. A page served by a bridge dials its own origin, which cannot raise Chrome's local-access prompt, so it connects at once; a standalone deployment connects on load only for a user who has connected before, and otherwise shows a connect prompt.
+ */
+export function shouldAutoConnect(
+  location: { readonly host: string; readonly protocol: string },
+  storage: Storage,
+): boolean {
+  return isServedByBridge(location) || hasConnectedBefore(storage);
 }
