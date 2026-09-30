@@ -464,7 +464,7 @@ describe("GatewayTrust — verified members of a trusted principal", () => {
   });
 });
 
-describe("GatewayTrust — machine-keyed trust (agent-comms#343)", () => {
+describe("GatewayTrust: machine-keyed trust (agent-comms#343)", () => {
   const MACHINE = "aabbccdd";
   const PRINCIPAL = "eeff0011";
   const DEVICE = "11223344";
