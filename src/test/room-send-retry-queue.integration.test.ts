@@ -43,6 +43,8 @@ function fakeTransport(): {
     connectToRemote: async () => {},
     broadcast: async () => {},
     broadcastRevocation: async () => {},
+    broadcastCoordinatorClaim: async () => {},
+    sendCoordinatorClaim: async () => {},
     sendRoomRequest: async (_memberId, command): Promise<ManageOutcome> => {
       attempts.push(command.params);
       if (!connected) {

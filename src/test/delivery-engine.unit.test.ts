@@ -122,6 +122,8 @@ function fakeTransport(): MeshTransport {
     connectToRemote: vi.fn().mockResolvedValue(undefined),
     broadcast: vi.fn().mockResolvedValue(undefined),
     broadcastRevocation: vi.fn().mockResolvedValue(undefined),
+    broadcastCoordinatorClaim: vi.fn().mockResolvedValue(undefined),
+    sendCoordinatorClaim: vi.fn().mockResolvedValue(undefined),
     sendRoomRequest: vi
       .fn()
       .mockResolvedValue({ result: "error", code: "not_connected" }),

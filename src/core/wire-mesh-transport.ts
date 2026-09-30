@@ -14,7 +14,7 @@ import {
   ROOM_REQUEST_TIMEOUT_MS,
   manageRequestTimeoutMs,
 } from "./request-timeouts.js";
-import { connectWsUrl } from "./ws-dial.js";
+import { dialRemote } from "./ws-dial.js";
 import { HubSession } from "./hub-session.js";
 import { PRESENCE_READVERTISE_INTERVAL_MS } from "./gossip-extensions.js";
 import { GatewayTrust, type GatewayTrustReader } from "./gateway-trust.js";
@@ -38,10 +38,15 @@ import {
 import { directoryAdmission } from "./directory-admission.js";
 import { routeRoomRequestViaHub } from "./hub-forwarding.js";
 import { HubLink } from "./hub-link.js";
+import { ElectionSessions } from "./election-sessions.js";
+import {
+  DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
+  type ConnectionDecision,
+  type PendingConnection,
+} from "./pending-connection.js";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
-  type IncomingManageRequest,
   type ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
@@ -54,6 +59,7 @@ import { routeDataFrame } from "./data-frame-routing.js";
 import type {
   CapabilityScope,
   CapabilityToken,
+  CoordinatorFrame,
   DataHaveFrame,
   DataRequestFrame,
   Frame,
@@ -79,9 +85,13 @@ import type {
 } from "./transport.js";
 import type { PeerIdentity } from "./identity.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
-import type {
-  ConnectToRemoteOptions,
-  WireMeshTransportOptions,
+import {
+  DATA_SERVER_ACCEPT,
+  DEFAULT_LISTENER_ACCEPT,
+  operatorListenerAccept,
+  type AcceptOptions,
+  type ConnectToRemoteOptions,
+  type WireMeshTransportOptions,
 } from "./wire-mesh-transport-options.js";
 import {
   createRoomRouter,
@@ -94,13 +104,6 @@ import {
 // ---------------------------------------------------------------------------
 
 const COORDINATOR_HOST = "127.0.0.1";
-
-/** How long a connect_request may sit awaiting a human decision before this side gives up and rejects it automatically. Generous on purpose -- this bounds a human approval window, not a network timeout: 5 minutes covers a person genuinely being away from the terminal for a few minutes, while still guaranteeing every unanswered request eventually resolves instead of accumulating in pendingConnections indefinitely. */
-const PENDING_CONNECTION_TIMEOUT_MINUTES = 5;
-const SECONDS_PER_MINUTE = 60;
-const MS_PER_SECOND = 1000;
-const DEFAULT_PENDING_CONNECTION_TIMEOUT_MS =
-  PENDING_CONNECTION_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
 
 /** This project's own namespaced domain (registrant "exadev.io", local name "agent-comms-v1"), matching namespaced-domain-id's "<registrant>/<local-name>" shape -- registry/core-domains.md's own recommended pattern for a third party. Exported for test use only: a security test simulating a hostile client that skips connect_request needs to construct a well-formed frame under the same domain/verb/scope this transport itself listens on, rather than duplicating these as separately-maintained magic strings that could silently drift from the real values. */
 export const DOMAIN = "exadev.io/agent-comms-v1";
@@ -119,27 +122,6 @@ export const FRAME_SCOPE: Readonly<CapabilityScope> = {
 
 export function buildCommand(message: MeshMessage): ManageCommand {
   return { verb: FRAME_VERB, params: { message } };
-}
-
-// ---------------------------------------------------------------------------
-// Internal session bookkeeping
-// ---------------------------------------------------------------------------
-
-/** A human decision on a connect_request: "accept" resumes the still-blocked consumeQuarantined loop as a fully trusted session; "reject" (also used when the requester disconnects before a decision is made) unblocks it to close instead. */
-type ConnectionDecision = "accept" | "reject";
-
-interface PendingConnection {
-  respond: IncomingManageRequest["respond"];
-  dataPort: number;
-  name: string;
-  fingerprint: string;
-  policy: ListenerPolicy | undefined;
-  /** Held so acceptConnection can trackSession it synchronously, before firing onIntroduction -- that event's own handler (mesh-store's handleIntroduction) sends a reply on this same handle immediately, which needs peerSessions already populated. Waiting for consumeQuarantined's own suspended loop to resume and do it would race: resolve() below only wakes that loop on a later microtask tick, after onIntroduction has already fired. */
-  session: AcceptedMeshSession;
-  /** Settles the Promise consumeQuarantined is blocked on for this connect_request -- the mechanism by which acceptConnection/rejectConnection resume a loop suspended mid-iteration, without ever needing to re-obtain (and so needing to reason about the identity of) a second iterator over the same session's incomingManageRequests. */
-  resolve: (decision: ConnectionDecision) => void;
-  /** Auto-rejects this request after the configured pending-connection timeout if no human decision arrives first. Cleared by acceptConnection/rejectConnection/watchForDisconnect's own disconnect path, whichever settles the request first -- an entry is only ever removed from pendingConnections once, so this timer firing after another path already resolved it is structurally impossible, not merely guarded against. */
-  timeoutHandle: ReturnType<typeof setTimeout>;
 }
 
 // ---------------------------------------------------------------------------
@@ -181,6 +163,9 @@ export class WireMeshTransport implements MeshTransport {
 
   // -- Every live session this transport has ever created, accepted or dialled, for shutdown's own use only -- never used for addressing (peerSessions is), so it never loses track of one session to another sharing the same peer id.
   private readonly allSessions = new Set<AcceptedMeshSession>();
+
+  // -- The machine-local sessions coordinator claims travel over (agent-comms#341): see election-sessions.ts.
+  private readonly electionSessions: ElectionSessions;
 
   // -- Every device-id this side has ever heard gossip from, across every session's own directory, keyed by device-id hex -- the mesh-wide aggregation P3.8's own room-discovery design and the eventual agent register/update/offline retirement both need and don't otherwise have (agent-comms#48's own 2026-09-14 investigation confirmed no such aggregation existed anywhere in this file). Merged, never cleared on disconnect: a device's last-known advert (including its own presence/status, or any future gossiped extension) stays queryable even while its session is momentarily down, the same way the legacy agents Map keeps a record after setAgentOffline rather than deleting it outright.
   private readonly knownDevices = new Map<string, PeerAdvert>();
@@ -277,6 +262,7 @@ export class WireMeshTransport implements MeshTransport {
     });
     this.identityReady = toIdentityPort(identity);
     this.gatewayTrust = gatewayTrust;
+    this.electionSessions = new ElectionSessions(events);
     // Built before this.hub below (roomRouter has no dependency on it) so the hub can be wired with a direct this.roomRouter.handleRelayedRequest reference rather than a lazy closure. path.trace (agent-comms#199) is always registered here, ahead of any caller-supplied roomVerbHandlers, since every real construction site wants it answered identically regardless of which room verbs it registers.
     this.roomRouter = createRoomRouter({
       events,
@@ -384,10 +370,10 @@ export class WireMeshTransport implements MeshTransport {
 
   private async handleAcceptedConnection(
     connection: Readonly<Connection>,
-    policy: ListenerPolicy | undefined,
-    fireOnPeerConnected: boolean,
-    requiresApproval: boolean,
+    accept: Readonly<AcceptOptions>,
   ): Promise<void> {
+    const { policy, fireOnPeerConnected, requiresApproval, machineLocal } =
+      accept;
     if (this.shutDown) {
       await connection.close();
       return;
@@ -413,7 +399,7 @@ export class WireMeshTransport implements MeshTransport {
     if (requiresApproval) {
       // A listener a stranger can dial cold (the coordinator port, or any addListener-created listener) must not hand out full routing on the strength of a TLS handshake alone -- that only proves which key the far side holds, never that a human has approved them as a mesh member. Quarantine every request from this session until it's either an `introduce` (the pre-existing, ungated coordinator-handoff path, unchanged from before this substrate swap) or an approved `connect_request`.
       this.allSessions.add(session);
-      this.consumeQuarantined(session, handle);
+      this.consumeQuarantined(session, handle, machineLocal);
       this.watchForDisconnect(session, handle, deviceIdHex);
       return;
     }
@@ -428,7 +414,7 @@ export class WireMeshTransport implements MeshTransport {
       this.events.onPeerConnected(handle, info);
     }
 
-    this.consumeIncoming(session, handle);
+    this.consumeIncoming(session, handle, machineLocal);
     this.watchForDisconnect(session, handle, deviceIdHex);
   }
 
@@ -436,6 +422,7 @@ export class WireMeshTransport implements MeshTransport {
   private consumeQuarantined(
     session: AcceptedMeshSession,
     handle: Readonly<ConnectionHandle>,
+    machineLocal: boolean,
   ): void {
     void (async () => {
       let approved = false;
@@ -452,6 +439,8 @@ export class WireMeshTransport implements MeshTransport {
         }
         if (message.method === "introduce") {
           this.trackSession(handle.id, session);
+          // Trusted from here on, so its coordinator claims count; before this an unintroduced session could claim the role for itself.
+          if (machineLocal) this.electionSessions.enrol(session, handle);
           this.events.onIntroduction(handle, {
             peerId: handle.id,
             dataPort: message.dataPort,
@@ -515,13 +504,15 @@ export class WireMeshTransport implements MeshTransport {
     });
   }
 
-  /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch. */
+  /** Delegates the whole post-approval drain loop to roomRouter -- this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch, and, for a machine-local session, its coordinatorFrames drain for the same reason. */
   private consumeIncoming(
     session: AcceptedMeshSession,
     handle: Readonly<ConnectionHandle>,
+    machineLocal: boolean,
   ): void {
     this.roomRouter.drainSession(session, handle);
     this.drainRevocationAnnouncements(session);
+    if (machineLocal) this.electionSessions.enrol(session, handle);
   }
 
   /** Reads every revocation-entry this session's peer announces, for as long as the session lives, handing each one to MeshStore via onRevocationAnnounce -- one call per entry, matching revocationAnnouncements' own per-entry flattening of a revocation-announce frame's entries array. */
@@ -549,6 +540,7 @@ export class WireMeshTransport implements MeshTransport {
           const wasTracked = this.peerSessions.get(deviceIdHex) === session;
           if (wasTracked) this.peerSessions.delete(deviceIdHex);
           this.allSessions.delete(session);
+          this.electionSessions.delete(session);
           // Dropping the closed coordinator session is what makes hasCoordinatorConnection answer honestly once the coordinator process is gone; coordinatorDeviceHex deliberately survives, so the onPeerDisconnected fired just below can still be recognised as the coordinator's own departure rather than an ordinary peer's.
           if (this.coordinatorSession === session)
             this.coordinatorSession = undefined;
@@ -595,7 +587,7 @@ export class WireMeshTransport implements MeshTransport {
     this.dataListener = await this.wireTransport.listen(
       `${COORDINATOR_HOST}:0`,
       (connection) => {
-        void this.handleAcceptedConnection(connection, undefined, true, false);
+        void this.handleAcceptedConnection(connection, DATA_SERVER_ACCEPT);
       },
     );
     this._dataPort = listenerPort(this.dataListener);
@@ -623,7 +615,8 @@ export class WireMeshTransport implements MeshTransport {
       };
       this.coordinatorDeviceHex = handle.id;
       this.trackSession(handle.id, session);
-      this.consumeIncoming(session, handle);
+      // The well-known port is only ever bound on loopback, so the coordinator this dialled is on this machine.
+      this.consumeIncoming(session, handle, true);
       this.watchForDisconnect(session, handle, handle.id);
     }
     // Fire-and-forget, matching the previous transport's own contract: this resolves once the introduction is sent, not once a response arrives -- peer_list/peer_joined/become_coordinator arrive asynchronously via the normal dispatch path above, independent of this call's own promise.
@@ -644,7 +637,7 @@ export class WireMeshTransport implements MeshTransport {
       host,
       port,
       onAccepted: (connection) => {
-        void this.handleAcceptedConnection(connection, "full", false, true);
+        void this.handleAcceptedConnection(connection, DEFAULT_LISTENER_ACCEPT);
       },
     });
     this._isCoordinator = true;
@@ -704,7 +697,8 @@ export class WireMeshTransport implements MeshTransport {
     }
     this.trackSession(deviceIdHex, session);
     const handle: ConnectionHandle = { id: deviceIdHex };
-    this.consumeIncoming(session, handle);
+    // A data server only ever listens on loopback (startDataServer), so a dial that authenticated against one reached this machine.
+    this.consumeIncoming(session, handle, true);
     this.watchForDisconnect(session, handle, deviceIdHex);
   }
 
@@ -762,6 +756,20 @@ export class WireMeshTransport implements MeshTransport {
     );
   }
 
+  async broadcastCoordinatorClaim(
+    frame: Readonly<CoordinatorFrame>,
+  ): Promise<void> {
+    await this.electionSessions.broadcast(frame);
+  }
+
+  async sendCoordinatorClaim(
+    handle: Readonly<ConnectionHandle>,
+    frame: Readonly<CoordinatorFrame>,
+  ): Promise<void> {
+    const session = this.peerSessions.get(handle.id);
+    await this.electionSessions.send(session, handle, frame);
+  }
+
   async sendRoomRequest(
     memberId: string,
     command: ManageCommand,
@@ -808,20 +816,7 @@ export class WireMeshTransport implements MeshTransport {
     options: Readonly<ConnectToRemoteOptions>,
   ): Promise<void> {
     const { host, port, peerId, dataPort, name, fingerprint } = options;
-    // A ws:// or wss:// URL in the host position dials a WebSocket-served
-    // hub (e.g. the mesh.exadev.io cloudflare-hub) instead of raw TLS --
-    // the port is meaningless in URL form, so callers pass 0. Any other URL
-    // scheme is refused here rather than surfacing as an opaque DNS error
-    // from the TLS dial treating the whole URL as a hostname.
-    const isWsUrl = /^wss?:\/\//.test(host);
-    if (!isWsUrl && host.includes("://")) {
-      throw new Error(
-        `expected a hostname or a ws:// / wss:// URL, got "${host}"`,
-      );
-    }
-    const connection = isWsUrl
-      ? await connectWsUrl(host)
-      : await this.wireTransport.connect(`${host}:${String(port)}`);
+    const connection = await dialRemote(this.wireTransport, host, port);
     const session = await this.openSession(connection);
     const outcome = await session.sendManageRequest(
       buildCommand({
@@ -843,7 +838,7 @@ export class WireMeshTransport implements MeshTransport {
         id: deviceIdToHex(coordinatorDeviceId),
       };
       this.trackSession(handle.id, session);
-      this.consumeIncoming(session, handle);
+      this.consumeIncoming(session, handle, false);
       this.watchForDisconnect(session, handle, handle.id);
     }
   }
@@ -905,7 +900,10 @@ export class WireMeshTransport implements MeshTransport {
       port,
       policy,
       onAccepted: (connection) => {
-        void this.handleAcceptedConnection(connection, policy, false, true);
+        void this.handleAcceptedConnection(
+          connection,
+          operatorListenerAccept(policy),
+        );
       },
     });
   }
@@ -988,6 +986,7 @@ export class WireMeshTransport implements MeshTransport {
       await session.close().catch(() => undefined);
     }
     this.allSessions.clear();
+    this.electionSessions.clear();
     this.peerSessions.clear();
     this.coordinatorSession = undefined;
 

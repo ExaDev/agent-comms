@@ -354,6 +354,7 @@ describe("listener policy", () => {
       onPeerJoined: () => undefined,
       onBecomeCoordinator: () => undefined,
       onRevocationAnnounce: () => undefined,
+      onCoordinatorClaim: () => undefined,
       onPresenceAdvert: () => undefined,
       onDeviceReachable: () => undefined,
     };
