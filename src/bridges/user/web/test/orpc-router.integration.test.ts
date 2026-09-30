@@ -4,8 +4,11 @@
  * Drives every procedure through a real oRPC client over a real WebSocket connection against a real running server -- not a mocked transport -- including a resume/lastEventId replay test proving subscribeEvents actually closes the gap the plan set out to close: an event published while a subscriber is disconnected is still delivered once it reconnects with its last-received event id.
  */
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as fs from "node:fs";
 import net from "node:net";
+import { tmpdir } from "node:os";
+import * as path from "node:path";
 import WsWebSocket from "ws";
 import { createORPCClient, getEventMeta } from "@orpc/client";
 import { RPCLink, type WebSocketLike } from "@orpc/client/websocket";
@@ -70,7 +73,20 @@ async function setup(): Promise<{ client: MeshClient; port: number }> {
   return { client: connectMeshClient(port), port };
 }
 
+// The Dashboard controller persists its identity, and the rooms it creates stay bound to that identity, under the home directory keyed by the working directory. Pointing HOME at a fresh directory per test keeps every run starting from no stored state: without it a second run in the same checkout finds the rooms the first created and createRoom answers ROOM_EXISTS.
+let isolatedHome: string | undefined;
+
+beforeEach(() => {
+  isolatedHome = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-orpc-home-"));
+  vi.stubEnv("HOME", isolatedHome);
+});
+
 afterEach(async () => {
+  vi.unstubAllEnvs();
+  if (isolatedHome !== undefined) {
+    fs.rmSync(isolatedHome, { recursive: true, force: true });
+    isolatedHome = undefined;
+  }
   for (const socket of sockets.splice(0)) socket.close();
   if (handle) {
     // wss.close()/server.close() are asynchronous -- neither actually releases its port until its optional callback fires. Awaiting that here keeps a later test's findFreePort() from being handed a port this handle hasn't genuinely released yet.
