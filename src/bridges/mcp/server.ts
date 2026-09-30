@@ -20,6 +20,8 @@ import {
   installShutdownSignalHandlers,
   MCP_TOOL_PARAMS,
 } from "../../core/index.js";
+import type { Readable } from "node:stream";
+import type { BridgeMeshOptions } from "../../core/bridge-mesh.js";
 import type { IdentitySlot } from "../../core/identity-store.js";
 import { releaseIdentityLock } from "../../core/identity-store.js";
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
@@ -36,10 +38,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export async function run(): Promise<void> {
+/** Seams that let a test run the real bridge against an isolated mesh and a piped stdin; every real launch omits them. */
+export interface McpBridgeOptions {
+  /** Ports and hub for the bridge's own mesh store; see BridgeMeshOptions. */
+  mesh?: BridgeMeshOptions | undefined;
+  /** The identity slot. Defaults to this process's working directory under the `mcp` harness. */
+  slot?: IdentitySlot | undefined;
+  /** The stream JSON-RPC requests are read from. Defaults to process.stdin. */
+  input?: Readable | undefined;
+}
+
+export async function run(options?: Readonly<McpBridgeOptions>): Promise<void> {
   // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us.
-  const identitySlot: IdentitySlot = { harness: "mcp", cwd: process.cwd() };
-  const { store, tool } = await createBridgeMesh(identitySlot);
+  const identitySlot: IdentitySlot = options?.slot ?? {
+    harness: "mcp",
+    cwd: process.cwd(),
+  };
+  const { store, tool } = await createBridgeMesh(identitySlot, options?.mesh);
   store.onError = createMeshErrorReporter();
   store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
   let agentId: string | undefined;
@@ -112,7 +127,7 @@ export async function run(): Promise<void> {
   await store.init();
   const webHandle = await tryStartBridgeWebServer(store, "mcp");
   tool.getWebUrlStatus = () => getWebUrlStatus(webHandle);
-  await mcp.connect(new StdioServerTransport());
+  await mcp.connect(new StdioServerTransport(options?.input));
 
   const reg = await ensureRegistered({
     cwd: process.cwd(),

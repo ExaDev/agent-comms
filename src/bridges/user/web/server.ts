@@ -236,7 +236,10 @@ export async function createWebServer(options?: {
   server.listen(port, WEB_HOST, () => {
     const addr = server.address();
     const actualPort = typeof addr === "object" && addr ? addr.port : port;
-    console.log(`Agent Comms web UI: http://${WEB_HOST}:${String(actualPort)}`);
+    // stderr, not stdout: a stdio MCP bridge owns stdout for JSON-RPC, so any other line there is protocol noise to a strictly framed client.
+    console.error(
+      `Agent Comms web UI: http://${WEB_HOST}:${String(actualPort)}`,
+    );
   });
 
   return { server, controller, wss, pushManager, publisher };
