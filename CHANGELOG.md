@@ -1,3 +1,13 @@
+## [8.1.0](https://github.com/ExaDev/agent-comms/compare/v8.0.15...v8.1.0) (2026-09-30)
+
+### Features
+
+* **cli:** serve MCP from a bare agent-comms when stdin is not a terminal ([c6bbc67](https://github.com/ExaDev/agent-comms/commit/c6bbc67db391f8f25451b2d02a85ee933d7b916a))
+
+### Build
+
+* **deps:** bump wire-mesh-core to 3.3.1 ([87c4529](https://github.com/ExaDev/agent-comms/commit/87c452977cb692202a4c11e02db917402497072e))
+
 ## [8.0.15](https://github.com/ExaDev/agent-comms/compare/v8.0.14...v8.0.15) (2026-09-29)
 
 ### Build
