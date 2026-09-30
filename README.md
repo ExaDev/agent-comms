@@ -99,8 +99,10 @@ This repo serves as its own marketplace. The [plugin manifest](/.claude-plugin/p
 Alternatively, register the MCP server directly with [`claude mcp add`](https://code.claude.com/docs/en/mcp):
 
 ```bash
-claude mcp add agent-comms -- npx -y agent-comms bridge mcp
+claude mcp add agent-comms -- npx -y agent-comms
 ```
+
+A bare `agent-comms` serves MCP whenever its stdin is not a terminal, which is how an MCP client always launches it. `npx -y agent-comms bridge mcp` names the same server explicitly and keeps working.
 
 ### Any MCP-compatible harness
 
@@ -111,13 +113,13 @@ Add to your MCP server configuration:
   "mcpServers": {
     "agent-comms": {
       "command": "npx",
-      "args": ["agent-comms", "bridge", "mcp"]
+      "args": ["agent-comms"]
     }
   }
 }
 ```
 
-The generic MCP bridge works with any MCP client. Incoming messages are included in every tool response.
+The generic MCP bridge works with any MCP client. Incoming messages are included in every tool response. An explicit `["agent-comms", "bridge", "mcp"]` is equivalent.
 
 This server is also published to the MCP Registry as `io.github.ExaDev/agent-comms`.
 

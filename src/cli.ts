@@ -2,7 +2,7 @@
  * agent-comms — cross-harness LLM agent communication mesh.
  *
  * Usage:
- *   npx agent-comms              # setup (auto-detect and configure)
+ *   npx agent-comms              # in a terminal: setup (auto-detect and configure); with a piped stdin: serve MCP, as `bridge mcp`
  *   npx agent-comms setup        # same as above
  *   npx agent-comms status       # check current configuration
  *   npx agent-comms remove       # undo configuration
@@ -25,6 +25,7 @@ import * as os from "node:os";
 import { execSync } from "node:child_process";
 import { z } from "zod";
 import { bridges } from "./bridges/registry.js";
+import { resolveDefaultCommand } from "./core/default-command.js";
 import { runTui } from "./bridges/user/tui.js";
 import { runCli } from "./bridges/user/cli.js";
 
@@ -181,10 +182,17 @@ const harnesses: HarnessDef[] = [
 // Main
 // ---------------------------------------------------------------------------
 
-// process.argv[0] is the node binary, [1] the script path, [2] the subcommand -- everything from here on is the subcommand's own args.
-const CLI_ARGS_START_INDEX = 3;
+// process.argv[0] is the node binary, [1] the script path, the rest the subcommand and its own args.
+const SCRIPT_ARGS_START_INDEX = 2;
+// Within the resolved arguments, index 0 is the subcommand and everything after it is the subcommand's own args.
+const SUBCOMMAND_ARGS_START_INDEX = 1;
 
-const command = process.argv[2] ?? "setup";
+// Runtime value is undefined on a non-TTY stdin (the tty.ReadStream type says plain boolean), which is falsy and therefore reads as "not a terminal" without further coercion.
+const resolvedArgs = resolveDefaultCommand(
+  process.argv.slice(SCRIPT_ARGS_START_INDEX),
+  process.stdin.isTTY,
+);
+const command = resolvedArgs[0] ?? "setup";
 
 switch (command) {
   case "setup":
@@ -197,7 +205,7 @@ switch (command) {
     remove();
     break;
   case "bridge": {
-    const bridgeId = process.argv[3];
+    const bridgeId = resolvedArgs[1];
     if (bridgeId === undefined) {
       console.error("Usage: agent-comms bridge <id>");
       process.exit(1);
@@ -206,7 +214,7 @@ switch (command) {
     break;
   }
   case "chat": {
-    const chatArgs = process.argv.slice(CLI_ARGS_START_INDEX);
+    const chatArgs = resolvedArgs.slice(SUBCOMMAND_ARGS_START_INDEX);
     runChat(chatArgs);
     break;
   }
@@ -215,13 +223,16 @@ switch (command) {
   case "rooms":
   case "agents":
   case "read": {
-    const cliArgs = process.argv.slice(CLI_ARGS_START_INDEX);
+    const cliArgs = resolvedArgs.slice(SUBCOMMAND_ARGS_START_INDEX);
     runUserCli(command, cliArgs);
     break;
   }
   default:
     console.log(
       "Usage: agent-comms [setup|status|remove|bridge <id>|chat|send|dm|rooms|agents|read]",
+    );
+    console.log(
+      "With no subcommand: setup when stdin is a terminal, the MCP server when it is not.",
     );
     process.exit(1);
 }
