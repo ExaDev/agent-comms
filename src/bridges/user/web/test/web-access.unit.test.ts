@@ -5,10 +5,13 @@
 import { describe, expect, it } from "vitest";
 import * as os from "node:os";
 import {
-  ACCESS_COOKIE_NAME,
+  accessCookieName,
   authorise,
+  canonicalAddress,
   generateAccessToken,
   isLoopbackAddress,
+  isWildcardHost,
+  localWebUrl,
   LOOPBACK_HOST,
   requiresAccessToken,
   resolveWebBindHost,
@@ -26,8 +29,17 @@ const LAN_CLIENT = "192.168.1.50";
 const BIND = "192.168.1.10";
 const HOST_HEADER = `${BIND}:${String(PORT)}`;
 
-function policy(): AccessPolicy {
-  return { token: generateAccessToken(), bindHost: BIND, port: PORT };
+const COOKIE_NAME = accessCookieName(PORT);
+
+/** A policy for a LAN bind whose machine has no interface addresses, so every non-loopback client is a remote device. */
+function policy(overrides: Readonly<Partial<AccessPolicy>> = {}): AccessPolicy {
+  return {
+    token: generateAccessToken(),
+    bindHost: BIND,
+    port: PORT,
+    localClientAddresses: () => new Set(),
+    ...overrides,
+  };
 }
 
 function request(overrides: Partial<AccessRequest>): AccessRequest {
@@ -55,10 +67,60 @@ describe("resolveWebBindHost", () => {
     expect(resolveWebBindHost("::", { [WEB_HOST_ENV]: "0.0.0.0" })).toBe("::");
   });
 
+  it.each(["::0", "0:0:0:0:0:0:0:0", "::ffff:0.0.0.0", "::ffff:0:0"])(
+    "canonicalises the wildcard spelling %s so it is classified as a wildcard",
+    (spelling) => {
+      const host = resolveWebBindHost(spelling, {});
+      expect(isWildcardHost(host)).toBe(true);
+      expect(requiresAccessToken(host)).toBe(true);
+    },
+  );
+
   it("rejects a value that is not an IP address instead of falling back", () => {
     expect(() =>
       resolveWebBindHost(undefined, { [WEB_HOST_ENV]: "lan" }),
     ).toThrow(WEB_HOST_ENV);
+  });
+});
+
+describe("canonicalAddress", () => {
+  it.each([
+    ["::0", "::"],
+    ["0:0:0:0:0:0:0:1", "::1"],
+    ["::ffff:127.0.0.1", "127.0.0.1"],
+    ["::ffff:7f00:1", "127.0.0.1"],
+    ["192.168.1.10", "192.168.1.10"],
+    ["fe80::1%en0", "fe80::1%en0"],
+  ])("spells %s as %s", (input, expected) => {
+    expect(canonicalAddress(input)).toBe(expected);
+  });
+});
+
+describe("isWildcardHost", () => {
+  it.each(["0.0.0.0", "::", "::0", "0:0:0:0:0:0:0:0", "::ffff:0.0.0.0"])(
+    "%s binds every interface",
+    (host) => {
+      expect(isWildcardHost(host)).toBe(true);
+    },
+  );
+
+  it.each(["192.168.1.10", "127.0.0.1", "::1", "fe80::1%en0"])(
+    "%s binds one interface",
+    (host) => {
+      expect(isWildcardHost(host)).toBe(false);
+    },
+  );
+});
+
+describe("localWebUrl", () => {
+  it("maps a wildcard bind to loopback and keeps a specific bind", () => {
+    expect(localWebUrl("0.0.0.0", PORT)).toBe(`http://127.0.0.1:${PORT}`);
+    expect(localWebUrl("::", PORT)).toBe(`http://127.0.0.1:${PORT}`);
+    expect(localWebUrl(BIND, PORT)).toBe(`http://${BIND}:${PORT}`);
+  });
+
+  it("brackets an IPv6 bind", () => {
+    expect(localWebUrl("::1", PORT)).toBe(`http://[::1]:${PORT}`);
   });
 });
 
@@ -105,18 +167,98 @@ describe("tokensMatch", () => {
 });
 
 describe("authorise", () => {
-  it("allows everything when there is no policy (a loopback bind)", () => {
-    expect(
-      authorise(undefined, request({ headers: { host: "evil.example" } })),
-    ).toEqual({ kind: "allow" });
+  it("allows a loopback client with a loopback Host and no token, under a loopback bind", () => {
+    const loopbackBind = policy({ token: undefined, bindHost: LOOPBACK_HOST });
+    for (const host of ["localhost", LOOPBACK_HOST, "[::1]"]) {
+      expect(
+        authorise(
+          loopbackBind,
+          request({
+            remoteAddress: "127.0.0.1",
+            headers: { host: `${host}:${String(PORT)}` },
+          }),
+        ),
+      ).toEqual({ kind: "allow" });
+    }
   });
 
-  it("allows a loopback client without a token or a matching Host, even under a policy", () => {
+  it("rejects a rebound Host from a loopback client, under a loopback bind and under a LAN bind", () => {
+    for (const p of [
+      policy({ token: undefined, bindHost: LOOPBACK_HOST }),
+      policy(),
+    ]) {
+      expect(
+        authorise(
+          p,
+          request({
+            remoteAddress: "127.0.0.1",
+            headers: { host: `rebind.example:${String(PORT)}` },
+          }),
+        ),
+      ).toMatchObject({ kind: "deny", status: HTTP_FORBIDDEN });
+    }
+  });
+
+  it("rejects the wildcard address as a Host even from loopback, under a wildcard bind", () => {
+    expect(
+      authorise(
+        policy({ bindHost: "0.0.0.0" }),
+        request({
+          remoteAddress: "127.0.0.1",
+          headers: { host: `0.0.0.0:${String(PORT)}` },
+        }),
+      ),
+    ).toMatchObject({ kind: "deny", status: HTTP_FORBIDDEN });
+  });
+
+  it("allows a loopback client without a token under a LAN bind", () => {
     const decision = authorise(
       policy(),
-      request({ remoteAddress: "127.0.0.1", headers: { host: "localhost" } }),
+      request({
+        remoteAddress: "127.0.0.1",
+        headers: { host: `localhost:${String(PORT)}` },
+      }),
     );
     expect(decision).toEqual({ kind: "allow" });
+  });
+
+  it("allows a client connecting from one of this machine's own interface addresses without a token", () => {
+    const decision = authorise(
+      policy({ localClientAddresses: () => new Set([BIND]) }),
+      request({ remoteAddress: BIND }),
+    );
+    expect(decision).toEqual({ kind: "allow" });
+  });
+
+  it("answers 401 to a remote client under a loopback bind, which has no token to present", () => {
+    expect(
+      authorise(
+        policy({ token: undefined, bindHost: LOOPBACK_HOST }),
+        request({ headers: { host: `localhost:${String(PORT)}` } }),
+      ),
+    ).toMatchObject({ kind: "deny", status: HTTP_UNAUTHORIZED });
+  });
+
+  it("scopes the cookie to the server's port so two servers on one host keep separate cookies", () => {
+    const portA = 41001;
+    const portB = 41002;
+    const a = policy({ port: portA });
+    const b = policy({ port: portB });
+    const both = `${accessCookieName(portA)}=${a.token}; ${accessCookieName(portB)}=${b.token}`;
+    const via = (p: Readonly<AccessPolicy>, port: number, cookie: string) =>
+      authorise(
+        p,
+        request({ headers: { host: `${BIND}:${String(port)}`, cookie } }),
+      );
+    expect(via(a, portA, both)).toEqual({ kind: "allow" });
+    expect(via(b, portB, both)).toEqual({ kind: "allow" });
+    expect(accessCookieName(portA)).not.toBe(accessCookieName(portB));
+    expect(
+      via(a, portA, `${accessCookieName(portB)}=${b.token}`),
+    ).toMatchObject({ kind: "deny", status: HTTP_UNAUTHORIZED });
+    expect(
+      via(b, portB, `${accessCookieName(portA)}=${a.token}`),
+    ).toMatchObject({ kind: "deny", status: HTTP_UNAUTHORIZED });
   });
 
   it("answers 401 to a non-loopback client with no token", () => {
@@ -155,7 +297,7 @@ describe("authorise", () => {
         request({
           headers: {
             host: HOST_HEADER,
-            cookie: `a=b; ${ACCESS_COOKIE_NAME}=${p.token}`,
+            cookie: `a=b; ${COOKIE_NAME}=${p.token}`,
           },
         }),
       ),
@@ -166,7 +308,7 @@ describe("authorise", () => {
         request({
           headers: {
             host: HOST_HEADER,
-            cookie: `${ACCESS_COOKIE_NAME}=wrong`,
+            cookie: `${COOKIE_NAME}=wrong`,
           },
         }),
       ),
@@ -182,7 +324,7 @@ describe("authorise", () => {
     expect(decision).toEqual({
       kind: "exchange",
       status: HTTP_FOUND,
-      cookie: `${ACCESS_COOKIE_NAME}=${p.token}; HttpOnly; SameSite=Strict; Path=/`,
+      cookie: `${COOKIE_NAME}=${p.token}; HttpOnly; SameSite=Strict; Path=/`,
       location: "/room?x=1",
     });
   });
@@ -248,7 +390,7 @@ describe("authorise", () => {
       request({
         headers: {
           host: HOST_HEADER,
-          cookie: `${ACCESS_COOKIE_NAME}=${p.token}`,
+          cookie: `${COOKIE_NAME}=${p.token}`,
           origin: `http://${BIND}:9999`,
         },
       }),
@@ -263,7 +405,7 @@ describe("authorise", () => {
       request({
         headers: {
           host: HOST_HEADER,
-          cookie: `${ACCESS_COOKIE_NAME}=${p.token}`,
+          cookie: `${COOKIE_NAME}=${p.token}`,
           origin: `http://${HOST_HEADER}`,
         },
       }),
