@@ -21,6 +21,7 @@ export type GatewayTrustReader = Pick<
   GatewayTrust,
   | "isTrusted"
   | "isReachable"
+  | "isVouchedBy"
   | "hasAny"
   | "isTrustedPrincipal"
   | "isTrustedFor"
@@ -136,6 +137,12 @@ export class GatewayTrust {
       this.isVerifiedMember(key, "principal") ||
       this.isVerifiedMember(key, "machine")
     );
+  }
+
+  /** Whether the device (hex, case-insensitive) is currently a verified member through a trusted issuer of the given kind: its proof of that kind has not lapsed and its issuer is still trusted. Unlike isReachable, this answers for one kind alone, so a device reachable through its principal is not taken to hold a live machine record too. */
+  isVouchedBy(deviceHex: string, kind: GroupKind): boolean {
+    this.refresh();
+    return this.isVerifiedMember(deviceHex.toLowerCase(), kind);
   }
 
   /** Records that deviceHex presented a membership proof, valid until expiresAt (epoch ms), verified against voucher (agent-comms#266, agent-comms#343). From then until the proof lapses, or the voucher's issuer stops being trusted, isReachable treats the device as reachable. A later proof from the same kind of issuer never shortens an earlier one's window. The caller has already verified the proof: this class does no cryptography. */
