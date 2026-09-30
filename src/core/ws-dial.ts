@@ -32,7 +32,7 @@ export async function connectWsUrl(url: string): Promise<Connection> {
     }, CONNECT_TIMEOUT_MS);
     socket.once("open", () => {
       clearTimeout(timer);
-      resolve(wrapSocket(socket));
+      resolve(wrapWsSocket(socket));
     });
     socket.once("error", (error) => {
       clearTimeout(timer);
@@ -41,7 +41,8 @@ export async function connectWsUrl(url: string): Promise<Connection> {
   });
 }
 
-function wrapSocket(socket: WsSocket): Connection {
+/** Wraps an open ws socket (dialled here, or accepted by a relay server with binaryType "arraybuffer") as a wire-mesh Connection: one canonical-CBOR frame per binary message. */
+export function wrapWsSocket(socket: WsSocket): Connection {
   const pending: Frame[] = [];
   const waiters: {
     resolve: (result: IteratorResult<Frame>) => void;

@@ -167,9 +167,26 @@ describe("readvertiseGossip", () => {
       getHostedRooms: () => ROOMS,
       getSelfAgentAdvert: () => FULL_ADVERT,
       getCcPeerVersion: () => undefined,
+      getRelayOffer: () => undefined,
       ...overrides,
     });
   }
+
+  it("carries a served relay's offer to peers and the hub alike, and no offer while none is served (agent-comms#342)", () => {
+    const hub = fakeSession();
+    const peer = fakeSession();
+    const addresses = ["ws://127.0.0.1:4100/", "ws://192.168.1.20:4100/"];
+
+    advertise([hub.session, peer.session], hub.session, {
+      getRelayOffer: () => addresses,
+    });
+    advertise([hub.session, peer.session], hub.session);
+
+    expect(peer.sent[0]?.["wire-mesh/relay-offer"]).toEqual(addresses);
+    expect(hub.sent[0]?.["wire-mesh/relay-offer"]).toEqual(addresses);
+    expect(peer.sent[1]).not.toHaveProperty("wire-mesh/relay-offer");
+    expect(hub.sent[1]).not.toHaveProperty("wire-mesh/relay-offer");
+  });
 
   it("gives a directly connected peer the whole advert and every hosted room", () => {
     const hub = fakeSession();

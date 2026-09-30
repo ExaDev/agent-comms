@@ -103,6 +103,8 @@ async function wireTransportInternal(
       isAccountMember: async (claim) => store.membership.isAccountMember(claim),
     },
     gatewayTrust: store.gatewayTrust,
+    // A store that comes to serve the relay role (agent-comms#342) serves loopback only, so a test never opens a listener on the local network.
+    relayListenHost: "127.0.0.1",
   });
   store.setTransport(transport);
   store.setIdentity({

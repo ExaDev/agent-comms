@@ -9,6 +9,7 @@ import type {
   DirectoryEntry,
 } from "wire-mesh-core/domain/mesh-session";
 import type { PeerAdvert } from "wire-mesh-core/generated/protocol";
+import { buildRelayOfferExtension } from "wire-mesh-core/domain/relay-advert";
 import { AgentStatus } from "./types.js";
 import { getOwnPackageVersion } from "./package-version.js";
 import {
@@ -167,6 +168,8 @@ export function readvertiseGossip(options: {
   getSelfAgentAdvert: (() => AgentSelfAdvert | undefined) | undefined;
   /** Reads this side's own currently-running cc-peer version, when this process is fronting/bridging one -- folded into the same AGENT_COMMS_VERSION_GOSSIP_KEY advert as this side's own always-known agent-comms package version (agent-comms#198). Unlike presence/hostedRooms/selfAgentAdvert, agent-comms' own version is never genuinely absent (getOwnPackageVersion() always answers), so the versions extension is built and included unconditionally whenever this function runs at all -- there is no "no version to report" case the way there is for the other three optional facts. */
   getCcPeerVersion: (() => string | undefined) | undefined;
+  /** The addresses this side serves a relay at (agent-comms#342), undefined while it serves none. */
+  getRelayOffer: () => readonly string[] | undefined;
 }): void {
   const {
     allSessions,
@@ -177,6 +180,7 @@ export function readvertiseGossip(options: {
     getHostedRooms,
     getSelfAgentAdvert,
     getCcPeerVersion,
+    getRelayOffer,
   } = options;
   const status = getCurrentPresence?.();
   const selfAgentAdvert = getSelfAgentAdvert?.();
@@ -195,6 +199,15 @@ export function readvertiseGossip(options: {
   const hostedRooms = getHostedRooms?.();
   if (hostedRooms !== undefined)
     hubExtensions[HOSTED_ROOMS_GOSSIP_KEY] = summariseHostedRooms(hostedRooms);
+  // Offered to hub clients as well as peers, since a trusted device on another machine learns the offer through the hub; that exposes the relay's addresses to every hub client, part of the metadata a relay's operator accepts in serving one.
+  const relayOffer = getRelayOffer();
+  if (relayOffer !== undefined) {
+    for (const [key, value] of Object.entries(
+      buildRelayOfferExtension(relayOffer),
+    )) {
+      hubExtensions[key] = value;
+    }
+  }
   const peerExtensions: Record<string, unknown> = { ...hubExtensions };
   if (hostedRooms !== undefined)
     peerExtensions[HOSTED_ROOMS_GOSSIP_KEY] = hostedRooms;
@@ -223,6 +236,7 @@ export function startGossipInterval(options: {
   getHostedRooms: (() => readonly HostedRoomAdvert[]) | undefined;
   getSelfAgentAdvert: (() => AgentSelfAdvert | undefined) | undefined;
   getCcPeerVersion: (() => string | undefined) | undefined;
+  getRelayOffer: () => readonly string[] | undefined;
   intervalMs: number;
 }): ReturnType<typeof setInterval> | undefined {
   const {
@@ -234,6 +248,7 @@ export function startGossipInterval(options: {
     getHostedRooms,
     getSelfAgentAdvert,
     getCcPeerVersion,
+    getRelayOffer,
     intervalMs,
   } = options;
   if (
@@ -253,6 +268,7 @@ export function startGossipInterval(options: {
       getHostedRooms,
       getSelfAgentAdvert,
       getCcPeerVersion,
+      getRelayOffer,
     });
   }, intervalMs);
   interval.unref();

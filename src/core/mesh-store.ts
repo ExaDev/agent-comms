@@ -454,10 +454,12 @@ export class MeshStore implements CommsStore {
       claimWaitMs: coordinatorClaimWaitMs,
       onGained: async () => {
         this.staleAgentChecker.start();
+        this.requireTransport().setRelayEligible?.(true);
         await this.onCoordinatorRoleChanged?.(true);
       },
       onLost: async () => {
         this.staleAgentChecker.stop();
+        this.requireTransport().setRelayEligible?.(false);
         await this.onCoordinatorRoleChanged?.(false);
       },
       onError: this.reportError,

@@ -29,6 +29,8 @@ export interface WireMeshTransportOptions {
     ) => Promise<boolean>;
   }>;
   gatewayTrust?: Readonly<GatewayTrustReader>;
+  /** The interface the relay this transport serves listens on (agent-comms#342). Defaults to every interface (ALL_INTERFACES_HOST), so the relay reaches the local network; a test serves loopback only. */
+  relayListenHost?: string | undefined;
   /** Checks a gossiped membership proof against a principal or machine this side trusts (MembershipProofs.verify). Without it, a directory entry from a device not trusted by id is refused even when it carries a proof. */
   verifyMembership?: (
     claim: Readonly<{ proof: string; deviceHex: string; issuerHex: string }>,
