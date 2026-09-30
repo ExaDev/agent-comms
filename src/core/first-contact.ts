@@ -23,7 +23,7 @@ export const FIRST_CONTACT_GROUP = "239.255.19.77";
 const LOOPBACK_INTERFACE = "127.0.0.1";
 
 /** The limited-broadcast address that carries beacons and probes to other machines on the LAN. */
-const BROADCAST_ADDRESS = "255.255.255.255";
+export const BROADCAST_ADDRESS = "255.255.255.255";
 
 /** How often the beacon repeats once started; matching discovery-mdns.ts's own interval so the two presences behave alike on the wire. */
 export const FIRST_CONTACT_INTERVAL_MS = 30_000;
