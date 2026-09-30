@@ -20,6 +20,8 @@ export interface PeerInfo {
   id: string;
   port: number;
   startedAt: string;
+  /** The host this peer's data port listens on. Absent means the machine-local default (localhost): every peer a coordinator introduction or a same-machine first contact names needs no host, while a peer discovered on another machine (first-contact beacons, agent-comms#341) carries the address its beacon came from. */
+  host?: string;
 }
 
 // ---------------------------------------------------------------------------

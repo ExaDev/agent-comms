@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect } from "vitest";
 import { createBridgeMesh } from "../core/bridge-mesh.js";
+import { freeLocalPort } from "./hub-helpers.js";
 import { getOwnPackageVersion } from "../core/package-version.js";
 import { buildAction } from "../core/bridge.js";
 import type { IdentitySlot } from "../core/identity-store.js";
@@ -63,6 +64,7 @@ test("createBridgeMesh's tool reports an available update when the injected vers
   const newerVersion = "9999.0.0";
   const { store, tool } = await createBridgeMesh(slot, {
     coordinatorPort: testCoordinatorPort(),
+    firstContactPort: await freeLocalPort(),
     fetchLatestVersion: async () => Promise.resolve(newerVersion),
   });
   try {
@@ -95,6 +97,7 @@ test("createBridgeMesh's tool reports its own version with no update line when n
   const slot = tempSlot("test-harness-no-drift");
   const { store, tool } = await createBridgeMesh(slot, {
     coordinatorPort: testCoordinatorPort(),
+    firstContactPort: await freeLocalPort(),
     fetchLatestVersion: async () => Promise.resolve(undefined),
   });
   try {

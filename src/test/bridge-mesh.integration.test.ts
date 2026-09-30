@@ -18,6 +18,7 @@ import {
   type IdentitySlot,
 } from "../core/identity-store.js";
 import { waitFor } from "./test-transport.js";
+import { freeLocalPort } from "./hub-helpers.js";
 import { realHubOverWs, waitForCondition } from "./hub-helpers.js";
 
 /** A device-id is a 64-character lowercase hex SHA-256 digest. */
@@ -38,7 +39,9 @@ function tempSlot(harness: string): IdentitySlot {
 test("createBridgeMesh sets peerId to deviceIdToHex(identity.deviceId), not the certificate fingerprint", async () => {
   const slot = tempSlot("test-harness");
   const identity = loadOrCreateIdentity(slot);
-  const { store } = await createBridgeMesh(slot);
+  const { store } = await createBridgeMesh(slot, {
+    firstContactPort: await freeLocalPort(),
+  });
   try {
     expect(store.peerId).toBe(
       deviceIdToHex(Uint8Array.from(identity.deviceId)),
@@ -51,7 +54,9 @@ test("createBridgeMesh sets peerId to deviceIdToHex(identity.deviceId), not the 
 
 test("createBridgeMesh wires a WireMeshTransport", async () => {
   const slot = tempSlot("test-harness");
-  const { store } = await createBridgeMesh(slot);
+  const { store } = await createBridgeMesh(slot, {
+    firstContactPort: await freeLocalPort(),
+  });
   try {
     // init() is the only way to prove the transport is actually usable end to end, which also confirms it's a WireMeshTransport by construction (createBridgeMesh only ever builds one).
     await store.init();
@@ -67,8 +72,14 @@ test("createBridgeMesh passes an explicit coordinatorPort through to MeshStore, 
   const port =
     TEST_COORDINATOR_PORT_BASE +
     Math.floor(Math.random() * TEST_COORDINATOR_PORT_RANGE);
-  const a = await createBridgeMesh(slotA, { coordinatorPort: port });
-  const b = await createBridgeMesh(slotB, { coordinatorPort: port });
+  const a = await createBridgeMesh(slotA, {
+    coordinatorPort: port,
+    firstContactPort: await freeLocalPort(),
+  });
+  const b = await createBridgeMesh(slotB, {
+    coordinatorPort: port,
+    firstContactPort: await freeLocalPort(),
+  });
   try {
     await a.store.init();
     await b.store.init();
@@ -85,6 +96,40 @@ test("createBridgeMesh passes an explicit coordinatorPort through to MeshStore, 
     await waitFor(
       () => b.store.serialise().agents[a.store.peerId] !== undefined,
       "b sees a's agent, proving both joined the same mesh on the shared coordinatorPort",
+    );
+  } finally {
+    await b.store.shutdown();
+    await a.store.shutdown();
+  }
+});
+
+test("two bridges on different coordinator ports form one mesh through first contact alone", async () => {
+  const slotA = tempSlot("test-harness-a");
+  const slotB = tempSlot("test-harness-b");
+  // Distinct coordinator ports: each bridge becomes its own coordinator, so the coordinator can play no part in either finding the other. Only the shared first-contact port joins them.
+  const firstContactPort = await freeLocalPort();
+  const a = await createBridgeMesh(slotA, {
+    coordinatorPort: await freeLocalPort(),
+    firstContactPort,
+  });
+  const b = await createBridgeMesh(slotB, {
+    coordinatorPort: await freeLocalPort(),
+    firstContactPort,
+  });
+  try {
+    await a.store.init();
+    await b.store.init();
+    await a.store.registerAgent({
+      name: "peer-a",
+      harness: "test-harness-a",
+      cwd: "/tmp/project",
+      pid: process.pid,
+      visibility: "visible",
+      tags: [],
+    });
+    await waitFor(
+      () => b.store.serialise().agents[a.store.peerId] !== undefined,
+      "b sees a's agent, proving first contact alone formed the mesh across two separate coordinators",
     );
   } finally {
     await b.store.shutdown();

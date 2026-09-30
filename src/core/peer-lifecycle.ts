@@ -10,6 +10,7 @@ import type {
 } from "./wire-protocol.js";
 import { isAddrInUse, isConnectionRefused } from "./bind-retry.js";
 import { COORDINATOR_HOST } from "./mesh-store-shared.js";
+import { startFirstContact, type FirstContact } from "./first-contact.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { RoomProtocol } from "./room-protocol.js";
 import type { StaleAgentChecker } from "./stale-agent-checker.js";
@@ -21,6 +22,8 @@ export interface PeerLifecycleDeps {
   peerInfo: Map<string, PeerInfo>;
   agents: Map<string, AgentIdentity>;
   coordinatorPort: number;
+  /** The UDP port the coordinator-free first-contact presence binds (agent-comms#341). Undefined means no presence at all: only the bridge entry points set it (bridge-mesh.ts), so a store built by anything else, a test included, never cross-discovers another store. */
+  firstContactPort?: number | undefined;
   getPeerId: () => string;
   /** The peer ID of the coordinator this side currently answers to, as the transport reports it -- undefined when this side is the coordinator itself or has never reached one. Supplied as its own dep rather than read off requireTransport() so the crash-race decision below is expressible against a plain value in tests. */
   getCoordinatorPeerId: () => string | undefined;
@@ -53,7 +56,33 @@ export class PeerLifecycle {
   /** Guards against a second contest running while the first is still binding or rejoining -- a coordinator whose process dies can close more than one session to this side, and each close arrives as its own disconnect. */
   private contestingCoordinatorRole = false;
 
+  /** The first-contact presence, when one was configured and started; owned here because discovering a peer and dialling it is peer-lifecycle bookkeeping (handlePeerList), the same path a coordinator's peer_list takes. */
+  private firstContact: FirstContact | undefined;
+
   constructor(private readonly deps: PeerLifecycleDeps) {}
+
+  /** Starts the coordinator-free presence (agent-comms#341) when a firstContactPort was configured: each discovered peer (carrying the host its beacon came from) is fed through handlePeerList, whose dial-out plus the peer_list every established connection shares (handlePeerConnected) forms the mesh transitively with no coordinator's handout. A no-op with no port, and on a second call. */
+  startFirstContact(): void {
+    const port = this.deps.firstContactPort;
+    if (port === undefined || this.firstContact !== undefined) return;
+    this.firstContact = startFirstContact({
+      peerId: this.deps.getPeerId(),
+      dataPort: this.deps.requireTransport().dataPort,
+      port,
+      onPeer: (info) => {
+        this.handlePeerList([info]);
+      },
+      onError: (error) => {
+        this.deps.onError?.(error);
+      },
+    });
+  }
+
+  /** Stops the presence and releases its port. Idempotent, and a no-op when none was started. */
+  stopFirstContact(): void {
+    this.firstContact?.stop();
+    this.firstContact = undefined;
+  }
 
   handlePeerList(peers: readonly PeerInfo[]): void {
     const peerId = this.deps.getPeerId();
@@ -112,6 +141,12 @@ export class PeerLifecycle {
         state,
       });
     }
+    // Share this side's known peers over every established connection (agent-comms#341): the receiver's handlePeerList dials each one it does not yet know, and each of those connections shares in turn, so the data-connection graph forms transitively by flooding and needs no coordinator's peer-list handout. Previously only a coordinator's introduce flow ever sent peer_list.
+    const peerList: MeshMessage = {
+      method: "peer_list",
+      peers: [...this.deps.peerInfo.values()],
+    };
+    await this.deps.requireTransport().send(handle, peerList);
     await this.deps.roomProtocol.flushPendingRoomRequests(handle.id);
   }
 
