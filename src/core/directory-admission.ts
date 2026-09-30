@@ -47,7 +47,7 @@ interface Verdict {
   until: number;
 }
 
-/** Builds the admission check for a transport's directory merge: given a batch of entries, the ones to merge. An entry is merged if its device is trusted by id, is itself a trusted principal's own device, or carries a proof that a trusted principal or machine vouches for it; a verified device is recorded in gatewayTrust until the proof lapses or its issuer stops being trusted. A device's newer proof is verified as it arrives, which is how its trust is renewed before the old one lapses. */
+/** Builds the admission check for a transport's directory merge: given a batch of entries, the ones to merge. An entry is merged if its device is trusted by id, is itself a trusted principal's own device, or carries a proof that a trusted principal or machine vouches for it; each proof an entry carries is judged on its own, and every one that verifies records the device in gatewayTrust under that kind until the proof lapses or its issuer stops being trusted. A remembered good verdict is reused only while that kind's record is still live, and a device's newer proof is verified as it arrives, which is how its trust is renewed before the old one lapses. */
 export function directoryAdmission(
   deps: Readonly<DirectoryAdmissionDeps>,
 ): (entries: readonly DirectoryEntry[]) => Promise<DirectoryEntry[]> {
@@ -104,6 +104,8 @@ export function directoryAdmission(
         continue;
       }
       if (verifyMembership === undefined) continue;
+      // Every proof the entry carries is judged, not just the first that passes, so a device vouched for by both a trusted principal and a trusted machine holds a record of each and stays reachable when either issuer is untrusted.
+      let vouched = false;
       for (const { field, kind } of PROOF_SOURCES) {
         const proof = readMembershipProof(entry.advert, field);
         if (proof === undefined) continue;
@@ -111,9 +113,9 @@ export function directoryAdmission(
         const key = `${kind}:${deviceHex}`;
         const known = verdicts.get(key);
         if (known?.proof === proof) {
-          if (known.ok && gatewayTrust.isReachable(deviceHex)) {
-            admitted.push(entry);
-            break;
+          if (known.ok && gatewayTrust.isVouchedBy(deviceHex, kind)) {
+            vouched = true;
+            continue;
           }
           if (!known.ok && known.until > Date.now()) continue;
         }
@@ -132,10 +134,10 @@ export function directoryAdmission(
             { kind, issuer: vouch.issuer },
             vouch.expires,
           );
-          admitted.push(entry);
-          break;
+          vouched = true;
         }
       }
+      if (vouched) admitted.push(entry);
     }
     return admitted;
   };

@@ -328,4 +328,55 @@ describe("directoryAdmission", () => {
       { device: deviceHex("both-proofs"), kind: "machine", issuer: MACHINE },
     ]);
   });
+  it("records a device vouched for by both a trusted principal and a trusted machine under each, so it stays reachable after the principal is untrusted", async () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL);
+    trust.addMachine(MACHINE);
+    const verifyMembership = verifier(true);
+
+    const admitted = await directoryAdmission({
+      gatewayTrust: trust,
+      verifyMembership,
+    })([
+      entryWith("both-valid", {
+        membership: "principal-proof",
+        machine: "machine-proof",
+      }),
+    ]);
+
+    expect(admitted).toHaveLength(1);
+    expect(trust.listVerifiedMembers()).toEqual([
+      { device: deviceHex("both-valid"), kind: "principal", issuer: PRINCIPAL },
+      { device: deviceHex("both-valid"), kind: "machine", issuer: MACHINE },
+    ]);
+
+    trust.removePrincipal(PRINCIPAL);
+
+    expect(trust.isReachable(deviceHex("both-valid"))).toBe(true);
+  });
+
+  it("verifies a new machine proof even while a remembered principal verdict still keeps the device reachable", async () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL);
+    trust.addMachine(MACHINE);
+    const verifyMembership = verifier(true);
+    const admit = directoryAdmission({ gatewayTrust: trust, verifyMembership });
+
+    await admit([entry("principal-then-machine", "principal-proof")]);
+    await admit([
+      entryWith("principal-then-machine", {
+        membership: "principal-proof",
+        machine: "machine-proof",
+      }),
+    ]);
+
+    expect(verifyMembership).toHaveBeenLastCalledWith({
+      proof: "machine-proof",
+      deviceHex: deviceHex("principal-then-machine"),
+      issuerHex: MACHINE,
+    });
+    expect(
+      trust.isVouchedBy(deviceHex("principal-then-machine"), "machine"),
+    ).toBe(true);
+  });
 });
