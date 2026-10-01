@@ -160,7 +160,7 @@ export class MeshClient {
     this.client = client;
     void this.pumpEvents(client, ++this.eventPumpGeneration);
 
-    // Discover the web server — walk up from 19877 matching the server's port discovery. If served by a bridge's own server (loopback, or plain http over the LAN), use that origin directly. Otherwise probe localhost.
+    // Discover the web server: walk up from 19877 matching the server's port discovery. If served by a bridge's own server (loopback, or plain http over the LAN), use that origin directly. Otherwise probe localhost.
     if (isServedByBridge(location)) {
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
       const url = `${proto}//${location.host}/ws/mesh`;
