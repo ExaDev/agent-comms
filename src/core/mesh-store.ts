@@ -205,7 +205,7 @@ export class MeshStore implements CommsStore {
   }
 
   /**
-   * Whether this store should hold a hub session right now. It has something to say to another machine only when it has an agent that is not a ghost and its machine trusts at least one remote device or principal. Until then, holding a session would put its device id on a public hub for nobody's benefit, and a ghost agent is by definition not reachable from anywhere. A hidden agent does hold one, and advertises only the device advert every session opens with, which is what lets it be reached by device id.
+   * Whether this store should hold a hub session right now. It has something to say to another machine only when it has an agent that is not a ghost and its machine trusts at least one remote device, principal or machine. Until then, holding a session would put its device id on a public hub for nobody's benefit, and a ghost agent is by definition not reachable from anywhere. A hidden agent does hold one, and advertises only the device advert every session opens with, which is what lets it be reached by device id.
    */
   private wantsHubSession(): boolean {
     const self = this.agents.get(this.peerId);
