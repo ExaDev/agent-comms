@@ -43,7 +43,7 @@ sequenceDiagram
     participant P1 as Peer 1 (first to start)
     participant P2 as Peer 2
     participant P3 as Peer 3
-    P1->>P1: binds port 19876 and claims the coordinator role
+    P1->>P1: binds port 19876, then claims the coordinator role once no holder has announced itself
     P2->>P1: connect to 19876
     P1-->>P2: peer list [P1]
     P2->>P1: establish data connection
@@ -71,10 +71,11 @@ Either way, direct peer-to-peer data connections are untouched, so messages betw
 
 The **coordinator role** is separate from the port. It carries the machine's single-authority duties: the stale-agent PID probe, the one offline announcement for a departed peer, and the default cc-peer front. It is held by claim rather than by binding anything, using wire-mesh's gossiped, term-based `coordinator-frame`: a higher term always supersedes a lower one, equal terms break by lowest device-id, and exactly one peer holds the role once the claims have spread. Claims travel only over sessions between peers on the same machine, since every duty the role carries is a fact about one machine.
 
-- A store claims the role only when it knows of no holder and is alone as far as it can tell: it bound the well-known port, or nothing on the port answered and it could not bind it either
-- Every store tells each new session which claim it accepts, so a joiner learns the holder instead of claiming over it
+- A store claims the role only when it knows of no holder and is alone as far as it can tell: it bound the well-known port, or nothing on the port answered and it could not bind it either. When first contact is running, a holder that never held the port may still be about to announce itself, so the store first waits the ordinary network deadline for that announcement and claims only if none came; a store arriving at an existing mesh therefore never takes the role from its holder
+- Both ends of every session between two stores on the machine tell each other which claim they accept as the session opens, so a joiner learns the holder instead of claiming over it, whichever side dialled
+- Claims are read only from trusted sessions on the machine: never from a session that may cross machines (an `addListener` listener, a `connectToRemote` dial, or a dial at any address other than a loopback one, such as a peer first contact heard over LAN broadcast), and never from a session on the well-known port before it has introduced itself
 - Two meshes that each elected a holder while apart (joined later by first contact, say) converge on one: the lower claim is superseded and its holder stops its duties
-- When the holder departs, the survivor with the lowest device-id claims at once at a raised term; any other survivor claims itself if no higher claim reaches it within the ordinary network deadline, which covers a successor that has gone too
+- When the holder departs, the survivor with the lowest device-id among the stores it has a session to claims at once at a raised term; any other survivor claims itself if, after the ordinary network deadline, the holder it accepts is still one it has no session to, which covers a successor that has gone too and a claim naming a device that never joined
 - The holder need not be the peer that bound the port, and a graceful shutdown hands on only the port listener: survivors recover the role from the departure itself
 
 While the role is vacant, between the holder's loss and the successor's claim, no stale-agent probe runs and no cc-peer front is serving local Claude Code sessions that have no bridge of their own; the new holder restarts both as it takes the role. Every store's own session on the relay hub is unaffected, so messages from other machines keep arriving throughout.
@@ -178,7 +179,7 @@ One bridge process relays for exactly one local Claude Code session, the same "o
 
 ### Default cc-peer front
 
-A Claude Code session with no agent-comms bridge of its own is still reachable from the mesh: whichever bridge on the machine currently holds the elected coordinator role fronts every local session it discovers via `cc-peer`'s own roster, using the same `(harness, cwd)` identity slot that session's own `claude-code` bridge would use if it started. Identity belongs to the slot, not to whichever process is currently serving it — the session's own bridge holds the slot when it's live; the front holds it otherwise, and yields the moment a real bridge for that slot appears, so addressing, room membership, and queued deliveries all carry over unchanged across the transition. No configuration is needed: every bridge in this repo wires the front to its own coordinator-role transitions automatically, and a machine with no local Claude Code sessions (or no `cc-peer` sockets at all) runs it as a clean no-op.
+A Claude Code session with no agent-comms bridge of its own is still reachable from the mesh: whichever bridge on the machine currently holds the elected coordinator role fronts every local session it discovers via `cc-peer`'s own roster, using the same `(harness, cwd)` identity slot that session's own `claude-code` bridge would use if it started. Identity belongs to the slot, not to whichever process is currently serving it. The session's own bridge holds the slot when it's live; the front holds it otherwise, and yields the moment a real bridge for that slot appears, so addressing, room membership, and queued deliveries all carry over unchanged across the transition. No configuration is needed: every bridge in this repo wires the front to its own coordinator-role transitions automatically, and a machine with no local Claude Code sessions (or no `cc-peer` sockets at all) runs it as a clean no-op.
 
 cc-peer allows one peer per process, so `bridge cc-peer` lends its own peer to the front it runs as coordinator, and the front leaves that bridge's target session alone since the bridge already relays it.
 
