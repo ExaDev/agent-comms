@@ -1,3 +1,32 @@
+## [8.5.0](https://github.com/ExaDev/agent-comms/compare/v8.4.1...v8.5.0) (2026-10-01)
+
+### Features
+
+* **core:** vouch for every device on a host with a machine identity ([19c2dec](https://github.com/ExaDev/agent-comms/commit/19c2dec1acee659c65463e932087ce070d42fc40)), closes [#343](https://github.com/ExaDev/agent-comms/issues/343)
+
+### Bug Fixes
+
+* **core:** drop a hub-only device from the directory once the trust that admitted it is withdrawn ([618aebb](https://github.com/ExaDev/agent-comms/commit/618aebb8e9da7badebba171cbee80c4a7ca96718))
+* **core:** judge every membership proof an advert carries so a device keeps each voucher's record ([8ccc142](https://github.com/ExaDev/agent-comms/commit/8ccc14291010f16b6c07d3b5286ded3acca917ad))
+* **core:** load an issuer identity with its owning module's full record guard ([7903eac](https://github.com/ExaDev/agent-comms/commit/7903eac89213c7a5b303c3afced06c6ef72eb9a6))
+* **core:** refuse a gateway_trust id that is not a full device-id ([bf7a9d0](https://github.com/ExaDev/agent-comms/commit/bf7a9d03efedc946e3036486170adbe88bfd69ba))
+* **core:** report an unidentifiable machine proof instead of failing list_agents ([2576f06](https://github.com/ExaDev/agent-comms/commit/2576f06006bad3edc51169d21c5dba2efed6f83d))
+* **core:** write issuer identity files atomically and refuse an unusable one ([f5efa5e](https://github.com/ExaDev/agent-comms/commit/f5efa5edc00088d4dc44565e30081539d489d90d))
+
+### Refactoring
+
+* **core:** share issuer identity persistence between the principal and a new machine identity ([fed059b](https://github.com/ExaDev/agent-comms/commit/fed059b5e8b1655ee2e51eff47aa670784113e88))
+
+### Documentation
+
+* **core:** count trusted machines in the hub session gate ([8cf2576](https://github.com/ExaDev/agent-comms/commit/8cf2576ad5e285fae2bc94c09995a876cae8013c))
+* **core:** state that the machine key is per OS account on a host ([ea52fc0](https://github.com/ExaDev/agent-comms/commit/ea52fc02783d20fbf3734fafc717f32bf0761b57))
+
+### Styles
+
+* **core:** keep a single blank line between the transport's election and device fields ([4c843a5](https://github.com/ExaDev/agent-comms/commit/4c843a5ce04fffe974bb8392b25a0430250207ac))
+* **core:** punctuate the admitDevice doc comment and a trust test title without dashes ([45dad83](https://github.com/ExaDev/agent-comms/commit/45dad83a203c0a2c332fb592f344816f881578f3))
+
 ## [8.4.1](https://github.com/ExaDev/agent-comms/compare/v8.4.0...v8.4.1) (2026-10-01)
 
 ### Build
