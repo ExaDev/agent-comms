@@ -4,7 +4,7 @@
 import { isDeviceIdHex } from "./room-path.js";
 import type { CommsAction } from "./types.js";
 import type { CommsResult, MeshOnlyFeatures } from "./tool.js";
-import type { Namer } from "./naming.js";
+import { idWithNames, type Namer } from "./naming.js";
 
 /** The slice of MeshOnlyFeatures the three functions below actually need, named so this file doesn't repeat the same Pick inline at every signature. */
 export type GatewayTrustStore = Pick<
@@ -150,7 +150,7 @@ export function gatewayListTrusted(
       );
     }
   };
-  const entry = (id: string): string => `${id}  ${namer(id)}`;
+  const entry = (id: string): string => idWithNames(id, namer);
   section("Trusted remote gateway devices", devices.map(entry));
   section("Trusted remote gateway principals", principals.map(entry));
   section("Trusted remote machines", machines.map(entry));

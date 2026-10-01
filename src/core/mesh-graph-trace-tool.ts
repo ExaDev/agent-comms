@@ -5,7 +5,7 @@
 import type { CommsAction } from "./types.js";
 import type { CommsResult, MeshOnlyFeatures } from "./tool.js";
 import { tryMeshAction } from "./tool.js";
-import type { Namer } from "./naming.js";
+import { idWithNames, type Namer } from "./naming.js";
 
 /** Column width the "direct"/"relay" edge-kind label is padded to in meshGraphAction's own listing, matching tool.ts's own aligned-column convention for every other tabular action result. */
 const MESH_GRAPH_EDGE_KIND_COLUMN_WIDTH = 6;
@@ -38,7 +38,7 @@ export function meshGraphAction(
   const edgesBlock =
     edgeLines.length > 0 ? edgeLines.join("\n") : "  (no edges reported)";
   return {
-    content: `Mesh graph:\nNodes (${String(graph.nodes.length)}):\n${graph.nodes.map((node) => `  ${node}  ${namer(node)}`).join("\n")}\nEdges:\n${edgesBlock}`,
+    content: `Mesh graph:\nNodes (${String(graph.nodes.length)}):\n${graph.nodes.map((node) => `  ${idWithNames(node, namer)}`).join("\n")}\nEdges:\n${edgesBlock}`,
     isError: false,
   };
 }

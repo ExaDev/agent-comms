@@ -129,6 +129,13 @@ function wireText(adverts: readonly unknown[]): string {
   return strings.join("\n");
 }
 
+/** The first line of listing that contains text. */
+function rowOf(listing: string, text: string): string {
+  const row = listing.split("\n").find((line) => line.includes(text));
+  if (row === undefined) throw new Error(`no line contains ${text}`);
+  return row;
+}
+
 describe("naming", () => {
   it("shows a trusted machine's own name, and the viewer's petnames before it, in list_agents, gateway_list_trusted and whoami", async () => {
     const hub = await realHubOverWs();
@@ -164,15 +171,53 @@ describe("naming", () => {
       `Machine alpha box "host-a" ${shortId(machineA)}:`,
     );
     const agentName = (await a.store.getAgent(a.store.peerId))?.name;
-    expect(listing).toContain(
-      `a's agent "${String(agentName)}" ${shortId(a.store.peerId)}`,
+    // The row prints the full id in its own column, so the name column carries the names without a short id repeating its start.
+    const row = rowOf(listing, a.store.peerId);
+    expect(row).toContain(
+      `${a.store.peerId}  a's agent "${String(agentName)}"  `,
+    );
+    expect(row).not.toContain(
+      `"${String(agentName)}" ${shortId(a.store.peerId)}`,
+    );
+    expect(row.indexOf("test")).toBe(
+      rowOf(listing, "Harness").indexOf("Harness"),
     );
     expect(await run(b, { action: "gateway_list_trusted" })).toContain(
-      `${machineA}  alpha box "host-a" ${shortId(machineA)}`,
+      `${machineA}  alpha box "host-a"\n`,
     );
     expect(await run(a, { action: "whoami" })).toContain(
       `Machine name: "host-a" ${shortId(machineA)}`,
     );
+  });
+
+  it("refuses a control sequence in an agent name at registration, and does not list a remote agent that gossips one", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+    const a = await hostStore(hub.url, await freeLocalPort(), hostDir());
+    const b = await hostStore(hub.url, await freeLocalPort(), hostDir());
+    a.store.addTrustedGatewayMachine(machineOf(b));
+    b.store.addTrustedGatewayMachine(machineOf(a));
+    const evilName = "evil\u001b[2Jname";
+
+    await expect(
+      a.store.updateAgent(a.store.peerId, { name: evilName }),
+    ).rejects.toMatchObject({ code: "INVALID_NAME" });
+    await waitFor(
+      async () =>
+        (await run(b, { action: "list_agents" })).includes(a.store.peerId),
+      "b to list A's agent while its name is conforming",
+    );
+
+    // A peer that does not validate its own name: A's stored record is changed behind its registry's back, so A gossips the name as it is.
+    const record = await a.store.getAgent(a.store.peerId);
+    if (record === undefined) throw new Error("A has no agent record");
+    record.name = evilName;
+    await waitFor(
+      async () =>
+        !(await run(b, { action: "list_agents" })).includes(a.store.peerId),
+      "b to stop listing A's agent once it gossips a control sequence",
+    );
+    expect(await run(b, { action: "list_agents" })).not.toContain("\u001b");
   });
 
   it("puts the machine's own name on the wire but never a petname, over the hub or a direct peer session", async () => {
