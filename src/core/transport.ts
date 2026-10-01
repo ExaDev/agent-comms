@@ -134,7 +134,7 @@ export interface TransportEvents {
   ) => void;
 
   /**
-   * A machine-local session was enrolled in the coordinator election (agent-comms#341), on either end of it: accepted on a loopback listener, or dialled at a peer's data server or the well-known port. MeshStore tells the peer at once which claim it accepts, so a joiner learns the incumbent instead of claiming over it, whichever side dialled.
+   * A machine-local session was enrolled in the coordinator election (agent-comms#341), on either end of it: accepted on a loopback listener, or dialled at a loopback address. MeshStore tells the peer at once which claim it accepts, so a joiner learns the incumbent instead of claiming over it, whichever side dialled.
    */
   onElectionSessionEnrolled: (handle: Readonly<ConnectionHandle>) => void;
 
