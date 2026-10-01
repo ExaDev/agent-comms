@@ -109,6 +109,26 @@ test("a corrupt identity file is refused and left as it is, never replaced with 
   expect(fs.readFileSync(identityFile(dir), "utf-8")).toBe("{not json");
 });
 
+test("valid key material beside malformed grant bookkeeping is refused at load, the same verdict the grant writers would reach", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  const file = identityFile(dir);
+  const stored: unknown = JSON.parse(fs.readFileSync(file, "utf-8"));
+  const damaged = JSON.stringify({
+    ...(typeof stored === "object" ? stored : {}),
+    issuedDmGrants: { bearer: 7 },
+  });
+  fs.writeFileSync(file, damaged);
+
+  expect(() => loadOrCreateUserIdentity({ dir })).toThrow(
+    /does not hold a usable identity record/,
+  );
+  expect(() => {
+    saveIssuedDmGrant({ dir }, "bearer", new Uint8Array([1]));
+  }).toThrow(/does not hold a usable identity record/);
+  expect(fs.readFileSync(file, "utf-8")).toBe(damaged);
+});
+
 test("an empty identity file is refused rather than regenerated, since an atomic write never leaves one behind", () => {
   const dir = tempDir();
   loadOrCreateUserIdentity({ dir });

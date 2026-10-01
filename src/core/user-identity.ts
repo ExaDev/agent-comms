@@ -67,7 +67,10 @@ function readStoredUserIdentity(file: string): StoredUserIdentity | undefined {
 export function loadOrCreateUserIdentity(
   options?: Readonly<UserIdentityOptions>,
 ): PeerIdentity {
-  return loadOrCreateIssuerIdentity(userIdentityFile(options));
+  return loadOrCreateIssuerIdentity(
+    userIdentityFile(options),
+    isStoredUserIdentity,
+  );
 }
 
 /**
