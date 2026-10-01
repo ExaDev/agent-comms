@@ -141,8 +141,11 @@ function renewIfNeeded(
   return renewed;
 }
 
-/** Generates a fresh identity and persists it at file, which does not exist yet. The create is exclusive, so when a concurrent caller creates the file first this caller keeps the winner's key and returns that instead of overwriting it. */
-function createIssuerIdentity(file: string): PeerIdentity {
+/** Generates a fresh identity and persists it at file, which does not exist yet. The create is exclusive, so when a concurrent caller creates the file first this caller keeps the winner's key and returns that instead of overwriting it, judging the winner's record with the owning module's guard. */
+function createIssuerIdentity(
+  file: string,
+  guard: (value: unknown) => value is StoredIssuerKey,
+): PeerIdentity {
   const identity = generateIdentity();
   if (
     createFileExclusive(
@@ -153,7 +156,7 @@ function createIssuerIdentity(file: string): PeerIdentity {
   ) {
     return identity;
   }
-  const winner = readIssuerRecord(file, isStoredIssuerKey);
+  const winner = readIssuerRecord(file, guard);
   if (winner === undefined) {
     throw new Error(`${file} was created and removed again while loading it`);
   }
@@ -161,15 +164,18 @@ function createIssuerIdentity(file: string): PeerIdentity {
 }
 
 /**
- * Loads the issuer identity persisted at file, creating it on first use. A record nearing certificate expiry is renewed in place and a missing file is created exclusively. A file that exists but holds no usable record is an error, never regenerated.
+ * Loads the issuer identity persisted at file, creating it on first use. A record nearing certificate expiry is renewed in place and a missing file is created exclusively. guard is the owning module's check of its full record shape, the same one its own reads use, so a record that loads here is one every later read-modify-write of that module accepts too. A file that exists but fails guard is an error, never regenerated.
  */
-export function loadOrCreateIssuerIdentity(file: string): PeerIdentity {
+export function loadOrCreateIssuerIdentity(
+  file: string,
+  guard: (value: unknown) => value is StoredIssuerKey,
+): PeerIdentity {
   fs.mkdirSync(path.dirname(file), {
     recursive: true,
     mode: IDENTITY_DIR_MODE,
   });
 
-  const stored = readIssuerRecord(file, isStoredIssuerKey);
-  if (stored === undefined) return createIssuerIdentity(file);
+  const stored = readIssuerRecord(file, guard);
+  if (stored === undefined) return createIssuerIdentity(file, guard);
   return renewIfNeeded(file, stored);
 }

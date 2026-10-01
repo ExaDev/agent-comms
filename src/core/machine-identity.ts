@@ -7,7 +7,10 @@
 import * as os from "node:os";
 import * as path from "node:path";
 import type { PeerIdentity } from "./identity.js";
-import { loadOrCreateIssuerIdentity } from "./issuer-identity-file.js";
+import {
+  isStoredIssuerKey,
+  loadOrCreateIssuerIdentity,
+} from "./issuer-identity-file.js";
 
 export interface MachineIdentityOptions {
   /** Directory override for tests; defaults to ~/.agent-comms, beside the user identity and every bridge slot. */
@@ -26,5 +29,8 @@ export function machineIdentityFile(
 export function loadOrCreateMachineIdentity(
   options?: Readonly<MachineIdentityOptions>,
 ): PeerIdentity {
-  return loadOrCreateIssuerIdentity(machineIdentityFile(options));
+  return loadOrCreateIssuerIdentity(
+    machineIdentityFile(options),
+    isStoredIssuerKey,
+  );
 }
