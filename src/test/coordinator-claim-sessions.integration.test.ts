@@ -1,7 +1,8 @@
 /**
- * Which sessions a store accepts coordinator claims from, and announces its own over (agent-comms#341), against real sockets. A claim is a bid for this machine's coordinator duties, so it may only come from a trusted session to a peer on this machine: never from a session that may cross machines (an addListener listener, a connectToRemote dial), and never from a session on the well-known port before it has introduced itself. A hand-built peer on the far end of each session sends a claim at a term above the store's own, so an accepted claim would visibly replace the store's; a manage-request sent after the claim over the same session, and answered, proves the store has read the claim before the test looks at its state.
+ * Which sessions a store accepts coordinator claims from, and announces its own over (agent-comms#341), against real sockets. A claim is a bid for this machine's coordinator duties, so it may only come from a trusted session to a peer on this machine: never from a session that may cross machines (an addListener listener, a connectToRemote dial, a data dial at an address other than a loopback one), and never from a session on the well-known port before it has introduced itself. A hand-built peer on the far end of each session sends a claim at a term above the store's own, so an accepted claim would visibly replace the store's; a manage-request sent after the claim over the same session, and answered, proves the store has read the claim before the test looks at its state.
  */
 
+import * as os from "node:os";
 import { test, expect } from "vitest";
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
 import {
@@ -257,6 +258,93 @@ test("a store that dials a peer's data server tells it the incumbent, not only t
       term: 0,
       coordinator: deviceIdFromHex(store.peerId),
     });
+  } finally {
+    await teardown.run();
+  }
+});
+
+/** An address of this machine's own that is not a loopback one, so a dial at it reaches a listener here while naming an address another machine on the LAN could equally hold. */
+function nonLoopbackAddress(): string {
+  const address = Object.values(os.networkInterfaces())
+    .flat()
+    .find((entry) => entry?.family === "IPv4" && !entry.internal);
+  if (address === undefined) {
+    throw new Error(
+      "this test needs a non-loopback IPv4 interface to dial a listener through",
+    );
+  }
+  return address.address;
+}
+
+/** Has the store dial a raw peer's listener at the given host through the ordinary peer-list path (the one first contact feeds discovered peers into), returning the raw peer's end of the session once the store is reading it. */
+async function dialedByStore(
+  store: MeshStore,
+  peer: Readonly<RawPeer>,
+  host: string,
+  teardown: TeardownStack,
+): Promise<AcceptedMeshSession> {
+  const session = await new Promise<AcceptedMeshSession>((resolve, reject) => {
+    void peer.transport
+      .listen("0.0.0.0:0", (connection) => {
+        openSession(peer, connection, teardown).then(resolve, reject);
+      })
+      .then((listener) => {
+        teardown.push(async () => {
+          await listener.close();
+        });
+        store.events.onPeerList([
+          {
+            id: peer.deviceHex,
+            host,
+            port: listenerPort(listener),
+            startedAt: new Date().toISOString(),
+          },
+        ]);
+      })
+      .catch(reject);
+  });
+  // Answered only once the store is reading this session, so the claim the caller sends next cannot arrive before the store has decided whether to enrol it.
+  await roundTrip(session);
+  return session;
+}
+
+test("a claim over a data dial at a non-loopback address is dropped, since that address may belong to another machine on the LAN", async () => {
+  const teardown = new TeardownStack();
+  try {
+    const store = await startLoneHolder(teardown);
+    const peer = rawPeer();
+    const session = await dialedByStore(
+      store,
+      peer,
+      nonLoopbackAddress(),
+      teardown,
+    );
+
+    await session.sendCoordinatorClaim(rogueClaim(peer.deviceHex));
+    await roundTrip(session);
+
+    expect(store.coordinatorClaim).toEqual({ term: 0, holder: store.peerId });
+    expect(store.holdsCoordinatorRole).toBe(true);
+  } finally {
+    await teardown.run();
+  }
+});
+
+test("a claim over a data dial at a loopback address is accepted", async () => {
+  const teardown = new TeardownStack();
+  try {
+    const store = await startLoneHolder(teardown);
+    const peer = rawPeer();
+    const session = await dialedByStore(store, peer, "127.0.0.1", teardown);
+
+    await session.sendCoordinatorClaim(rogueClaim(peer.deviceHex));
+    await roundTrip(session);
+
+    expect(store.coordinatorClaim).toEqual({
+      term: ROGUE_TERM,
+      holder: peer.deviceHex,
+    });
+    expect(store.holdsCoordinatorRole).toBe(false);
   } finally {
     await teardown.run();
   }

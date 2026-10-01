@@ -39,6 +39,7 @@ import { directoryAdmission } from "./directory-admission.js";
 import { routeRoomRequestViaHub } from "./hub-forwarding.js";
 import { HubLink } from "./hub-link.js";
 import { ElectionSessions } from "./election-sessions.js";
+import { isLoopbackAddress } from "./loopback-address.js";
 import {
   DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
   expirePendingConnection,
@@ -607,8 +608,8 @@ export class WireMeshTransport implements MeshTransport {
       };
       this.coordinatorDeviceHex = handle.id;
       this.trackSession(handle.id, session);
-      // The well-known port is only ever bound on loopback, so the coordinator this dialled is on this machine.
-      this.consumeIncoming(session, handle, true);
+      // Machine-local only when the address dialled was a loopback one: the dialler knows nothing else about where the far side is.
+      this.consumeIncoming(session, handle, isLoopbackAddress(host));
       this.watchForDisconnect(session, handle, handle.id);
     }
   }
@@ -643,8 +644,9 @@ export class WireMeshTransport implements MeshTransport {
   ): Promise<void> {
     if (this.shutDown || this.dataDials.has(peer.id)) return;
     this.dataDials.add(peer.id);
+    const host = peer.host ?? COORDINATOR_HOST;
     const connection = await this.wireTransport
-      .connect(`${peer.host ?? COORDINATOR_HOST}:${String(peer.port)}`)
+      .connect(`${host}:${String(peer.port)}`)
       .catch((error: unknown) => {
         const reason = error instanceof Error ? error.message : String(error);
         this.events.onError?.(
@@ -684,8 +686,8 @@ export class WireMeshTransport implements MeshTransport {
     }
     this.trackSession(deviceIdHex, session);
     const handle: ConnectionHandle = { id: deviceIdHex };
-    // A data server only ever listens on loopback (startDataServer), so a dial that authenticated against one reached this machine.
-    this.consumeIncoming(session, handle, true);
+    // Machine-local only when the address dialled was a loopback one. A peer list or a first-contact beacon heard over LAN broadcast can name any host, and a device there can serve a session under the very device-id it announced, so authenticating the far side proves who it is, never that it is on this machine.
+    this.consumeIncoming(session, handle, isLoopbackAddress(host));
     this.watchForDisconnect(session, handle, deviceIdHex);
   }
 
