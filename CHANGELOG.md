@@ -1,3 +1,21 @@
+## [8.3.0](https://github.com/ExaDev/agent-comms/compare/v8.2.1...v8.3.0) (2026-10-01)
+
+### Features
+
+* **bridge:** advertise the web UI port over the first-contact beacon port without the token ([eca6c95](https://github.com/ExaDev/agent-comms/commit/eca6c95de710998552d09948ce7c871a38b02ac4))
+* **bridge:** bind the web server beyond loopback on AGENT_COMMS_WEB_HOST with token-gated access ([8f05dd9](https://github.com/ExaDev/agent-comms/commit/8f05dd9863b72a4ed8d2374475994e2d5752eef9))
+* **bridge:** gate non-loopback web requests behind a per-process token with Host and Origin checks ([d9e35ca](https://github.com/ExaDev/agent-comms/commit/d9e35ca41af185f21cc00fb1c4ad67d411dbe318))
+
+### Bug Fixes
+
+* **bridge:** connect at once when a bridge serves the page over the LAN ([3fb8bf7](https://github.com/ExaDev/agent-comms/commit/3fb8bf70f99c7667376f082a922a9df6c49864cf))
+* **bridge:** tighten the web access gate for several bridges and every bind spelling ([8a996fa](https://github.com/ExaDev/agent-comms/commit/8a996fa96f136d6d0b18a931bef17b2c7facc74d))
+* **bridge:** use the page's own origin for the mesh socket when served over plain http ([1b0ae26](https://github.com/ExaDev/agent-comms/commit/1b0ae26b94f4ba8ac33b207a9974bd626cfc5653))
+
+### Documentation
+
+* state the cleartext and local-proxy limits of LAN exposure ([8469e7b](https://github.com/ExaDev/agent-comms/commit/8469e7b4cb2c5744ed184a91faf6f20da0ddb5f6))
+
 ## [8.2.1](https://github.com/ExaDev/agent-comms/compare/v8.2.0...v8.2.1) (2026-10-01)
 
 ### Bug Fixes
