@@ -1,5 +1,5 @@
 /**
- * Whole-file writes that a concurrent reader never observes half done, shared by the per-slot identity store (identity-store.ts) and the grouping-issuer identity files (issuer-identity-file.ts). Every bridge on the machine may read these files while another bridge is writing them, so a reader must see either the complete previous content or the complete new content, never an empty or partial file.
+ * Whole-file writes that a concurrent reader never observes half done, shared by the per-slot identity store (identity-store.ts), the grouping-issuer identity files (issuer-identity-file.ts) and the petnames file (petnames.ts). Every bridge on the machine may read these files while another bridge is writing them, so a reader must see either the complete previous content or the complete new content, never an empty or partial file.
  */
 
 import * as fs from "node:fs";
