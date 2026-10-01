@@ -4,7 +4,7 @@
 
 import type { CommsAction } from "./types.js";
 import type { CommsResult } from "./tool.js";
-import type { Namer, Naming } from "./naming.js";
+import { idWithNames, type Namer, type Naming } from "./naming.js";
 
 /** The result for a bridge constructed without naming wired. */
 function namingUnavailable(): CommsResult {
@@ -52,7 +52,7 @@ export function petnameList(
     return { content: "You have not named anything.", isError: false };
   }
   return {
-    content: `Your names:\n${petnames.map((id) => `  ${id}  ${namer(id)}`).join("\n")}`,
+    content: `Your names:\n${petnames.map((id) => `  ${idWithNames(id, namer)}`).join("\n")}`,
     isError: false,
   };
 }

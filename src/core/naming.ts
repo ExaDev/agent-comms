@@ -5,20 +5,42 @@
  */
 
 import {
-  MAX_DISPLAY_NAME_LENGTH,
   formatDisplayName,
-  parseDisplayName,
+  formatNames,
   type DisplayNameParts,
 } from "./display-name.js";
 import type { Petnames } from "./petnames.js";
-import { CommsError } from "./store.js";
+import { requireDisplayName } from "./store.js";
 
-/** Formats one id by the display convention. selfName, when given, is the name the caller already knows the subject asserts (an agent's registered name); otherwise the namer supplies the one it knows, if any. */
-export type Namer = (id: string, selfName?: string) => string;
+export interface NameOptions {
+  /** The name the caller already knows the subject asserts (an agent's registered name); otherwise the namer supplies the one it knows, if any. */
+  selfName?: string | undefined;
+  /** The surface prints the full id beside the name, so the short id is left out (formatNames rather than formatDisplayName), and an id with no name gives the empty string. */
+  besideFullId?: boolean | undefined;
+}
+
+/** Formats one id by the display convention. */
+export type Namer = (id: string, options?: Readonly<NameOptions>) => string;
+
+/** Formats parts by options: formatNames beside a full id, formatDisplayName otherwise. */
+function formatFor(
+  parts: Readonly<DisplayNameParts>,
+  options: Readonly<NameOptions> | undefined,
+): string {
+  return options?.besideFullId === true
+    ? formatNames(parts)
+    : formatDisplayName(parts);
+}
 
 /** The namer for a surface with no naming wired: no petnames and no known self names, only what the caller passes. */
-export const plainNamer: Namer = (id, selfName) =>
-  formatDisplayName({ id, selfName });
+export const plainNamer: Namer = (id, options) =>
+  formatFor({ id, selfName: options?.selfName }, options);
+
+/** id followed by its names, the form every listing whose entries are acted on by full id prints: two spaces between them, and the id alone when it has no name. */
+export function idWithNames(id: string, namer: Namer): string {
+  const names = namer(id, { besideFullId: true });
+  return names === "" ? id : `${id}  ${names}`;
+}
 
 export interface NamingDeps {
   petnames: Petnames;
@@ -56,13 +78,7 @@ export class Naming {
       await this.deps.saveMachineName(undefined);
       return undefined;
     }
-    const parsed = parseDisplayName(name);
-    if (parsed === undefined) {
-      throw new CommsError(
-        `A machine name must be non-empty, at most ${String(MAX_DISPLAY_NAME_LENGTH)} characters, and free of control characters.`,
-        "INVALID_NAME",
-      );
-    }
+    const parsed = requireDisplayName(name, "A machine name");
     await this.deps.saveMachineName(parsed);
     return parsed;
   }
@@ -92,13 +108,16 @@ export class Naming {
   async namer(requesterId: string): Promise<Namer> {
     const petnames = this.deps.petnames.list();
     const selfNames = await this.selfNames(requesterId);
-    return (id, selfName) => {
+    return (id, options) => {
       const key = id.toLowerCase();
-      return formatDisplayName({
-        id,
-        petname: petnames.get(key),
-        selfName: selfName ?? selfNames.get(key),
-      });
+      return formatFor(
+        {
+          id,
+          petname: petnames.get(key),
+          selfName: options?.selfName ?? selfNames.get(key),
+        },
+        options,
+      );
     };
   }
 }

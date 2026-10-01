@@ -10,6 +10,7 @@
 import { detailsShared } from "./agent-registry.js";
 import { groupAgentsByMachine } from "./machine-list-groups.js";
 import { plainNamer, type Namer, type Naming } from "./naming.js";
+import { agentTable, type AgentTableRow } from "./agent-table.js";
 import {
   machineName,
   petnameClear,
@@ -72,10 +73,6 @@ import {
 
 /** Table column widths for the plain-text listing helpers below, chosen to line up with the existing aligned output. */
 const ROOM_TYPE_COLUMN_WIDTH = 7;
-const AGENT_NAME_COLUMN_WIDTH = 25;
-const AGENT_HARNESS_COLUMN_WIDTH = 12;
-const AGENT_STATUS_COLUMN_WIDTH = 7;
-const AGENT_VISIBILITY_COLUMN_WIDTH = 9;
 
 /** Start/end indices into an ISO-8601 timestamp string ("YYYY-MM-DDTHH:MM:SS.sssZ") that slice out the "HH:MM:SS" portion. */
 const ISO_TIME_START_INDEX = 11;
@@ -623,11 +620,19 @@ export class CommsTool {
         : cwd;
 
     const namer = await this.namerFor(ctx);
+    // The full id is printed in its own column, so the name column carries the names alone.
+    const rowOf = (a: AgentIdentity): AgentTableRow => ({
+      id: a.id,
+      name: namer(a.id, { selfName: a.name, besideFullId: true }),
+      harness: a.harness,
+      status: a.status,
+      visibility: a.visibility,
+      cwd: `${detailsShared(a) ? abbreviateCwd(a.cwd) : "(not shared)"}${a.id === ctx.agentId ? " (you)" : ""}`,
+    });
+    const table = agentTable(agents.map(rowOf));
     const describe = (a: AgentIdentity): string => {
       const isSelf = a.id === ctx.agentId;
-      const self = isSelf ? " (you)" : "";
       const shared = detailsShared(a);
-      const cwd = shared ? abbreviateCwd(a.cwd) : "(not shared)";
       const rooms = !shared
         ? "not shared"
         : a.subscribedRooms.length > 0
@@ -639,7 +644,7 @@ export class CommsTool {
         isSelf,
         this.store.getCcPeerVersion,
       );
-      return `${a.id}  ${namer(a.id, a.name).padEnd(AGENT_NAME_COLUMN_WIDTH)} ${a.harness.padEnd(AGENT_HARNESS_COLUMN_WIDTH)} ${a.status.padEnd(AGENT_STATUS_COLUMN_WIDTH)} ${a.visibility.padEnd(AGENT_VISIBILITY_COLUMN_WIDTH)} ${cwd}${self}\n        Rooms: ${rooms}\n        Versions: ${versions}`;
+      return `${table.line(rowOf(a))}\n        Rooms: ${rooms}\n        Versions: ${versions}`;
     };
     const machines = await this.store.listAgentMachines?.();
     const groups = groupAgentsByMachine(
@@ -657,7 +662,7 @@ export class CommsTool {
       })
       .join("\n");
     return {
-      content: `Agents:\n  ID      Name                      Harness      Status  Visibility  CWD\n${body}`,
+      content: `Agents:\n  ${table.header}\n${body}`,
       isError: false,
     };
   }

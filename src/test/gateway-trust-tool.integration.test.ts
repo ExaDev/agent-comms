@@ -206,7 +206,7 @@ describe("CommsTool gateway trust actions", () => {
 
     expect(result.isError, result.content).toBe(false);
     expect(result.content).toContain(
-      `Devices trusted through a principal:\n  ${memberHex}  ${shortId(memberHex)} (vouched for by ${shortId(PRINCIPAL_HEX)})`,
+      `Devices trusted through a principal:\n  ${memberHex} (vouched for by ${shortId(PRINCIPAL_HEX)})`,
     );
 
     await store.shutdown();
@@ -352,10 +352,10 @@ describe("buildAction gateway trust parsing", () => {
     );
     const listed = await tool.handle(ctx, { action: "gateway_list_trusted" });
     expect(listed.content).toContain(
-      `Trusted remote machines:\n  ${MACHINE_HEX}  ${shortId(MACHINE_HEX)}`,
+      `Trusted remote machines:\n  ${MACHINE_HEX}\n`,
     );
     expect(listed.content).toContain(
-      `Devices trusted through a machine:\n  ${memberHex}  ${shortId(memberHex)} (runs on ${shortId(MACHINE_HEX)})`,
+      `Devices trusted through a machine:\n  ${memberHex} (runs on ${shortId(MACHINE_HEX)})`,
     );
 
     const untrusted = await tool.handle(ctx, {
