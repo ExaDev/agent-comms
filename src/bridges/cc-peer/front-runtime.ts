@@ -4,6 +4,7 @@
  * Untested directly, exactly like run.ts's own real construction (see cc-peer-bridge.test.ts's header comment): front.ts, front-controller.ts, and front-relay.ts already carry the front's entire decision/diffing/relay logic under direct DI-based unit tests, so this file's only remaining job -- calling the real cc-peer/core APIs in the right order -- is exercised by actually running a bridge as this machine's coordinator.
  */
 
+import { parseDisplayName } from "../../core/display-name.js";
 import { CcPeer, CC_PEER_VERSION } from "cc-peer";
 import { AliasPool } from "cc-peer/alias-pool";
 import type { AliasMessage } from "cc-peer/alias-pool";
@@ -56,9 +57,11 @@ export interface CreateDefaultCcPeerFrontOptions {
     ((entry: Readonly<CcPeerRosterEntryLike>) => boolean) | undefined;
 }
 
-/** Falls back to "claude-code-<pid>" when a session has never picked its own cc-peer display name -- ensureRegistered requires a defaultName, and an unnamed session is still worth fronting under something stable and identifiable. */
+/** The session's own cc-peer display name when it is usable as an agent name (parseDisplayName, which registration enforces), otherwise "claude-code-<pid>": ensureRegistered requires a defaultName, and a session that never picked a name, or picked one registration would refuse, is still worth fronting under something stable and identifiable. */
 function defaultSessionName(entry: Readonly<CcPeerRosterEntryLike>): string {
-  return entry.name ?? `claude-code-${String(entry.pid)}`;
+  const name =
+    entry.name === undefined ? undefined : parseDisplayName(entry.name);
+  return name ?? `claude-code-${String(entry.pid)}`;
 }
 
 /**

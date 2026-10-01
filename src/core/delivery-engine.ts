@@ -2,6 +2,7 @@
  * DeliveryEngine — the busiest hub in MeshStore: owns queued/local delivery, room-membership CRDT merge (mergeRoom/refreshMembership/recordMemberOp), patch application and broadcast, read receipts, and the two gossip callbacks (presence-advert, revocation-announce) that mutate this state directly. Split out of mesh-store.ts to reduce it under the repo's max-lines cap. Every core Map it touches (agents/rooms/messages/dms/deliveryQueues/localDeliveryKeys/pendingMarkReadTimers) is a direct reference into MeshStore's own fields, shared by construction rather than copied, since AgentRegistry, RoomLifecycle, RoomProtocol, RoomMessaging, FederationBridge, and StaleAgentChecker all read or mutate the same underlying state.
  */
 
+import { parseDisplayName } from "./display-name.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type { RevocationEntry } from "wire-mesh-core/generated/protocol";
 import { bytesFromHex } from "wire-mesh-core/domain/device-id";
@@ -282,6 +283,8 @@ export class DeliveryEngine {
   async applyPatch(patch: MeshStatePatch): Promise<void> {
     switch (patch.type) {
       case "agent_upsert": {
+        // A registered name is checked as it is registered (requireAgentName), so a record whose name parseDisplayName would not keep as it is did not come from a conforming peer, and its name could carry a terminal control sequence into every surface that prints it: the record is not applied.
+        if (parseDisplayName(patch.agent.name) !== patch.agent.name) break;
         const existingAgent = this.deps.agents.get(patch.agent.id);
         if (
           existingAgent !== undefined &&

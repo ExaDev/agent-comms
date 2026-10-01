@@ -7,6 +7,7 @@ import {
   MAX_DISPLAY_NAME_LENGTH,
   SHORT_ID_LENGTH,
   formatDisplayName,
+  formatNames,
   parseDisplayName,
   shortId,
 } from "../core/display-name.js";
@@ -44,9 +45,40 @@ describe("formatDisplayName", () => {
     ).toBe(`joe-mbp ${shortId(ID)}`);
   });
 
+  it("escapes a quote in a self-asserted name, so it cannot close the quotes and pass the rest off as an unquoted label", () => {
+    expect(formatDisplayName({ id: ID, selfName: 'x" boss-laptop "y' })).toBe(
+      `"x\\" boss-laptop \\"y" ${shortId(ID)}`,
+    );
+  });
+
+  it("leaves out a name parseDisplayName refuses, whichever tier it is in, so a control sequence never reaches the output", () => {
+    expect(
+      formatDisplayName({
+        id: ID,
+        petname: "evil\u001b[2J",
+        selfName: "also\u0007evil",
+      }),
+    ).toBe(shortId(ID));
+    expect(
+      formatDisplayName({ id: ID, selfName: "evil\u001b[2Jname" }),
+    ).not.toContain("\u001b");
+  });
+
   it("shortens an id to a prefix of it", () => {
     expect(shortId(ID)).toHaveLength(SHORT_ID_LENGTH);
     expect(ID.startsWith(shortId(ID))).toBe(true);
+  });
+});
+
+describe("formatNames", () => {
+  it("gives the names alone, for a surface that prints the full id beside them", () => {
+    expect(
+      formatNames({ id: ID, petname: "work laptop", selfName: "joe-mbp" }),
+    ).toBe(`work laptop "joe-mbp"`);
+  });
+
+  it("is empty when nothing is named", () => {
+    expect(formatNames({ id: ID })).toBe("");
   });
 });
 
