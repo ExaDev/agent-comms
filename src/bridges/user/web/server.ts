@@ -195,7 +195,7 @@ export async function createWebServer(options?: {
   beaconPort?: number | undefined;
   existingController?: ChatController | undefined;
   coordinatorPort?: number | undefined;
-  /** Overrides the first-contact UDP port a fresh controller's store runs presence on -- ChatController's own firstContactPort, ignored when existingController is supplied. */
+  /** Overrides the first-contact UDP port a fresh controller's store runs presence on (ChatController's own firstContactPort); ignored when existingController is supplied. */
   firstContactPort?: number | undefined;
   /** Overrides the hub a fresh controller's own coordinator role dials on takeover -- ChatController's own hubUrl, ignored when existingController is supplied since that controller already made its own choice. See ChatController's own hubUrl doc comment. */
   hubUrl?: string | undefined;
