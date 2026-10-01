@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { fileURLToPath } from "node:url";
+import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import {
   freeLocalPort,
   TeardownStack,
@@ -28,7 +29,6 @@ const RUNNER = path.join(
 
 const INITIALIZE_ID = 1;
 const TOOLS_LIST_ID = 2;
-const MCP_PROTOCOL_VERSION = "2025-06-18";
 
 /** Startup includes a real store init and web server start in a fresh process, so the wait is generous; the test's own timeout is the backstop. */
 const RESPONSE_TIMEOUT_MS = 25_000;
@@ -131,7 +131,7 @@ it("writes only JSON-RPC messages to stdout and puts the web UI banner on stderr
       id: INITIALIZE_ID,
       method: "initialize",
       params: {
-        protocolVersion: MCP_PROTOCOL_VERSION,
+        protocolVersion: LATEST_PROTOCOL_VERSION,
         capabilities: {},
         clientInfo: { name: "stdout-channel-test", version: "0.0.0" },
       },
