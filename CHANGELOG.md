@@ -1,3 +1,30 @@
+## [8.4.0](https://github.com/ExaDev/agent-comms/compare/v8.3.1...v8.4.0) (2026-10-01)
+
+### Features
+
+* **core:** elect the coordinator role by gossiped claim instead of the port bind ([f87387a](https://github.com/ExaDev/agent-comms/commit/f87387a198860456bc13588fa740e8768299a0e2))
+
+### Bug Fixes
+
+* **bridge:** check Origin for every web client and stop sending wildcard CORS ([35d190b](https://github.com/ExaDev/agent-comms/commit/35d190b6a0b40577f2f82f39a5c48f3894ee4b61))
+* **core:** enrol a dialled session in the election only when the address dialled was a loopback one ([adbb8b1](https://github.com/ExaDev/agent-comms/commit/adbb8b18d310550c7249d025bf9c4ba493dddb3b))
+* **core:** enrol an accepted session in the election before announcing over it ([c449ffb](https://github.com/ExaDev/agent-comms/commit/c449ffbff2cfec05ea7868162a55d04833ebdaa2))
+* **core:** raise an agent's revision wherever it is set offline ([f2ef52b](https://github.com/ExaDev/agent-comms/commit/f2ef52bba810bb8b4d0836fac5cf09c0fc5efbb3))
+* **core:** read coordinator claims only while their session is trusted, and announce from both ends ([d1e216e](https://github.com/ExaDev/agent-comms/commit/d1e216e036b3f9121d31d54b8d235f1ef6862535))
+* **core:** report a session's presence advert only when it changes ([e2f5e11](https://github.com/ExaDev/agent-comms/commit/e2f5e11a389aed51b0d9446a5d8a3e150418353f))
+* **core:** wait for an incumbent before claiming alone, and serialise role transitions ([d142c12](https://github.com/ExaDev/agent-comms/commit/d142c12e6129c95074e5796d6dffb249120e6963))
+
+### Documentation
+
+* **bridge:** replace an em-dash in the web server discovery comment ([6e1f15d](https://github.com/ExaDev/agent-comms/commit/6e1f15d41dc18b30d11e492512db2599df88444f))
+* describe the claim wait and which sessions carry coordinator claims ([e6c7e4f](https://github.com/ExaDev/agent-comms/commit/e6c7e4f6667b2f1f75ce7804ae9950d61e783fca))
+* separate the elected coordinator role from the well-known port ([99511a8](https://github.com/ExaDev/agent-comms/commit/99511a864ce7160e071a5dcc2c8ff2d1adef86e6))
+
+### Tests
+
+* **bridge:** isolate the oRPC router tests' persisted identity under a per-test home directory ([8b4f1ca](https://github.com/ExaDev/agent-comms/commit/8b4f1ca1b3dc38f7ecddbf2f3f416ab77669413d))
+* **core:** cover the elected coordinator role over real sockets ([ff7dd5a](https://github.com/ExaDev/agent-comms/commit/ff7dd5aa65457be47353c49a75f2d467f4323390))
+
 ## [8.3.1](https://github.com/ExaDev/agent-comms/compare/v8.3.0...v8.3.1) (2026-10-01)
 
 ### Build
