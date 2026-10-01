@@ -6,6 +6,7 @@
  * JSON.parse boundaries use Zod schemas for type-safe parsing.
  */
 
+import { MAX_DISPLAY_NAME_LENGTH, parseDisplayName } from "./display-name.js";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -57,6 +58,23 @@ export class CommsError extends Error {
     super(message);
     this.name = "CommsError";
   }
+}
+
+/** raw as parseDisplayName (display-name.ts) stores it. Throws INVALID_NAME, naming what was being named (for example "A petname"), when parseDisplayName refuses it: every place that accepts a name from this end (a petname, this machine's name, an agent's registered name) refuses an unusable one the same way. Lives here beside CommsError because display-name.ts is also bundled for the browser and so depends on nothing. */
+export function requireDisplayName(raw: string, what: string): string {
+  const name = parseDisplayName(raw);
+  if (name === undefined) {
+    throw new CommsError(
+      `${what} must be non-empty, at most ${String(MAX_DISPLAY_NAME_LENGTH)} characters, and free of control characters.`,
+      "INVALID_NAME",
+    );
+  }
+  return name;
+}
+
+/** An agent's registered name is its self-asserted name (display-name.ts), so it is held to the same rules as it is registered or changed: requireDisplayName for "An agent name". */
+export function requireAgentName(raw: string): string {
+  return requireDisplayName(raw, "An agent name");
 }
 
 // ---------------------------------------------------------------------------
@@ -150,10 +168,11 @@ export class FileStore implements CommsStore {
     visibility: Visibility;
     tags: string[];
   }): Promise<AgentIdentity> {
+    const name = requireAgentName(opts.name);
     const existing = await this.readIdentity(opts.harness, opts.cwd);
     if (existing) {
       return this.updateAgent(existing.id, {
-        name: opts.name,
+        name,
         visibility: opts.visibility,
         tags: opts.tags,
         status: "active",
@@ -165,7 +184,7 @@ export class FileStore implements CommsStore {
     const agent: AgentIdentity = {
       id,
       version: 1,
-      name: opts.name,
+      name,
       harness: opts.harness,
       cwd: opts.cwd,
       pid: opts.pid,
@@ -204,6 +223,9 @@ export class FileStore implements CommsStore {
     const updated: AgentIdentity = {
       ...agent,
       ...patch,
+      ...(patch.name === undefined
+        ? {}
+        : { name: requireAgentName(patch.name) }),
       version: agent.version + 1,
     };
     await this.writeJsonFile(this.agentPath(id), updated);

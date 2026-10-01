@@ -2,7 +2,8 @@
  * AgentRegistry — the agent-identity half of CommsStore: the per-(harness, cwd) identity cache readIdentity/writeIdentity uses to recognise a restarted bridge as the same agent, and the register/get/update/list/offline lifecycle around an AgentIdentity record itself. Split out of mesh-store.ts to reduce it under the repo's max-lines cap.
  */
 
-import { CommsError } from "./store.js";
+import { parseDisplayName } from "./display-name.js";
+import { CommsError, requireAgentName } from "./store.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
 import type { MeshTransport } from "./transport.js";
 import type { ReceivedAgentSelfAdvert } from "./gossip-extensions.js";
@@ -34,6 +35,8 @@ export interface AgentRegistryDeps {
 function isAgentSelfAdvert(value: unknown): value is ReceivedAgentSelfAdvert {
   if (typeof value !== "object" || value === null) return false;
   if (!("name" in value) || typeof value.name !== "string") return false;
+  // The name is the agent's self-asserted name, held to the rules it was registered under (requireAgentName); one parseDisplayName would not keep as it is did not come from a conforming peer and could carry a terminal control sequence.
+  if (parseDisplayName(value.name) !== value.name) return false;
   if (!("harness" in value) || typeof value.harness !== "string") return false;
   if ("membership" in value && typeof value.membership !== "string")
     return false;
@@ -81,10 +84,11 @@ export class AgentRegistry {
     visibility: Visibility;
     tags: string[];
   }): Promise<AgentIdentity> {
+    const name = requireAgentName(opts.name);
     const existing = await this.readIdentity(opts.harness, opts.cwd);
     if (existing) {
       return this.updateAgent(existing.id, {
-        name: opts.name,
+        name,
         visibility: opts.visibility,
         tags: opts.tags,
         status: "active",
@@ -96,7 +100,7 @@ export class AgentRegistry {
     const agent: AgentIdentity = {
       id,
       version: 1,
-      name: opts.name,
+      name,
       harness: opts.harness,
       cwd: opts.cwd,
       pid: opts.pid,
@@ -139,9 +143,15 @@ export class AgentRegistry {
     if (!agent)
       throw new CommsError(`Agent ${id} not found`, "AGENT_NOT_FOUND");
 
+    const name =
+      patch.name === undefined ? undefined : requireAgentName(patch.name);
     const oldStatus = agent.status;
     const oldName = agent.name;
-    const updatedAgent: AgentIdentity = { ...agent, ...patch };
+    const updatedAgent: AgentIdentity = {
+      ...agent,
+      ...patch,
+      ...(name === undefined ? {} : { name }),
+    };
     this.deps.deliveryEngine.bump(updatedAgent);
     this.deps.agents.set(id, updatedAgent);
     await this.deps.deliveryEngine.broadcastPatch({
@@ -149,12 +159,8 @@ export class AgentRegistry {
       agent: updatedAgent,
     });
 
-    if (patch.name !== undefined && patch.name !== oldName) {
-      await this.deps.deliveryEngine.notifyRoomsOfNameChange(
-        id,
-        oldName,
-        patch.name,
-      );
+    if (name !== undefined && name !== oldName) {
+      await this.deps.deliveryEngine.notifyRoomsOfNameChange(id, oldName, name);
     }
 
     if (patch.status && patch.status !== oldStatus) {
