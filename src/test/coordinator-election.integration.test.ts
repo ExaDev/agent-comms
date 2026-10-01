@@ -1,13 +1,19 @@
 /**
- * The elected coordinator role over real localhost sockets (agent-comms#341): several MeshStore instances, each on its own WireMeshTransport, gossiping coordinator claims over their machine-local sessions. Asserts that exactly one store holds the role and every store agrees which, that a store which never bound the well-known port can hold it, and that the holder's loss is recovered by a survivor raising the term. The decision logic is unit-tested against fakes in coordinator-role.unit.test.ts and coordinator-failover.unit.test.ts.
+ * The elected coordinator role over real localhost sockets (agent-comms#341): several MeshStore instances, each on its own WireMeshTransport, gossiping coordinator claims over their machine-local sessions. Asserts that exactly one store holds the role and every store agrees which, that a store which never bound the well-known port can hold it and keeps it when lower-id stores arrive, that stores which each claimed alone converge, and that the holder's loss is recovered by a survivor raising the term. Which sessions a claim is accepted from is covered by coordinator-claim-sessions.integration.test.ts; the decision logic is unit-tested against fakes in coordinator-role.unit.test.ts and coordinator-failover.unit.test.ts.
  */
 
 import * as net from "node:net";
 import { test, expect } from "vitest";
+import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
+import { generateIdentity, type PeerIdentity } from "../core/identity.js";
 import { MeshStore } from "../core/mesh-store.js";
+import type { MeshStoreOptions } from "../core/mesh-store-options.js";
 import type { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import { TeardownStack, freeLocalPort } from "./hub-helpers.js";
 import { waitFor, wireTestTransportWithHub } from "./test-transport.js";
+
+/** A claim wait for a store the test starts with nobody else to meet: there is no incumbent it could hear, so waiting any longer would only slow the test. */
+const NOTHING_TO_WAIT_FOR_MS = 0;
 
 interface Node {
   name: string;
@@ -19,11 +25,15 @@ interface Node {
 
 async function startNode(
   name: string,
-  ports: Readonly<{ coordinatorPort: number; firstContactPort?: number }>,
+  options: Readonly<MeshStoreOptions>,
   teardown: TeardownStack,
+  identity?: PeerIdentity,
 ): Promise<Node> {
-  const store = new MeshStore(ports);
-  const { transport } = await wireTestTransportWithHub(store);
+  const store = new MeshStore(options);
+  const { transport } = await wireTestTransportWithHub(
+    store,
+    identity === undefined ? undefined : { identityLoader: () => identity },
+  );
   const roleChanges: boolean[] = [];
   store.onCoordinatorRoleChanged = (isCoordinator) => {
     roleChanges.push(isCoordinator);
@@ -104,15 +114,96 @@ test("exactly one of three stores holds the elected coordinator role, and every 
   }
 });
 
-test("a store that never bound the well-known port holds the elected role once first contact joins two stores that each claimed alone", async () => {
+/** Three fresh identities, in ascending device-id order. */
+function identitiesByDeviceId(): [PeerIdentity, PeerIdentity, PeerIdentity] {
+  const hex = (identity: PeerIdentity): string =>
+    deviceIdToHex(Uint8Array.from(identity.deviceId));
+  const [lowest, middle, highest] = [
+    generateIdentity(),
+    generateIdentity(),
+    generateIdentity(),
+  ].sort((a, b) => (hex(a) < hex(b) ? -1 : 1));
+  if (lowest === undefined || middle === undefined || highest === undefined) {
+    throw new Error("expected three identities");
+  }
+  return [lowest, middle, highest];
+}
+
+test("an existing mesh behind a squatted port keeps its holder when a lower-id store joins through first contact", async () => {
   const teardown = new TeardownStack();
   try {
     const coordinatorPort = await freeLocalPort();
     const firstContactPort = await freeLocalPort();
     await occupyPort(coordinatorPort, teardown);
-    const ports = { coordinatorPort, firstContactPort };
-    const left = await startNode("left", ports, teardown);
-    const right = await startNode("right", ports, teardown);
+    const [lowest, middle, highest] = identitiesByDeviceId();
+    const holder = await startNode(
+      "holder",
+      {
+        coordinatorPort,
+        firstContactPort,
+        coordinatorClaimWaitMs: NOTHING_TO_WAIT_FOR_MS,
+      },
+      teardown,
+      highest,
+    );
+    await waitFor(
+      () => holder.store.holdsCoordinatorRole,
+      "the store started alone behind the squatted port claims the role",
+    );
+    // The joiners keep the default claim wait, which is what gives the holder's announcement time to reach each of them over first contact before it would claim.
+    const member = await startNode(
+      "member",
+      { coordinatorPort, firstContactPort },
+      teardown,
+      middle,
+    );
+    await waitFor(
+      () => settledOnOneHolder([holder, member]),
+      "the second store learned the incumbent through first contact",
+    );
+
+    const newcomer = await startNode(
+      "newcomer",
+      { coordinatorPort, firstContactPort },
+      teardown,
+      lowest,
+    );
+    const nodes = [holder, member, newcomer];
+    await waitFor(
+      () => settledOnOneHolder(nodes),
+      "the newcomer learned the incumbent through first contact",
+    );
+
+    expect(newcomer.store.peerId < member.store.peerId).toBe(true);
+    expect(member.store.peerId < holder.store.peerId).toBe(true);
+    for (const node of nodes) {
+      expect(node.transport.isCoordinator).toBe(false);
+      expect(node.store.coordinatorClaim).toEqual({
+        term: 0,
+        holder: holder.store.peerId,
+      });
+    }
+    expect(holder.roleChanges).toEqual([true]);
+    expect(member.roleChanges).toEqual([]);
+    expect(newcomer.roleChanges).toEqual([]);
+  } finally {
+    await teardown.run();
+  }
+});
+
+test("two stores that each claimed alone behind a squatted port converge on the lower device-id once first contact joins them", async () => {
+  const teardown = new TeardownStack();
+  try {
+    const coordinatorPort = await freeLocalPort();
+    const firstContactPort = await freeLocalPort();
+    await occupyPort(coordinatorPort, teardown);
+    const options = {
+      coordinatorPort,
+      firstContactPort,
+      coordinatorClaimWaitMs: NOTHING_TO_WAIT_FOR_MS,
+    };
+    const left = await startNode("left", options, teardown);
+    const right = await startNode("right", options, teardown);
     const nodes = [left, right];
 
     await waitFor(
@@ -120,17 +211,14 @@ test("a store that never bound the well-known port holds the elected role once f
       "first contact brought both claims together and one superseded the other",
     );
 
-    expect(left.transport.isCoordinator).toBe(false);
-    expect(right.transport.isCoordinator).toBe(false);
     const [holder] = holders(nodes);
     if (holder === undefined) throw new Error("expected a holder");
     // Both claimed term 0 while alone, so the equal-term tiebreak by lowest device-id decided it.
     expect(holder.store.peerId).toBe(
       [left.store.peerId, right.store.peerId].sort()[0],
     );
+    expect(holder.store.coordinatorClaim?.term).toBe(0);
     expect(holder.roleChanges).toEqual([true]);
-    const other = nodes.find((node) => node !== holder);
-    expect(other?.roleChanges).toEqual([true, false]);
   } finally {
     await teardown.run();
   }
