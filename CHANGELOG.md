@@ -1,3 +1,19 @@
+## [8.2.1](https://github.com/ExaDev/agent-comms/compare/v8.2.0...v8.2.1) (2026-10-01)
+
+### Bug Fixes
+
+* **bridge:** write the web UI banner to stderr so MCP stdout carries only JSON-RPC ([550a728](https://github.com/ExaDev/agent-comms/commit/550a728d8d11ec78f26b0500b5453f04bd8a6a3e))
+
+### Refactoring
+
+* **bridge:** print the web UI URL once, from createWebServer ([0b070ec](https://github.com/ExaDev/agent-comms/commit/0b070ec6dafd7fba202402a87a824633eddc42ca))
+* **core:** export BridgeMeshOptions from the core index ([4812a41](https://github.com/ExaDev/agent-comms/commit/4812a417e31cd6ab2695f3fe9af7abff42cf4b9a))
+
+### Tests
+
+* **bridge:** give each e2e dashboard its own first-contact port ([77777da](https://github.com/ExaDev/agent-comms/commit/77777da5cd26db454e70d9a2375215e04a0435d9)), closes [#362](https://github.com/ExaDev/agent-comms/issues/362)
+* **bridge:** wait for the stderr banner before asserting it in the stdout channel test ([746fe2e](https://github.com/ExaDev/agent-comms/commit/746fe2ebdd9c00d5532ef1ac9af6bc374747ad0c))
+
 ## [8.2.0](https://github.com/ExaDev/agent-comms/compare/v8.1.1...v8.2.0) (2026-09-30)
 
 ### Features
