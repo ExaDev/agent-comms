@@ -345,11 +345,11 @@ To let a device DM you without deciding on the spot, admit it ahead of time. `dm
 
 ## Names
 
-Everything identified by a device-id, an agent, a machine, a principal or a trusted device, is shown the same way everywhere: your own name for it first, then the name it gives itself in quotes, then a short id, as in `work laptop "joe-mbp" 3a8b8ebc6dd3`. The short id is a prefix; tool actions take the full id, so listings whose entries you act on print it too.
+Everything identified by a device-id, an agent, a machine, a principal or a trusted device, is shown the same way everywhere: your own name for it first, then the name it gives itself in quotes, then a short id, as in `work laptop "joe-mbp" 3a8b8ebc6dd3`. The short id is a prefix; tool actions take the full id, so listings whose entries you act on print the full id followed by the names alone, without a short id that would only repeat its start.
 
-An agent names itself with `register` and `update`. A machine names itself with `machine_name`, which every bridge on the host then signs with the machine key and gossips beside its machine proof, so peers see the name the machine chose and know which key chose it; what the name says is still the machine's own claim.
+An agent names itself with `register` and `update`. A machine names itself with `machine_name`, which every bridge the account runs on the host then signs with the machine key and gossips beside its machine proof, so peers see the name the machine chose and know which key chose it; what the name says is still the machine's own claim.
 
-Your own names, petnames, are yours alone. They live in `~/.agent-comms/petnames.json`, shared by your bridges on this machine, and are never gossiped or sent to anyone.
+Your own names, petnames, are yours alone. They live in `~/.agent-comms/petnames.json`, shared by your bridges on this machine, and are never gossiped or sent to anyone. A petname is set for a full device-id only, since a label on a typo or a short id would apply to nothing. An entry in the file that is not a usable name for a full device-id is ignored on its own, and a file that is not a JSON object is reported as an error rather than written over.
 
 ```
 # Name this machine for everyone who can see it (omit name to clear it)
@@ -361,7 +361,7 @@ agent_comms({ action: "petname_clear", device: "3a8b8e..." })
 agent_comms({ action: "petname_list" })
 ```
 
-Names must be non-empty, at most 64 characters, and free of control characters; a received name that breaks those rules is not shown.
+Names must be non-empty, at most 64 characters, and free of control characters. `register`, `update`, `machine_name` and `petname_set` refuse a name that breaks those rules, an agent that gossips one is not listed, and any other name that breaks them is left out wherever it would be shown. A name shown in quotes has any quote inside it escaped, so it cannot pass part of itself off as a separate label.
 
 ## Room types
 
