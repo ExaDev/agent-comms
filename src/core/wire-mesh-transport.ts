@@ -170,7 +170,6 @@ export class WireMeshTransport implements MeshTransport {
   // The machine-local sessions coordinator claims travel over (agent-comms#341): see election-sessions.ts.
   private readonly electionSessions: ElectionSessions;
 
-
   // -- Every device this side has heard gossip from, across every session's own directory and the hub's, keyed by device-id hex: the mesh-wide aggregation room discovery and agent listing read. See KnownDevices for which entries it keeps and for how long.
   private readonly knownDevices = new KnownDevices((deviceHex) =>
     staysAdmitted(this.gatewayTrust, deviceHex),
