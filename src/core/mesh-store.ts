@@ -413,6 +413,9 @@ export class MeshStore implements CommsStore {
         this.deliveryEngine.notifyRoomsOfStatus(agentId, status),
       broadcastPatch: async (patch) =>
         this.deliveryEngine.broadcastPatch(patch),
+      bump: (agent) => {
+        this.deliveryEngine.bump(agent);
+      },
     });
 
     this.coordinatorRole = new CoordinatorRole({

@@ -703,6 +703,18 @@ describe("DeliveryEngine — applyPatch(agent_offline)", () => {
     expect(h.deps.agents.get(OTHER_ID)?.status).toBe("offline");
   });
 
+  it("raises the record's revision, so a snapshot taken while the agent was running cannot turn it back on", async () => {
+    const h = makeHarness();
+    const running = agent({ status: "active" });
+    h.deps.agents.set(OTHER_ID, structuredClone(running));
+
+    await h.engine.applyPatch({ type: "agent_offline", agentId: OTHER_ID });
+    h.engine.applyStateSync(emptyState({ agents: { [OTHER_ID]: running } }));
+
+    expect(h.deps.agents.get(OTHER_ID)?.status).toBe("offline");
+    expect(h.deps.agents.get(OTHER_ID)?.version).toBe(running.version + 1);
+  });
+
   it("does nothing when the agent has no local record", async () => {
     const h = makeHarness();
     await expect(

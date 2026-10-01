@@ -13,6 +13,8 @@ export interface StaleAgentCheckerDeps {
   peerInfo: Map<string, PeerInfo>;
   notifyRoomsOfStatus: (agentId: string, status: AgentStatus) => Promise<void>;
   broadcastPatch: (patch: MeshStatePatch) => Promise<void>;
+  /** Raises an agent's sync revision, so the offline record outranks every snapshot taken while the agent was running. */
+  bump: (agent: AgentIdentity) => void;
 }
 
 /** How often the elected coordinator probes registered agent PIDs for liveness. */
@@ -54,6 +56,7 @@ export class StaleAgentChecker {
       peerInfo,
       notifyRoomsOfStatus,
       broadcastPatch,
+      bump,
     } = this.deps;
     const deadIds: string[] = [];
 
@@ -68,6 +71,7 @@ export class StaleAgentChecker {
       const agent = agents.get(id);
       if (agent) {
         agent.status = "offline";
+        bump(agent);
         agents.set(id, agent);
         await notifyRoomsOfStatus(id, "offline");
       }

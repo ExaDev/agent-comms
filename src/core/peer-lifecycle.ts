@@ -34,7 +34,11 @@ export interface PeerLifecycleDeps {
   roomProtocol: Pick<RoomProtocol, "flushPendingRoomRequests">;
   deliveryEngine: Pick<
     DeliveryEngine,
-    "applyStateSync" | "applyPatch" | "notifyRoomsOfStatus" | "broadcastPatch"
+    | "applyStateSync"
+    | "applyPatch"
+    | "notifyRoomsOfStatus"
+    | "broadcastPatch"
+    | "bump"
   >;
   /** The elected coordinator role: claimed when this side takes the port listener, or finds it held by something that never answers, with no incumbent known; recovered when its holder departs; and the authority retireDepartedAgent checks. Announcing it to each new session is the transport's onElectionSessionEnrolled, not a PeerLifecycle concern. */
   coordinatorRole: Pick<
@@ -315,7 +319,9 @@ export class PeerLifecycle {
     if (!this.deps.coordinatorRole.isHolder()) return;
     const agent = this.deps.agents.get(peerId);
     if (agent === undefined || agent.status === "offline") return;
+    // Bumped so that a state snapshot a survivor sends from before it heard of the departure, which still shows the agent running at its old revision, cannot turn it back on.
     agent.status = "offline";
+    this.deps.deliveryEngine.bump(agent);
     this.deps.agents.set(peerId, agent);
     await this.deps.deliveryEngine.notifyRoomsOfStatus(peerId, "offline");
     await this.deps.deliveryEngine.broadcastPatch({

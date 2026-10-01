@@ -183,6 +183,10 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
       broadcastPatch: async (patch) => {
         calls.broadcasts.push(patch);
       },
+      bump: <T extends { version: number }>(entity: T): T => {
+        entity.version += 1;
+        return entity;
+      },
     },
     coordinatorRole: role,
     onError: (error) => {
@@ -382,11 +386,14 @@ test("a survivor claims the role itself once the expected successor's claim neve
 test("the elected holder retires a departed peer's own agent record", async () => {
   const harness = makeHarness();
   await harness.role.claimIfVacant();
-  harness.agents.set(HIGH_ID, agentRecord(HIGH_ID, "active"));
+  const running = agentRecord(HIGH_ID, "active");
+  harness.agents.set(HIGH_ID, structuredClone(running));
 
   await harness.lifecycle.handlePeerDeparture(HIGH_ID);
 
   expect(harness.agents.get(HIGH_ID)?.status).toBe("offline");
+  // Above the revision a survivor's snapshot from before the departure would carry.
+  expect(harness.agents.get(HIGH_ID)?.version).toBe(running.version + 1);
   expect(harness.roomStatusNotifications).toEqual([
     { agentId: HIGH_ID, status: "offline" },
   ]);

@@ -81,6 +81,9 @@ function harness(agents: readonly AgentIdentity[]): Harness {
     peerInfo,
     notifyRoomsOfStatus,
     broadcastPatch: broadcastPatch,
+    bump: (record) => {
+      record.version += 1;
+    },
   };
   return {
     deps,
@@ -182,6 +185,10 @@ describe("StaleAgentChecker", () => {
       checker.stop();
 
       expect(deps.agents.get("a1")?.status).toBe("offline");
+      // Above the revision of any snapshot taken while the agent was running.
+      expect(deps.agents.get("a1")?.version).toBe(
+        agent("a1", "active", DEAD_PID, isoAgeMs(0)).version + 1,
+      );
       expect(notifyRoomsOfStatus).toHaveBeenCalledWith("a1", "offline");
       expect(broadcastPatch).toHaveBeenCalledWith({
         type: "agent_offline",
