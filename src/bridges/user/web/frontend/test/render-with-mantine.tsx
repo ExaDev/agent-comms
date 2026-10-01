@@ -6,9 +6,11 @@ import { MantineProvider } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { theme } from "../theme.js";
 
-export function renderWithMantine(ui: ReactElement): RenderResult {
-  // A fresh QueryClient per render call -- sharing one across tests would leak cached query results between them.
-  const queryClient = new QueryClient();
+/** Renders ui inside the providers every component needs. queryClient is a fresh one per call unless a test passes its own to drive cache invalidation itself; sharing one across tests would leak cached query results between them. */
+export function renderWithMantine(
+  ui: ReactElement,
+  queryClient: QueryClient = new QueryClient(),
+): RenderResult {
   return render(
     <QueryClientProvider client={queryClient}>
       <MantineProvider theme={theme} defaultColorScheme="dark">

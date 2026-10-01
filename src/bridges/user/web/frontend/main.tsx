@@ -14,6 +14,7 @@ import { parseInput, routeAction } from "./input.js";
 import { State } from "./state.js";
 import { useClientState } from "./use-client-state.js";
 import { MeshClient } from "./mesh-client.js";
+import { invalidateMeshViews, staleAfter } from "./mesh-invalidation.js";
 import { theme } from "./theme.js";
 import type { Action, DisplayMessage } from "./types.js";
 
@@ -40,7 +41,7 @@ if (rootEl === null) {
 
 const state = new State();
 
-/** Backs the three structured one-shot reads (agent-comms#206) -- getRoomMessages/getMeshGraph/getMeshTrace, via meshClient.queryUtils. */
+/** Backs the structured one-shot reads (agent-comms#206, agent-comms#345): getRoomMessages, getMeshGraph, getDisplayNames and getMeshTrace, via meshClient.queryUtils. */
 const queryClient = new QueryClient();
 
 // ---------------------------------------------------------------------------
@@ -76,13 +77,8 @@ meshClient.onDelivery((event) => {
   const msg = deliveryEventToMessage(event, state.get().currentRoom);
   if (msg) addMessage(msg);
 
-  if (
-    event.type === "member_joined" ||
-    event.type === "member_left" ||
-    event.type === "member_status" ||
-    event.type === "name_changed"
-  ) {
-    void invalidateMeshGraph();
+  if (staleAfter(event.type)) {
+    void invalidateMeshViews(queryClient, meshClient.queryUtils);
   }
 });
 
@@ -106,16 +102,10 @@ async function sendAction(action: Action): Promise<void> {
     type: result.isError ? "status" : "system",
     text: result.isError ? `Error: ${result.content}` : result.content,
   });
+  // A successful action (a petname set, the machine renamed, a room joined) can change the graph or a label, so both are refreshed.
   if (!result.isError) {
-    void invalidateMeshGraph();
+    void invalidateMeshViews(queryClient, meshClient.queryUtils);
   }
-}
-
-/** Invalidates the mesh graph query on the same triggers a REST refresh used to run on (agent-comms#201/#206) -- a failure here (most commonly this bridge running on a FileStore rather than a real mesh transport, so mesh_graph simply isn't supported) is left to whatever's already subscribed to the query to surface, the same way any other failed refetch would. */
-async function invalidateMeshGraph(): Promise<void> {
-  await queryClient.invalidateQueries({
-    queryKey: meshClient.queryUtils.getMeshGraph.key(),
-  });
 }
 
 async function onJoinRoom(roomId: string): Promise<void> {
