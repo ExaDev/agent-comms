@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
+import { QueryClient } from "@tanstack/react-query";
+import { invalidateMeshViews, staleAfter } from "../mesh-invalidation.js";
 import { MeshPanel } from "../components/MeshPanel.js";
 import type { MeshGraph, MeshTraceResult } from "../types.js";
 import { stubMantineJsdomGlobals } from "./jsdom-mantine-polyfills.js";
@@ -123,5 +125,27 @@ describe("MeshPanel", () => {
       await screen.findByText(`work laptop "joe-mbp" ${shortId(DEVICE_A)}`),
     ).toBeInTheDocument();
     expect(screen.getByText(shortId(DEVICE_B))).toBeInTheDocument();
+  });
+
+  it("relabels a node once a name change invalidates the mesh views", async () => {
+    getMeshGraphMock.mockResolvedValue(MOCK_GRAPH);
+    getDisplayNamesMock.mockResolvedValue([
+      { id: DEVICE_A, selfName: "old-name" },
+    ]);
+    const queryClient = new QueryClient();
+    renderWithMantine(<MeshPanel queryUtils={queryUtils} />, queryClient);
+    expect(
+      await screen.findByText(`"old-name" ${shortId(DEVICE_A)}`),
+    ).toBeInTheDocument();
+
+    getDisplayNamesMock.mockResolvedValue([
+      { id: DEVICE_A, selfName: "new-name" },
+    ]);
+    expect(staleAfter("name_changed")).toBe(true);
+    await invalidateMeshViews(queryClient, queryUtils);
+
+    expect(
+      await screen.findByText(`"new-name" ${shortId(DEVICE_A)}`),
+    ).toBeInTheDocument();
   });
 });
