@@ -6,9 +6,11 @@ import { describe, expect, it } from "vitest";
 import * as os from "node:os";
 import {
   accessCookieName,
+  accessUrls,
   authorise,
   canonicalAddress,
   generateAccessToken,
+  HOSTED_DASHBOARD_ORIGIN,
   isLoopbackAddress,
   isWildcardHost,
   localWebUrl,
@@ -324,7 +326,7 @@ describe("authorise", () => {
     expect(decision).toEqual({
       kind: "exchange",
       status: HTTP_FOUND,
-      cookie: `${COOKIE_NAME}=${p.token}; HttpOnly; SameSite=Strict; Path=/`,
+      cookie: `${COOKIE_NAME}=${p.token}; HttpOnly; SameSite=Lax; Path=/`,
       location: "/room?x=1",
     });
   });
@@ -411,5 +413,179 @@ describe("authorise", () => {
       }),
     );
     expect(decision).toEqual({ kind: "allow" });
+  });
+
+  it("rejects a foreign Origin from a loopback client, under a loopback bind and a wildcard bind", () => {
+    for (const bindHost of [LOOPBACK_HOST, "0.0.0.0"]) {
+      const decision = authorise(
+        policy({ token: undefined, bindHost }),
+        request({
+          remoteAddress: "127.0.0.1",
+          headers: {
+            host: `127.0.0.1:${String(PORT)}`,
+            origin: "https://evil.example",
+          },
+        }),
+      );
+      expect(decision).toMatchObject({ kind: "deny", status: HTTP_FORBIDDEN });
+    }
+  });
+
+  it("rejects a foreign Origin from a client on this machine's own interface address", () => {
+    const decision = authorise(
+      policy({ localClientAddresses: () => new Set([LAN_CLIENT]) }),
+      request({
+        headers: { host: HOST_HEADER, origin: "https://evil.example" },
+      }),
+    );
+    expect(decision).toMatchObject({ kind: "deny", status: HTTP_FORBIDDEN });
+  });
+
+  it("rejects an https Origin whose host and port match this server", () => {
+    const decision = authorise(
+      policy({ token: undefined, bindHost: LOOPBACK_HOST }),
+      request({
+        remoteAddress: "127.0.0.1",
+        headers: {
+          host: `127.0.0.1:${String(PORT)}`,
+          origin: `https://127.0.0.1:${String(PORT)}`,
+        },
+      }),
+    );
+    expect(decision).toMatchObject({ kind: "deny", status: HTTP_FORBIDDEN });
+  });
+
+  it("allows an http Origin naming a loopback name on the bound port from a loopback client", () => {
+    const decision = authorise(
+      policy({ token: undefined, bindHost: LOOPBACK_HOST }),
+      request({
+        remoteAddress: "127.0.0.1",
+        headers: {
+          host: `127.0.0.1:${String(PORT)}`,
+          origin: `http://localhost:${String(PORT)}`,
+        },
+      }),
+    );
+    expect(decision).toEqual({ kind: "allow" });
+  });
+
+  it("allows the hosted dashboard's Origin from a loopback client only", () => {
+    const loopback = authorise(
+      policy({ token: undefined, bindHost: LOOPBACK_HOST }),
+      request({
+        remoteAddress: "127.0.0.1",
+        headers: {
+          host: `127.0.0.1:${String(PORT)}`,
+          origin: HOSTED_DASHBOARD_ORIGIN,
+        },
+      }),
+    );
+    expect(loopback).toEqual({ kind: "allow" });
+    const p = policy();
+    const remote = authorise(
+      p,
+      request({
+        headers: {
+          host: HOST_HEADER,
+          cookie: `${COOKIE_NAME}=${p.token}`,
+          origin: HOSTED_DASHBOARD_ORIGIN,
+        },
+      }),
+    );
+    expect(remote).toMatchObject({ kind: "deny", status: HTTP_FORBIDDEN });
+  });
+
+  it("accepts the Bearer scheme in any letter case and rejects other schemes", () => {
+    const p = policy();
+    for (const scheme of ["Bearer", "bearer", "BEARER"]) {
+      expect(
+        authorise(
+          p,
+          request({
+            headers: {
+              host: HOST_HEADER,
+              authorization: `${scheme} ${String(p.token)}`,
+            },
+          }),
+        ),
+      ).toEqual({ kind: "allow" });
+    }
+    expect(
+      authorise(
+        p,
+        request({
+          headers: {
+            host: HOST_HEADER,
+            authorization: `Basic ${String(p.token)}`,
+          },
+        }),
+      ),
+    ).toMatchObject({ kind: "deny", status: HTTP_UNAUTHORIZED });
+  });
+});
+
+describe("accessUrls", () => {
+  const MAC = "00:00:00:00:00:00";
+
+  function v4(address: string, internal: boolean): os.NetworkInterfaceInfoIPv4 {
+    return {
+      address,
+      family: "IPv4",
+      internal,
+      netmask: "255.255.255.0",
+      mac: MAC,
+      cidr: null,
+    };
+  }
+
+  function v6(address: string): os.NetworkInterfaceInfoIPv6 {
+    return {
+      address,
+      family: "IPv6",
+      internal: false,
+      netmask: "ffff:ffff:ffff:ffff::",
+      mac: MAC,
+      cidr: null,
+      scopeid: 0,
+    };
+  }
+
+  const loopback = { lo0: [v4("127.0.0.1", true)] };
+  const lan = {
+    en0: [v4("192.168.1.10", false), v6("fe80::1"), v6("2001:db8::10")],
+    ...loopback,
+  };
+
+  function listFor(
+    bindHost: string,
+    interfaces: NodeJS.Dict<os.NetworkInterfaceInfo[]>,
+  ): string[] {
+    return accessUrls(
+      { ...policy({ bindHost }), token: "t" },
+      () => interfaces,
+    );
+  }
+
+  it("lists external IPv4 and non-link-local IPv6 addresses, bracketed, under the IPv6 wildcard", () => {
+    expect(listFor("::", lan)).toEqual([
+      `http://192.168.1.10:${String(PORT)}/?token=t`,
+      `http://[2001:db8::10]:${String(PORT)}/?token=t`,
+    ]);
+  });
+
+  it("lists only IPv4 addresses under the IPv4 wildcard, which accepts no IPv6 connection", () => {
+    expect(listFor("0.0.0.0", lan)).toEqual([
+      `http://192.168.1.10:${String(PORT)}/?token=t`,
+    ]);
+  });
+
+  it("lists nothing when a wildcard bind finds no external address", () => {
+    expect(listFor("0.0.0.0", loopback)).toEqual([]);
+  });
+
+  it("lists the bound address under a specific bind", () => {
+    expect(listFor(BIND, loopback)).toEqual([
+      `http://${BIND}:${String(PORT)}/?token=t`,
+    ]);
   });
 });

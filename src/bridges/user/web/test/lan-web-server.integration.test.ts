@@ -20,6 +20,7 @@ import {
 } from "../server.js";
 import {
   accessCookieName,
+  HOSTED_DASHBOARD_ORIGIN,
   ownInterfaceAddresses,
   WEB_HOST_ENV,
 } from "../web-access.js";
@@ -68,6 +69,7 @@ async function start(
     coordinatorPort: await freeLocalPort(),
     hubUrl: await unreachableHubUrl(),
     beaconPort: await freeLocalPort(),
+    firstContactPort: await freeLocalPort(),
   });
   cleanups.push(async () => {
     await new Promise<void>((resolve) => {
@@ -190,6 +192,44 @@ describe("Host check on loopback", () => {
       headers: { host: `0.0.0.0:${String(port)}` },
     });
     expect(reply.status).toBe(HTTP_FORBIDDEN);
+  });
+});
+
+describe("Origin check on loopback", () => {
+  const FOREIGN = { origin: "https://evil.example" };
+
+  it.each([undefined, "0.0.0.0"])(
+    "answers 403 to a loopback request carrying a foreign Origin and sends no wildcard CORS header, under bind %s",
+    async (host) => {
+      const { port } = await start(host);
+      const read = await call("127.0.0.1", port, { headers: FOREIGN });
+      expect(read.status).toBe(HTTP_FORBIDDEN);
+      expect(read.headers["access-control-allow-origin"]).toBeUndefined();
+      const action = await call("127.0.0.1", port, {
+        method: "POST",
+        path: "/api/action",
+        headers: { ...FOREIGN, "content-type": "text/plain" },
+        body: JSON.stringify({ action: "list_rooms" }),
+      });
+      expect(action.status).toBe(HTTP_FORBIDDEN);
+    },
+  );
+
+  it.each([undefined, "0.0.0.0"])(
+    "refuses a websocket upgrade from loopback carrying a foreign Origin and opens one without an Origin or with the server's own, under bind %s",
+    async (host) => {
+      const { port } = await start(host);
+      expect(await upgrade("127.0.0.1", port, FOREIGN)).toBe("rejected");
+      expect(await upgrade("127.0.0.1", port, {})).toBe("open");
+      const own = { origin: `http://127.0.0.1:${String(port)}` };
+      expect(await upgrade("127.0.0.1", port, own)).toBe("open");
+    },
+  );
+
+  it("admits the hosted dashboard's Origin from loopback", async () => {
+    const { port } = await start(undefined);
+    const hosted = { origin: HOSTED_DASHBOARD_ORIGIN };
+    expect(await upgrade("127.0.0.1", port, hosted)).toBe("open");
   });
 });
 

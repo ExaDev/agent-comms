@@ -1,7 +1,7 @@
 /**
  * Network exposure policy for the bridge web server (agent-comms#346).
  *
- * The default is loopback only, with no token. Setting AGENT_COMMS_WEB_HOST to a non-loopback address is the explicit opt-in to LAN reachability. Because the server exposes every mutating action (POST /api/action and the /ws/mesh oRPC socket), a non-loopback bind always comes with a per-process secret token. Every request, from any client, must carry a Host header naming this server (the DNS rebinding defence: a rebound name resolves here but arrives with the attacker's name in Host). A client on this machine (loopback, or one of this machine's own interface addresses) needs nothing more. Any other client must also present the token (as a bearer token, or as the cookie a one-time `?token=` URL exchange sets) and, when it carries an Origin, carry one that names the same host.
+ * The default is loopback only, with no token. Setting AGENT_COMMS_WEB_HOST to a non-loopback address is the explicit opt-in to LAN reachability. Because the server exposes every mutating action (POST /api/action and the /ws/mesh oRPC socket), a non-loopback bind always comes with a per-process secret token. Every request, from any client, must carry a Host header naming this server (the DNS rebinding defence: a rebound name resolves here but arrives with the attacker's name in Host), and any Origin it carries must be this server over http (the cross-site defence: a page open in the operator's own browser reaches loopback as readily as a LAN page does, so the check cannot be limited to remote clients). The one other origin admitted, and only from a client on this machine, is the hosted dashboard (see HOSTED_DASHBOARD_ORIGIN). A client on this machine (loopback, or one of this machine's own interface addresses) needs nothing more. Any other client must also present the token, as a bearer token or as the cookie a one-time `?token=` URL exchange sets.
  */
 
 import * as crypto from "node:crypto";
@@ -35,7 +35,16 @@ const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_FOUND = 302;
 
-const BEARER_PREFIX = "Bearer ";
+/** The authentication scheme of an `Authorization` header carrying the token. Scheme names are case-insensitive (RFC 9110 section 11.1). */
+const BEARER_SCHEME = "bearer";
+
+/** The origin of the dashboard deployed to GitHub Pages. It discovers a bridge's server by probing loopback ports and then opens its `/ws/mesh` socket cross-origin, so its Origin is admitted from a client on this machine; every other foreign origin is refused. */
+export const HOSTED_DASHBOARD_ORIGIN = "https://exadev.github.io";
+
+/** How long the address sets derived from the machine's interfaces and hostname are reused. Reading them costs a system call per interface, which every request would otherwise pay; this bounds how long a newly attached interface waits to be recognised. */
+const INTERFACE_CACHE_MS = 5000;
+
+const LINK_LOCAL_V6 = /^fe[89ab]/i;
 
 const LOOPBACK_V4_PREFIX = "127.";
 const IPV4_MAPPED_PREFIX = "::ffff:";
@@ -129,8 +138,19 @@ export function tokensMatch(presented: string, expected: string): boolean {
   return crypto.timingSafeEqual(digest(presented), digest(expected));
 }
 
-/** The addresses of this machine's own network interfaces. */
-export function ownInterfaceAddresses(): ReadonlySet<string> {
+/** Returns `compute()`, reusing the previous result for INTERFACE_CACHE_MS. */
+function cachedFor<T>(compute: () => T): () => T {
+  let cached: { readonly value: T; readonly expires: number } | undefined;
+  return () => {
+    const now = Date.now();
+    if (cached === undefined || now >= cached.expires) {
+      cached = { value: compute(), expires: now + INTERFACE_CACHE_MS };
+    }
+    return cached.value;
+  };
+}
+
+function readInterfaceAddresses(): ReadonlySet<string> {
   const addresses = new Set<string>();
   for (const entries of Object.values(os.networkInterfaces())) {
     for (const entry of entries ?? []) {
@@ -139,6 +159,11 @@ export function ownInterfaceAddresses(): ReadonlySet<string> {
   }
   return addresses;
 }
+
+/** The addresses of this machine's own network interfaces, as of at most INTERFACE_CACHE_MS ago. */
+export const ownInterfaceAddresses: () => ReadonlySet<string> = cachedFor(
+  readInterfaceAddresses,
+);
 
 /** The exposure a running server is under. */
 export interface AccessPolicy {
@@ -178,8 +203,7 @@ function headerValue(
   return Array.isArray(value) ? value[0] : value;
 }
 
-/** Every hostname a client may legitimately use to reach this server: loopback names, the addresses it is bound to and this machine's own name (plus its `.local` mDNS form). Never a name an outside party could make resolve here, which is what DNS rebinding relies on, and never the wildcard address itself, which a page in a local browser can also reach. */
-function allowedHostnames(bindHost: string): Set<string> {
+function readAllowedHostnames(bindHost: string): Set<string> {
   const names = new Set<string>(LOOPBACK_HOSTNAMES);
   if (isWildcardHost(bindHost)) {
     for (const address of ownInterfaceAddresses()) names.add(address);
@@ -193,6 +217,18 @@ function allowedHostnames(bindHost: string): Set<string> {
   names.add(machine);
   names.add(`${machine}.local`);
   return names;
+}
+
+const hostnameSets = new Map<string, () => ReadonlySet<string>>();
+
+/** Every hostname a client may legitimately use to reach this server: loopback names, the addresses it is bound to and this machine's own name (plus its `.local` mDNS form). Never a name an outside party could make resolve here, which is what DNS rebinding relies on, and never the wildcard address itself, which a page in a local browser can also reach. Reused for INTERFACE_CACHE_MS per bind address. */
+function allowedHostnames(bindHost: string): ReadonlySet<string> {
+  let read = hostnameSets.get(bindHost);
+  if (read === undefined) {
+    read = cachedFor(() => readAllowedHostnames(bindHost));
+    hostnameSets.set(bindHost, read);
+  }
+  return read();
 }
 
 /** A Host header names either an IP literal (compared in canonical form) or a DNS name (compared as is). */
@@ -228,8 +264,12 @@ function hostHeaderAllowed(
   return allowedHostnames(policy.bindHost).has(authority.hostname);
 }
 
-/** An Origin, when the browser sends one, must be this very server: otherwise a page from elsewhere on the LAN could drive it with the operator's cookie. */
-function originAllowed(headers: AccessRequest["headers"]): boolean {
+/** An Origin, when the browser sends one, must be this very server over http: otherwise a page from anywhere (on the LAN, or open in the operator's own browser) could drive it. The hosted dashboard is the one other origin, and only for a client on this machine. */
+function originAllowed(
+  policy: Readonly<AccessPolicy>,
+  headers: AccessRequest["headers"],
+  ownClient: boolean,
+): boolean {
   const origin = headerValue(headers, "origin");
   if (origin === undefined) return true;
   let parsed: URL;
@@ -238,9 +278,11 @@ function originAllowed(headers: AccessRequest["headers"]): boolean {
   } catch {
     return false;
   }
-  return (
-    parsed.host.toLowerCase() === headerValue(headers, "host")?.toLowerCase()
-  );
+  if (ownClient && parsed.origin === HOSTED_DASHBOARD_ORIGIN) return true;
+  if (parsed.protocol !== "http:") return false;
+  const authority = parseAuthority(parsed.host);
+  if (authority?.port !== policy.port) return false;
+  return allowedHostnames(policy.bindHost).has(authority.hostname);
 }
 
 function cookieToken(
@@ -259,8 +301,11 @@ function cookieToken(
 function bearerToken(headers: AccessRequest["headers"]): string | undefined {
   const authorization = headerValue(headers, "authorization");
   if (authorization === undefined) return undefined;
-  return authorization.startsWith(BEARER_PREFIX)
-    ? authorization.slice(BEARER_PREFIX.length)
+  const separator = authorization.indexOf(" ");
+  if (separator === -1) return undefined;
+  const scheme = authorization.slice(0, separator).toLowerCase();
+  return scheme === BEARER_SCHEME
+    ? authorization.slice(separator + 1).trim()
     : undefined;
 }
 
@@ -291,7 +336,7 @@ function isOwnClient(
 }
 
 /**
- * Decides whether a request may proceed. The Host header must name this server, for every client. A client on this machine is then allowed. Any other client needs the token (a bearer token or the cookie), and any Origin it sends must be this server; a GET carrying the right `?token=` instead exchanges it for the cookie.
+ * Decides whether a request may proceed. The Host header must name this server and any Origin must be this server, for every client. A client on this machine is then allowed. Any other client needs the token (a bearer token or the cookie); a GET carrying the right `?token=` instead exchanges it for the cookie.
  */
 export function authorise(
   policy: Readonly<AccessPolicy>,
@@ -300,15 +345,21 @@ export function authorise(
   if (!hostHeaderAllowed(policy, request.headers)) {
     return { kind: "deny", status: HTTP_FORBIDDEN, message: "Forbidden host" };
   }
-  if (isOwnClient(policy, request.remoteAddress)) return { kind: "allow" };
+  const ownClient = isOwnClient(policy, request.remoteAddress);
+  if (!originAllowed(policy, request.headers, ownClient)) {
+    return {
+      kind: "deny",
+      status: HTTP_FORBIDDEN,
+      message: "Forbidden origin",
+    };
+  }
+  if (ownClient) return { kind: "allow" };
   const { token } = policy;
   if (token === undefined) {
     return { kind: "deny", status: HTTP_UNAUTHORIZED, message: "Unauthorized" };
   }
   if (presentedCredential(policy, token, request.headers)) {
-    return originAllowed(request.headers)
-      ? { kind: "allow" }
-      : { kind: "deny", status: HTTP_FORBIDDEN, message: "Forbidden origin" };
+    return { kind: "allow" };
   }
   if (request.method === "GET") {
     const url = new URL(request.url, "http://placeholder");
@@ -318,7 +369,7 @@ export function authorise(
       return {
         kind: "exchange",
         status: HTTP_FOUND,
-        cookie: `${accessCookieName(policy.port)}=${token}; HttpOnly; SameSite=Strict; Path=/`,
+        cookie: `${accessCookieName(policy.port)}=${token}; HttpOnly; SameSite=Lax; Path=/`,
         location: `${url.pathname}${url.search}`,
       };
     }
@@ -326,16 +377,21 @@ export function authorise(
   return { kind: "deny", status: HTTP_UNAUTHORIZED, message: "Unauthorized" };
 }
 
-/** The URLs an operator can open on the LAN, each carrying the token for the one-time exchange. A wildcard bind lists every external IPv4 address of this machine; a specific bind lists that address. */
+/** The URLs an operator can open on the LAN, each carrying the token for the one-time exchange. A wildcard bind lists every external, non-link-local address of this machine that the bind family can reach (IPv6 bracketed, and only under `::`, since `0.0.0.0` accepts IPv4 alone); a specific bind lists that address. The list is empty when a wildcard bind finds no such address. */
 export function accessUrls(
   policy: Readonly<AccessPolicy> & { readonly token: string },
+  interfaces: () => NodeJS.Dict<
+    os.NetworkInterfaceInfo[]
+  > = os.networkInterfaces,
 ): string[] {
   const hosts: string[] = [];
   if (isWildcardHost(policy.bindHost)) {
-    for (const addresses of Object.values(os.networkInterfaces())) {
+    const ipv4Only = canonicalAddress(policy.bindHost) === IPV4_WILDCARD;
+    for (const addresses of Object.values(interfaces())) {
       for (const entry of addresses ?? []) {
-        if (!entry.internal && entry.family === "IPv4")
-          hosts.push(entry.address);
+        if (entry.internal || LINK_LOCAL_V6.test(entry.address)) continue;
+        if (ipv4Only && entry.family !== "IPv4") continue;
+        hosts.push(urlHost(entry.address));
       }
     }
   } else {
