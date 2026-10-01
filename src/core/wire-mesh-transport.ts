@@ -29,13 +29,13 @@ import {
 } from "./listener-registry.js";
 import {
   findPresenceAdvert,
+  KnownDevices,
   listKnownDevicesEntries,
   mergeAndAnnounceReachable,
-  mergeKnownDevices,
   readvertiseGossip,
   startGossipInterval,
 } from "./gossip-directory.js";
-import { directoryAdmission } from "./directory-admission.js";
+import { directoryAdmission, staysAdmitted } from "./directory-admission.js";
 import { routeRoomRequestViaHub } from "./hub-forwarding.js";
 import { HubLink } from "./hub-link.js";
 import { ElectionSessions } from "./election-sessions.js";
@@ -170,20 +170,23 @@ export class WireMeshTransport implements MeshTransport {
   // The machine-local sessions coordinator claims travel over (agent-comms#341): see election-sessions.ts.
   private readonly electionSessions: ElectionSessions;
 
-  // -- Every device-id this side has ever heard gossip from, across every session's own directory, keyed by device-id hex -- the mesh-wide aggregation P3.8's own room-discovery design and the eventual agent register/update/offline retirement both need and don't otherwise have (agent-comms#48's own 2026-09-14 investigation confirmed no such aggregation existed anywhere in this file). Merged, never cleared on disconnect: a device's last-known advert (including its own presence/status, or any future gossiped extension) stays queryable even while its session is momentarily down, the same way the legacy agents Map keeps a record after setAgentOffline rather than deleting it outright.
-  private readonly knownDevices = new Map<string, PeerAdvert>();
+
+  // -- Every device this side has heard gossip from, across every session's own directory and the hub's, keyed by device-id hex: the mesh-wide aggregation room discovery and agent listing read. See KnownDevices for which entries it keeps and for how long.
+  private readonly knownDevices = new KnownDevices((deviceHex) =>
+    staysAdmitted(this.gatewayTrust, deviceHex),
+  );
 
   /** Every device this side has ever heard gossip from, mesh-wide -- not just its own directly-connected peers -- with each one's own latest full advert (addresses, snapshot-seconds, and every open-extension field such as presence/status). See gossip-directory.ts's own listKnownDevicesEntries for the actual implementation, kept out of this already-large file. */
   listKnownDevices(): readonly {
     deviceId: string;
     advert: Readonly<PeerAdvert>;
   }[] {
-    return listKnownDevicesEntries(this.knownDevices);
+    return listKnownDevicesEntries(this.knownDevices.current());
   }
 
   /** Assembles this side's own best-effort view of the mesh's connection graph (agent-comms#199) -- see mesh-graph.ts's own computeMeshGraph for the actual implementation, kept out of this already-large file. */
   meshGraph(): MeshGraph {
-    return computeMeshGraph(this.knownDevices);
+    return computeMeshGraph(this.knownDevices.current());
   }
 
   /** Sends path.trace to targetDeviceHex (agent-comms#199) -- see mesh-graph.ts's own traceMeshPath for the actual direct-or-hub fallback, kept out of this already-large file. */
@@ -539,7 +542,7 @@ export class WireMeshTransport implements MeshTransport {
       // The presence this session last reported. Every session event carries the whole directory, including events this side causes by sending a frame and the final closed event, so the peer's advert repeats long after the peer sent it. Only a change is news: re-reporting a stale advert would mark a departed peer's agent running again after the coordinator has set it offline, and nothing would ever correct that.
       let reportedPresence: AgentStatus | undefined;
       for await (const event of session.events) {
-        mergeKnownDevices(this.knownDevices, event.directory);
+        this.knownDevices.mergeLocal(event.directory);
         const presence = findPresenceAdvert(deviceIdHex, event.directory);
         if (presence !== undefined && presence !== reportedPresence) {
           reportedPresence = presence;

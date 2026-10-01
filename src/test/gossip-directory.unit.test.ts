@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  KnownDevices,
   mergeKnownDevices,
   readvertiseGossip,
   type GossipSession,
@@ -36,6 +37,22 @@ function advert(snapshotSeconds: number, hex = DEVICE_A_HEX): PeerAdvert {
 function entry(hex: string, snapshotSeconds: number): DirectoryEntry {
   return { device: deviceIdBytes(hex), advert: advert(snapshotSeconds, hex) };
 }
+
+describe("KnownDevices", () => {
+  it("drops a hub-only device from the view once it stops being admitted, and keeps one also heard locally", () => {
+    const admitted = new Set([DEVICE_A_HEX, DEVICE_B_HEX]);
+    const known = new KnownDevices((hex) => admitted.has(hex));
+    known.mergeHub([entry(DEVICE_A_HEX, 1), entry(DEVICE_B_HEX, 1)]);
+    known.mergeLocal([entry(DEVICE_B_HEX, 1)]);
+    expect([...known.current().keys()]).toEqual([DEVICE_A_HEX, DEVICE_B_HEX]);
+
+    admitted.clear();
+
+    expect([...known.current().keys()]).toEqual([DEVICE_B_HEX]);
+    admitted.add(DEVICE_A_HEX);
+    expect([...known.current().keys()]).toEqual([DEVICE_B_HEX]);
+  });
+});
 
 describe("mergeKnownDevices", () => {
   it("records a device this map has never seen before", () => {

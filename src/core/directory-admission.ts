@@ -47,6 +47,19 @@ interface Verdict {
   until: number;
 }
 
+/** Whether an entry this side has already merged from the hub would still be admitted now, with no new proof to judge: its device is reachable (trusted by id, or vouched for by a proof that has not lapsed from an issuer still trusted) or is itself a trusted principal's own device. The read-time counterpart of directoryAdmission, which KnownDevices uses to drop a device as soon as the trust that let it in is withdrawn or lapses. */
+export function staysAdmitted(
+  gatewayTrust: Readonly<
+    Pick<GatewayTrustReader, "isReachable" | "isTrustedPrincipal">
+  >,
+  deviceHex: string,
+): boolean {
+  return (
+    gatewayTrust.isReachable(deviceHex) ||
+    gatewayTrust.isTrustedPrincipal(deviceHex)
+  );
+}
+
 /** Builds the admission check for a transport's directory merge: given a batch of entries, the ones to merge. An entry is merged if its device is trusted by id, is itself a trusted principal's own device, or carries a proof that a trusted principal or machine vouches for it; each proof an entry carries is judged on its own, and every one that verifies records the device in gatewayTrust under that kind until the proof lapses or its issuer stops being trusted. A remembered good verdict is reused only while that kind's record is still live, and a device's newer proof is verified as it arrives, which is how its trust is renewed before the old one lapses. */
 export function directoryAdmission(
   deps: Readonly<DirectoryAdmissionDeps>,
