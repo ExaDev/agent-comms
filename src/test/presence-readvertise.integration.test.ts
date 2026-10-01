@@ -97,6 +97,80 @@ describe("WireMeshTransport presence re-advertisement", () => {
     }
   });
 
+  test("a re-sent advert that has not changed, and the closed event that repeats it, are reported only once", async () => {
+    const identityA = generateIdentity();
+    const identityB = generateIdentity();
+    const peerIdA = deviceIdToHex(
+      await toIdentityPort(identityA).then((p) => p.deviceId),
+    );
+    const peerIdB = deviceIdToHex(
+      await toIdentityPort(identityB).then((p) => p.deviceId),
+    );
+
+    const presenceSeenByB: AgentStatus[] = [];
+    let currentStatusA: AgentStatus = "active";
+
+    const transportA = new WireMeshTransport(
+      eventsRecordingPresence(() => undefined),
+      identityA,
+      {
+        getCurrentPresence: () => currentStatusA,
+        presenceReadvertiseIntervalMs: SHORT_PRESENCE_INTERVAL_MS,
+      },
+    );
+    let sessionToAClosed = false;
+    const transportB = new WireMeshTransport(
+      {
+        ...eventsRecordingPresence((_handle, status) => {
+          presenceSeenByB.push(status);
+        }),
+        onPeerDisconnected: () => {
+          sessionToAClosed = true;
+        },
+      },
+      identityB,
+    );
+    let transportAStopped = false;
+
+    try {
+      await transportA.startDataServer();
+      await transportB.connectToPeer(
+        {
+          id: peerIdA,
+          port: transportA.dataPort,
+          startedAt: new Date().toISOString(),
+        },
+        peerIdB,
+      );
+      await waitFor(
+        () => presenceSeenByB.includes("active"),
+        "B observes A's initial active presence",
+      );
+      // Several ticks, each re-sending the unchanged "active" advert.
+      await new Promise((resolve) => {
+        setTimeout(
+          resolve,
+          SHORT_PRESENCE_INTERVAL_MS * PRESENCE_INTERVAL_TICKS_TO_SPAN,
+        );
+      });
+      currentStatusA = "idle";
+      await waitFor(
+        () => presenceSeenByB.includes("idle"),
+        "B observes A's change to idle",
+      );
+
+      // The closed event repeats A's last advert, which B has already reported.
+      await transportA.shutdown();
+      transportAStopped = true;
+      await waitFor(() => sessionToAClosed, "B saw its session to A close");
+
+      expect(presenceSeenByB).toEqual(["active", "idle"]);
+    } finally {
+      await transportB.shutdown();
+      if (!transportAStopped) await transportA.shutdown();
+    }
+  });
+
   test("a session with no presence source configured never re-advertises", async () => {
     const identityA = generateIdentity();
     const identityB = generateIdentity();

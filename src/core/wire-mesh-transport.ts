@@ -40,6 +40,7 @@ import { routeRoomRequestViaHub } from "./hub-forwarding.js";
 import { HubLink } from "./hub-link.js";
 import { ElectionSessions } from "./election-sessions.js";
 import { isLoopbackAddress } from "./loopback-address.js";
+import type { AgentStatus } from "./types.js";
 import {
   DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
   expirePendingConnection,
@@ -535,10 +536,13 @@ export class WireMeshTransport implements MeshTransport {
     deviceIdHex: string,
   ): void {
     void (async () => {
+      // The presence this session last reported. Every session event carries the whole directory, including events this side causes by sending a frame and the final closed event, so the peer's advert repeats long after the peer sent it. Only a change is news: re-reporting a stale advert would mark a departed peer's agent running again after the coordinator has set it offline, and nothing would ever correct that.
+      let reportedPresence: AgentStatus | undefined;
       for await (const event of session.events) {
         mergeKnownDevices(this.knownDevices, event.directory);
         const presence = findPresenceAdvert(deviceIdHex, event.directory);
-        if (presence !== undefined) {
+        if (presence !== undefined && presence !== reportedPresence) {
+          reportedPresence = presence;
           this.events.onPresenceAdvert(handle, presence);
         }
         if (event.state.status === "closed") {
