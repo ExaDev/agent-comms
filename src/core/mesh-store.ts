@@ -1,7 +1,7 @@
 /**
  * MeshStore — transport-agnostic peer mesh for agent communication.
  *
- * Each bridge instance is a peer in the mesh. Peers find each other through first contact (a machine-local UDP presence) or through the well-known port, whose holder introduces joiners; neither is required for peers to keep talking once connected. The coordinator duties are held by an elected CoordinatorRole, not by the port holder. All state is held in memory and synchronised between peers. Delivery events are pushed directly over the transport — no polling, no filesystem.
+ * Each bridge instance is a peer in the mesh. Peers find each other through first contact (a UDP presence beaconing over loopback multicast to stores on this machine and over limited broadcast to other machines on the LAN) or through the well-known port, whose holder introduces joiners; neither is required for peers to keep talking once connected. The coordinator duties are held by an elected CoordinatorRole, not by the port holder. All state is held in memory and synchronised between peers. Delivery events are pushed directly over the transport, with no polling and no filesystem.
  *
  * Transport is set via setTransport() (e.g. WireMeshTransport for encrypted connections) before init() or any other transport-using method is called -- there is no default, since every real bridge builds its own transport from this store's own events getter, which needs the store to already exist.
  *
@@ -11,7 +11,10 @@
 import { bytesToHex, deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import * as os from "node:os";
 import { MembershipProofs } from "./membership-proofs.js";
-import { ROOM_JOIN_APPROVAL_TIMEOUT_MS } from "./request-timeouts.js";
+import {
+  ROOM_JOIN_APPROVAL_TIMEOUT_MS,
+  ROOM_REQUEST_TIMEOUT_MS,
+} from "./request-timeouts.js";
 import { CommsError } from "./store.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
@@ -263,7 +266,7 @@ export class MeshStore implements CommsStore {
   onError: ((error: Error) => void) | undefined;
 
   /**
-   * Fires whenever this store gains or loses the elected coordinator role (agent-comms#341): true once a claim naming this store is accepted, false when a superseding claim is accepted or right before shutdown() gives the role up. Holding the well-known port has no bearing on it. Left undefined by default (matching onDelivery/onPatch/onError): a caller that wants to react to owning the coordinator role -- e.g. bridge-mesh.ts starting/stopping the cc-peer front (agent-comms#157), a Node/filesystem-specific capability that has no place in this transport-agnostic core -- sets it, exactly like those three.
+   * Fires whenever this store gains or loses the elected coordinator role (agent-comms#341): true once a claim naming this store is accepted, false when a superseding claim is accepted or right before shutdown() gives the role up. Holding the well-known port has no bearing on it. A call runs only once the previous one has finished, so a caller stopping something asynchronously is never asked to start it again mid-stop. Left undefined by default (matching onDelivery/onPatch/onError): a caller that wants to react to owning the coordinator role (e.g. bridge-mesh.ts starting/stopping the cc-peer front (agent-comms#157), a Node/filesystem-specific capability that has no place in this transport-agnostic core) sets it, exactly like those three.
    */
   onCoordinatorRoleChanged:
     ((isCoordinator: boolean) => void | Promise<void>) | undefined;
@@ -288,6 +291,7 @@ export class MeshStore implements CommsStore {
       hubUrl,
       roomJoinApprovalTimeoutMs = ROOM_JOIN_APPROVAL_TIMEOUT_MS,
       presenceStaleAfterMs = DEFAULT_PRESENCE_STALE_AFTER_MS,
+      coordinatorClaimWaitMs = ROOM_REQUEST_TIMEOUT_MS,
       slot,
     } = options ?? {};
     this.peerId = bytesToHex(
@@ -413,8 +417,8 @@ export class MeshStore implements CommsStore {
 
     this.coordinatorRole = new CoordinatorRole({
       getPeerId: () => this.peerId,
-      livePeerIds: () => this.peerInfo.keys(),
       requireTransport: () => this.requireTransport(),
+      claimWaitMs: coordinatorClaimWaitMs,
       onGained: async () => {
         this.staleAgentChecker.start();
         await this.onCoordinatorRoleChanged?.(true);
@@ -1080,7 +1084,7 @@ export class MeshStore implements CommsStore {
 
     // Gives the elected coordinator role up (stopping the stale-agent probe and firing onCoordinatorRoleChanged(false)) when this store held it; survivors recover it from this store's departure.
     await this.coordinatorRole.stop();
-    // Graceful handover of the well-known port listener (agent-comms#170) -- a no-op unless this side currently holds it, so this runs unconditionally rather than being gated behind an isCoordinator check duplicated here. Must run before the transport shuts down: the handoff message rides the very peer sessions shutdown() is about to close.
+    // Graceful handover of the well-known port listener (agent-comms#170): a no-op unless this side currently holds it, so this runs unconditionally rather than being gated behind an isCoordinator check duplicated here. Must run before the transport shuts down: the handoff message rides the very peer sessions shutdown() is about to close.
     await this.peerLifecycle.sendCoordinatorHandover();
     await this.requireTransport().shutdown();
     await farewell;

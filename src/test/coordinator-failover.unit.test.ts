@@ -23,6 +23,9 @@ const DEVICE_ID_HEX_LENGTH = 64;
 const COORDINATOR_ID = "1".repeat(DEVICE_ID_HEX_LENGTH);
 const LOW_ID = "2".repeat(DEVICE_ID_HEX_LENGTH);
 const HIGH_ID = "3".repeat(DEVICE_ID_HEX_LENGTH);
+/** Sorts below every other id here, for a peer this side lists but can never hold an election with. */
+const UNENROLLED_ID = "0".repeat(DEVICE_ID_HEX_LENGTH);
+const UNENROLLED_DATA_PORT = 41_004;
 
 interface TransportCalls {
   becomeCoordinator: { host: string; port: number }[];
@@ -78,6 +81,8 @@ interface HarnessOptions {
   coordinatorPeerId?: string | undefined;
   /** Rejection thrown by the transport's becomeCoordinator, simulating another survivor winning the bind race. */
   bindFailure?: Error;
+  /** Peers this side lists (in peerInfo) but has no machine-local session to, such as one approved through connect_request or named in a peer list it never managed to dial. */
+  notEnrolled?: readonly string[];
 }
 
 function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
@@ -93,6 +98,7 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
   const agents = new Map<string, AgentIdentity>();
   const roomStatusNotifications: Harness["roomStatusNotifications"] = [];
   const errors: Error[] = [];
+  const notEnrolled = new Set(options.notEnrolled);
   let gains = 0;
 
   let isCoordinator = options.isCoordinator ?? false;
@@ -125,7 +131,13 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
       calls.claims.push(frame);
     },
     sendCoordinatorClaim: async () => {},
-    electionPeerIds: () => new Set<string>(),
+    // Every peer this side still lists has a machine-local session to it unless the test says otherwise; handlePeerDeparture drops a departed peer from peerInfo just as the transport drops its closed session.
+    electionPeerIds: () =>
+      new Set(
+        [...peerInfo.keys()].filter(
+          (id) => id !== selfId && !notEnrolled.has(id),
+        ),
+      ),
     sendRoomRequest: async () => ({ result: "ok" }),
     addListener: async () => "listener",
     removeListener: async () => {},
@@ -136,8 +148,8 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
 
   const role = new CoordinatorRole({
     getPeerId: () => selfId,
-    livePeerIds: () => peerInfo.keys(),
     requireTransport: () => transport,
+    claimWaitMs: ROOM_REQUEST_TIMEOUT_MS,
     onGained: async () => {
       gains += 1;
     },
@@ -318,6 +330,20 @@ test("the elected holder's departure makes the lowest surviving device-id claim 
   expect(harness.role.isHolder()).toBe(true);
   expect(harness.gains).toBe(1);
   expect(harness.calls.becomeCoordinator).toHaveLength(1);
+});
+
+test("a lower-id peer this side lists but has no machine-local session to does not hold the lowest survivor back from claiming at once", async () => {
+  const harness = makeHarness({ notEnrolled: [UNENROLLED_ID] });
+  harness.peerInfo.set(
+    UNENROLLED_ID,
+    peer(UNENROLLED_ID, UNENROLLED_DATA_PORT, "2026-01-01T00:00:03.000Z"),
+  );
+  await electHolder(harness, COORDINATOR_ID, 0);
+
+  await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
+
+  expect(harness.calls.claims).toEqual([claimFor(LOW_ID, 1)]);
+  expect(harness.role.isHolder()).toBe(true);
 });
 
 test("a survivor that is not the lowest device-id leaves the claim to the lowest one", async () => {

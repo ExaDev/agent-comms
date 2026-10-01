@@ -2,10 +2,11 @@
  * CoordinatorRole's election behaviour (agent-comms#341) over an in-memory bus: several roles, each gossiping its claims to every other exactly as WireMeshTransport gossips them over machine-local sessions, so convergence, supersession and the no-echo rule are observable without sockets.
  */
 
-import { test, expect } from "vitest";
+import { afterEach, test, expect, vi } from "vitest";
 import { deviceIdFromHex } from "wire-mesh-core/domain/device-id";
 import type { CoordinatorFrame } from "wire-mesh-core/generated/protocol";
 import { CoordinatorRole } from "../core/coordinator-role.js";
+import { ROOM_REQUEST_TIMEOUT_MS } from "../core/request-timeouts.js";
 import type { ConnectionHandle } from "../core/transport.js";
 
 const DEVICE_ID_HEX_LENGTH = 64;
@@ -33,7 +34,7 @@ class Bus {
       id,
       role: new CoordinatorRole({
         getPeerId: () => id,
-        livePeerIds: () => this.members.keys(),
+        claimWaitMs: ROOM_REQUEST_TIMEOUT_MS,
         requireTransport: () => ({
           broadcastCoordinatorClaim: async (frame) => {
             member.sent.push(frame);
@@ -45,6 +46,9 @@ class Bus {
             member.sent.push(frame);
             this.queue.push({ from: id, to: handle.id, frame });
           },
+          // Every other member on the bus has a machine-local session to this one; remove() is a session closing.
+          electionPeerIds: () =>
+            new Set([...this.members.keys()].filter((other) => other !== id)),
         }),
         onGained: async () => {
           member.gains += 1;
@@ -97,6 +101,14 @@ class Bus {
 function hexId(digit: string): string {
   return digit.repeat(DEVICE_ID_HEX_LENGTH);
 }
+
+function claimFor(holderHex: string, term: number): CoordinatorFrame {
+  return { type: "coordinator", term, coordinator: deviceIdFromHex(holderHex) };
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 test("a lone store that claims the vacant role holds it at term 0", async () => {
   const bus = new Bus();
@@ -237,4 +249,123 @@ test("stop gives the role up exactly once and ignores later claims", async () =>
 
   expect(holder.role.isHolder()).toBe(false);
   expect(holder.losses).toBe(1);
+});
+
+test("a store that may not be alone claims the vacant role once the claim wait passes with no incumbent heard", async () => {
+  vi.useFakeTimers();
+  const bus = new Bus();
+  const only = bus.add(hexId("5"));
+
+  only.role.claimIfVacantAfterWait();
+  expect(only.role.current()).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
+
+  expect(only.role.current()).toEqual({ term: 0, holder: only.id });
+  expect(only.role.isHolder()).toBe(true);
+});
+
+test("a lower-id newcomer waiting to claim never takes the role from an incumbent whose claim reaches it within the wait", async () => {
+  vi.useFakeTimers();
+  const bus = new Bus();
+  const holder = bus.add(hexId("5"));
+  const newcomer = bus.add(hexId("1"));
+  await holder.role.claimIfVacant();
+
+  newcomer.role.claimIfVacantAfterWait();
+  await bus.settle();
+  await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
+  await bus.settle();
+
+  expect(bus.holders()).toEqual([holder.id]);
+  expect(newcomer.role.current()).toEqual({ term: 0, holder: holder.id });
+  expect(newcomer.gains).toBe(0);
+  expect(holder.losses).toBe(0);
+});
+
+test("a claim naming a device this side has no session to is taken over at a raised term one claim wait later", async () => {
+  vi.useFakeTimers();
+  const bus = new Bus();
+  const self = bus.add(hexId("5"));
+  const absentTerm = 3;
+
+  await self.role.handleClaim(
+    { id: hexId("7") },
+    claimFor(hexId("1"), absentTerm),
+  );
+  expect(self.role.isHolder()).toBe(false);
+  await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
+
+  expect(self.role.current()).toEqual({
+    term: absentTerm + 1,
+    holder: self.id,
+  });
+  expect(self.role.isHolder()).toBe(true);
+});
+
+test("a claim naming a holder that this side reaches within the claim wait is left standing", async () => {
+  vi.useFakeTimers();
+  const bus = new Bus();
+  const self = bus.add(hexId("5"));
+  const holderId = hexId("1");
+  const term = 3;
+
+  await self.role.handleClaim({ id: hexId("7") }, claimFor(holderId, term));
+  bus.add(holderId);
+  await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
+
+  expect(self.role.current()).toEqual({ term, holder: holderId });
+  expect(self.role.isHolder()).toBe(false);
+  expect(self.gains).toBe(0);
+});
+
+test("a role lost and regained while its duties are still stopping starts them again only once they have stopped", async () => {
+  const selfId = hexId("2");
+  const rivalId = hexId("1");
+  const electionPeers = new Set([rivalId]);
+  const log: string[] = [];
+  const gate = { open: (): void => {} };
+  const stopping = new Promise<void>((resolve) => {
+    gate.open = resolve;
+  });
+  const role = new CoordinatorRole({
+    getPeerId: () => selfId,
+    claimWaitMs: ROOM_REQUEST_TIMEOUT_MS,
+    requireTransport: () => ({
+      broadcastCoordinatorClaim: async () => {},
+      sendCoordinatorClaim: async () => {},
+      electionPeerIds: () => electionPeers,
+    }),
+    onGained: async () => {
+      log.push("gained");
+    },
+    onLost: async () => {
+      log.push("stopping");
+      await stopping;
+      log.push("stopped");
+    },
+    onError: (error) => {
+      throw error;
+    },
+  });
+  await role.claimIfVacant();
+
+  const nextMacrotask = async (): Promise<void> =>
+    new Promise((resolve) => {
+      setImmediate(resolve);
+    });
+  // A higher-term claim takes the role away, and onLost starts; its holder then leaves, so this side is the lowest survivor and claims straight back while onLost is still waiting.
+  const losing = role.handleClaim({ id: rivalId }, claimFor(rivalId, 1));
+  await nextMacrotask();
+  expect(log).toEqual(["gained", "stopping"]);
+  electionPeers.delete(rivalId);
+  const regaining = role.handleDeparture(rivalId, async () => {});
+  await nextMacrotask();
+  expect(log).toEqual(["gained", "stopping"]);
+
+  gate.open();
+  await Promise.all([losing, regaining]);
+
+  expect(log).toEqual(["gained", "stopping", "stopped", "gained"]);
+  expect(role.isHolder()).toBe(true);
+  expect(role.current()).toEqual({ term: 2, holder: selfId });
 });

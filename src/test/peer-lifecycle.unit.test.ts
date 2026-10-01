@@ -11,6 +11,7 @@ import type { PeerInfo, SerialisedState } from "../core/wire-protocol.js";
 
 const OWNER_ID = "owner-device";
 const COORDINATOR_PORT = 19876;
+const FIRST_CONTACT_PORT = 19877;
 
 function peerInfo(
   id: string,
@@ -39,7 +40,7 @@ interface Harness {
   applyPatch: ReturnType<typeof vi.fn>;
   coordinatorRole: {
     claimIfVacant: ReturnType<typeof vi.fn>;
-    announceTo: ReturnType<typeof vi.fn>;
+    claimIfVacantAfterWait: ReturnType<typeof vi.fn>;
     handleDeparture: ReturnType<typeof vi.fn>;
     isHolder: ReturnType<typeof vi.fn>;
   };
@@ -61,7 +62,7 @@ function makeHarness(): Harness {
   const broadcastPatch = vi.fn().mockResolvedValue(undefined);
   const coordinatorRole = {
     claimIfVacant: vi.fn().mockResolvedValue(undefined),
-    announceTo: vi.fn().mockResolvedValue(undefined),
+    claimIfVacantAfterWait: vi.fn(),
     handleDeparture: vi.fn().mockResolvedValue(undefined),
     isHolder: vi.fn().mockReturnValue(false),
   };
@@ -246,26 +247,24 @@ describe("PeerLifecycle — handleBecomeCoordinator", () => {
   });
 });
 
-describe("PeerLifecycle — announcing the elected coordinator (agent-comms#341)", () => {
-  it("announces the incumbent over every newly connected session", async () => {
+describe("PeerLifecycle and the elected coordinator (agent-comms#341)", () => {
+  it("claims the role at once after binding the port when no first-contact presence could reach anyone else", async () => {
     const h = makeHarness();
-    const handle = { id: "new-peer" };
 
-    await h.lifecycle.handlePeerConnected(handle, peerInfo("new-peer"));
+    await h.lifecycle.handleBecomeCoordinator([]);
 
-    expect(h.coordinatorRole.announceTo).toHaveBeenCalledWith(handle);
+    expect(h.coordinatorRole.claimIfVacant).toHaveBeenCalledTimes(1);
+    expect(h.coordinatorRole.claimIfVacantAfterWait).not.toHaveBeenCalled();
   });
 
-  it("announces the incumbent to a peer that introduced itself through the port", async () => {
+  it("waits for an incumbent's announcement before claiming after binding the port when first contact may reach an existing holder", async () => {
     const h = makeHarness();
-    const handle = { id: "joiner" };
+    h.deps.firstContactPort = FIRST_CONTACT_PORT;
 
-    await h.lifecycle.handleIntroduction(handle, {
-      peerId: "joiner",
-      dataPort: 2,
-    });
+    await h.lifecycle.handleBecomeCoordinator([]);
 
-    expect(h.coordinatorRole.announceTo).toHaveBeenCalledWith(handle);
+    expect(h.coordinatorRole.claimIfVacantAfterWait).toHaveBeenCalledTimes(1);
+    expect(h.coordinatorRole.claimIfVacant).not.toHaveBeenCalled();
   });
 
   it("hands every departure to the elected role before anything else", async () => {

@@ -16,6 +16,8 @@ export interface MeshStoreOptions {
   readonly presenceStaleAfterMs?: number | undefined;
   /** The UDP port init() binds the first-contact presence on (agent-comms#341): beacons, probes, and discovered peers fed into the ordinary peer-list flood, so a mesh forms with no coordinator at all. Left out, the store runs no presence: only the bridge entry points set it (bridge-mesh.ts, FIRST_CONTACT_PORT by default), so a store built by anything else, a test included, stays inert and never cross-discovers another store. A bridge-level test overrides it with an OS-assigned free port. */
   readonly firstContactPort?: number | undefined;
+  /** How long this store waits for an incumbent's coordinator claim to reach it before claiming the elected role itself (agent-comms#341): after the holder departs, after accepting a claim naming a holder it has no session to, and before a store that may meet others through first contact claims a vacant role. Defaults to ROOM_REQUEST_TIMEOUT_MS; a test shortens it. */
+  readonly coordinatorClaimWaitMs?: number | undefined;
   /** Locates this store's persisted bootstrap state. The connectionCodes ledger is per slot. gatewayTrust is shared by every slot in the slot's identity directory, so all stores on a machine (each fronted session included) advertise under one operator decision. */
   readonly slot?: Readonly<IdentitySlot>;
 }
