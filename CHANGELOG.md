@@ -1,3 +1,22 @@
+## [8.6.0](https://github.com/ExaDev/agent-comms/compare/v8.5.0...v8.6.0) (2026-10-01)
+
+### Features
+
+* **bridge:** label the dashboard's mesh graph and trace targets by display name ([524f032](https://github.com/ExaDev/agent-comms/commit/524f032b3b1e915cdb3bafc950effa4415a1d2bc))
+* **core:** one display convention for anything named by a device-id ([8d1acdc](https://github.com/ExaDev/agent-comms/commit/8d1acdcc0f5147fbc4e2c8073b5c6c45e78f0e2e))
+* **core:** signed machine display names and per-viewer petnames ([a51739e](https://github.com/ExaDev/agent-comms/commit/a51739eb7fa5cbf12696417a09adf428ab906c58)), closes [#345](https://github.com/ExaDev/agent-comms/issues/345)
+
+### Bug Fixes
+
+* **bridge:** refresh the dashboard's display names whenever the mesh graph is refreshed ([5eeaf15](https://github.com/ExaDev/agent-comms/commit/5eeaf15c0edf6253632cb5800bd96a80baf5bf4a))
+* **core:** fail loudly on an unreadable petnames file and label only full device-ids ([4299426](https://github.com/ExaDev/agent-comms/commit/429942668d8324e7cfd24f935c9d0f6fa4a586bb))
+* **core:** keep control sequences and forged labels out of every displayed name ([578c63d](https://github.com/ExaDev/agent-comms/commit/578c63d54873f08a017a82c0f71b3bcdadbc459d))
+* **core:** print names alone beside a full id and align list_agents columns to their content ([3b60039](https://github.com/ExaDev/agent-comms/commit/3b60039ed6e9e7511e887f09fa3c10c4b7dce09a))
+
+### Documentation
+
+* describe how names are refused, escaped and listed beside a full id ([f3941af](https://github.com/ExaDev/agent-comms/commit/f3941afcecf953c456264122b0a030a08bbfc892))
+
 ## [8.5.0](https://github.com/ExaDev/agent-comms/compare/v8.4.1...v8.5.0) (2026-10-01)
 
 ### Features
