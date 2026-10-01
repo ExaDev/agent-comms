@@ -309,7 +309,9 @@ export class DeliveryEngine {
           await this.reassertOwnAgent(agent, agent.version);
           break;
         }
+        // Bumped, as every store that sets an agent offline bumps it: left at the revision it had while running, the record would lose to any snapshot of that same revision still showing it running, and a peer that had not yet heard of the departure would turn it back on.
         agent.status = "offline";
+        this.bump(agent);
         this.deps.agents.set(patch.agentId, agent);
         break;
       }

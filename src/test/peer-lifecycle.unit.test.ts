@@ -80,6 +80,10 @@ function makeHarness(): Harness {
       applyPatch,
       notifyRoomsOfStatus,
       broadcastPatch,
+      bump: <T extends { version: number }>(entity: T): T => {
+        entity.version += 1;
+        return entity;
+      },
     },
     coordinatorRole,
   };
