@@ -48,6 +48,7 @@ import {
   serveWebConsole,
 } from "./web-console-static.js";
 import {
+  ACCESS_QUERY_PARAM,
   accessUrls,
   authorise,
   generateAccessToken,
@@ -60,7 +61,6 @@ import {
 } from "./web-access.js";
 import { startWebBeacon } from "./web-beacon.js";
 
-const HTTP_NO_CONTENT = 204;
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
@@ -195,7 +195,7 @@ export async function createWebServer(options?: {
   beaconPort?: number | undefined;
   existingController?: ChatController | undefined;
   coordinatorPort?: number | undefined;
-  /** Overrides the first-contact UDP port a fresh controller's store runs presence on -- ChatController's own firstContactPort, ignored when existingController is supplied. */
+  /** Overrides the first-contact UDP port a fresh controller's store runs presence on (ChatController's own firstContactPort); ignored when existingController is supplied. */
   firstContactPort?: number | undefined;
   /** Overrides the hub a fresh controller's own coordinator role dials on takeover -- ChatController's own hubUrl, ignored when existingController is supplied since that controller already made its own choice. See ChatController's own hubUrl doc comment. */
   hubUrl?: string | undefined;
@@ -364,7 +364,13 @@ function announceLanAccess(
   console.error(
     "Agent Comms web UI is reachable beyond loopback. Open one of these from a device on the network; the token is required for every non-loopback request:",
   );
-  for (const url of accessUrls(policy)) console.error(`  ${url}`);
+  const urls = accessUrls(policy);
+  if (urls.length === 0) {
+    console.error(
+      `No external address of this machine was found. Reach it by a name or address the network knows, at port ${String(policy.port)}, and open /?${ACCESS_QUERY_PARAM}=${policy.token}`,
+    );
+  }
+  for (const url of urls) console.error(`  ${url}`);
   const beacon = startWebBeacon({
     peerId,
     webPort: policy.port,
@@ -430,17 +436,6 @@ function handleRequest(
   webConsoleDist: string | undefined,
 ): void {
   const url = new URL(req.url ?? "/", `http://localhost`);
-
-  // CORS
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    res.writeHead(HTTP_NO_CONTENT);
-    res.end();
-    return;
-  }
 
   // wire-mesh's web-console — an alternate, generic reference-client UI, served only when AGENT_COMMS_WEB_CONSOLE_DIST resolves to a real build.
   if (
