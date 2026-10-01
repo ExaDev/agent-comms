@@ -43,13 +43,49 @@ export function mergeKnownDevices(
   }
 }
 
+/**
+ * The mesh-wide gossip directory a transport reads (agent-comms#48): the latest advert of every device it has heard of, from its local peer sessions and from the hub, kept across disconnects so a device's last-known advert stays queryable while its session is down.
+ *
+ * A device heard of through a local peer session is kept for good, since the local mesh admits its peers by its own approval rather than by gateway trust. A device heard of only through the hub is kept only while the hub would still admit it (admitted, the same decision directoryAdmission makes), and that is checked on every read (agent-comms#343): withdrawing trust from a device, principal or machine, in this process or in another that shares the trust file, removes from the view every device that trust alone let in, and so does a membership proof lapsing. Nothing re-adds such a device unless the hub admits it again.
+ */
+export class KnownDevices {
+  private readonly adverts = new Map<string, PeerAdvert>();
+  private readonly heardLocally = new Set<string>();
+
+  /** admitted answers whether the hub would still admit the device (hex) today. */
+  constructor(private readonly admitted: (deviceHex: string) => boolean) {}
+
+  /** Merges a local peer session's directory (see mergeKnownDevices). */
+  mergeLocal(directory: readonly DirectoryEntry[]): void {
+    mergeKnownDevices(this.adverts, directory);
+    for (const entry of directory) {
+      this.heardLocally.add(deviceIdToHex(entry.device));
+    }
+  }
+
+  /** Merges the hub session's admitted directory (see mergeKnownDevices). */
+  mergeHub(directory: readonly DirectoryEntry[]): void {
+    mergeKnownDevices(this.adverts, directory);
+  }
+
+  /** The current view, keyed by device-id hex, after dropping every hub-only device the hub would no longer admit. */
+  current(): ReadonlyMap<string, Readonly<PeerAdvert>> {
+    for (const deviceHex of [...this.adverts.keys()]) {
+      if (!this.heardLocally.has(deviceHex) && !this.admitted(deviceHex)) {
+        this.adverts.delete(deviceHex);
+      }
+    }
+    return this.adverts;
+  }
+}
+
 /** Merges a hub session's own admitted directory into knownDevices and announces each device in it as reachable. Every entry the hub hands over here has already passed admitEntries, so a device named in one is both present on the hub and trusted or vouched for by this side: exactly the moment a request queued for it becomes worth retrying, and the only such moment for a device that has no local peer session of its own to connect. */
 export function mergeAndAnnounceReachable(
-  knownDevices: Map<string, PeerAdvert>,
+  knownDevices: KnownDevices,
   directory: readonly DirectoryEntry[],
   events: Readonly<Pick<TransportEvents, "onDeviceReachable">>,
 ): void {
-  mergeKnownDevices(knownDevices, directory);
+  knownDevices.mergeHub(directory);
   for (const entry of directory) {
     events.onDeviceReachable(deviceIdToHex(entry.device));
   }

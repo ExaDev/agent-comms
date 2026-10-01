@@ -166,6 +166,11 @@ describe("machine identity", () => {
     expect(b1.gatewayTrust.isReachable(a1.peerId)).toBe(false);
     expect(b1.gatewayTrust.isReachable(a2.peerId)).toBe(false);
     expect(b1.listVerifiedMembers()).toEqual([]);
+    const afterRevoke = await listAgentsText(b1);
+    expect(afterRevoke).toContain(b1.peerId);
+    expect(afterRevoke).not.toContain(a1.peerId);
+    expect(afterRevoke).not.toContain(a2.peerId);
+    expect(afterRevoke).not.toContain(remoteHeading);
   });
 
   it("carries the machine proof only in a visible agent's advert", async () => {

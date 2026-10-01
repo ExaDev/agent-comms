@@ -97,7 +97,7 @@ export class GatewayTrust {
     this.persist();
   }
 
-  /** Withdraws a previously trusted device-id (hex, case-insensitive). A no-op if it was never trusted. Mirrors FederationManager.removeTrustedFingerprint's own precedent: already-merged directory entries and in-flight requests are unaffected -- this governs future traffic only. Persists the updated set when this instance was constructed with a location. */
+  /** Withdraws a previously trusted device-id (hex, case-insensitive). A no-op if it was never trusted. Requests already in flight are unaffected; a directory entry merged from the hub because of this trust alone leaves the transport's view on its next read (KnownDevices, gossip-directory.ts). Persists the updated set when this instance was constructed with a location. */
   remove(deviceHex: string): void {
     this.refresh();
     this.trusted.delete(deviceHex.toLowerCase());
@@ -189,7 +189,7 @@ export class GatewayTrust {
     this.persist();
   }
 
-  /** Withdraws trust from one issuer and, in the same act, from every device reachable only through it. */
+  /** Withdraws trust from one issuer and, in the same act, from every device reachable only through it; the transport's directory drops those devices on its next read (KnownDevices, gossip-directory.ts). */
   private removeIssuer(kind: GroupKind, deviceHex: string): void {
     this.refresh();
     const issuer = deviceHex.toLowerCase();
