@@ -21,7 +21,6 @@ import {
   MCP_TOOL_PARAMS,
   type BridgeMeshOptions,
 } from "../../core/index.js";
-import type { Readable } from "node:stream";
 import type { IdentitySlot } from "../../core/identity-store.js";
 import { releaseIdentityLock } from "../../core/identity-store.js";
 import { wireDefaultCcPeerFront } from "../cc-peer/default-front.js";
@@ -38,14 +37,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Seams that let a test run the real bridge against an isolated mesh and a piped stdin; every real launch omits them. */
+/** Seams that let a test run the real bridge against an isolated mesh; every real launch omits them. */
 export interface McpBridgeOptions {
   /** Ports and hub for the bridge's own mesh store; see BridgeMeshOptions. */
   mesh?: BridgeMeshOptions | undefined;
   /** The identity slot. Defaults to this process's working directory under the `mcp` harness. */
   slot?: IdentitySlot | undefined;
-  /** The stream JSON-RPC requests are read from. Defaults to process.stdin. */
-  input?: Readable | undefined;
 }
 
 export async function run(options?: Readonly<McpBridgeOptions>): Promise<void> {
@@ -127,7 +124,7 @@ export async function run(options?: Readonly<McpBridgeOptions>): Promise<void> {
   await store.init();
   const webHandle = await tryStartBridgeWebServer(store, "mcp");
   tool.getWebUrlStatus = () => getWebUrlStatus(webHandle);
-  await mcp.connect(new StdioServerTransport(options?.input));
+  await mcp.connect(new StdioServerTransport());
 
   const reg = await ensureRegistered({
     cwd: process.cwd(),
