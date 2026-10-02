@@ -30,6 +30,7 @@ import {
   installShutdownSignalHandlers,
   isActionableEvent,
   MCP_TOOL_PARAMS,
+  type BridgeRunOptions,
 } from "../../core/index.js";
 import {
   releaseIdentityLock,
@@ -163,13 +164,13 @@ function drainPending(filePath: string): string[] {
     .filter((l) => l.length > 0);
 }
 
-export async function run(): Promise<void> {
+export async function run(options?: Readonly<BridgeRunOptions>): Promise<void> {
   // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us
-  const identitySlot: IdentitySlot = {
+  const identitySlot: IdentitySlot = options?.slot ?? {
     harness: "claude-code",
     cwd: process.cwd(),
   };
-  const { store, tool } = await createBridgeMesh(identitySlot);
+  const { store, tool } = await createBridgeMesh(identitySlot, options?.mesh);
   store.onError = createMeshErrorReporter();
   store.onCoordinatorRoleChanged = wireDefaultCcPeerFront(store);
   let agentId: string | undefined;

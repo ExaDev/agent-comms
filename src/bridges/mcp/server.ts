@@ -19,7 +19,7 @@ import {
   drainAndFormat,
   installShutdownSignalHandlers,
   MCP_TOOL_PARAMS,
-  type BridgeMeshOptions,
+  type BridgeRunOptions,
 } from "../../core/index.js";
 import type { IdentitySlot } from "../../core/identity-store.js";
 import { releaseIdentityLock } from "../../core/identity-store.js";
@@ -37,15 +37,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Seams that let a test run the real bridge against an isolated mesh; every real launch omits them. */
-export interface McpBridgeOptions {
-  /** Ports and hub for the bridge's own mesh store; see BridgeMeshOptions. */
-  mesh?: BridgeMeshOptions | undefined;
-  /** The identity slot. Defaults to this process's working directory under the `mcp` harness. */
-  slot?: IdentitySlot | undefined;
-}
-
-export async function run(options?: Readonly<McpBridgeOptions>): Promise<void> {
+export async function run(options?: Readonly<BridgeRunOptions>): Promise<void> {
   // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us.
   const identitySlot: IdentitySlot = options?.slot ?? {
     harness: "mcp",

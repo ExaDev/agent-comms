@@ -51,6 +51,14 @@ export interface BridgeMeshOptions {
   firstContactPort?: number | undefined;
 }
 
+/** Seams that let a test run a real bridge against an isolated mesh; every real launch omits them. */
+export interface BridgeRunOptions {
+  /** Ports and hub for the bridge's own mesh store; see BridgeMeshOptions. */
+  mesh?: BridgeMeshOptions | undefined;
+  /** The identity slot. Defaults to this process's working directory under the bridge's own harness. */
+  slot?: IdentitySlot | undefined;
+}
+
 /** The synchronous half of bridge construction: everything loadOrCreateIdentity's own synchronous key material makes possible. Use this directly only when the calling entry point cannot await inline (see this file's own header comment); every other caller should use createBridgeMesh below. */
 export function createBridgeMeshSync(
   slot: Readonly<IdentitySlot>,
