@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_HUB_URL,
+  HUB_URL_ENV_VAR,
   mergeMessageHistories,
+  resolveHubUrl,
   ROOM_TOKEN_LIFETIME_MS,
 } from "../core/mesh-store-shared.js";
 
@@ -127,5 +130,36 @@ describe("mergeMessageHistories", () => {
     );
     expect(merged.map((m) => m.id)).toEqual(["a"]);
     expect(merged[0]?.readBy.sort()).toEqual(["u1", "u2"]);
+  });
+});
+
+describe("resolveHubUrl", () => {
+  it("returns the production hub when the variable is unset", () => {
+    expect(resolveHubUrl({})).toBe(DEFAULT_HUB_URL);
+  });
+
+  it("returns the production hub when the variable is blank", () => {
+    expect(resolveHubUrl({ [HUB_URL_ENV_VAR]: "  " })).toBe(DEFAULT_HUB_URL);
+  });
+
+  it("returns a configured wss:// hub", () => {
+    expect(
+      resolveHubUrl({ [HUB_URL_ENV_VAR]: "wss://relay.example.com/" }),
+    ).toBe("wss://relay.example.com/");
+  });
+
+  it("returns a configured ws:// hub, trimmed", () => {
+    expect(resolveHubUrl({ [HUB_URL_ENV_VAR]: " ws://10.0.0.5:8787/ " })).toBe(
+      "ws://10.0.0.5:8787/",
+    );
+  });
+
+  it("throws on a value that is not a WebSocket URL instead of falling back to the public hub", () => {
+    expect(() =>
+      resolveHubUrl({ [HUB_URL_ENV_VAR]: "https://relay.example.com/" }),
+    ).toThrow(HUB_URL_ENV_VAR);
+    expect(() => resolveHubUrl({ [HUB_URL_ENV_VAR]: "not a url" })).toThrow(
+      HUB_URL_ENV_VAR,
+    );
   });
 });
