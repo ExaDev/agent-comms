@@ -15,6 +15,8 @@ import { runAccountCommand, type AccountCliIo } from "../account-cli.js";
 import { freeLocalPort, realHubOverWs, TeardownStack } from "./hub-helpers.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 
+/** A device-id is a 64-character lowercase hex SHA-256 digest. */
+const DEVICE_ID_HEX_LENGTH = 64;
 /** Short enough that a gossip re-advertisement fires within a test's own wait budget. */
 const FAST_GOSSIP_INTERVAL_MS = 50;
 
@@ -69,6 +71,7 @@ async function machine(
   await wireTestTransport(store, {
     presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
     userIdentityOptions: { dir },
+    machineIdentityOptions: { dir },
     clock,
   });
   await store.init();
@@ -151,6 +154,75 @@ describe("account join", () => {
     expect(loadUserDisplayName({ dir: userDirOf(newMachine) })).toBe(
       "work account",
     );
+  });
+
+  it("keeps the label given on join as the issuing machine's petname for the joining machine", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+    const account = await machine(hub.url, "account-home");
+    const newMachine = await machine(hub.url, "new-machine");
+    const newMachineId = newMachine.getMachineId();
+
+    const invite = await account.account.invite();
+    await newMachine.account.join(invite.code, { label: "studio mac" });
+
+    expect(account.naming.listPetnames().get(newMachineId ?? "")).toBe(
+      "studio mac",
+    );
+    expect(newMachine.naming.listPetnames().size).toBe(0);
+  });
+
+  it("refuses an unusable label before redeeming anything, leaving the invite for another try", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+    const account = await machine(hub.url, "account-home");
+    const newMachine = await machine(hub.url, "new-machine");
+    const own = principalOf(newMachine);
+
+    const invite = await account.account.invite();
+    await expect(
+      newMachine.account.join(invite.code, { label: "bad\u001b[2Jlabel" }),
+    ).rejects.toMatchObject({ code: "INVALID_NAME" });
+
+    expect(newMachine.gatewayTrust.isTrusted(account.peerId)).toBe(false);
+    expect(principalOf(newMachine)).toBe(own);
+    await newMachine.account.join(invite.code, { label: "studio mac" });
+    expect(principalOf(newMachine)).toBe(principalOf(account));
+  });
+
+  it("refuses a join request whose label breaks the rules without spending the invite, even from a peer that skips its own check", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+    const account = await machine(hub.url, "account-home");
+    const invite = await account.account.invite();
+    const request = async (params: Record<string, unknown>) =>
+      account.account.handleJoinRequest({
+        requestId: 1,
+        command: {
+          verb: "account:join",
+          params: { verb: "account.join", code: invite.code.code, ...params },
+        },
+        scope: { kind: "node" },
+        respond: async () => Promise.resolve(),
+      });
+
+    expect(
+      await request({ label: "x", machine: "not-a-device-id" }),
+    ).toMatchObject({ result: "error", code: "invalid_label" });
+    expect(
+      await request({
+        label: "bad\u001bname",
+        machine: "a".repeat(DEVICE_ID_HEX_LENGTH),
+      }),
+    ).toMatchObject({ result: "error", code: "invalid_label" });
+    expect(
+      await request({ machine: "a".repeat(DEVICE_ID_HEX_LENGTH) }),
+    ).toMatchObject({
+      result: "error",
+      code: "invalid_label",
+    });
+    expect(account.naming.listPetnames().size).toBe(0);
+    expect(await request({})).toMatchObject({ result: "ok" });
   });
 
   it("answers an invite once, so a second machine redeeming the same invite is refused", async () => {
@@ -245,6 +317,44 @@ describe("account join", () => {
     expect(inviteOutput.at(-1)).toBe(
       "The invite was redeemed: the new machine now holds this account.",
     );
+  });
+
+  it("takes --label on account join and the issuer keeps it as its name for the new machine", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+    const account = await machine(hub.url, "account-home", {
+      visibility: "hidden",
+    });
+    const newMachine = await machine(hub.url, "new-machine", {
+      visibility: "hidden",
+    });
+    let printInvite: (line: string) => void = () => undefined;
+    const printedInvite = new Promise<string>((resolve) => {
+      printInvite = resolve;
+    });
+    const noSecret = async (): Promise<string> =>
+      Promise.reject(new Error("the invite command reads no secret"));
+
+    const inviting = runAccountCommand(
+      ["invite"],
+      commandIo(account, noSecret, (line) => {
+        if (line.startsWith("{")) printInvite(line);
+      }),
+    );
+    const invite = await printedInvite;
+    await runAccountCommand(
+      ["join", "--label", "studio mac"],
+      commandIo(
+        newMachine,
+        async () => Promise.resolve(invite),
+        () => undefined,
+      ),
+    );
+    await inviting;
+
+    expect(
+      account.naming.listPetnames().get(newMachine.getMachineId() ?? ""),
+    ).toBe("studio mac");
   });
 
   it("refuses an account join given something that is not an invite", async () => {

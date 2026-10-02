@@ -27,7 +27,7 @@ export const ACCOUNT_USAGE = [
   "Usage: agent-comms account export <file>",
   "       agent-comms account import <file>",
   "       agent-comms account invite [--ttl-minutes <n>] [--sign-key <file>]",
-  "       agent-comms account join [--public-key <file>] [--fingerprint <hex>]",
+  "       agent-comms account join [--public-key <file>] [--fingerprint <hex>] [--label <name>]",
 ].join("\n");
 
 export interface AccountCliIo {
