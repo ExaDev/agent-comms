@@ -1,3 +1,10 @@
+## [8.13.7](https://github.com/ExaDev/agent-comms/compare/v8.13.6...v8.13.7) (2026-10-02)
+
+### Documentation
+
+* drop the blank lines left above the tagline ([6ab1cc1](https://github.com/ExaDev/agent-comms/commit/6ab1cc1ce47e4a1c7c6fa04106be89486098231b))
+* place the readme charts after the tagline ([6c37930](https://github.com/ExaDev/agent-comms/commit/6c37930f3f2d3ae0d9dcb33d115efead7e5012ae))
+
 ## [8.13.6](https://github.com/ExaDev/agent-comms/compare/v8.13.5...v8.13.6) (2026-10-02)
 
 ### Bug Fixes
