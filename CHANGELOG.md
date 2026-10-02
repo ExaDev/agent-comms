@@ -1,3 +1,9 @@
+## [8.13.5](https://github.com/ExaDev/agent-comms/compare/v8.13.4...v8.13.5) (2026-10-02)
+
+### Documentation
+
+* use a transparent background and no logo on the readme charts ([c2f0697](https://github.com/ExaDev/agent-comms/commit/c2f0697b8a9dbf65ddcbcd550e09ff75fd56296c))
+
 ## [8.13.4](https://github.com/ExaDev/agent-comms/compare/v8.13.3...v8.13.4) (2026-10-02)
 
 ### Documentation
