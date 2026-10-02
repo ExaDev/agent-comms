@@ -1,3 +1,9 @@
+## [8.13.4](https://github.com/ExaDev/agent-comms/compare/v8.13.3...v8.13.4) (2026-10-02)
+
+### Documentation
+
+* plot the readme charts on a log scale at a width that sits side by side ([93f6b2a](https://github.com/ExaDev/agent-comms/commit/93f6b2a2f6b96bba6e204324fe3a2ba405c4bfca))
+
 ## [8.13.3](https://github.com/ExaDev/agent-comms/compare/v8.13.2...v8.13.3) (2026-10-02)
 
 ### Documentation
