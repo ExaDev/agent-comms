@@ -1,3 +1,24 @@
+## [8.9.0](https://github.com/ExaDev/agent-comms/compare/v8.8.1...v8.9.0) (2026-10-02)
+
+### Features
+
+* **core:** choose the hub session's relay from a ranked set ([53f5573](https://github.com/ExaDev/agent-comms/commit/53f5573b505f21234d783281e9f3334dbfe9ac57))
+* **core:** front the served relay's clients over the hub session's uplink ([0d6a824](https://github.com/ExaDev/agent-comms/commit/0d6a8241f30e96c122e37712c76e5cdf4ddd2f75))
+* **core:** serve the relay role from the elected coordinator ([a68e725](https://github.com/ExaDev/agent-comms/commit/a68e725d7c294b157734207cd9c078b170b32e41))
+
+### Refactoring
+
+* **core:** build the hosted-room adverts outside the store ([dfea2e0](https://github.com/ExaDev/agent-comms/commit/dfea2e03c85803e9d1cc0231afd7d3b160ee29f3))
+
+### Documentation
+
+* describe the relay fronting its clients over its uplink ([1ee6d5c](https://github.com/ExaDev/agent-comms/commit/1ee6d5c40964c215ef491a18c192424db406ad6e))
+* describe the relay set and the relay the coordinator serves ([353cae2](https://github.com/ExaDev/agent-comms/commit/353cae2c0ba652d61f98fa4580afd53bca40e3a8))
+
+### Tests
+
+* **core:** reach a store behind the relay from a device on the public hub ([e60733a](https://github.com/ExaDev/agent-comms/commit/e60733a414dbb6997da64606b405f54e15909b6b))
+
 ## [8.8.1](https://github.com/ExaDev/agent-comms/compare/v8.8.0...v8.8.1) (2026-10-02)
 
 ### Build
