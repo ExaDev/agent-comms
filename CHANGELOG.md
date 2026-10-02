@@ -1,3 +1,9 @@
+## [8.11.0](https://github.com/ExaDev/agent-comms/compare/v8.10.2...v8.11.0) (2026-10-02)
+
+### Features
+
+* **core:** surface LAN peers' web UI beacons in a lan_web_uis listing ([1c62de2](https://github.com/ExaDev/agent-comms/commit/1c62de2412373ae1526c2c45952a51d60981e296))
+
 ## [8.10.2](https://github.com/ExaDev/agent-comms/compare/v8.10.1...v8.10.2) (2026-10-02)
 
 ### Build
