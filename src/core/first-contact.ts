@@ -12,6 +12,7 @@
 
 import * as dgram from "node:dgram";
 import type { PeerInfo } from "./wire-protocol.js";
+import { isWebBeaconPayload } from "./web-beacon.js";
 
 /** The shared beacon port, the same one discovery-mdns.ts's backend uses: one presence per machine-local network, interoperable payloads. */
 export const FIRST_CONTACT_PORT = 19877;
@@ -54,6 +55,10 @@ export interface FirstContactOptions {
   name: string;
   /** Called once per discovered peer (deduplicated by peerId within this instance's lifetime). */
   onPeerDiscovered: (peer: Readonly<DiscoveredPeer>) => void;
+  /** Called for every web UI beacon heard (agent-comms#353), with the host taken from the datagram's source address. Not deduplicated: a beacon repeats on the presence's own interval, and the receiver refreshes its entry each time. Absent means this presence ignores web beacons, today's behaviour before the receiving side existed. */
+  onWebBeacon?: (
+    beacon: Readonly<{ peerId: string; host: string; webPort: number }>,
+  ) => void;
   /** The UDP port the presence binds, beacons, and probes on. Defaults to FIRST_CONTACT_PORT; overridable so tests take an OS-assigned free port rather than contending with a real machine presence. */
   port?: number;
   /** Reported, never fatal: a network where broadcast is unavailable (some cloud environments) simply yields no discovery. */
@@ -113,6 +118,15 @@ export class FirstContact {
 
   private handlePacket(msg: Buffer, rinfo: dgram.RemoteInfo): void {
     const parsed: unknown = this.parseJson(msg);
+    if (isWebBeaconPayload(parsed)) {
+      if (parsed.peerId === this.opts.peerId) return;
+      this.opts.onWebBeacon?.({
+        peerId: parsed.peerId,
+        host: rinfo.address,
+        webPort: parsed.webPort,
+      });
+      return;
+    }
     if (!isBeaconPayload(parsed)) {
       // A probe from another peer: answer at once with a fresh beacon on the same many-receiver destinations (see the header comment on why never a unicast reply), so the prober does not wait out our interval.
       if (isProbePayload(parsed)) {
@@ -201,6 +215,7 @@ export function startFirstContact(
     dataPort: number;
     port: number;
     onPeer: (peer: Readonly<PeerInfo>) => void;
+    onWebBeacon?: FirstContactOptions["onWebBeacon"];
     onError: (error: Error) => void;
   }>,
 ): FirstContact {
@@ -209,6 +224,9 @@ export function startFirstContact(
     dataPort: input.dataPort,
     name: `agent-comms-${input.peerId.slice(0, BEACON_NAME_PEER_ID_CHARS)}`,
     port: input.port,
+    ...(input.onWebBeacon !== undefined
+      ? { onWebBeacon: input.onWebBeacon }
+      : {}),
     onPeerDiscovered: (peer) => {
       input.onPeer({
         id: peer.peerId,

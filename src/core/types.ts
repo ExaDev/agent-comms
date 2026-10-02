@@ -454,6 +454,7 @@ export const CommsActionSchema = defineSchema(
       id: z.string(),
     }),
     z.object({ action: z.literal("mesh_interfaces") }),
+    z.object({ action: z.literal("lan_web_uis") }),
     z.object({
       action: z.literal("mesh_listen"),
       host: z.string(),

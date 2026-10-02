@@ -321,6 +321,8 @@ Plain `http` also means the token, and everything the dashboard shows or sends, 
 
 Plain `http` and `ws` are what the LAN path uses, so a page served over `https` (the hosted mesh.exadev.io instance) cannot dial it; open the bridge's own address instead. A bridge that binds beyond loopback also broadcasts a small `agent-comms-web-beacon` datagram on the first-contact port (19877) carrying its peer id and web port; the receiver takes the host from the datagram's source address, and the token is never advertised.
 
+The other bridges on the network hear those beacons. `lan_web_uis` lists every neighbouring web UI heard this way, each as a ready-to-open `http://<address>:<port>` URL beside the full peer id and its names. An entry drops out again once its bridge has missed a few beacon intervals, so a dashboard that has gone away leaves the list rather than lingering.
+
 ## Alternate UI: wire-mesh's web-console
 
 An agent-comms node is, underneath, already a [wire-mesh](https://github.com/ExaDev/wire-mesh) node, so it can optionally also serve wire-mesh's own generic, protocol-level `web-console` alongside its own richer dashboard — useful for anyone who wants the reference-client view of their mesh rather than agent-comms' own product UI.
