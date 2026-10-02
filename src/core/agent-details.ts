@@ -186,13 +186,14 @@ export class AgentDetailsExchange {
     for (;;) {
       let outcome;
       try {
-        outcome = await this.deps
-          .requireTransport()
-          .sendRoomRequest(
-            agentId,
-            { verb: AGENT_DETAILS_VERB, params: { verb: AGENT_DETAILS_VERB } },
-            { kind: "node" },
-          );
+        outcome = await this.deps.requireTransport().sendRoomRequest(
+          agentId,
+          {
+            verb: AGENT_DETAILS_CAPABILITY_VERB,
+            params: { verb: AGENT_DETAILS_VERB },
+          },
+          { kind: "node" },
+        );
       } catch {
         // An unreachable peer is routine (it is listed from its last advert); its details stay not shared.
         return;
