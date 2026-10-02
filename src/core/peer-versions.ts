@@ -76,3 +76,23 @@ export async function queryPeerVersion(
   }
   return { version };
 }
+
+/** The four version reads MeshStore exposes (gossiped agent-comms, cc-peer and wire-mesh-core versions, and the live query), each resolving the transport only when called. */
+export function peerVersionReaders(
+  requireTransport: () => Readonly<MeshTransport>,
+): {
+  agentComms: (deviceId: string) => string | undefined;
+  ccPeer: (deviceId: string) => string | undefined;
+  wireMeshCore: (deviceId: string) => string | undefined;
+  query: (deviceId: string) => Promise<{ version: string } | { error: string }>;
+} {
+  return {
+    agentComms: (deviceId) =>
+      getPeerAgentCommsVersions(requireTransport(), deviceId)?.agentComms,
+    ccPeer: (deviceId) =>
+      getPeerAgentCommsVersions(requireTransport(), deviceId)?.ccPeer,
+    wireMeshCore: (deviceId) =>
+      getPeerWireMeshCoreVersion(requireTransport(), deviceId),
+    query: async (deviceId) => queryPeerVersion(requireTransport(), deviceId),
+  };
+}

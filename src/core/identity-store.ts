@@ -19,6 +19,12 @@ import {
 } from "./identity.js";
 import type { PeerIdentity } from "./identity.js";
 import { writeFileAtomic } from "./atomic-file.js";
+import {
+  isPidAlive,
+  readLockPid,
+  releaseLockFile,
+  tryAcquireLock,
+} from "./pid-lock-file.js";
 
 /** A bridge's identity slot: one persisted identity per harness and cwd. */
 export interface IdentitySlot {
@@ -186,65 +192,6 @@ export function oplogDirFor(slot: Readonly<IdentitySlot>): string {
   return path.join(dir, base);
 }
 
-function isPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Read the PID holding the lock, or undefined when absent or unreadable. */
-function readLockPid(lockFile: string): number | undefined {
-  let raw: string;
-  try {
-    raw = fs.readFileSync(lockFile, "utf-8");
-  } catch {
-    return undefined;
-  }
-  const pid = Number.parseInt(raw.trim(), 10);
-  return Number.isInteger(pid) ? pid : undefined;
-}
-
-function isEexist(err: unknown): boolean {
-  if (!(err instanceof Error) || !("code" in err)) return false;
-  return err.code === "EEXIST";
-}
-
-/**
- * Attempts to atomically claim lockFile for this process via write-temp-then-hardlink: link() is POSIX-guaranteed atomic and exclusive (it fails with EEXIST if the target name already exists), and because the temp file's content is fully written before the link is created, the lock file's content can never be observed incomplete the instant its name exists -- unlike a bare open(O_CREAT|O_EXCL) followed by a separate write(), which leaves a real window where the file exists with zero bytes. Returns the current holder when someone else already holds it (a live different PID blocks the claim; a stale one is taken over here, racing a concurrent taker-over the same way a live holder would -- whichever wins the exclusive link claims it, the loser simply reports the winner's PID once it re-reads the lock).
- */
-function tryAcquireLock(
-  lockFile: string,
-): { acquired: true } | { acquired: false; heldBy: number | undefined } {
-  const claim = (): boolean => {
-    const tmpFile = `${lockFile}.${String(process.pid)}.tmp`;
-    fs.writeFileSync(tmpFile, `${String(process.pid)}\n`, "utf-8");
-    try {
-      fs.linkSync(tmpFile, lockFile);
-      return true;
-    } catch (err) {
-      if (!isEexist(err)) throw err;
-      return false;
-    } finally {
-      fs.rmSync(tmpFile, { force: true });
-    }
-  };
-
-  if (claim()) return { acquired: true };
-
-  const heldBy = readLockPid(lockFile);
-  if (heldBy !== undefined && heldBy !== process.pid && isPidAlive(heldBy)) {
-    return { acquired: false, heldBy };
-  }
-
-  // The existing lock is stale (a dead PID, or unreadable) -- take it over.
-  fs.rmSync(lockFile, { force: true });
-  if (claim()) return { acquired: true };
-  return { acquired: false, heldBy: readLockPid(lockFile) };
-}
-
 function persistIdentity(identityFile: string, identity: PeerIdentity): void {
   const stored: StoredIdentity = {
     privateKey: identity.privateKey,
@@ -353,10 +300,7 @@ export function loadIdentityForFront(
  * Release the slot lock on graceful shutdown. A lock held by another PID (taken over after this process crashed and restarted) is left alone.
  */
 export function releaseIdentityLock(slot: Readonly<IdentitySlot>): void {
-  const { lockFile } = slotPaths(slot);
-  if (readLockPid(lockFile) === process.pid) {
-    fs.rmSync(lockFile, { force: true });
-  }
+  releaseLockFile(slotPaths(slot).lockFile);
 }
 
 /** Reads the slot's raw stored identity record, or undefined if the file is missing or unparseable. Used by the room-token functions below to read-modify-write only the roomTokens field, leaving the persisted key material exactly as it is. */

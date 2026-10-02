@@ -24,6 +24,7 @@ import { FIRST_CONTACT_PORT } from "./first-contact.js";
 import { CommsTool } from "./tool.js";
 import { WireMeshTransport } from "./wire-mesh-transport.js";
 import { loadOrCreateIdentity, oplogDirFor } from "./identity-store.js";
+import { openAccountLedger } from "./account-ledger-store.js";
 import type { IdentitySlot } from "./identity-store.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
 import type { PeerIdentity } from "./identity.js";
@@ -99,6 +100,10 @@ export function createBridgeMeshSyncFromIdentity(
     getHostedRooms: () => store.hostedRooms,
     dataStorage,
     getSelfAgentAdvert: () => store.selfAgentAdvert,
+    accountReplication: {
+      getLedger: () => store.accountLedger,
+      isAccountMember: async (claim) => store.membership.isAccountMember(claim),
+    },
     gatewayTrust: store.gatewayTrust,
   });
   transport.getCcPeerVersion = () => store.getCcPeerVersion?.();
@@ -118,13 +123,19 @@ export function createBridgeMeshSyncFromIdentity(
     store,
     tool,
     attachIdentity: async () => {
+      const clock = createSystemClock();
       store.setIdentity({
         identity: await toIdentityPort(identity),
-        clock: createSystemClock(),
+        clock,
         slot,
         revocation,
         dataStorage,
         userIdentity: await toIdentityPort(userIdentity),
+        accountLedger: await openAccountLedger({
+          userIdentityOptions,
+          userIdentity,
+          clock,
+        }),
         userIdentityOptions,
         machineIdentity: await toIdentityPort(machineIdentity),
         machineIdentityOptions,

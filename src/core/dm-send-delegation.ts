@@ -19,10 +19,7 @@ import {
   DM_SEND_CAPABILITY,
   DM_SEND_SCOPE_KIND,
 } from "./dm-token-verification.js";
-import {
-  saveIssuedDmGrant,
-  type UserIdentityOptions,
-} from "./user-identity.js";
+import type { AccountLedger } from "./account-ledger.js";
 
 /** delegationsRemaining a delegated device's own token permits below it, when the caller doesn't ask for more -- 0, matching every other non-delegable grant this codebase already mints by default (device-membership.ts's own NOT_DELEGABLE): an ordinary device is a leaf of the chain, not a further delegator. */
 const LEAF_NOT_DELEGABLE = 0;
@@ -30,8 +27,8 @@ const LEAF_NOT_DELEGABLE = 0;
 export interface DelegateDmSendToDeviceOptions {
   /** The principal doing the sub-delegating -- must be the same identity the parent grant's own bearer names, or mintCapabilityToken's own parent-bearer-matches-issuer narrowing check refuses the mint outright (`parent_bearer_mismatch`). */
   userIdentity: IdentityPort;
-  /** Directory override for tests, forwarded to user-identity.ts's own issued-grant storage -- must resolve to the same user-identity.json userIdentity's own key material lives in. */
-  userIdentityOptions?: UserIdentityOptions;
+  /** The account's replicated grant ledger, which records the delegation so any machine holding the account key can revoke it. */
+  accountLedger: AccountLedger;
   clock: Clock;
   tokenId: Uint8Array<ArrayBuffer>;
   /** The grant this principal itself was admitted with (room-lifecycle.ts's admitAgentForDm, minted with delegationsRemaining \> 0) -- every one of tokens.cddl's own narrowing obligations is checked against it at mint time. */
@@ -46,7 +43,7 @@ export interface DelegateDmSendToDeviceOptions {
 }
 
 /**
- * Mints deviceId's own dm:send delegation from a received grant: bearer = deviceId, parent = the grant this principal itself was admitted with, scope unchanged (still the REMOTE admitting principal's own "user" scope, never this principal's own device-id) -- mintCapabilityToken's own narrowing refuses this outright if parent's own delegationsRemaining was 0 (nothing left to sub-delegate) or if userIdentity does not match parent's own bearer. On success, records the token-id under THIS principal's own issued-grant store, keyed by deviceId's hex, so a later revocation can find it -- reuses user-identity.ts's saveIssuedDmGrant/loadIssuedDmGrant/deleteIssuedDmGrant exactly as admitAgentForDm's own root-level self-grants do, since both are simply "grants this identity has issued," keyed by bearer, regardless of whether the grant is root-level or itself a delegation.
+ * Mints deviceId's own dm:send delegation from a received grant: bearer = deviceId, parent = the grant this principal itself was admitted with, scope unchanged (still the REMOTE admitting principal's own "user" scope, never this principal's own device-id); mintCapabilityToken's own narrowing refuses this outright if parent's own delegationsRemaining was 0 (nothing left to sub-delegate) or if userIdentity does not match parent's own bearer. On success, records the token-id in THIS principal's own replicated grant ledger as a dm grant keyed by deviceId's hex, so a later revocation on any of the account's machines can find it; admitAgentForDm's own root-level self-grants are recorded the same way, since both are simply grants this identity has issued, keyed by bearer, whether root-level or a delegation.
  */
 export async function delegateDmSendToDevice(
   options: Readonly<DelegateDmSendToDeviceOptions>,
@@ -67,8 +64,8 @@ export async function delegateDmSendToDevice(
   });
   if (!verdict.ok) return verdict;
 
-  saveIssuedDmGrant(
-    options.userIdentityOptions,
+  await options.accountLedger.recordGrant(
+    "dm",
     deviceIdToHex(options.deviceId),
     options.tokenId,
   );

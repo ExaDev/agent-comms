@@ -8,15 +8,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect, vi, afterEach } from "vitest";
 import {
-  deleteIssuedDeviceGrant,
-  loadIssuedDeviceGrant,
+  clearLegacyIssuedGrants,
+  loadOrCreateLedgerWriterNonce,
   loadOrCreateUserIdentity,
-  saveIssuedDeviceGrant,
-  loadIssuedDmGrant,
-  saveIssuedDmGrant,
-  deleteIssuedDmGrant,
+  readLegacyIssuedGrants,
 } from "../core/user-identity.js";
 import { CERTIFICATE_VALIDITY_MS } from "../core/identity.js";
+import { generateWriterNonce } from "../core/account-ledger-crypto.js";
 import { randomId } from "../core/random-id.js";
 
 // node:fs's linkSync is wrapped (not replaced) so every test gets the real filesystem by default; only the one race test below overrides it, via mockImplementationOnce, to simulate a concurrent writer winning the exclusive create. vi.spyOn cannot target an ESM named export directly ("Module namespace is not configurable"), so the wrap has to happen at vi.mock time instead.
@@ -109,7 +107,7 @@ test("a corrupt identity file is refused and left as it is, never replaced with 
   expect(fs.readFileSync(identityFile(dir), "utf-8")).toBe("{not json");
 });
 
-test("valid key material beside malformed grant bookkeeping is refused at load, the same verdict the grant writers would reach", () => {
+test("valid key material beside malformed grant bookkeeping is refused at load, the same verdict the ledger writer nonce read would reach", () => {
   const dir = tempDir();
   loadOrCreateUserIdentity({ dir });
   const file = identityFile(dir);
@@ -123,9 +121,9 @@ test("valid key material beside malformed grant bookkeeping is refused at load, 
   expect(() => loadOrCreateUserIdentity({ dir })).toThrow(
     /does not hold a usable identity record/,
   );
-  expect(() => {
-    saveIssuedDmGrant({ dir }, "bearer", new Uint8Array([1]));
-  }).toThrow(/does not hold a usable identity record/);
+  expect(() =>
+    loadOrCreateLedgerWriterNonce({ dir }, () => new Uint8Array([1])),
+  ).toThrow(/does not hold a usable identity record/);
   expect(fs.readFileSync(file, "utf-8")).toBe(damaged);
 });
 
@@ -171,160 +169,112 @@ test("losing the creation race re-reads the winner's identity instead of overwri
   expect(loser.deviceId).toEqual(winner.deviceId);
 });
 
-test("loadIssuedDeviceGrant is undefined for a device this principal has never admitted", () => {
+/** Reads user-identity.json as a plain object, the way a test inspects or edits fields a real build would have written. */
+function readStoredRecord(dir: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(
+    fs.readFileSync(identityFile(dir), "utf-8"),
+  );
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("user-identity.json is not an object");
+  }
+  return { ...parsed };
+}
+
+function writeStoredRecord(dir: string, record: Record<string, unknown>): void {
+  fs.writeFileSync(identityFile(dir), JSON.stringify(record));
+}
+
+/** The token-ids a pre-ledger build recorded in the fixture below: arbitrary, distinct, and only compared for identity. */
+const LEGACY_TOKENS = {
+  deviceA: randomId(),
+  deviceB: randomId(),
+  bearerA: randomId(),
+};
+
+const LEGACY_GRANTS = [
+  { kind: "device", subject: "device-a", tokenId: LEGACY_TOKENS.deviceA },
+  { kind: "device", subject: "device-b", tokenId: LEGACY_TOKENS.deviceB },
+  { kind: "dm", subject: "bearer-a", tokenId: LEGACY_TOKENS.bearerA },
+];
+
+function base64(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64");
+}
+
+/** What a build before the replicated ledger left behind after admitting two devices and granting one DM. */
+function writeLegacyLedger(dir: string): void {
+  writeStoredRecord(dir, {
+    ...readStoredRecord(dir),
+    issuedDeviceGrants: {
+      "device-a": base64(LEGACY_TOKENS.deviceA),
+      "device-b": base64(LEGACY_TOKENS.deviceB),
+    },
+    issuedDmGrants: { "bearer-a": base64(LEGACY_TOKENS.bearerA) },
+  });
+}
+
+test("loadOrCreateLedgerWriterNonce generates a nonce once and returns the same one after that", () => {
   const dir = tempDir();
   loadOrCreateUserIdentity({ dir });
-  expect(loadIssuedDeviceGrant({ dir }, "device-hex-1")).toBeUndefined();
+  const generated = generateWriterNonce();
+  const generate = vi.fn(() => generated);
+
+  const first = loadOrCreateLedgerWriterNonce({ dir }, generate);
+  const second = loadOrCreateLedgerWriterNonce({ dir }, generate);
+
+  expect(first).toEqual(generated);
+  expect(second).toEqual(first);
+  expect(generate).toHaveBeenCalledTimes(1);
 });
 
-test("saveIssuedDeviceGrant persists a token-id, loadIssuedDeviceGrant reloads it keyed by device hex", () => {
+test("readLegacyIssuedGrants returns every grant a pre-ledger build recorded", () => {
   const dir = tempDir();
   loadOrCreateUserIdentity({ dir });
-  const tokenId = Uint8Array.from([1, 2, 2, 1]);
+  writeLegacyLedger(dir);
 
-  saveIssuedDeviceGrant({ dir }, "device-hex-1", tokenId);
-
-  expect(loadIssuedDeviceGrant({ dir }, "device-hex-1")).toEqual(tokenId);
+  expect(readLegacyIssuedGrants({ dir })).toEqual(LEGACY_GRANTS);
 });
 
-test("saveIssuedDeviceGrant overwrites only the given device's own record, leaving others and the identity's own key material untouched", () => {
+test("readLegacyIssuedGrants is empty for an identity this build created", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+
+  expect(readLegacyIssuedGrants({ dir })).toEqual([]);
+});
+
+test("clearLegacyIssuedGrants removes exactly the migrated grants and keeps the key material", () => {
   const dir = tempDir();
   const identity = loadOrCreateUserIdentity({ dir });
-  const tokenIdA = Uint8Array.from([1]);
-  const tokenIdB = Uint8Array.from([2]);
-  saveIssuedDeviceGrant({ dir }, "device-a", tokenIdA);
-  saveIssuedDeviceGrant({ dir }, "device-b", tokenIdB);
-
-  const tokenIdAReplacement = Uint8Array.from([2, 1]);
-  saveIssuedDeviceGrant({ dir }, "device-a", tokenIdAReplacement);
-
-  expect(loadIssuedDeviceGrant({ dir }, "device-a")).toEqual(
-    tokenIdAReplacement,
+  writeLegacyLedger(dir);
+  const migrated = readLegacyIssuedGrants({ dir }).filter(
+    (grant) => grant.subject !== "device-b",
   );
-  expect(loadIssuedDeviceGrant({ dir }, "device-b")).toEqual(tokenIdB);
-  const reloaded = loadOrCreateUserIdentity({ dir });
-  expect(reloaded.privateKey).toBe(identity.privateKey);
-});
 
-test("deleteIssuedDeviceGrant removes one device's own record, leaving others in place", () => {
-  const dir = tempDir();
-  loadOrCreateUserIdentity({ dir });
-  saveIssuedDeviceGrant({ dir }, "device-a", Uint8Array.from([1]));
-  saveIssuedDeviceGrant({ dir }, "device-b", Uint8Array.from([2]));
+  clearLegacyIssuedGrants({ dir }, migrated);
 
-  deleteIssuedDeviceGrant({ dir }, "device-a");
-
-  expect(loadIssuedDeviceGrant({ dir }, "device-a")).toBeUndefined();
-  expect(loadIssuedDeviceGrant({ dir }, "device-b")).toEqual(
-    Uint8Array.from([2]),
+  expect(readLegacyIssuedGrants({ dir })).toEqual([
+    { kind: "device", subject: "device-b", tokenId: LEGACY_TOKENS.deviceB },
+  ]);
+  expect(readStoredRecord(dir)).not.toHaveProperty("issuedDmGrants");
+  expect(loadOrCreateUserIdentity({ dir }).privateKey).toBe(
+    identity.privateKey,
   );
 });
 
-test("deleteIssuedDeviceGrant is a no-op when nothing was recorded for that device", () => {
+test("a renewed identity keeps its ledger writer nonce and any unmigrated grants", () => {
   const dir = tempDir();
   loadOrCreateUserIdentity({ dir });
-  expect(() => {
-    deleteIssuedDeviceGrant({ dir }, "never-admitted");
-  }).not.toThrow();
-});
-
-test("a renewed identity keeps its issuedDeviceGrants record", () => {
-  const dir = tempDir();
-  loadOrCreateUserIdentity({ dir });
-  saveIssuedDeviceGrant({ dir }, "device-a", Uint8Array.from([1, 2, 1]));
-
-  const file = identityFile(dir);
-  const stored = JSON.parse(fs.readFileSync(file, "utf-8")) as {
-    expiresAt: string;
-  };
-  stored.expiresAt = new Date(Date.now() + NEAR_EXPIRY_OFFSET_MS).toISOString();
-  fs.writeFileSync(file, JSON.stringify(stored));
+  const nonce = loadOrCreateLedgerWriterNonce({ dir }, generateWriterNonce);
+  writeLegacyLedger(dir);
+  writeStoredRecord(dir, {
+    ...readStoredRecord(dir),
+    expiresAt: new Date(Date.now() + NEAR_EXPIRY_OFFSET_MS).toISOString(),
+  });
 
   loadOrCreateUserIdentity({ dir });
 
-  expect(loadIssuedDeviceGrant({ dir }, "device-a")).toEqual(
-    Uint8Array.from([1, 2, 1]),
+  expect(loadOrCreateLedgerWriterNonce({ dir }, generateWriterNonce)).toEqual(
+    nonce,
   );
-});
-
-test("loadIssuedDmGrant returns undefined when no grant has been recorded for a bearer", () => {
-  const dir = tempDir();
-  loadOrCreateUserIdentity({ dir });
-
-  expect(loadIssuedDmGrant({ dir }, "aa")).toBeUndefined();
-});
-
-test("saveIssuedDmGrant persists a token-id that loadIssuedDmGrant then returns", () => {
-  const dir = tempDir();
-  loadOrCreateUserIdentity({ dir });
-  const tokenId = randomId();
-
-  saveIssuedDmGrant({ dir }, "aa", tokenId);
-
-  expect(loadIssuedDmGrant({ dir }, "aa")).toEqual(tokenId);
-});
-
-test("saveIssuedDmGrant for a second bearer leaves the first bearer's own record untouched", () => {
-  const dir = tempDir();
-  loadOrCreateUserIdentity({ dir });
-  const firstTokenId = randomId();
-  const secondTokenId = randomId();
-
-  saveIssuedDmGrant({ dir }, "aa", firstTokenId);
-  saveIssuedDmGrant({ dir }, "bb", secondTokenId);
-
-  expect(loadIssuedDmGrant({ dir }, "aa")).toEqual(firstTokenId);
-  expect(loadIssuedDmGrant({ dir }, "bb")).toEqual(secondTokenId);
-});
-
-test("saveIssuedDmGrant overwrites an earlier record for the same bearer", () => {
-  const dir = tempDir();
-  loadOrCreateUserIdentity({ dir });
-  const originalTokenId = randomId();
-  const freshTokenId = randomId();
-
-  saveIssuedDmGrant({ dir }, "aa", originalTokenId);
-  saveIssuedDmGrant({ dir }, "aa", freshTokenId);
-
-  expect(loadIssuedDmGrant({ dir }, "aa")).toEqual(freshTokenId);
-});
-
-test("deleteIssuedDmGrant removes a recorded grant, leaving other bearers' records untouched", () => {
-  const dir = tempDir();
-  loadOrCreateUserIdentity({ dir });
-  saveIssuedDmGrant({ dir }, "aa", randomId());
-  const keptTokenId = randomId();
-  saveIssuedDmGrant({ dir }, "bb", keptTokenId);
-
-  deleteIssuedDmGrant({ dir }, "aa");
-
-  expect(loadIssuedDmGrant({ dir }, "aa")).toBeUndefined();
-  expect(loadIssuedDmGrant({ dir }, "bb")).toEqual(keptTokenId);
-});
-
-test("deleteIssuedDmGrant is a no-op when nothing was recorded for that bearer", () => {
-  const dir = tempDir();
-  loadOrCreateUserIdentity({ dir });
-
-  expect(() => {
-    deleteIssuedDmGrant({ dir }, "aa");
-  }).not.toThrow();
-});
-
-test("a renewed identity keeps its issuedDmGrants record", () => {
-  const dir = tempDir();
-  loadOrCreateUserIdentity({ dir });
-  const tokenId = randomId();
-  saveIssuedDmGrant({ dir }, "aa", tokenId);
-
-  const file = identityFile(dir);
-  const stored = JSON.parse(fs.readFileSync(file, "utf-8")) as {
-    expiresAt: string;
-  };
-  stored.expiresAt = new Date(Date.now() + NEAR_EXPIRY_OFFSET_MS).toISOString();
-  fs.writeFileSync(file, JSON.stringify(stored));
-
-  loadOrCreateUserIdentity({ dir });
-
-  expect(loadIssuedDmGrant({ dir }, "aa")).toEqual(tokenId);
+  expect(readLegacyIssuedGrants({ dir })).toEqual(LEGACY_GRANTS);
 });

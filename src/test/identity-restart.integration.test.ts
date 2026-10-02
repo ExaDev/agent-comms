@@ -23,6 +23,7 @@ import {
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import { loadOrCreateMachineIdentity } from "../core/machine-identity.js";
+import { openAccountLedger } from "../core/account-ledger-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
 
@@ -58,15 +59,19 @@ async function makePeer(
   const userIdentityOptions = {
     dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-user-identity-")),
   };
+  const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
   store.setIdentity({
     identity: await toIdentityPort(identity),
     clock: createSystemClock(),
     slot,
     revocation: createRevocationView(),
     dataStorage: createMemoryStorage(),
-    userIdentity: await toIdentityPort(
-      loadOrCreateUserIdentity(userIdentityOptions),
-    ),
+    userIdentity: await toIdentityPort(userIdentity),
+    accountLedger: await openAccountLedger({
+      userIdentityOptions,
+      userIdentity,
+      clock: createSystemClock(),
+    }),
     userIdentityOptions,
     machineIdentity: await toIdentityPort(
       loadOrCreateMachineIdentity(userIdentityOptions),

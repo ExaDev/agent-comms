@@ -7,7 +7,12 @@ import { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import type { TransportEvents } from "../core/transport.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
-import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
+import {
+  createRevocationView,
+  type RevocationView,
+} from "wire-mesh-core/domain/revocation-view";
+import type { Clock } from "wire-mesh-core/ports/clock";
+import type { KeyValueStorage } from "wire-mesh-core/ports/storage";
 import { createMemoryStorage } from "wire-mesh-core/adapters/memory-storage";
 import { loadOrCreateIdentity } from "../core/identity-store.js";
 import type { IdentitySlot } from "../core/identity-store.js";
@@ -19,6 +24,7 @@ import {
   loadOrCreateMachineIdentity,
   type MachineIdentityOptions,
 } from "../core/machine-identity.js";
+import { openAccountLedger } from "../core/account-ledger-store.js";
 import { nanoid } from "../core/nanoid.js";
 import type { MeshStore } from "../core/mesh-store.js";
 
@@ -35,6 +41,12 @@ interface WireTransportOptions {
   machineIdentityOptions?: Readonly<MachineIdentityOptions> | undefined;
   /** Overrides which identity-store loader resolves this store's identity for the given slot — defaults to loadOrCreateIdentity (the real-bridge path, which takes the slot's exclusivity lock). Pass loadIdentityForFront to model the default cc-peer front's own store instead (agent-comms#299's own reproduction needs both loaders live against one slot at once, which no single wireTestTransport call could otherwise construct). */
   identityLoader?: ((slot: Readonly<IdentitySlot>) => PeerIdentity) | undefined;
+  /** The store's RevocationView, for a test that inspects what the store has learned was revoked. A fresh one when omitted. */
+  revocation?: RevocationView | undefined;
+  /** Backs the store's own room-notice oplog and the transport's generic core/data responder, for a test that inspects what a store was sent. A fresh memory store when omitted. */
+  dataStorage?: KeyValueStorage | undefined;
+  /** The store's clock, for a test that moves time on deterministically. The system clock when omitted. */
+  clock?: Clock | undefined;
 }
 
 async function wireTransportInternal(
@@ -48,6 +60,9 @@ async function wireTransportInternal(
     userIdentityOptions,
     machineIdentityOptions,
     identityLoader = loadOrCreateIdentity,
+    revocation = createRevocationView(),
+    clock = createSystemClock(),
+    dataStorage = createMemoryStorage(),
   } = options ?? {};
   const resolvedSlot: IdentitySlot = slot ?? {
     harness: "test",
@@ -73,7 +88,6 @@ async function wireTransportInternal(
   // Every real bridge sets peerId to deviceIdToHex(identity.deviceId) before wiring the transport (createBridgeMesh) -- WireMeshTransport's own session bookkeeping is keyed by device-id, so a peer's advertised ID and the identity the other side actually authenticates the connection against must be the same value, or introduction/state-sync never recognises the peer as itself.
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- memory-backed, matching every other throwaway test identity here, rather than a real createNodeFsStorage a test would need to clean up afterwards.
-  const dataStorage = createMemoryStorage();
   const transport = new WireMeshTransport(store.events, identity, {
     roomVerbHandlers: store.roomVerbHandlers,
     roomJoinApprovalTimeoutMs: store.roomJoinApprovalTimeoutMs,
@@ -84,16 +98,25 @@ async function wireTransportInternal(
     dataStorage,
     getSelfAgentAdvert: () => store.selfAgentAdvert,
     getHostedRooms: () => store.hostedRooms,
+    accountReplication: {
+      getLedger: () => store.accountLedger,
+      isAccountMember: async (claim) => store.membership.isAccountMember(claim),
+    },
     gatewayTrust: store.gatewayTrust,
   });
   store.setTransport(transport);
   store.setIdentity({
     identity: await toIdentityPort(identity),
-    clock: createSystemClock(),
+    clock,
     slot: resolvedSlot,
-    revocation: createRevocationView(),
+    revocation,
     dataStorage,
     userIdentity: await toIdentityPort(userIdentity),
+    accountLedger: await openAccountLedger({
+      userIdentityOptions: resolvedUserIdentityOptions,
+      userIdentity,
+      clock,
+    }),
     userIdentityOptions: resolvedUserIdentityOptions,
     machineIdentity: await toIdentityPort(machineIdentity),
     machineIdentityOptions: resolvedMachineIdentityOptions,

@@ -12,10 +12,9 @@ import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
 import { generateIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { randomId } from "../core/random-id.js";
-import {
-  loadIssuedDmGrant,
-  loadOrCreateUserIdentity,
-} from "../core/user-identity.js";
+import { loadOrCreateUserIdentity } from "../core/user-identity.js";
+import { openAccountLedger } from "../core/account-ledger-store.js";
+import type { AccountLedger } from "../core/account-ledger.js";
 import {
   DM_SEND_CAPABILITY,
   DM_SEND_SCOPE_KIND,
@@ -31,14 +30,28 @@ function tempDir(): string {
   return fs.mkdtempSync(path.join(tmpdir(), "agent-comms-dm-delegation-test-"));
 }
 
-/** A real, persisted user-principal identity -- delegateDmSendToDevice writes through to the same user-identity.json this identity's own key material lives in, so the fixture must actually create that file first, the same way device-membership.test.ts's own makeUser() does. */
+/** A real, persisted user-principal identity and its account ledger, which delegateDmSendToDevice records the delegation in, opened the way device-membership.test.ts's own makeUser() opens them. */
 async function makeUser(): Promise<{
   identity: Awaited<ReturnType<typeof toIdentityPort>>;
-  userIdentityOptions: { dir: string };
+  ledger: AccountLedger;
 }> {
   const dir = tempDir();
-  const identity = await toIdentityPort(loadOrCreateUserIdentity({ dir }));
-  return { identity, userIdentityOptions: { dir } };
+  const userIdentity = loadOrCreateUserIdentity({ dir });
+  const identity = await toIdentityPort(userIdentity);
+  const ledger = await openAccountLedger({
+    userIdentityOptions: { dir },
+    userIdentity,
+    clock: createSystemClock(),
+  });
+  return { identity, ledger };
+}
+
+async function outstandingTokenIds(
+  ledger: AccountLedger,
+  deviceHex: string,
+): Promise<Uint8Array[]> {
+  const grants = await ledger.outstandingGrants("dm", deviceHex);
+  return grants.map((grant) => grant.tokenId);
 }
 
 /** Alice's own root-level dm:send grant naming bearer as the admitted party -- the same shape room-lifecycle.ts's admitAgentForDm mints, built directly here so this file's own tests don't need a full MeshStore. Takes an explicit expires (rather than deriving one from clock.now() itself) so a caller can mint a child token sharing the identical expiry -- a real wall clock advances between two calls, and a child's own expires must never exceed its parent's. */
@@ -67,7 +80,7 @@ async function mintRootGrant(options: {
 describe("delegateDmSendToDevice", () => {
   it("mints a dm:send token bearing the device, chaining back to the remote admitting principal", async () => {
     const alice = await toIdentityPort(generateIdentity());
-    const { identity: bobPrincipal, userIdentityOptions } = await makeUser();
+    const { identity: bobPrincipal, ledger } = await makeUser();
     const bobDevice = await toIdentityPort(generateIdentity());
     const clock = createSystemClock();
     const expires = clock.now() + TOKEN_TTL_MS;
@@ -82,7 +95,7 @@ describe("delegateDmSendToDevice", () => {
 
     const verdict = await delegateDmSendToDevice({
       userIdentity: bobPrincipal,
-      userIdentityOptions,
+      accountLedger: ledger,
       clock,
       tokenId: randomId(),
       parent: grant,
@@ -109,7 +122,7 @@ describe("delegateDmSendToDevice", () => {
 
   it("records the delegated grant's token-id under the delegating principal's own store, keyed by device hex", async () => {
     const alice = await toIdentityPort(generateIdentity());
-    const { identity: bobPrincipal, userIdentityOptions } = await makeUser();
+    const { identity: bobPrincipal, ledger } = await makeUser();
     const bobDevice = await toIdentityPort(generateIdentity());
     const clock = createSystemClock();
     const tokenId = randomId();
@@ -125,7 +138,7 @@ describe("delegateDmSendToDevice", () => {
 
     const verdict = await delegateDmSendToDevice({
       userIdentity: bobPrincipal,
-      userIdentityOptions,
+      accountLedger: ledger,
       clock,
       tokenId,
       parent: grant,
@@ -136,12 +149,12 @@ describe("delegateDmSendToDevice", () => {
     expect(verdict.ok).toBe(true);
 
     const deviceHex = deviceIdToHex(bobDevice.deviceId);
-    expect(loadIssuedDmGrant(userIdentityOptions, deviceHex)).toEqual(tokenId);
+    expect(await outstandingTokenIds(ledger, deviceHex)).toEqual([tokenId]);
   });
 
   it("refuses when the parent grant carries no further delegation depth, and records nothing", async () => {
     const alice = await toIdentityPort(generateIdentity());
-    const { identity: bobPrincipal, userIdentityOptions } = await makeUser();
+    const { identity: bobPrincipal, ledger } = await makeUser();
     const bobDevice = await toIdentityPort(generateIdentity());
     const clock = createSystemClock();
     const expires = clock.now() + TOKEN_TTL_MS;
@@ -157,7 +170,7 @@ describe("delegateDmSendToDevice", () => {
 
     const verdict = await delegateDmSendToDevice({
       userIdentity: bobPrincipal,
-      userIdentityOptions,
+      accountLedger: ledger,
       clock,
       tokenId: randomId(),
       parent: grant,
@@ -169,12 +182,12 @@ describe("delegateDmSendToDevice", () => {
     expect(verdict.ok).toBe(false);
     if (!verdict.ok) expect(verdict.reason).toBe("delegation_exceeds_parent");
     const deviceHex = deviceIdToHex(bobDevice.deviceId);
-    expect(loadIssuedDmGrant(userIdentityOptions, deviceHex)).toBeUndefined();
+    expect(await outstandingTokenIds(ledger, deviceHex)).toEqual([]);
   });
 
   it("refuses when the caller's identity is not the parent grant's own bearer", async () => {
     const alice = await toIdentityPort(generateIdentity());
-    const { identity: bobPrincipal, userIdentityOptions } = await makeUser();
+    const { identity: bobPrincipal, ledger } = await makeUser();
     const someoneElse = await toIdentityPort(generateIdentity());
     const bobDevice = await toIdentityPort(generateIdentity());
     const clock = createSystemClock();
@@ -191,7 +204,7 @@ describe("delegateDmSendToDevice", () => {
     const verdict = await delegateDmSendToDevice({
       // someoneElse never received this grant -- only bobPrincipal (the parent's own bearer) may mint a delegation of it.
       userIdentity: someoneElse,
-      userIdentityOptions,
+      accountLedger: ledger,
       clock,
       tokenId: randomId(),
       parent: grant,

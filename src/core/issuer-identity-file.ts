@@ -109,7 +109,10 @@ export function writeIssuerRecord(
   writeFileAtomic(file, serializeRecord(record), IDENTITY_FILE_MODE);
 }
 
-function toPeerIdentity(stored: Readonly<StoredIssuerKey>): PeerIdentity {
+/** The identity a stored key record describes: the key, its certificate, and the fingerprint and device-id derived from them. */
+export function issuerPeerIdentity(
+  stored: Readonly<StoredIssuerKey>,
+): PeerIdentity {
   return {
     privateKey: stored.privateKey,
     certificate: stored.certificate,
@@ -118,7 +121,10 @@ function toPeerIdentity(stored: Readonly<StoredIssuerKey>): PeerIdentity {
   };
 }
 
-function keyRecord(identity: Readonly<PeerIdentity>): StoredIssuerKey {
+/** The key record that persists identity, with a fresh expiry stamp. */
+export function issuerKeyRecord(
+  identity: Readonly<PeerIdentity>,
+): StoredIssuerKey {
   return {
     privateKey: identity.privateKey,
     certificate: identity.certificate,
@@ -134,10 +140,10 @@ function renewIfNeeded(
   const expiresAt = Date.parse(stored.expiresAt);
   const needsRenewal =
     Number.isNaN(expiresAt) || Date.now() > expiresAt - RENEWAL_MARGIN_MS;
-  if (!needsRenewal) return toPeerIdentity(stored);
+  if (!needsRenewal) return issuerPeerIdentity(stored);
 
   const renewed = certifyKeyPair(stored.privateKey);
-  writeIssuerRecord(file, { ...stored, ...keyRecord(renewed) });
+  writeIssuerRecord(file, { ...stored, ...issuerKeyRecord(renewed) });
   return renewed;
 }
 
@@ -150,7 +156,7 @@ function createIssuerIdentity(
   if (
     createFileExclusive(
       file,
-      serializeRecord(keyRecord(identity)),
+      serializeRecord(issuerKeyRecord(identity)),
       IDENTITY_FILE_MODE,
     )
   ) {
