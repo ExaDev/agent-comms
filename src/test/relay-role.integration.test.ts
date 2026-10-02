@@ -4,6 +4,7 @@
 
 import { expect, test } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
+import { dmRoomPath } from "../core/room-path.js";
 import type { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import { TeardownStack, freeLocalPort, realHubOverWs } from "./hub-helpers.js";
 import { waitFor, wireTestTransportWithHub } from "./test-transport.js";
@@ -106,6 +107,108 @@ test("a store falls back to the public hub when the relay it used goes away, and
       () => hub.connectionCount() === 1 && second.transport.hub.isConnected,
       "the survivor holds the uplink to the public hub",
     );
+  } finally {
+    await teardown.run();
+  }
+});
+
+test("a store behind the relay and a device on the public hub reach each other through the relay's uplink, each seen under its own device-id", async () => {
+  const teardown = new TeardownStack();
+  try {
+    const hub = await realHubOverWs();
+    teardown.push(hub.close);
+    const machineA = {
+      coordinatorPort: await freeLocalPort(),
+      hubUrl: hub.url,
+    };
+    const machineB = {
+      coordinatorPort: await freeLocalPort(),
+      hubUrl: hub.url,
+    };
+    const relayHolder = await startNode("a1", machineA, teardown);
+    const behindRelay = await startNode("a2", machineA, teardown);
+    const remote = await startNode("b1", machineB, teardown);
+    for (const local of [relayHolder, behindRelay]) {
+      local.store.addTrustedGateway(remote.store.peerId);
+      remote.store.addTrustedGateway(local.store.peerId);
+    }
+    await waitFor(
+      () => relayHolder.transport.relay.servedConnectionCount() === 1,
+      "the second store of the machine is a client of the first store's relay",
+    );
+    await waitFor(
+      () => relayHolder.transport.relay.routableClientCount() === 1,
+      "the relay can route to the store behind it",
+    );
+    await waitFor(
+      () => hub.connectionCount() === 2,
+      "the public hub holds the relay's uplink and the remote device, and not the store behind the relay",
+    );
+
+    await waitFor(async () => {
+      const agents = await remote.store.listAgents(remote.store.peerId);
+      return agents.some((agent) => agent.id === behindRelay.store.peerId);
+    }, "the remote device learned of the store behind the relay under its own device-id");
+    await waitFor(async () => {
+      const agents = await behindRelay.store.listAgents(
+        behindRelay.store.peerId,
+      );
+      return agents.some((agent) => agent.id === remote.store.peerId);
+    }, "the store behind the relay learned of the remote device under its own device-id");
+
+    const dmPath = dmRoomPath(behindRelay.store.peerId, remote.store.peerId);
+    const request = behindRelay.store.requestDmAccess(remote.store.peerId);
+    await waitFor(
+      () => remote.store.listPendingRoomJoins().length === 1,
+      "the remote device saw the request from the store behind the relay",
+    );
+    expect(remote.store.listPendingRoomJoins()[0]?.requesterId).toBe(
+      behindRelay.store.peerId,
+    );
+    remote.store.acceptRoomJoin(dmPath, behindRelay.store.peerId);
+    await request;
+
+    const outbound = await behindRelay.store.sendDm(
+      behindRelay.store.peerId,
+      remote.store.peerId,
+      "from behind the relay",
+    );
+    await waitFor(
+      () =>
+        (remote.store.serialise().dms[dmPath] ?? []).some(
+          (message) => message.id === outbound.message.id,
+        ),
+      "the remote device received the message sent from behind the relay",
+    );
+    expect(
+      (remote.store.serialise().dms[dmPath] ?? []).find(
+        (message) => message.id === outbound.message.id,
+      ),
+    ).toMatchObject({
+      from: behindRelay.store.peerId,
+      to: remote.store.peerId,
+    });
+
+    const inbound = await remote.store.sendDm(
+      remote.store.peerId,
+      behindRelay.store.peerId,
+      "from the public hub",
+    );
+    await waitFor(
+      () =>
+        (behindRelay.store.serialise().dms[dmPath] ?? []).some(
+          (message) => message.id === inbound.message.id,
+        ),
+      "the store behind the relay received the message sent from the public hub",
+    );
+    expect(
+      (behindRelay.store.serialise().dms[dmPath] ?? []).find(
+        (message) => message.id === inbound.message.id,
+      ),
+    ).toMatchObject({
+      from: remote.store.peerId,
+      to: behindRelay.store.peerId,
+    });
   } finally {
     await teardown.run();
   }

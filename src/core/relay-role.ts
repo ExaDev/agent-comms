@@ -84,6 +84,11 @@ export class RelayRole {
     return this.server === undefined ? 0 : this.server.connectionCount();
   }
 
+  /** How many clients the served relay can route to, or 0 while none is served. See RelayServer.routableClientCount. */
+  routableClientCount(): number {
+    return this.server === undefined ? 0 : this.server.routableClientCount();
+  }
+
   /** Whether this store may serve: set from the elected coordinator role. An eligible store moves its hub session back onto the uplink at once. */
   setEligible(eligible: boolean): void {
     this.eligible = eligible;
