@@ -1,3 +1,16 @@
+## [8.13.0](https://github.com/ExaDev/agent-comms/compare/v8.12.0...v8.13.0) (2026-10-02)
+
+### Features
+
+* **core:** let AGENT_COMMS_HUB_URL point bridges at a self-hosted hub ([369e7bb](https://github.com/ExaDev/agent-comms/commit/369e7bb8de02853043c43f0d97c2a09b630e092b)), references [#335](https://github.com/ExaDev/agent-comms/issues/335)
+
+### Build
+
+* **deps-dev:** bump @earendil-works/pi-ai from 0.85.1 to 0.87.1 ([37e6a6c](https://github.com/ExaDev/agent-comms/commit/37e6a6c2258a711efd355877ed04c59ab0044398))
+* **deps-dev:** bump @types/node from 26.6.1 to 26.6.2 ([cb7b62f](https://github.com/ExaDev/agent-comms/commit/cb7b62f053bef4eb75d14799f38f4833c3783cac))
+* **deps:** bump @tanstack/react-query from 5.102.8 to 5.103.2 ([0736753](https://github.com/ExaDev/agent-comms/commit/0736753dc9c0983bebea587a6d865bb19779d092))
+* **deps:** bump openpgp from 6.3.1 to 6.3.2 ([5d18288](https://github.com/ExaDev/agent-comms/commit/5d18288dce0aa5972d266bb6566aa6f73800d335))
+
 ## [8.12.0](https://github.com/ExaDev/agent-comms/compare/v8.11.0...v8.12.0) (2026-10-02)
 
 ### Features
