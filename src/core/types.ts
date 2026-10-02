@@ -503,6 +503,11 @@ export const CommsActionSchema = defineSchema(
       name: z.string().optional(),
     }),
     z.object({
+      action: z.literal("principal_name"),
+      /** The name this account (user principal) asserts for itself, signed by its user key into every device's advert. Omitted clears it. */
+      name: z.string().optional(),
+    }),
+    z.object({
       action: z.literal("dm_admit"),
       target: z.string(),
       /** When true, `target` is a user principal (its whoami Principal line) rather than one device: every device of that user can then use the grant. */

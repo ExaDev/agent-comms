@@ -43,6 +43,8 @@ function isAgentSelfAdvert(value: unknown): value is ReceivedAgentSelfAdvert {
   if ("machine" in value && typeof value.machine !== "string") return false;
   if ("machineName" in value && typeof value.machineName !== "string")
     return false;
+  if ("principalName" in value && typeof value.principalName !== "string")
+    return false;
   if ("cwd" in value && typeof value.cwd !== "string") return false;
   if ("pid" in value && typeof value.pid !== "number") return false;
   if ("startedAt" in value && typeof value.startedAt !== "string") return false;

@@ -134,15 +134,18 @@ export function readMembershipProof(
     : undefined;
 }
 
-/** The machine name claim a peer gossiped in its agent/self advert (name-claim.ts), or undefined when it carries none. Only read here; nothing it says is believed until it is verified against the machine its proof names. */
-export function readMachineNameClaim(
+/** Which agent/self field carries which issuer's name claim: `machineName` the machine's, `principalName` the user principal's. */
+export type NameClaimField = "machineName" | "principalName";
+
+/** The name claim a peer gossiped in its agent/self advert under field (name-claim.ts), or undefined when it carries none. Only read here; nothing it says is believed until it is verified against the issuer its proof names. */
+export function readNameClaim(
   advert: Readonly<Record<string, unknown>>,
+  field: NameClaimField,
 ): string | undefined {
   const self: unknown = advert[AGENT_SELF_GOSSIP_KEY];
   if (typeof self !== "object" || self === null) return undefined;
-  return "machineName" in self && typeof self.machineName === "string"
-    ? self.machineName
-    : undefined;
+  const claim: unknown = field in self ? Reflect.get(self, field) : undefined;
+  return typeof claim === "string" ? claim : undefined;
 }
 
 /** The one thing gossip re-advertisement needs from a session: somewhere to send the extension bag. */

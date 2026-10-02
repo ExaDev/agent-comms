@@ -13,6 +13,7 @@ import { plainNamer, type Namer, type Naming } from "./naming.js";
 import { agentTable, type AgentTableRow } from "./agent-table.js";
 import {
   machineName,
+  principalName,
   petnameClear,
   petnameList,
   petnameSet,
@@ -376,6 +377,8 @@ export class CommsTool {
           return petnameList(this.naming, await this.namerFor(ctx));
         case "machine_name":
           return await machineName(this.naming, action);
+        case "principal_name":
+          return await principalName(this.naming, action);
         case "dm_admit":
           return await dmAdmit(this.store, action, ctx.agentId);
         case "dm_use_grant":
@@ -465,11 +468,13 @@ export class CommsTool {
     if (!agent) return { content: "Not registered.", isError: true };
     const principal = this.store.getUserPrincipalId?.();
     const machine = this.store.getMachineId?.();
+    const namer = await this.namerFor(ctx);
     const lines = [
       `ID: ${agent.id}`,
       ...(principal !== undefined ? [`Principal: ${principal}`] : []),
       ...(machine !== undefined ? [`Machine: ${machine}`] : []),
-      ...machineNameLine(machine, await this.namerFor(ctx)),
+      ...nameLine("Principal name", principal, namer),
+      ...nameLine("Machine name", machine, namer),
       `Name: ${agent.name}`,
       `Harness: ${agent.harness}`,
       `Visibility: ${agent.visibility}`,
@@ -873,9 +878,13 @@ export class CommsTool {
   }
 }
 
-/** whoami's "Machine name:" line: this machine by the display convention, only when it has a name, since the Machine line above already shows its id. */
-function machineNameLine(machine: string | undefined, namer: Namer): string[] {
-  if (machine === undefined) return [];
-  const named = namer(machine);
-  return named === shortId(machine) ? [] : [`Machine name: ${named}`];
+/** whoami's "<label>:" line for a grouping issuer: it by the display convention, only when it has a name, since the line above already shows its id. */
+function nameLine(
+  label: string,
+  issuer: string | undefined,
+  namer: Namer,
+): string[] {
+  if (issuer === undefined) return [];
+  const named = namer(issuer);
+  return named === shortId(issuer) ? [] : [`${label}: ${named}`];
 }

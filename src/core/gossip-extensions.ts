@@ -61,6 +61,8 @@ export interface AgentSelfSummary {
   machine?: string;
   /** This device's machine's self display name claim (name-claim.ts, agent-comms#345), signed by the machine key, so a peer can show the name the machine chose for itself. Absent while the machine has no name. Travels with the machine proof, under the same visibility rule. */
   machineName?: string;
+  /** This device's user principal's self display name claim (name-claim.ts, agent-comms#359), signed by the user key, so a peer can show the name the account chose for itself. Absent while the account has no name. Travels with the membership proof, under the same visibility rule. */
+  principalName?: string;
 }
 
 /** What a bridge knows about itself beyond its summary, and shares only with peers it deals with directly: a hub relays what it is given to every client that connects, so none of this goes to one. */
@@ -92,6 +94,9 @@ export function summariseAgentSelfAdvert(
     ...(advert.machine !== undefined ? { machine: advert.machine } : {}),
     ...(advert.machineName !== undefined
       ? { machineName: advert.machineName }
+      : {}),
+    ...(advert.principalName !== undefined
+      ? { principalName: advert.principalName }
       : {}),
   };
 }

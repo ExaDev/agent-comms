@@ -20,6 +20,9 @@ import { generateIdentity } from "../core/identity.js";
 import { randomId } from "../core/random-id.js";
 import {
   importAccountKey,
+  loadUserDisplayName,
+  readAccountContents,
+  saveUserDisplayName,
   loadOrCreateLedgerWriterNonce,
   loadOrCreateUserIdentity,
 } from "../core/user-identity.js";
@@ -58,15 +61,22 @@ function io(passphrase: string): AccountCliIo & { lines: string[] } {
 
 describe("account bundle", () => {
   const privateKey = generateIdentity().privateKey;
+  const contents = { privateKey, displayName: "work account" };
 
   it("round-trips the key under the right passphrase", () => {
-    const bundle = sealAccountBundle(privateKey, PASSPHRASE);
+    const bundle = sealAccountBundle(contents, PASSPHRASE);
 
-    expect(openAccountBundle(bundle, PASSPHRASE)).toBe(privateKey);
+    expect(openAccountBundle(bundle, PASSPHRASE)).toEqual(contents);
+  });
+
+  it("round-trips an account that has no name", () => {
+    const bundle = sealAccountBundle({ privateKey }, PASSPHRASE);
+
+    expect(openAccountBundle(bundle, PASSPHRASE)).toEqual({ privateKey });
   });
 
   it("never holds the key in the clear", () => {
-    const bundle = sealAccountBundle(privateKey, PASSPHRASE);
+    const bundle = sealAccountBundle(contents, PASSPHRASE);
 
     expect(bundle).not.toContain("PRIVATE KEY");
     expect(Buffer.from(bundle, "base64url").toString("utf-8")).not.toContain(
@@ -75,7 +85,7 @@ describe("account bundle", () => {
   });
 
   it("refuses the wrong passphrase", () => {
-    const bundle = sealAccountBundle(privateKey, PASSPHRASE);
+    const bundle = sealAccountBundle(contents, PASSPHRASE);
 
     expect(() => openAccountBundle(bundle, `${PASSPHRASE}!`)).toThrow(
       expect.objectContaining({ code: "WRONG_PASSPHRASE" }),
@@ -85,7 +95,7 @@ describe("account bundle", () => {
   it("refuses a passphrase shorter than the minimum", () => {
     expect(() =>
       sealAccountBundle(
-        privateKey,
+        contents,
         "x".repeat(MIN_ACCOUNT_PASSPHRASE_LENGTH - 1),
       ),
     ).toThrow(expect.objectContaining({ code: "WEAK_PASSPHRASE" }));
@@ -103,9 +113,9 @@ describe("account bundle", () => {
       expiresAt: "2030-01-01T00:00:00.000Z",
       deviceId: "aa",
     };
-    const sealed = sealAccountKeyForInvite(privateKey, invite);
+    const sealed = sealAccountKeyForInvite(contents, invite);
 
-    expect(openAccountKeyFromInvite(sealed, invite)).toBe(privateKey);
+    expect(openAccountKeyFromInvite(sealed, invite)).toEqual(contents);
     expect(() =>
       openAccountKeyFromInvite(sealed, { ...invite, code: "abd" }),
     ).toThrow(expect.objectContaining({ code: "INVALID_BUNDLE" }));
@@ -128,6 +138,42 @@ describe("account export and import", () => {
 
     expect(principalIn(machineB)).toBe(principal);
     expect(fs.readFileSync(file, "utf-8")).not.toContain("PRIVATE KEY");
+  });
+
+  it("carries the account's name to the importing machine, and keeps it when a later import names none", async () => {
+    const machineA = tempDir();
+    const machineB = tempDir();
+    const file = path.join(tempDir(), "account.bundle");
+    loadOrCreateUserIdentity({ dir: machineA });
+    saveUserDisplayName({ dir: machineA }, "work account");
+
+    await runAccountCommand(["export", file], io(PASSPHRASE), {
+      dir: machineA,
+    });
+    await runAccountCommand(["import", file], io(PASSPHRASE), {
+      dir: machineB,
+    });
+
+    expect(loadUserDisplayName({ dir: machineB })).toBe("work account");
+    importAccountKey(
+      { dir: machineB },
+      { privateKey: readAccountContents({ dir: machineB }).privateKey },
+    );
+    expect(loadUserDisplayName({ dir: machineB })).toBe("work account");
+  });
+
+  it("refuses a bundle whose name breaks the display-name rules", () => {
+    const bundle = sealAccountBundle(
+      {
+        privateKey: generateIdentity().privateKey,
+        displayName: "bad\u001b[2J",
+      },
+      PASSPHRASE,
+    );
+
+    expect(() => openAccountBundle(bundle, PASSPHRASE)).toThrow(
+      expect.objectContaining({ code: "INVALID_BUNDLE" }),
+    );
   });
 
   it("gives the importing machine its own ledger writer, never the exporting machine's", async () => {
@@ -245,9 +291,12 @@ describe("account export and import", () => {
     const firstHex = deviceIdToHex(Uint8Array.from(first.deviceId));
     const secondHex = deviceIdToHex(Uint8Array.from(second.deviceId));
 
-    importAccountKey({ dir: machine }, second.privateKey);
-    importAccountKey({ dir: machine }, first.privateKey);
-    const result = importAccountKey({ dir: machine }, second.privateKey);
+    importAccountKey({ dir: machine }, { privateKey: second.privateKey });
+    importAccountKey({ dir: machine }, { privateKey: first.privateKey });
+    const result = importAccountKey(
+      { dir: machine },
+      { privateKey: second.privateKey },
+    );
 
     expect(principalIn(machine)).toBe(secondHex);
     expect(result.replacedFile).toBe(
@@ -274,7 +323,10 @@ describe("account export and import", () => {
     fs.writeFileSync(setAsideFile, damaged);
 
     expect(() =>
-      importAccountKey({ dir: machine }, generateIdentity().privateKey),
+      importAccountKey(
+        { dir: machine },
+        { privateKey: generateIdentity().privateKey },
+      ),
     ).toThrow(expect.objectContaining({ code: "ACCOUNT_SET_ASIDE_CONFLICT" }));
     expect(fs.readFileSync(setAsideFile, "utf-8")).toBe(damaged);
     expect(principalIn(machine)).toBe(heldHex);
@@ -284,7 +336,10 @@ describe("account export and import", () => {
     const machineA = tempDir();
     const identity = loadOrCreateUserIdentity({ dir: machineA });
 
-    const result = importAccountKey({ dir: machineA }, identity.privateKey);
+    const result = importAccountKey(
+      { dir: machineA },
+      { privateKey: identity.privateKey },
+    );
 
     expect(result.replacedFile).toBeUndefined();
     expect(fs.readdirSync(machineA)).toEqual(["user-identity.json"]);

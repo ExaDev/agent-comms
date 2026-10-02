@@ -26,7 +26,7 @@ import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import { CommsError } from "./store.js";
 import type { MeshTransport } from "./transport.js";
 import type { ConnectionCode } from "./types.js";
-import { importAccountKey, readAccountPrivateKey } from "./user-identity.js";
+import { importAccountKey, readAccountContents } from "./user-identity.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
 
 /** The request verb an invite's redeemer sends its issuer (params.verb), and the capability verb the manage-command carries only to satisfy manage-command.verb's grammar: the handler checks the invite itself, never a token. */
@@ -124,7 +124,7 @@ export class AccountJoin {
     return { code, settled };
   }
 
-  /** Answers an account.join request: the account key sealed for the named invite, once, and only before the invite expires. Every other request, including a second use of the same invite, is refused without saying whether the invite ever existed. */
+  /** Answers an account.join request: the account key and name sealed for the named invite, once, and only before the invite expires. Every other request, including a second use of the same invite, is refused without saying whether the invite ever existed. */
   readonly handleJoinRequest = async (
     request: Readonly<IncomingManageRequest>,
   ): Promise<ManageOutcome> => {
@@ -139,7 +139,7 @@ export class AccountJoin {
     this.invites.delete(invite.secret.code);
     const { userIdentityOptions } = this.deps.requireIdentity();
     const sealed = sealAccountKeyForInvite(
-      readAccountPrivateKey(userIdentityOptions),
+      readAccountContents(userIdentityOptions),
       invite.secret,
     );
     invite.settle("redeemed");
@@ -187,11 +187,11 @@ export class AccountJoin {
         "INVITE_REFUSED",
       );
     }
-    const privateKeyPem = openAccountKeyFromInvite(sealed, candidate);
+    const contents = openAccountKeyFromInvite(sealed, candidate);
     const current = this.deps.requireIdentity();
     const { identity, replacedFile } = importAccountKey(
       current.userIdentityOptions,
-      privateKeyPem,
+      contents,
     );
     this.deps.setIdentity({
       ...current,

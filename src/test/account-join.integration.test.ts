@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Clock } from "wire-mesh-core/ports/clock";
 import { DEFAULT_CONNECTION_CODE_TTL_MS } from "../core/connection-code.js";
 import { MeshStore } from "../core/mesh-store.js";
+import { loadUserDisplayName } from "../core/user-identity.js";
 import type { Visibility } from "../core/types.js";
 import { runAccountCommand, type AccountCliIo } from "../account-cli.js";
 import { freeLocalPort, realHubOverWs, TeardownStack } from "./hub-helpers.js";
@@ -19,6 +20,8 @@ const FAST_GOSSIP_INTERVAL_MS = 50;
 
 const cleanups = new TeardownStack();
 const dirs: string[] = [];
+/** Each machine's user identity directory, by its store. */
+const userDirs = new WeakMap<MeshStore, string>();
 
 afterEach(async () => {
   await cleanups.run();
@@ -30,6 +33,12 @@ afterEach(async () => {
 function userDir(): string {
   const dir = fs.mkdtempSync(path.join(tmpdir(), "account-join-user-"));
   dirs.push(dir);
+  return dir;
+}
+
+function userDirOf(store: MeshStore): string {
+  const dir = userDirs.get(store);
+  if (dir === undefined) throw new Error("store was not made by machine()");
   return dir;
 }
 
@@ -55,9 +64,11 @@ async function machine(
     hubUrl,
   });
   const { clock, visibility = "visible" } = options;
+  const dir = userDir();
+  userDirs.set(store, dir);
   await wireTestTransport(store, {
     presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
-    userIdentityOptions: { dir: userDir() },
+    userIdentityOptions: { dir },
     clock,
   });
   await store.init();
@@ -125,6 +136,21 @@ describe("account join", () => {
       issuer: accountPrincipal,
       kind: "principal",
     });
+  });
+
+  it("hands the account's name to the machine that joins it", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+    const account = await machine(hub.url, "account-home");
+    const newMachine = await machine(hub.url, "new-machine");
+    await account.naming.setPrincipalName("work account");
+
+    const invite = await account.account.invite();
+    await newMachine.account.join(invite.code);
+
+    expect(loadUserDisplayName({ dir: userDirOf(newMachine) })).toBe(
+      "work account",
+    );
   });
 
   it("answers an invite once, so a second machine redeeming the same invite is refused", async () => {
