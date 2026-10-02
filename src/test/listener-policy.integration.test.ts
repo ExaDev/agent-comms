@@ -22,14 +22,15 @@ import {
 } from "../core/wire-mesh-transport.js";
 import type { ConnectionHandle, TransportEvents } from "../core/transport.js";
 import { test, describe, expect } from "vitest";
+import { freeLocalPort } from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
 
-const TEST_PORT = 19880;
 const PARSED_ACTION_TEST_PORT = 9999;
 
 describe("listener policy", () => {
   test("coordinator starts with a single default localhost listener", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const port = await freeLocalPort();
+    const store = new MeshStore({ coordinatorPort: port });
     await wireTestTransport(store);
     try {
       await store.init();
@@ -51,14 +52,14 @@ describe("listener policy", () => {
       expect(
         listeners[0]?.port,
         "Default listener should be on the coordinator port",
-      ).toBe(TEST_PORT);
+      ).toBe(port);
     } finally {
       await store.shutdown();
     }
   });
 
   test("addListener creates an additional listener", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     try {
       await store.init();
@@ -87,7 +88,7 @@ describe("listener policy", () => {
   });
 
   test("removeListener removes a non-default listener", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     try {
       await store.init();
@@ -108,7 +109,7 @@ describe("listener policy", () => {
   });
 
   test("removeListener rejects removing the default listener", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     try {
       await store.init();
@@ -129,7 +130,7 @@ describe("listener policy", () => {
   });
 
   test("observe listener accepts connections but enforces policy", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     try {
       await store.init();
@@ -166,7 +167,7 @@ describe("listener policy", () => {
   });
 
   test("mesh_listeners action returns all listeners via CommsTool", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     try {
       await store.init();
@@ -203,7 +204,7 @@ describe("listener policy", () => {
   });
 
   test("mesh_interfaces action returns available network adapters", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     try {
       await store.init();
@@ -234,7 +235,7 @@ describe("listener policy", () => {
   });
 
   test("mesh_unlisten removes listener via CommsTool", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     try {
       await store.init();
@@ -270,7 +271,7 @@ describe("listener policy", () => {
   });
 
   test("mesh_listen adds listener via CommsTool", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     try {
       await store.init();

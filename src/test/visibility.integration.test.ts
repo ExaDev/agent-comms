@@ -16,6 +16,7 @@ import { buildAction } from "../core/bridge.js";
 import { DiscoveryManager } from "../core/discovery.js";
 import type { DiscoveryBackend, AdvertiseOptions } from "../core/discovery.js";
 import type { MeshVisibility } from "../core/types.js";
+import { freeLocalPort } from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
 
 /** A fake DiscoveryBackend whose startAdvertising returns a NEW, incrementing id every call -- deliberately unlike the real mdns/tailscale backends' own deterministic `${name}-${port}` ids, so a test exercising it proves DiscoveryManager itself preserves a stable external advertisement id across pause/resume, rather than merely benefiting from a backend's own incidental determinism. */
@@ -44,8 +45,6 @@ function fakeBackend(name: string): DiscoveryBackend & {
     stop: vi.fn(async () => Promise.resolve()),
   };
 }
-
-const TEST_PORT = 19881;
 
 // ---------------------------------------------------------------------------
 // DiscoveryManager unit tests (no mesh init)
@@ -165,7 +164,7 @@ describe("DiscoveryManager pause/resume genuinely re-advertises", () => {
 
 describe("MeshStore visibility delegation", () => {
   test("setVisibility delegates to discovery manager", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     await store.init();
 
@@ -184,7 +183,7 @@ describe("MeshStore visibility delegation", () => {
   });
 
   test("setVisibility with adapter delegates per-adapter", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     await store.init();
 
@@ -202,7 +201,7 @@ describe("MeshStore visibility delegation", () => {
 
 describe("CommsTool visibility actions", () => {
   test("mesh_set_visibility action sets visibility", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     await store.init();
 
@@ -232,7 +231,7 @@ describe("CommsTool visibility actions", () => {
   });
 
   test("mesh_set_visibility with adapter sets per-adapter", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     await store.init();
 
@@ -262,7 +261,7 @@ describe("CommsTool visibility actions", () => {
   });
 
   test("mesh_get_visibility returns current visibility", async () => {
-    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
     await wireTestTransport(store);
     await store.init();
 

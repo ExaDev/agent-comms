@@ -17,17 +17,12 @@ import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { randomId } from "../core/random-id.js";
 import { delegateDmSendToDevice } from "../core/dm-send-delegation.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
+import { freeLocalPort } from "./hub-helpers.js";
 
 /** Delegated token expiry -- comfortably longer than a single test run, matching this file's sibling integration tests' own convention. */
 const DELEGATED_TOKEN_TTL_MS = 60_000;
 /** The admitted principal keeps exactly one further hop of delegation depth, enough to reach one of its own devices -- the minimal case the issue itself describes ("sub-delegate to its own devices"). */
 const ONE_HOP_DELEGABLE = 1;
-
-let nextPort = 20_970;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
 
 function tempUserIdentityDir(): { dir: string } {
   return {
@@ -38,7 +33,7 @@ function tempUserIdentityDir(): { dir: string } {
 }
 
 test("a principal's own device, holding only a delegated dm:send token, auto-admits into the admitting user's DM scope", async () => {
-  const port = freshPort();
+  const port = await freeLocalPort();
 
   // Alice's own user-principal identity is controlled directly (not the throwaway one wireTestTransport would otherwise generate and never disclose), so this test can compute the exact "user" scope path a delegated token must keep naming.
   const aliceUserIdentityOptions = tempUserIdentityDir();

@@ -8,14 +8,8 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { dmRoomPath } from "../core/room-path.js";
-import { realHubOverWs, TeardownStack } from "./hub-helpers.js";
+import { freeLocalPort, realHubOverWs, TeardownStack } from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
-
-let nextPort = 26_400;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
 
 /** Short enough that a gossip re-advertisement fires within a test's own poll budget. */
 const FAST_GOSSIP_INTERVAL_MS = 50;
@@ -97,11 +91,11 @@ describe("principal membership trust", () => {
     const dirB = userDir();
 
     // Machine A: two stores under the same account, each advertising itself on the hub, so each trusts b1's principal.
-    const a1 = await machineStore(hub.url, freshPort(), dirA);
+    const a1 = await machineStore(hub.url, await freeLocalPort(), dirA);
     const a2 = await machineStore(hub.url, a1.coordinatorPort, dirA);
     await register(a2, "a2-local-agent");
     // Machine B: its own gateway and agent, a different account.
-    const b1 = await machineStore(hub.url, freshPort(), dirB);
+    const b1 = await machineStore(hub.url, await freeLocalPort(), dirB);
     await register(b1, "b1-remote");
 
     // Each side trusts only the other's principal. No device id is trusted anywhere.
@@ -132,12 +126,16 @@ describe("principal membership trust", () => {
     const dirB = userDir();
     const dirStranger = userDir();
 
-    const a1 = await machineStore(hub.url, freshPort(), dirA);
+    const a1 = await machineStore(hub.url, await freeLocalPort(), dirA);
     const a2 = await machineStore(hub.url, a1.coordinatorPort, dirA);
     await register(a2, "a2-local-agent");
-    const b1 = await machineStore(hub.url, freshPort(), dirB);
+    const b1 = await machineStore(hub.url, await freeLocalPort(), dirB);
     await register(b1, "b1-remote");
-    const stranger = await machineStore(hub.url, freshPort(), dirStranger);
+    const stranger = await machineStore(
+      hub.url,
+      await freeLocalPort(),
+      dirStranger,
+    );
     await register(stranger, "stranger");
 
     a1.addTrustedGatewayPrincipal(principalOf(b1));
@@ -162,10 +160,10 @@ describe("principal membership trust", () => {
     const dirA = userDir();
     const dirB = userDir();
 
-    const a1 = await machineStore(hub.url, freshPort(), dirA);
+    const a1 = await machineStore(hub.url, await freeLocalPort(), dirA);
     const a2 = await machineStore(hub.url, a1.coordinatorPort, dirA);
     await register(a2, "a2-local-agent");
-    const b1 = await machineStore(hub.url, freshPort(), dirB);
+    const b1 = await machineStore(hub.url, await freeLocalPort(), dirB);
     await register(b1, "b1-remote");
     a1.addTrustedGatewayPrincipal(principalOf(b1));
     a2.addTrustedGatewayPrincipal(principalOf(b1));
@@ -189,10 +187,10 @@ describe("principal membership trust", () => {
     const dirA = userDir();
     const dirB = userDir();
 
-    const a1 = await machineStore(hub.url, freshPort(), dirA);
+    const a1 = await machineStore(hub.url, await freeLocalPort(), dirA);
     const a2 = await machineStore(hub.url, a1.coordinatorPort, dirA);
     await register(a2, "a2-local-agent");
-    const b1 = await machineStore(hub.url, freshPort(), dirB);
+    const b1 = await machineStore(hub.url, await freeLocalPort(), dirB);
     await register(b1, "b1-remote");
     a1.addTrustedGatewayPrincipal(principalOf(b1));
     a2.addTrustedGatewayPrincipal(principalOf(b1));

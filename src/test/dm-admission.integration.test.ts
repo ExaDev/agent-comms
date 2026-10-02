@@ -8,12 +8,7 @@ import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { dmRoomPath } from "../core/room-path.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-let nextPort = 20_950;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
+import { freeLocalPort } from "./hub-helpers.js";
 
 async function makeConnectedPair(
   port: number,
@@ -50,7 +45,7 @@ async function makeConnectedPair(
 }
 
 test("A's DM request holds open for B's decision; B's reply back auto-approves", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const dmPath = dmRoomPath(a.peerId, b.peerId);
@@ -79,7 +74,7 @@ test("A's DM request holds open for B's decision; B's reply back auto-approves",
 });
 
 test("an unsolicited DM request (no prior outbound request) still needs a human decision", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const dmPath = dmRoomPath(a.peerId, b.peerId);
@@ -102,7 +97,7 @@ test("an unsolicited DM request (no prior outbound request) still needs a human 
 });
 
 test("a rejected DM request throws, and never auto-approves the reciprocal reply", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const dmPath = dmRoomPath(a.peerId, b.peerId);

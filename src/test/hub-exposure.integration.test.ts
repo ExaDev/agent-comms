@@ -11,6 +11,7 @@ import {
 } from "../core/gossip-extensions.js";
 import type { Visibility } from "../core/types.js";
 import {
+  freeLocalPort,
   observeHub,
   realHubOverWs,
   TeardownStack,
@@ -20,12 +21,6 @@ import { wireTestTransport } from "./test-transport.js";
 
 /** A device-id is a 64-character lowercase hex SHA-256 digest. */
 const DEVICE_ID_HEX_LENGTH = 64;
-
-let nextPort = 24_300;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
 
 /** Short enough that several gossip rounds fit inside a test's own watch window. */
 const FAST_GOSSIP_INTERVAL_MS = 50;
@@ -49,7 +44,10 @@ async function startStore(
   hubUrl: string,
   visibility: Visibility | undefined,
 ): Promise<MeshStore> {
-  const store = new MeshStore({ coordinatorPort: freshPort(), hubUrl });
+  const store = new MeshStore({
+    coordinatorPort: await freeLocalPort(),
+    hubUrl,
+  });
   await wireTestTransport(store, {
     presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
   });

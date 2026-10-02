@@ -8,12 +8,7 @@ import { CommsTool } from "../core/tool.js";
 import { dmRoomPath } from "../core/room-path.js";
 import { buildFrontedSessionRecord } from "../bridges/cc-peer/front-relay.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-let nextPort = 24_450;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
+import { freeLocalPort } from "./hub-helpers.js";
 
 const PEER_NAME = "agent-comms-front";
 const SESSION_PID = 4242;
@@ -34,7 +29,7 @@ async function registered(port: number, name: string): Promise<MeshStore> {
 }
 
 test("a session with no agent-comms tool admits a first-contact DM by messaging the front, and hears the outcome", async () => {
-  const port = freshPort();
+  const port = await freeLocalPort();
   const sender = await registered(port, "sender");
   const fronted = await registered(port, "fronted");
   await waitFor(
@@ -121,7 +116,7 @@ test("a session with no agent-comms tool admits a first-contact DM by messaging 
 });
 
 test("a session that rejects a first-contact DM makes the sender's dm fail", async () => {
-  const port = freshPort();
+  const port = await freeLocalPort();
   const sender = await registered(port, "sender");
   const fronted = await registered(port, "fronted");
   await waitFor(

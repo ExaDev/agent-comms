@@ -9,12 +9,7 @@ import type { DeliveryEvent } from "../core/types.js";
 import { buildFrontedSessionRecord } from "../bridges/cc-peer/front-relay.js";
 import { ReplyAliasDirectory } from "../bridges/cc-peer/reply-aliases.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-let nextPort = 27_500;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
+import { freeLocalPort } from "./hub-helpers.js";
 
 const PEER_NAME = "agent-comms-front";
 const SESSION_PID = 4343;
@@ -77,7 +72,7 @@ function frontFor(
 }
 
 test("a fronted session's reply to a room message posts back into that room, not a DM to its sender (agent-comms#289)", async () => {
-  const port = freshPort();
+  const port = await freeLocalPort();
   const sender = await registered(port, "room-sender");
   const fronted = await registered(port, "room-fronted");
   await waitFor(
@@ -156,7 +151,7 @@ test("a fronted session's reply to a room message posts back into that room, not
 });
 
 test("a fronted session's reply to a genuine DM still becomes a DM, through the same alias mechanism (agent-comms#289)", async () => {
-  const port = freshPort();
+  const port = await freeLocalPort();
   const sender = await registered(port, "dm-sender");
   const fronted = await registered(port, "dm-fronted");
   await waitFor(

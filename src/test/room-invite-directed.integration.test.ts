@@ -7,12 +7,7 @@ import { MeshStore } from "../core/mesh-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { loadRoomTokens } from "../core/identity-store.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-let nextPort = 21_210;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
+import { freeLocalPort } from "./hub-helpers.js";
 
 async function makeConnectedPair(port: number): Promise<{
   owner: MeshStore;
@@ -51,7 +46,9 @@ async function makeConnectedPair(port: number): Promise<{
 }
 
 test("inviting a target delivers a real room_invite carrying the room's own name/description and the inviter's own name/cwd", async () => {
-  const { owner, target, targetSlot } = await makeConnectedPair(freshPort());
+  const { owner, target, targetSlot } = await makeConnectedPair(
+    await freeLocalPort(),
+  );
 
   try {
     const room = await owner.createRoom({
@@ -94,7 +91,7 @@ test("inviting a target delivers a real room_invite carrying the room's own name
 });
 
 test("inviting an unreachable target throws rather than silently dropping the invite", async () => {
-  const owner = new MeshStore({ coordinatorPort: freshPort() });
+  const owner = new MeshStore({ coordinatorPort: await freeLocalPort() });
   await wireTestTransport(owner);
   await owner.init();
   await owner.registerAgent({

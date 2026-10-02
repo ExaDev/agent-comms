@@ -10,15 +10,9 @@ import {
 } from "../core/identity-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-import { TeardownStack } from "./hub-helpers.js";
+import { freeLocalPort, TeardownStack } from "./hub-helpers.js";
 
 /** Well clear of 19876, the well-known coordinator port a developer's own real bridges bind on the machine running these tests. */
-let nextPort = 22_900;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
-
 const cleanups = new TeardownStack();
 
 afterEach(async () => {
@@ -66,7 +60,7 @@ function statusesFor(
 
 describe("DM delivery status", () => {
   it("reports a DM as queued while its recipient is away, then delivers it and reports it delivered once the recipient returns", async () => {
-    const port = freshPort();
+    const port = await freeLocalPort();
     const sender = await makeStore(port, "sender");
     cleanups.push(async () => sender.store.shutdown());
     const recipient = await makeStore(port, "recipient");

@@ -5,20 +5,13 @@
  * room creation, messaging, and delivery push.
  */
 
-import { randomInt } from "node:crypto";
 import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
 import type { DeliveryEvent } from "../core/types.js";
+import { freeLocalPort } from "./hub-helpers.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-/** Start of this file's own reserved port band -- kept clear of the fixed literals every sibling integration test file hardcodes (19878-19897) so a random pick here can never collide with one of those. */
-const E2E_PORT_RANGE_START = 20_100;
-/** Width of the reserved band -- wide enough that two concurrent runs of this exact file on the same machine picking the same port by chance is negligible. */
-const E2E_PORT_RANGE_WIDTH = 900;
-/** Randomised per process rather than a fixed literal: a hardcoded port here deterministically collides (EADDRINUSE) with any other concurrent vitest run of this same file on the same machine -- confirmed repeatedly under real concurrent load, not hypothetical. */
-const E2E_PORT = E2E_PORT_RANGE_START + randomInt(E2E_PORT_RANGE_WIDTH);
 
 // ---------------------------------------------------------------------------
 // Timing constants — settle windows for asynchronous mesh propagation. There is no "operation complete" signal for these steps, so the test waits a fixed budget rather than polling.
@@ -38,10 +31,11 @@ const ROOM_JOIN_SETTLE_MS = 200;
 const MESSAGE_DELIVERY_SETTLE_MS = 300;
 
 async function createStore(
+  coordinatorPort: number,
   name: string,
   harness: string,
 ): Promise<{ store: MeshStore; tool: CommsTool; deliveries: DeliveryEvent[] }> {
-  const store = new MeshStore({ coordinatorPort: E2E_PORT });
+  const store = new MeshStore({ coordinatorPort });
   await wireTestTransport(store);
 
   const deliveries: DeliveryEvent[] = [];
@@ -66,13 +60,14 @@ async function createStore(
 
 async function main(): Promise<void> {
   console.log("Creating peer A (coordinator)...");
-  const a = await createStore("peer-a", "test-a");
+  const port = await freeLocalPort();
+  const a = await createStore(port, "peer-a", "test-a");
 
   // Give coordinator time to bind
   await sleep(COORDINATOR_BIND_SETTLE_MS);
 
   console.log("Creating peer B (joins mesh)...");
-  const b = await createStore("peer-b", "test-b");
+  const b = await createStore(port, "peer-b", "test-b");
 
   // Give peer B time to connect and sync
   await sleep(PEER_SYNC_SETTLE_MS);

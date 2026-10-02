@@ -13,14 +13,8 @@ import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { dmRoomPath } from "../core/room-path.js";
 import type { Visibility } from "../core/types.js";
-import { realHubOverWs, TeardownStack } from "./hub-helpers.js";
+import { freeLocalPort, realHubOverWs, TeardownStack } from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
-
-let nextPort = 22_400;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
 
 /** Short enough that a gossip re-advertisement (which carries the registerAgent'd agent/self extension) fires within a test's own poll budget, unlike the 20s production default. */
 const FAST_GOSSIP_INTERVAL_MS = 50;
@@ -83,7 +77,7 @@ describe("every store is its own hub peer", () => {
     cleanups.push(hub.close);
 
     const a1 = await startStore({
-      coordinatorPort: freshPort(),
+      coordinatorPort: await freeLocalPort(),
       hubUrl: hub.url,
       name: "a1",
     });
@@ -93,7 +87,7 @@ describe("every store is its own hub peer", () => {
       name: "a2",
     });
     const b1 = await startStore({
-      coordinatorPort: freshPort(),
+      coordinatorPort: await freeLocalPort(),
       hubUrl: hub.url,
       name: "b1",
     });
@@ -137,7 +131,7 @@ describe("every store is its own hub peer", () => {
     cleanups.push(hub.close);
 
     const a1 = await startStore({
-      coordinatorPort: freshPort(),
+      coordinatorPort: await freeLocalPort(),
       hubUrl: hub.url,
       name: "a1",
     });
@@ -147,7 +141,7 @@ describe("every store is its own hub peer", () => {
       name: "a2",
     });
     const b1 = await startStore({
-      coordinatorPort: freshPort(),
+      coordinatorPort: await freeLocalPort(),
       hubUrl: hub.url,
       name: "b1",
     });
@@ -166,7 +160,7 @@ describe("every store is its own hub peer", () => {
     cleanups.push(hub.close);
 
     const a1 = await startStore({
-      coordinatorPort: freshPort(),
+      coordinatorPort: await freeLocalPort(),
       hubUrl: hub.url,
       name: "a1",
     });
@@ -189,7 +183,7 @@ describe("every store is its own hub peer", () => {
       name: "visible-peer",
     });
     const b1 = await startStore({
-      coordinatorPort: freshPort(),
+      coordinatorPort: await freeLocalPort(),
       hubUrl: hub.url,
       name: "b1",
     });
@@ -218,7 +212,7 @@ describe("every store is its own hub peer", () => {
     cleanups.push(hub.close);
 
     const a1 = await startStore({
-      coordinatorPort: freshPort(),
+      coordinatorPort: await freeLocalPort(),
       hubUrl: hub.url,
       name: "a1",
     });
@@ -228,7 +222,7 @@ describe("every store is its own hub peer", () => {
       name: "a2",
     });
     const b1 = await startStore({
-      coordinatorPort: freshPort(),
+      coordinatorPort: await freeLocalPort(),
       hubUrl: hub.url,
       name: "b1",
     });

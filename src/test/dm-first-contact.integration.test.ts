@@ -7,12 +7,7 @@ import { MeshStore } from "../core/mesh-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { dmRoomPath } from "../core/room-path.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-let nextPort = 21_950;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
+import { freeLocalPort } from "./hub-helpers.js";
 
 async function makeConnectedPair(
   port: number,
@@ -49,7 +44,7 @@ async function makeConnectedPair(
 }
 
 test("a first sendDm holds for the counterpart's decision, delivers once accepted, and needs no second decision for later messages or the reply", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const dmPath = dmRoomPath(a.peerId, b.peerId);
@@ -103,7 +98,7 @@ test("a first sendDm holds for the counterpart's decision, delivers once accepte
 });
 
 test("a first sendDm the counterpart rejects throws and leaves no message recorded", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const dmPath = dmRoomPath(a.peerId, b.peerId);
@@ -126,7 +121,7 @@ test("a first sendDm the counterpart rejects throws and leaves no message record
 });
 
 test("the counterpart's agent is told about a pending DM request, so it knows there is something to accept", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const dmPath = dmRoomPath(a.peerId, b.peerId);

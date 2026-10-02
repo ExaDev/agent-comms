@@ -24,11 +24,6 @@ import { realHubOverWs, waitForCondition } from "./hub-helpers.js";
 /** A device-id is a 64-character lowercase hex SHA-256 digest. */
 const DEVICE_ID_HEX_LENGTH = 64;
 
-// Base of the ephemeral coordinator-port range used to avoid colliding with the mesh's real well-known port.
-const TEST_COORDINATOR_PORT_BASE = 20_900;
-// Width of the randomised offset added to TEST_COORDINATOR_PORT_BASE so concurrent test runs don't collide on the same port.
-const TEST_COORDINATOR_PORT_RANGE = 100;
-
 function tempSlot(harness: string): IdentitySlot {
   const dir = fs.mkdtempSync(
     path.join(tmpdir(), "agent-comms-bridge-mesh-test-"),
@@ -69,9 +64,7 @@ test("createBridgeMesh wires a WireMeshTransport", async () => {
 test("createBridgeMesh passes an explicit coordinatorPort through to MeshStore, forming one shared mesh", async () => {
   const slotA = tempSlot("test-harness-a");
   const slotB = tempSlot("test-harness-b");
-  const port =
-    TEST_COORDINATOR_PORT_BASE +
-    Math.floor(Math.random() * TEST_COORDINATOR_PORT_RANGE);
+  const port = await freeLocalPort();
   const a = await createBridgeMesh(slotA, {
     coordinatorPort: port,
     firstContactPort: await freeLocalPort(),
@@ -160,11 +153,10 @@ const REMOTE_DEVICE_HEX = "f".repeat(DEVICE_ID_HEX_LENGTH);
 test("createBridgeMesh passes an explicit hubUrl through to MeshStore, which dials it once it has an agent and trusts someone, and drops it on shutdown", async () => {
   const hub = await realHubOverWs();
   const slot = tempSlot("test-harness-hub");
-  const port =
-    TEST_COORDINATOR_PORT_BASE +
-    Math.floor(Math.random() * TEST_COORDINATOR_PORT_RANGE);
+  const port = await freeLocalPort();
   const { store } = await createBridgeMesh(slot, {
     coordinatorPort: port,
+    firstContactPort: await freeLocalPort(),
     hubUrl: hub.url,
   });
   try {

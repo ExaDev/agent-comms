@@ -5,12 +5,7 @@
 import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-let nextPort = 21_010;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
+import { freeLocalPort } from "./hub-helpers.js";
 
 async function makeConnectedPair(port: number): Promise<{
   owner: MeshStore;
@@ -66,7 +61,7 @@ async function joinAndAccept(
 }
 
 test("a joiner's own local room record carries the room's real name, description, and type", async () => {
-  const { owner, member } = await makeConnectedPair(freshPort());
+  const { owner, member } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const room = await owner.createRoom({
@@ -93,7 +88,7 @@ test("a joiner's own local room record carries the room's real name, description
 });
 
 test("refreshRoomMembers re-syncs a member's own local room record from the owner", async () => {
-  const { owner, member } = await makeConnectedPair(freshPort());
+  const { owner, member } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const room = await owner.createRoom({
@@ -125,7 +120,7 @@ test("refreshRoomMembers re-syncs a member's own local room record from the owne
 });
 
 test("refreshRoomMembers throws for a DM path -- no Room record exists to refresh", async () => {
-  const { owner, member } = await makeConnectedPair(freshPort());
+  const { owner, member } = await makeConnectedPair(await freeLocalPort());
 
   try {
     await expect(

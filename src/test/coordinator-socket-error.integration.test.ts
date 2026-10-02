@@ -8,9 +8,8 @@
 import * as net from "node:net";
 import { MeshStore } from "../core/mesh-store.js";
 import { test, expect } from "vitest";
+import { freeLocalPort } from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
-
-const TEST_PORT = 19879;
 
 // Time to let the coordinator's event loop process the ECONNRESET error event before asserting the process survived it.
 const ERROR_PROCESSING_DELAY_MS = 300;
@@ -24,13 +23,14 @@ const ERROR_PROCESSING_DELAY_MS = 300;
  * error event on the socket → uncaught exception → process crash.
  */
 test("coordinator survives ECONNRESET on accepted socket", async () => {
-  const store = new MeshStore({ coordinatorPort: TEST_PORT });
+  const port = await freeLocalPort();
+  const store = new MeshStore({ coordinatorPort: port });
   await wireTestTransport(store);
   await store.init();
 
   // Connect a raw socket to the coordinator port
   const socket = net.createConnection({
-    port: TEST_PORT,
+    port,
     host: "127.0.0.1",
   });
 
