@@ -50,6 +50,7 @@ test("createBridgeMesh sets peerId to deviceIdToHex(identity.deviceId), not the 
 test("createBridgeMesh wires a WireMeshTransport", async () => {
   const slot = tempSlot("test-harness");
   const { store } = await createBridgeMesh(slot, {
+    coordinatorPort: await freeLocalPort(),
     firstContactPort: await freeLocalPort(),
   });
   try {
