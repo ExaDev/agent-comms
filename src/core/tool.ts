@@ -10,6 +10,8 @@
 import { detailsShared } from "./agent-registry.js";
 import { groupAgentsByMachine } from "./machine-list-groups.js";
 import { plainNamer, type Namer, type Naming } from "./naming.js";
+import { lanWebUisAction } from "./lan-web-actions.js";
+import type { LanWebUiEntry } from "./lan-web-uis.js";
 import { agentTable, type AgentTableRow } from "./agent-table.js";
 import {
   machineName,
@@ -195,6 +197,8 @@ export interface MeshOnlyFeatures {
   queryVersion?: (
     deviceId: string,
   ) => Promise<{ version: string } | { error: string }>;
+  /** The LAN web UI table this machine's first-contact presence feeds (agent-comms#353). */
+  lanWebUis?: Readonly<{ list: () => readonly Readonly<LanWebUiEntry>[] }>;
   meshGraph?: () => MeshGraph;
   meshTrace?: (target: string, timeoutMs?: number) => Promise<MeshTraceResult>;
 }
@@ -349,6 +353,8 @@ export class CommsTool {
           return await meshUnadvertiseAction(this.discovery, action);
         case "mesh_interfaces":
           return meshInterfacesAction(this.store);
+        case "lan_web_uis":
+          return lanWebUisAction(this.store, await this.namerFor(ctx));
         case "mesh_listen":
           return await meshListenAction(this.store, action);
         case "mesh_unlisten":

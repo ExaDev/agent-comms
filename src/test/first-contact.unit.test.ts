@@ -91,6 +91,12 @@ afterEach(() => {
   }
 });
 
+type WebBeacon = Readonly<{
+  peerId: string;
+  host: string;
+  webPort: number;
+}>;
+
 /** A presence on a fresh free port recording every discovery, the fixture every test starts from. */
 async function startedPresence(onError?: (error: Error) => void): Promise<{
   presence: FirstContact;
@@ -111,6 +117,32 @@ async function startedPresence(onError?: (error: Error) => void): Promise<{
   });
   presence.start();
   return { presence, port, discovered };
+}
+
+/** A presence that also records every web beacon it hears (agent-comms#353), each with the sender's address. */
+async function startedPresenceHearingWebBeacons(): Promise<{
+  presence: FirstContact;
+  port: number;
+  discovered: DiscoveredPeer[];
+  webBeacons: WebBeacon[];
+}> {
+  const port = await freeLocalPort();
+  const discovered: DiscoveredPeer[] = [];
+  const webBeacons: WebBeacon[] = [];
+  const presence = new FirstContact({
+    peerId: PEER_ID_A,
+    dataPort: DATA_PORT_A,
+    name: "test-a",
+    port,
+    onPeerDiscovered: (peer) => {
+      discovered.push({ ...peer });
+    },
+    onWebBeacon: (beacon) => {
+      webBeacons.push({ ...beacon });
+    },
+  });
+  presence.start();
+  return { presence, port, discovered, webBeacons };
 }
 
 describe("FirstContact", () => {
@@ -191,6 +223,41 @@ describe("FirstContact", () => {
 
     expect(discovered).toEqual([]);
     expect(errors).toEqual([]);
+    presence.stop();
+  });
+
+  it("hands a web beacon up with the sender's address, without treating it as a peer discovery or a probe to answer", async () => {
+    const { presence, port, discovered, webBeacons } =
+      await startedPresenceHearingWebBeacons();
+    const other = await testSocket();
+
+    send(
+      other,
+      { type: "agent-comms-web-beacon", peerId: PEER_ID_B, webPort: 55213 },
+      port,
+    );
+    await settle();
+
+    expect(webBeacons).toEqual([
+      { peerId: PEER_ID_B, host: "127.0.0.1", webPort: 55213 },
+    ]);
+    expect(discovered).toEqual([]);
+    presence.stop();
+  });
+
+  it("drops its own web beacon reaching it back, by peerId", async () => {
+    const { presence, port, webBeacons } =
+      await startedPresenceHearingWebBeacons();
+    const other = await testSocket();
+
+    send(
+      other,
+      { type: "agent-comms-web-beacon", peerId: PEER_ID_A, webPort: 55213 },
+      port,
+    );
+    await settle();
+
+    expect(webBeacons).toEqual([]);
     presence.stop();
   });
 

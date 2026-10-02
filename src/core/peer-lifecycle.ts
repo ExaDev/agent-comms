@@ -32,6 +32,10 @@ export interface PeerLifecycleDeps {
   coordinatorPort: number;
   /** The UDP port the coordinator-free first-contact presence binds (agent-comms#341). Undefined means no presence at all: only the bridge entry points set it (bridge-mesh.ts), so a store built by anything else, a test included, never cross-discovers another store. */
   firstContactPort?: number | undefined;
+  /** Receives every web UI beacon the presence hears (agent-comms#353). Absent when the caller wants none. */
+  onWebBeacon?: (
+    beacon: Readonly<{ peerId: string; host: string; webPort: number }>,
+  ) => void;
   getPeerId: () => string;
   /** The peer ID of the coordinator this side currently answers to, as the transport reports it -- undefined when this side is the coordinator itself or has never reached one. Supplied as its own dep rather than read off requireTransport() so the crash-race decision below is expressible against a plain value in tests. */
   getCoordinatorPeerId: () => string | undefined;
@@ -87,6 +91,7 @@ export class PeerLifecycle {
       peerId: this.deps.getPeerId(),
       dataPort: this.deps.requireTransport().dataPort,
       port,
+      onWebBeacon: this.deps.onWebBeacon,
       onPeer: (info) => {
         this.handlePeerList([info]);
       },

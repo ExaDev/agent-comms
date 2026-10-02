@@ -63,6 +63,7 @@ import {
   requireMeshTrace,
 } from "./transport-queries.js";
 import { ACCOUNT_JOIN_VERB, AccountJoin } from "./account-join.js";
+import { LanWebUis } from "./lan-web-uis.js";
 import type {
   MeshStatePatch,
   PeerInfo,
@@ -158,6 +159,9 @@ export class MeshStore implements CommsStore {
 
   /** The connection-code generate/redeem pair (agent-comms#188) bootstrapping gatewayTrust above between two devices with no existing mesh connection. Persists across restarts per slot, from the slot passed to this store's own constructor, whereas gatewayTrust is shared by every slot in the slot's identity directory. generateConnectionCode/redeemConnectionCode below are the methods CommsTool actually calls through MeshOnlyFeatures; redeemConnectionCode is also where a successful redemption's deviceId gets fed into gatewayTrust.add, the actual point of this whole bootstrap. */
   private readonly connectionCodes: ConnectionCodeLedger;
+
+  /** The LAN web UIs this machine's first-contact presence has heard web beacons for (agent-comms#353), listed by the lan_web_uis action. */
+  readonly lanWebUis = new LanWebUis();
 
   /** Issues and answers account invites, and joins this machine to an account (agent-comms#344). Public so `agent-comms account invite` and `agent-comms account join` (account-cli.ts) reach it; deliberately not on CommsTool's surface (see account-join.ts). */
   readonly account: AccountJoin;
@@ -463,6 +467,9 @@ export class MeshStore implements CommsStore {
       agents: this.agents,
       coordinatorPort: this.coordinatorPort,
       firstContactPort: options?.firstContactPort,
+      onWebBeacon: (b) => {
+        this.lanWebUis.recordBeacon(b);
+      },
       getPeerId: () => this.peerId,
       getCoordinatorPeerId: () => this.requireTransport().coordinatorPeerId,
       requireTransport: () => this.requireTransport(),
