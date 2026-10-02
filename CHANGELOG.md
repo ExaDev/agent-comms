@@ -1,3 +1,13 @@
+## [8.12.0](https://github.com/ExaDev/agent-comms/compare/v8.11.0...v8.12.0) (2026-10-02)
+
+### Features
+
+* **core:** answer a trusted peer's ask for a hub-withheld agent's details ([be72111](https://github.com/ExaDev/agent-comms/commit/be7211188e2bafc697e85592c1cc8471db616068))
+
+### Documentation
+
+* add the MIT licence file package.json already declares ([5ad39d7](https://github.com/ExaDev/agent-comms/commit/5ad39d7cf604d49a624957cd6e2454b2ecf8dc8d))
+
 ## [8.11.0](https://github.com/ExaDev/agent-comms/compare/v8.10.2...v8.11.0) (2026-10-02)
 
 ### Features
