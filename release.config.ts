@@ -61,7 +61,6 @@ const config: GlobalConfig = {
           ".claude-plugin/marketplace.json",
           "server.json",
           "CHANGELOG.md",
-          "README.md",
         ],
         message: "chore(release): v${nextRelease.version} [skip ci]",
       },

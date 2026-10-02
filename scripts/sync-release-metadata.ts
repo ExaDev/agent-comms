@@ -35,7 +35,6 @@ const packagePath = path.join(root, "package.json");
 const pluginPath = path.join(root, ".claude-plugin/plugin.json");
 const marketplacePath = path.join(root, ".claude-plugin/marketplace.json");
 const serverPath = path.join(root, "server.json");
-const readmePath = path.join(root, "README.md");
 
 const packageObject = parseJsonObject(
   await readFile(packagePath, "utf8"),
@@ -132,18 +131,9 @@ packageEntryValue.version = packageVersion;
 pluginObject.version = packageVersion;
 marketplacePluginEntry.version = packageVersion;
 
-const readmeContent = await readFile(readmePath, "utf8");
-const updatedReadme = readmeContent
-  .replaceAll(/version-(\d+\.\d+\.\d+)-blue/g, `version-${packageVersion}-blue`)
-  .replaceAll(
-    /releases\/tag\/v\d+\.\d+\.\d+/g,
-    `releases/tag/v${packageVersion}`,
-  );
-
 const needsServerWrite = serverVersion !== packageVersion;
 const needsPluginWrite = pluginVersion !== packageVersion;
 const needsMarketplaceWrite = marketplacePluginVersion !== packageVersion;
-const needsReadmeWrite = readmeContent !== updatedReadme;
 
 if (needsServerWrite) {
   await writeFile(serverPath, stringifyJson(serverObject));
@@ -153,7 +143,4 @@ if (needsPluginWrite) {
 }
 if (needsMarketplaceWrite) {
   await writeFile(marketplacePath, stringifyJson(marketplaceObject));
-}
-if (needsReadmeWrite) {
-  await writeFile(readmePath, updatedReadme);
 }
