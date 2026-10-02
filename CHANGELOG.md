@@ -1,3 +1,13 @@
+## [8.7.0](https://github.com/ExaDev/agent-comms/compare/v8.6.2...v8.7.0) (2026-10-02)
+
+### Features
+
+* **core:** replicate the account's grant ledger across machines so a principal spans hosts ([a1608ef](https://github.com/ExaDev/agent-comms/commit/a1608ef9e8c05eb04a62636b49f5c046e812e5c3))
+
+### Refactoring
+
+* **bridge:** drop the unused MCP stdin seam, use the SDK protocol version in tests ([023f0b0](https://github.com/ExaDev/agent-comms/commit/023f0b0121a7c93a862fc4a431e9e8086749f045))
+
 ## [8.6.2](https://github.com/ExaDev/agent-comms/compare/v8.6.1...v8.6.2) (2026-10-01)
 
 ### Build
