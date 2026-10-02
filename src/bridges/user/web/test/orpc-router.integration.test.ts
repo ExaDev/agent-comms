@@ -15,23 +15,12 @@ import { RPCLink, type WebSocketLike } from "@orpc/client/websocket";
 import type { ContractRouterClient } from "@orpc/contract";
 import { createWebServer, type WebServerHandle } from "../server.js";
 import type { meshContract, MeshEvent } from "../contract.js";
-import { unreachableHubUrl } from "../../../../test/hub-helpers.js";
+import {
+  freeLocalPort,
+  unreachableHubUrl,
+} from "../../../../test/hub-helpers.js";
 
 type MeshClient = ContractRouterClient<typeof meshContract>;
-
-async function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      const port = typeof addr === "object" && addr !== null ? addr.port : 0;
-      server.close(() => {
-        resolve(port);
-      });
-    });
-    server.on("error", reject);
-  });
-}
 
 const sockets: WsWebSocket[] = [];
 let handle: WebServerHandle | undefined;
@@ -56,9 +45,13 @@ function connectMeshClient(port: number): MeshClient {
 }
 
 async function setup(): Promise<{ client: MeshClient; port: number }> {
-  const coordinatorPort = await findFreePort();
+  const coordinatorPort = await freeLocalPort();
   const hubUrl = await unreachableHubUrl();
-  handle = await createWebServer({ coordinatorPort, hubUrl });
+  handle = await createWebServer({
+    coordinatorPort,
+    firstContactPort: await freeLocalPort(),
+    hubUrl,
+  });
   await new Promise<void>((resolve) => {
     if (handle?.server.listening === true) {
       resolve();

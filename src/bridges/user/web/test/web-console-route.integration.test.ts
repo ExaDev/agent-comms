@@ -10,23 +10,14 @@ import http from "node:http";
 import net from "node:net";
 import { createWebServer, type WebServerHandle } from "../server.js";
 import { WEB_CONSOLE_MOUNT } from "../web-console-static.js";
-import { unreachableHubUrl } from "../../../../test/hub-helpers.js";
+import {
+  freeLocalPort,
+  unreachableHubUrl,
+} from "../../../../test/hub-helpers.js";
 
 const ENV_VAR = "AGENT_COMMS_WEB_CONSOLE_DIST";
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
-
-async function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      const port = typeof addr === "object" && addr !== null ? addr.port : 0;
-      server.close(() => resolve(port));
-    });
-    server.on("error", reject);
-  });
-}
 
 async function fetchText(
   port: number,
@@ -61,7 +52,11 @@ let originalEnv: string | undefined;
 /** Starts a web server and resolves once it's actually listening, returning its port. */
 async function startAndGetPort(coordinatorPort: number): Promise<number> {
   const hubUrl = await unreachableHubUrl();
-  const started = await createWebServer({ coordinatorPort, hubUrl });
+  const started = await createWebServer({
+    coordinatorPort,
+    firstContactPort: await freeLocalPort(),
+    hubUrl,
+  });
   handle = started;
   await new Promise<void>((resolve) => {
     if (started.server.listening) {
@@ -101,7 +96,7 @@ describe("web-console route (opt-in)", () => {
   it("404s under the mount when AGENT_COMMS_WEB_CONSOLE_DIST is unset", async () => {
     originalEnv = process.env[ENV_VAR];
     Reflect.deleteProperty(process.env, ENV_VAR);
-    const coordinatorPort = await findFreePort();
+    const coordinatorPort = await freeLocalPort();
     const port = await startAndGetPort(coordinatorPort);
 
     const { status } = await fetchText(port, WEB_CONSOLE_MOUNT);
@@ -122,7 +117,7 @@ describe("web-console route (opt-in)", () => {
     );
     process.env[ENV_VAR] = tmpDir;
 
-    const coordinatorPort = await findFreePort();
+    const coordinatorPort = await freeLocalPort();
     const port = await startAndGetPort(coordinatorPort);
 
     const index = await fetchText(port, WEB_CONSOLE_MOUNT);

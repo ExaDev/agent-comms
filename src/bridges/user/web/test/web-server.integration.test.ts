@@ -14,7 +14,10 @@ import {
   type WebServerHandle,
 } from "../server.js";
 import WS from "ws";
-import { unreachableHubUrl } from "../../../../test/hub-helpers.js";
+import {
+  freeLocalPort,
+  unreachableHubUrl,
+} from "../../../../test/hub-helpers.js";
 
 /** HTTP 200 OK. */
 const HTTP_OK = 200;
@@ -25,28 +28,19 @@ const HTTP_NOT_FOUND = 404;
 /** A device-id is a hex-encoded SHA-256 hash: 32 bytes, 64 hex characters. */
 const DEVICE_ID_HEX_LENGTH = 64;
 
-/** Find a free port on localhost by binding to port 0, matching the pattern used by the mesh core's own integration tests -- an isolated coordinator port keeps this suite from colliding with a real agent-comms mesh already running on the developer's machine (the default coordinator port, 19876, is a well-known constant every real bridge instance binds). */
-async function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      const port = typeof addr === "object" && addr !== null ? addr.port : 0;
-      server.close(() => resolve(port));
-    });
-    server.on("error", reject);
-  });
-}
-
 async function setup(): Promise<{
   port: number;
   handle: WebServerHandle;
   cleanup: () => Promise<void>;
 }> {
-  const coordinatorPort = await findFreePort();
+  const coordinatorPort = await freeLocalPort();
   const hubUrl = await unreachableHubUrl();
   // A local const each call owns and closes -- a shared module-level `let` would mean cleanup's closure reads whatever the module-level variable happens to hold when it actually runs, not the handle this specific setup() call created. Any interleaving between one test's async teardown and the next test's setup() could let one test's cleanup close a DIFFERENT test's server, leaking the first server's socket and tearing the second down mid-request. A per-call local eliminates the shared state entirely.
-  const handle = await createWebServer({ coordinatorPort, hubUrl });
+  const handle = await createWebServer({
+    coordinatorPort,
+    firstContactPort: await freeLocalPort(),
+    hubUrl,
+  });
 
   // Wait for the server to actually be listening
   await new Promise<void>((resolve) => {
