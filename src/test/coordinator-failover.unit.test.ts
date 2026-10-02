@@ -26,6 +26,8 @@ const HIGH_ID = "3".repeat(DEVICE_ID_HEX_LENGTH);
 /** Sorts below every other id here, for a peer this side lists but can never hold an election with. */
 const UNENROLLED_ID = "0".repeat(DEVICE_ID_HEX_LENGTH);
 const UNENROLLED_DATA_PORT = 41_004;
+/** How many binds meet the closing listener before the port is free, in the tests where it takes more than one round to release. */
+const CLOSING_LISTENER_BIND_CONFLICTS = 3;
 
 interface TransportCalls {
   becomeCoordinator: { host: string; port: number }[];
@@ -79,8 +81,12 @@ interface HarnessOptions {
   isCoordinator?: boolean;
   /** The port holder this side currently answers to, as the transport reports it. */
   coordinatorPeerId?: string | undefined;
-  /** Rejection thrown by the transport's becomeCoordinator, simulating another survivor winning the bind race. */
+  /** Rejection thrown by the transport's becomeCoordinator on every attempt, simulating another survivor winning the bind race. */
   bindFailure?: Error;
+  /** How many leading bind attempts fail with a port conflict before one succeeds, simulating the lost holder's listener releasing the port only after a while. */
+  bindConflicts?: number;
+  /** What each successive dial of the well-known port meets, the last entry repeating: "winner" reaches the surviving peer that won the bind race, "lost-holder" reaches the departed holder's own listener while it is still closing (the dial authenticates the lost holder's device-id), and an Error is a dial that fails. "winner" when omitted. */
+  dials?: readonly (Error | "winner" | "lost-holder")[];
   /** Peers this side lists (in peerInfo) but has no machine-local session to, such as one approved through connect_request or named in a peer list it never managed to dial. */
   notEnrolled?: readonly string[];
 }
@@ -102,21 +108,36 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
   let gains = 0;
 
   let isCoordinator = options.isCoordinator ?? false;
+  let coordinatorPeerId = options.coordinatorPeerId;
+  let bindAttempts = 0;
+  let dialAttempts = 0;
   const transport: MeshTransport = {
     dataPort: SELF_DATA_PORT,
     get isCoordinator(): boolean {
       return isCoordinator;
     },
     hasCoordinatorConnection: false,
-    coordinatorPeerId: options.coordinatorPeerId,
+    get coordinatorPeerId(): string | undefined {
+      return coordinatorPeerId;
+    },
     startDataServer: async () => {},
     connectToCoordinator: async (_host, port, peerId, dataPort) => {
       calls.connectToCoordinator.push({ port, peerId, dataPort });
+      const dials = options.dials ?? ["winner"];
+      const dial = dials[Math.min(dialAttempts, dials.length - 1)];
+      dialAttempts += 1;
+      if (dial instanceof Error) throw dial;
+      coordinatorPeerId = dial === "lost-holder" ? COORDINATOR_ID : HIGH_ID;
     },
     becomeCoordinator: async (host, port) => {
       calls.becomeCoordinator.push({ host, port });
       if (options.bindFailure !== undefined) throw options.bindFailure;
+      bindAttempts += 1;
+      if (bindAttempts <= (options.bindConflicts ?? 0)) {
+        throw new Error("listen EADDRINUSE: address already in use");
+      }
       isCoordinator = true;
+      coordinatorPeerId = undefined;
     },
     connectToPeer: async (target) => {
       calls.connectToPeer.push(target.id);
@@ -304,6 +325,53 @@ test("losing the bind race makes this peer rejoin under the new port holder", as
     { port: COORDINATOR_PORT, peerId: LOW_ID, dataPort: SELF_DATA_PORT },
   ]);
   expect(harness.errors).toEqual([]);
+});
+
+test("a dial that reaches the lost holder's own closing listener leaves the contest open until this peer binds the port", async () => {
+  const harness = makeHarness({
+    coordinatorPeerId: COORDINATOR_ID,
+    bindConflicts: CLOSING_LISTENER_BIND_CONFLICTS,
+    dials: ["lost-holder"],
+  });
+
+  await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
+
+  expect(harness.calls.becomeCoordinator).toHaveLength(
+    CLOSING_LISTENER_BIND_CONFLICTS + 1,
+  );
+  expect(harness.calls.connectToCoordinator).toHaveLength(
+    CLOSING_LISTENER_BIND_CONFLICTS,
+  );
+  expect(harness.errors).toEqual([]);
+});
+
+test("a dial torn down mid-handshake by a closing listener leaves the contest open until this peer binds the port", async () => {
+  const harness = makeHarness({
+    coordinatorPeerId: COORDINATOR_ID,
+    bindConflicts: CLOSING_LISTENER_BIND_CONFLICTS,
+    dials: [new Error("connection is closed")],
+  });
+
+  await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
+
+  expect(harness.calls.becomeCoordinator).toHaveLength(
+    CLOSING_LISTENER_BIND_CONFLICTS + 1,
+  );
+  expect(harness.errors).toEqual([]);
+});
+
+test("a contest that never settles is reported with the last dial failure once its rounds run out", async () => {
+  const harness = makeHarness({
+    coordinatorPeerId: COORDINATOR_ID,
+    bindFailure: new Error("listen EADDRINUSE: address already in use"),
+    dials: [new Error("connection is closed")],
+  });
+
+  await harness.lifecycle.handlePeerDeparture(COORDINATOR_ID);
+
+  expect(harness.errors.map((error) => error.message)).toEqual([
+    "PeerLifecycle: the vacated coordinator port kept changing hands and this peer neither took it nor found a successor holding it; the last dial failed: connection is closed",
+  ]);
 });
 
 test("a bind failure that is not a port conflict is reported, not retried as a rejoin", async () => {

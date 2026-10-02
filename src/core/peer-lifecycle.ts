@@ -10,7 +10,13 @@ import type {
   PeerInfo,
   SerialisedState,
 } from "./wire-protocol.js";
-import { isAddrInUse, isConnectionRefused } from "./bind-retry.js";
+import {
+  BECOME_COORDINATOR_BIND_RETRIES,
+  BECOME_COORDINATOR_BIND_RETRY_DELAY_MS,
+  isAddrInUse,
+  isConnectionRefused,
+} from "./bind-retry.js";
+import { ROOM_REQUEST_TIMEOUT_MS } from "./request-timeouts.js";
 import { COORDINATOR_HOST } from "./mesh-store-shared.js";
 import { startFirstContact, type FirstContact } from "./first-contact.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
@@ -54,11 +60,15 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** How many times a peer that has lost its coordinator alternates between binding the vacated port and joining whoever bound it first. More than one round is genuinely needed: a graceful handover names its successor before the outgoing coordinator's own listener closes, so a bind attempted in that window fails on a port that is about to be free, and the join it falls back to finds nothing listening a moment later. */
-const COORDINATOR_TAKEOVER_ROUNDS = 5;
+/** How many times a peer that has lost its coordinator alternates between binding the vacated port and joining whoever bound it first. A round that loses the bind has already spent a full becomeCoordinator retry window (BECOME_COORDINATOR_BIND_RETRIES attempts, BECOME_COORDINATOR_BIND_RETRY_DELAY_MS apart), so the rounds together are bounded by ROOM_REQUEST_TIMEOUT_MS, the ordinary bound on a peer completing a step. Several rounds are genuinely needed because the departed holder's own listener can outlast the sessions that reported its departure: its close only finishes once its transport has closed every session, which under load takes far longer than one retry window, and every bind and dial in that interval meets the dying listener. */
+const COORDINATOR_TAKEOVER_ROUNDS = Math.ceil(
+  ROOM_REQUEST_TIMEOUT_MS /
+    (BECOME_COORDINATOR_BIND_RETRIES * BECOME_COORDINATOR_BIND_RETRY_DELAY_MS),
+);
 
-/** What one attempt to join whoever won the bind race concluded. "nothing-listening" is the only outcome worth re-entering the race for: the port was taken when this side tried to bind it and free again by the time it tried to dial, so neither role has actually been settled yet. */
-type RejoinOutcome = "joined" | "nothing-listening" | "failed";
+/** What one attempt to join whoever won the bind race concluded. "unsettled" means no successor holds the port yet, so the caller re-enters the bind race: nothing was listening (the port was taken when this side tried to bind it and free again by the time it tried to dial), the dial reached the lost holder's own listener while it was still closing (told apart by the device-id the dial authenticated), or the dial failed on a connection that was torn down mid-handshake, which says the same thing. `cause` is the dial failure, when there was one, so that giving up can say what the last attempt met. */
+type RejoinOutcome =
+  { outcome: "joined" } | { outcome: "unsettled"; cause?: Error };
 
 export class PeerLifecycle {
   /** Guards against a second contest running while the first is still binding or rejoining -- a coordinator whose process dies can close more than one session to this side, and each close arrives as its own disconnect. */
@@ -259,6 +269,7 @@ export class PeerLifecycle {
       const survivors = [...this.deps.peerInfo.values()].filter(
         (peer) => peer.id !== selfId && peer.id !== lostCoordinatorId,
       );
+      let lastDialFailure: Error | undefined;
       for (let round = 0; round < COORDINATOR_TAKEOVER_ROUNDS; round++) {
         try {
           await this.handleBecomeCoordinator(survivors);
@@ -275,14 +286,16 @@ export class PeerLifecycle {
         }
         // A graceful handover racing this crash race can have made this side the coordinator while the bind above was in flight: the bind then fails against this side's own freshly bound listener, and dialling it would be this peer introducing itself to itself. Re-read through requireTransport() rather than the narrowed local, which TypeScript still believes is false from the guard at the top of this method.
         if (this.deps.requireTransport().isCoordinator) return;
-        if (
-          (await this.rejoinUnderNewCoordinator(selfId)) !== "nothing-listening"
-        )
-          return;
+        const rejoin = await this.rejoinUnderNewCoordinator(
+          selfId,
+          lostCoordinatorId,
+        );
+        if (rejoin.outcome === "joined") return;
+        lastDialFailure = rejoin.cause;
       }
       this.deps.onError?.(
         new Error(
-          "PeerLifecycle: the vacated coordinator port kept changing hands and this peer neither took it nor found anyone holding it",
+          `PeerLifecycle: the vacated coordinator port kept changing hands and this peer neither took it nor found a successor holding it${lastDialFailure === undefined ? "" : `; the last dial failed: ${lastDialFailure.message}`}`,
         ),
       );
     } finally {
@@ -290,9 +303,10 @@ export class PeerLifecycle {
     }
   }
 
-  /** Re-introduces this side to whichever survivor won the bind race, over a fresh coordinator connection to the same well-known port. Without it this peer would keep its existing data connections but be unknown to the new coordinator, so it would never appear in the peer list handed to the next joiner. A refused dial is reported as "nothing-listening" rather than as an error: it means the winner released the port again (or never finished taking it), which the caller answers by re-entering the bind race. Any other failure is reported here, since it says the coordinator is there and this peer still cannot reach it. */
+  /** Re-introduces this side to whichever survivor won the bind race, over a fresh coordinator connection to the same well-known port. Without it this peer would keep its existing data connections but be unknown to the new coordinator, so it would never appear in the peer list handed to the next joiner. Only a dial that reaches a different device than the lost holder counts as joining: the lost holder's listener can still be accepting while its transport closes, and a peer introduced to it would hold a session to a coordinator that is going away while nobody holds the port. Every dial failure is treated as unsettled rather than final for the same reason, since a connection torn down mid-handshake is what a closing listener produces; the caller answers by re-entering the bind race and reports the last failure only once it has run out of rounds. */
   private async rejoinUnderNewCoordinator(
     selfId: string,
+    lostCoordinatorId: string,
   ): Promise<RejoinOutcome> {
     const transport = this.deps.requireTransport();
     try {
@@ -302,16 +316,17 @@ export class PeerLifecycle {
         selfId,
         transport.dataPort,
       );
-      return "joined";
     } catch (error) {
-      if (isConnectionRefused(error)) return "nothing-listening";
-      this.deps.onError?.(
-        new Error(
-          `PeerLifecycle: lost the coordinator bind race and could not rejoin under the new coordinator: ${describe(error)}`,
-        ),
-      );
-      return "failed";
+      if (isConnectionRefused(error)) return { outcome: "unsettled" };
+      return {
+        outcome: "unsettled",
+        cause: error instanceof Error ? error : new Error(describe(error)),
+      };
     }
+    if (this.deps.requireTransport().coordinatorPeerId === lostCoordinatorId) {
+      return { outcome: "unsettled" };
+    }
+    return { outcome: "joined" };
   }
 
   /** Marks a departed peer's own agent offline and announces it, but only from the elected coordinator: the same single-authority rule StaleAgentChecker's PID probe already follows, so a departure produces one announcement rather than one per surviving peer. An agent's id is its peer's id (AgentRegistry.registerAgent), so the departed peer names its own record directly; the PID probe remains the backstop for an agent whose process dies without its session closing, and an already-offline record is left alone, so a successor that took over late announces nothing twice. */
