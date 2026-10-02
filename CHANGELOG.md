@@ -1,3 +1,13 @@
+## [8.9.4](https://github.com/ExaDev/agent-comms/compare/v8.9.3...v8.9.4) (2026-10-02)
+
+### Bug Fixes
+
+* **core:** keep contesting the vacated coordinator port until a successor holds it ([cb290ed](https://github.com/ExaDev/agent-comms/commit/cb290eda99be0bc0754b9b9a3747fb4677df3103))
+
+### Tests
+
+* **core:** report the survivor's own errors when the port rebind wait times out ([90fcf57](https://github.com/ExaDev/agent-comms/commit/90fcf57027d83e487179c34c113a272d7a8366b7))
+
 ## [8.9.3](https://github.com/ExaDev/agent-comms/compare/v8.9.2...v8.9.3) (2026-10-02)
 
 ### Bug Fixes
