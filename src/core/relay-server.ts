@@ -1,5 +1,5 @@
 /**
- * RelayServer: the relay role a bridge serves to its machine and local network (agent-comms#342), wire-mesh-core's transport-agnostic relay-hub domain logic (the same createRelayHub the public hub runs) behind a WebSocket listener. It forwards between its own directly connected clients, one hop, and nothing else: relay payloads are end-to-end encrypted between the two devices using it, so what the relay learns is who talks to whom, never what they say.
+ * RelayServer: the relay role a bridge serves to its machine and local network (agent-comms#342), wire-mesh-core's transport-agnostic relay-hub domain logic (the same createRelayHub the public hub runs) behind a WebSocket listener. It forwards between its own directly connected clients and, when given an uplink, carries them over it to the upstream hub and back (attachUplink), so a device on the upstream hub and a client of this relay reach each other with each end's own device-id intact. It never routes beyond that: relay payloads are end-to-end encrypted between the two devices using it, so what the relay learns is who talks to whom, never what they say.
  *
  * Admission is deny-by-default, like every other cross-machine decision here: a connection is registered with the hub only once it gossips an advert for a device isAdmitted accepts, and every gossiped advert naming a device it does not accept is dropped before the hub sees it. A connection that never gossips an admitted device can neither be named by a relay-connect nor relay anything, and learns nothing, since the hub's catch-up is sent only in answer to a registered connection's gossip.
  */
@@ -16,6 +16,7 @@ import {
 import type { Frame } from "wire-mesh-core/generated/protocol";
 import type { Connection } from "wire-mesh-core/ports/transport";
 import { wrapWsSocket } from "./ws-dial.js";
+import { createUplink, type UplinkFeed } from "./relay-uplink.js";
 
 /** The wildcard IPv4 address: listening on it serves every interface, loopback and the local network alike. */
 export const ALL_INTERFACES_HOST = "0.0.0.0";
@@ -28,6 +29,8 @@ export interface RelayServerOptions {
   host: string;
   /** Whether a device (hex) may use this relay. */
   isAdmitted: (deviceHex: string) => boolean;
+  /** Reports a failure of the uplink, which is otherwise detached from any caller. */
+  onError: (error: Error) => void;
 }
 
 export class RelayServer {
@@ -37,6 +40,8 @@ export class RelayServer {
   private readonly http: Server = createServer();
   private readonly wss = new WebSocketServer({ server: this.http });
   private port = 0;
+  /** Settles once the previous uplink has been forgotten by the hub, which refuses a second while one is attached. */
+  private uplinkDone: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: Readonly<RelayServerOptions>) {
     this.wss.on("connection", (socket) => {
@@ -61,6 +66,19 @@ export class RelayServer {
     this.port = address.port;
     // Never what keeps a process alive: the bridge that serves the relay decides when it exits.
     this.http.unref();
+  }
+
+  /** Takes the connection to the upstream hub as this relay's uplink (wire-mesh-core's relay-hub fronting, wire-mesh#311): the clients registered here become reachable through the upstream hub and can reach the devices registered there, each end keeping its own device-id. The upstream connection belongs to the caller's own session, so the frames it reads are fed in through the returned feed, and ending the feed detaches the uplink. */
+  attachUplink(upstream: Readonly<Connection>): UplinkFeed {
+    const uplink = createUplink(upstream);
+    this.uplinkDone = this.uplinkDone
+      .then(async () => this.hub.handleUplink(uplink.connection))
+      .catch((error: unknown) => {
+        this.options.onError(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      });
+    return uplink.feed;
   }
 
   /** The URLs this relay is reachable at, for its relay offer: loopback always, and each external IPv4 interface too when it listens on every interface. */
