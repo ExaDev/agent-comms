@@ -1,3 +1,10 @@
+## [8.13.3](https://github.com/ExaDev/agent-comms/compare/v8.13.2...v8.13.3) (2026-10-02)
+
+### Documentation
+
+* add live npm downloads and GitHub stars charts to the readme ([2fe3f6a](https://github.com/ExaDev/agent-comms/commit/2fe3f6a094a6524d3c75ce522af1031778f011d8))
+* size the readme charts side by side in light mode ([55deeea](https://github.com/ExaDev/agent-comms/commit/55deeeab81a05309e74004c4540acb670ac309c8))
+
 ## [8.13.2](https://github.com/ExaDev/agent-comms/compare/v8.13.1...v8.13.2) (2026-10-02)
 
 ### Build
