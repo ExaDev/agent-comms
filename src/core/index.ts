@@ -25,6 +25,7 @@ export type {
   BridgeMesh,
   BridgeMeshOptions,
   BridgeMeshSync,
+  BridgeRunOptions,
 } from "./bridge-mesh.js";
 export {
   loadIdentityForFront,
