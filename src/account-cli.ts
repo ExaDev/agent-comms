@@ -13,7 +13,7 @@ import { openAccountBundle, sealAccountBundle } from "./core/account-bundle.js";
 import {
   importAccountKey,
   loadOrCreateUserIdentity,
-  readAccountPrivateKey,
+  readAccountContents,
   type UserIdentityOptions,
 } from "./core/user-identity.js";
 
@@ -76,7 +76,7 @@ export async function runAccountCommand(
   if (subcommand === "export") {
     const identity = loadOrCreateUserIdentity(userIdentityOptions);
     const bundle = sealAccountBundle(
-      readAccountPrivateKey(userIdentityOptions),
+      readAccountContents(userIdentityOptions),
       await passphrase(io, true),
     );
     fs.writeFileSync(file, `${bundle}\n`, {
@@ -90,13 +90,13 @@ export async function runAccountCommand(
     return;
   }
   if (subcommand === "import") {
-    const privateKeyPem = openAccountBundle(
+    const contents = openAccountBundle(
       fs.readFileSync(file, "utf-8"),
       await passphrase(io, false),
     );
     const { identity, replacedFile } = importAccountKey(
       userIdentityOptions,
-      privateKeyPem,
+      contents,
     );
     io.log(`This machine now holds account ${principalOf(identity)}.`);
     if (replacedFile !== undefined) {

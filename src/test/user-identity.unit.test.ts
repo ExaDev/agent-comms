@@ -11,6 +11,8 @@ import {
   clearLegacyIssuedGrants,
   loadOrCreateLedgerWriterNonce,
   loadOrCreateUserIdentity,
+  loadUserDisplayName,
+  saveUserDisplayName,
   readLegacyIssuedGrants,
 } from "../core/user-identity.js";
 import { CERTIFICATE_VALIDITY_MS } from "../core/identity.js";
@@ -277,4 +279,40 @@ test("a renewed identity keeps its ledger writer nonce and any unmigrated grants
     nonce,
   );
   expect(readLegacyIssuedGrants({ dir })).toEqual(LEGACY_GRANTS);
+});
+
+test("a user display name is stored beside the key, replaced, cleared, and survives the key being reloaded", () => {
+  const dir = tempDir();
+  const identity = loadOrCreateUserIdentity({ dir });
+  expect(loadUserDisplayName({ dir })).toBeUndefined();
+
+  saveUserDisplayName({ dir }, "work account");
+  expect(loadUserDisplayName({ dir })).toBe("work account");
+  expect(loadOrCreateUserIdentity({ dir }).privateKey).toBe(
+    identity.privateKey,
+  );
+
+  saveUserDisplayName({ dir }, "home account");
+  expect(loadUserDisplayName({ dir })).toBe("home account");
+
+  saveUserDisplayName({ dir }, undefined);
+  expect(loadUserDisplayName({ dir })).toBeUndefined();
+});
+
+test("saving a user display name keeps the ledger writer nonce", () => {
+  const dir = tempDir();
+  loadOrCreateUserIdentity({ dir });
+  const nonce = loadOrCreateLedgerWriterNonce({ dir }, generateWriterNonce);
+
+  saveUserDisplayName({ dir }, "work account");
+
+  expect(loadOrCreateLedgerWriterNonce({ dir }, generateWriterNonce)).toEqual(
+    nonce,
+  );
+});
+
+test("a user display name cannot be saved before the account exists", () => {
+  expect(() => {
+    saveUserDisplayName({ dir: tempDir() }, "too early");
+  }).toThrow(/no user identity persisted yet/);
 });

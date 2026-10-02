@@ -1,5 +1,5 @@
 /**
- * Integration tests for naming (agent-comms#345): a machine's self display name, signed by its machine key, reaches a peer that trusts it and is shown as that machine's own claim; the viewer's petnames come first wherever an id is shown; and a petname never leaves the viewer's own storage, over the hub or over a direct peer session. Two hosts meet through a real hub; the stores of one host share its identity directory.
+ * Integration tests for naming (agent-comms#345, agent-comms#359): a machine's or an account's self display name, signed by its own key, reaches a peer that trusts it and is shown as that issuer's own claim; the viewer's petnames come first wherever an id is shown; and a petname never leaves the viewer's own storage, over the hub or over a direct peer session. Two hosts meet through a real hub; the stores of one host share its identity directory.
  */
 
 import * as fs from "node:fs";
@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { shortId } from "../core/display-name.js";
+import { loadUserDisplayName } from "../core/user-identity.js";
 import type { CommsAction } from "../core/types.js";
 import {
   freeLocalPort,
@@ -83,6 +84,12 @@ async function hostStore(
     transport,
     tool: new CommsTool(store, { naming: store.naming }),
   };
+}
+
+function principalOf(host: Host): string {
+  const principal = host.store.getUserPrincipalId();
+  if (principal === undefined) throw new Error("store has no identity yet");
+  return principal;
 }
 
 function machineOf(host: Host): string {
@@ -188,6 +195,70 @@ describe("naming", () => {
     expect(await run(a, { action: "whoami" })).toContain(
       `Machine name: "host-a" ${shortId(machineA)}`,
     );
+  });
+
+  it("shows a trusted account's own name beside its principal in gateway_list_trusted, whoami and the vouched-by column, and drops it when cleared", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+    const a = await hostStore(hub.url, await freeLocalPort(), hostDir());
+    const b = await hostStore(hub.url, await freeLocalPort(), hostDir());
+    a.store.addTrustedGatewayPrincipal(principalOf(b));
+    b.store.addTrustedGatewayPrincipal(principalOf(a));
+    const principalA = principalOf(a);
+
+    await run(a, { action: "principal_name", name: "alice" });
+
+    expect(await run(a, { action: "whoami" })).toContain(
+      `Principal name: "alice" ${shortId(principalA)}`,
+    );
+    await waitFor(
+      async () =>
+        (await run(b, { action: "gateway_list_trusted" })).includes(
+          `${principalA}  "alice"\n`,
+        ),
+      "b to show the name A's principal signed",
+    );
+    expect(await run(b, { action: "gateway_list_trusted" })).toContain(
+      `(vouched for by "alice" ${shortId(principalA)})`,
+    );
+
+    await run(b, {
+      action: "petname_set",
+      device: principalA,
+      name: "alice's",
+    });
+    expect(await run(b, { action: "gateway_list_trusted" })).toContain(
+      `${principalA}  alice's "alice"\n`,
+    );
+
+    await run(a, { action: "principal_name" });
+    expect(await run(a, { action: "whoami" })).not.toContain("Principal name");
+    await waitFor(
+      async () =>
+        !(await run(b, { action: "gateway_list_trusted" })).includes('"alice"'),
+      "b to stop showing the cleared name",
+    );
+  });
+
+  it("refuses control sequences in a principal name and keeps the name in the account's own file", async () => {
+    const hub = await realHubOverWs();
+    cleanups.push(hub.close);
+    const dir = hostDir();
+    const a = await hostStore(hub.url, await freeLocalPort(), dir);
+
+    const refused = await a.tool.handle(
+      {
+        agentId: a.store.peerId,
+        harness: "test",
+        cwd: "/test",
+        pid: process.pid,
+      },
+      { action: "principal_name", name: "evil\u001b[2Jname" },
+    );
+
+    expect(refused.isError).toBe(true);
+    await run(a, { action: "principal_name", name: "alice" });
+    expect(loadUserDisplayName({ dir })).toBe("alice");
   });
 
   it("refuses a control sequence in an agent name at registration, and does not list a remote agent that gossips one", async () => {

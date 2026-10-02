@@ -1,7 +1,7 @@
 /**
- * Naming (agent-comms#345): the viewer's petnames, the machine's own self display name, and the one namer every surface formats an id with. A MeshStore collaborator handed to CommsTool the way discovery is, so the tool's naming actions and every listing read through the same object.
+ * Naming (agent-comms#345): the viewer's petnames, the machine's and the account's own self display names, and the one namer every surface formats an id with. A MeshStore collaborator handed to CommsTool the way discovery is, so the tool's naming actions and every listing read through the same object.
  *
- * Nothing here is gossiped by this module. Petnames never leave the viewer's storage; the machine's name reaches peers only as the claim GroupProofs signs and puts in the advert.
+ * Nothing here is gossiped by this module. Petnames never leave the viewer's storage; the machine's and the account's names reach peers only as the claims GroupProofs signs and puts in the advert.
  */
 
 import {
@@ -44,14 +44,16 @@ export function idWithNames(id: string, namer: Namer): string {
 
 export interface NamingDeps {
   petnames: Petnames;
-  /** Every machine's verified self display name, keyed by machine id. */
-  machineNames: () => Promise<Map<string, string>>;
+  /** Every machine's and user principal's verified self display name, keyed by issuer id. */
+  issuerNames: () => Promise<Map<string, string>>;
   /** The agents requesterId may see, whose registered names are their self-asserted names. */
   listAgents: (
     requesterId: string,
   ) => Promise<readonly Readonly<{ id: string; name: string }>[]>;
   /** Persists this machine's own name (undefined clears it) and re-signs its claim. */
   saveMachineName: (name: string | undefined) => Promise<void>;
+  /** Persists this account's own name (undefined clears it) and re-signs its claim. */
+  saveUserName: (name: string | undefined) => Promise<void>;
 }
 
 export class Naming {
@@ -83,6 +85,19 @@ export class Naming {
     return parsed;
   }
 
+  /** Names this account (undefined clears the name). Throws INVALID_NAME for an unusable name. Returns the name as stored. */
+  async setPrincipalName(
+    name: string | undefined,
+  ): Promise<string | undefined> {
+    if (name === undefined) {
+      await this.deps.saveUserName(undefined);
+      return undefined;
+    }
+    const parsed = requireDisplayName(name, "An account name");
+    await this.deps.saveUserName(parsed);
+    return parsed;
+  }
+
   /** Every id requesterId has a name for, a petname or a known self name, with those names: the parts a surface outside this process (the dashboard) formats with formatDisplayName. */
   async nameParts(requesterId: string): Promise<DisplayNameParts[]> {
     const petnames = this.deps.petnames.list();
@@ -95,9 +110,9 @@ export class Naming {
     }));
   }
 
-  /** Every self-asserted name this store knows, keyed by device-id: verified machine names and the registered names of the agents requesterId may see. */
+  /** Every self-asserted name this store knows, keyed by device-id: verified machine and principal names and the registered names of the agents requesterId may see. */
   private async selfNames(requesterId: string): Promise<Map<string, string>> {
-    const names = await this.deps.machineNames();
+    const names = await this.deps.issuerNames();
     for (const agent of await this.deps.listAgents(requesterId)) {
       names.set(agent.id, agent.name);
     }

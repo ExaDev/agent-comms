@@ -10,6 +10,7 @@ import {
   scryptSync,
 } from "node:crypto";
 import { z } from "zod";
+import { parseDisplayName } from "./display-name.js";
 import { CommsError } from "./store.js";
 
 /** The text an exported bundle starts with, so a file can be recognised for what it is before any decryption is attempted. */
@@ -36,6 +37,45 @@ const INVITE_KEY_INFO = "agent-comms/account-invite/v1";
 const BUNDLE_AAD = Buffer.from(ACCOUNT_BUNDLE_PREFIX);
 
 const base64url = z.string().regex(/^[A-Za-z0-9_-]*$/);
+
+/** What an account export or a join carries: the PEM private key and the name the account asserts for itself, if it has one. */
+export interface AccountContents {
+  privateKey: string;
+  displayName?: string;
+}
+
+const accountContentsSchema = z
+  .object({ privateKey: z.string(), displayName: z.string().optional() })
+  .strict();
+
+/** The contents as the plaintext a bundle or a join seals. */
+function contentsText(contents: Readonly<AccountContents>): string {
+  return JSON.stringify(contents);
+}
+
+/** The contents a sealed plaintext holds. Throws INVALID_BUNDLE for a plaintext that is not account contents or whose name breaks the display-name rules, since a name from outside is shown to people. */
+function parseContents(plaintext: string, damaged: string): AccountContents {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(plaintext);
+  } catch {
+    throw new CommsError(damaged, "INVALID_BUNDLE");
+  }
+  const contents = accountContentsSchema.safeParse(decoded);
+  if (
+    !contents.success ||
+    (contents.data.displayName !== undefined &&
+      parseDisplayName(contents.data.displayName) !== contents.data.displayName)
+  ) {
+    throw new CommsError(damaged, "INVALID_BUNDLE");
+  }
+  return {
+    privateKey: contents.data.privateKey,
+    ...(contents.data.displayName === undefined
+      ? {}
+      : { displayName: contents.data.displayName }),
+  };
+}
 
 const passphraseEnvelopeSchema = z
   .object({
@@ -104,9 +144,9 @@ function passphraseKey(
   });
 }
 
-/** Seals the account's PEM private key under a passphrase, as one line of text. Throws WEAK_PASSPHRASE for a passphrase shorter than MIN_ACCOUNT_PASSPHRASE_LENGTH. */
+/** Seals the account's contents under a passphrase, as one line of text. Throws WEAK_PASSPHRASE for a passphrase shorter than MIN_ACCOUNT_PASSPHRASE_LENGTH. */
 export function sealAccountBundle(
-  privateKeyPem: string,
+  contents: Readonly<AccountContents>,
   passphrase: string,
 ): string {
   if (passphrase.length < MIN_ACCOUNT_PASSPHRASE_LENGTH) {
@@ -121,13 +161,16 @@ export function sealAccountBundle(
     kdf: "scrypt",
     ...cost,
     salt: salt.toString("base64url"),
-    ...seal(passphraseKey(passphrase, salt, cost), privateKeyPem),
+    ...seal(passphraseKey(passphrase, salt, cost), contentsText(contents)),
   };
   return `${ACCOUNT_BUNDLE_PREFIX}${Buffer.from(JSON.stringify(envelope)).toString("base64url")}`;
 }
 
-/** The PEM private key a bundle holds. Throws INVALID_BUNDLE for text that is not a bundle this build can read, and WRONG_PASSPHRASE when the passphrase does not open it. The cost parameters are read from the bundle but capped at this build's own, so a crafted bundle cannot make an import run for hours. */
-export function openAccountBundle(bundle: string, passphrase: string): string {
+/** The account contents a bundle holds. Throws INVALID_BUNDLE for text that is not a bundle this build can read, and WRONG_PASSPHRASE when the passphrase does not open it. The cost parameters are read from the bundle but capped at this build's own, so a crafted bundle cannot make an import run for hours. */
+export function openAccountBundle(
+  bundle: string,
+  passphrase: string,
+): AccountContents {
   const text = bundle.trim();
   if (!text.startsWith(ACCOUNT_BUNDLE_PREFIX)) {
     throw new CommsError("Not an agent-comms account bundle", "INVALID_BUNDLE");
@@ -157,14 +200,14 @@ export function openAccountBundle(bundle: string, passphrase: string): string {
     Buffer.from(envelope.data.salt, "base64url"),
     envelope.data,
   );
-  const privateKeyPem = open(key, envelope.data);
-  if (privateKeyPem === undefined) {
+  const plaintext = open(key, envelope.data);
+  if (plaintext === undefined) {
     throw new CommsError(
       "The passphrase does not open this account bundle",
       "WRONG_PASSPHRASE",
     );
   }
-  return privateKeyPem;
+  return parseContents(plaintext, "The account bundle is damaged");
 }
 
 /** The fields of an account invite both ends know: the invite's own single-use nonce is the secret, and the expiry and issuing device are bound in so a sealed key cannot be replayed under a different invite. */
@@ -186,21 +229,21 @@ function inviteKey(invite: Readonly<AccountInviteSecret>): Buffer {
   );
 }
 
-/** Seals the account's PEM private key for the machine redeeming `invite`. The invite's nonce carries enough entropy to key it directly, with no passphrase stretching needed. */
+/** Seals the account's contents for the machine redeeming `invite`. The invite's nonce carries enough entropy to key it directly, with no passphrase stretching needed. */
 export function sealAccountKeyForInvite(
-  privateKeyPem: string,
+  contents: Readonly<AccountContents>,
   invite: Readonly<AccountInviteSecret>,
 ): string {
   return Buffer.from(
-    JSON.stringify(seal(inviteKey(invite), privateKeyPem)),
+    JSON.stringify(seal(inviteKey(invite), contentsText(contents))),
   ).toString("base64url");
 }
 
-/** The PEM private key sealed for `invite`. Throws INVALID_BUNDLE when the text does not open under that invite. */
+/** The account contents sealed for `invite`. Throws INVALID_BUNDLE when the text does not open under that invite. */
 export function openAccountKeyFromInvite(
   sealed: string,
   invite: Readonly<AccountInviteSecret>,
-): string {
+): AccountContents {
   let decoded: unknown;
   try {
     decoded = JSON.parse(Buffer.from(sealed, "base64url").toString("utf-8"));
@@ -208,14 +251,14 @@ export function openAccountKeyFromInvite(
     throw new CommsError("The sealed account key is damaged", "INVALID_BUNDLE");
   }
   const envelope = inviteEnvelopeSchema.safeParse(decoded);
-  const privateKeyPem = envelope.success
+  const plaintext = envelope.success
     ? open(inviteKey(invite), envelope.data)
     : undefined;
-  if (privateKeyPem === undefined) {
+  if (plaintext === undefined) {
     throw new CommsError(
       "The sealed account key does not open under this invite",
       "INVALID_BUNDLE",
     );
   }
-  return privateKeyPem;
+  return parseContents(plaintext, "The sealed account key is damaged");
 }

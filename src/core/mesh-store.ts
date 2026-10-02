@@ -316,9 +316,10 @@ export class MeshStore implements CommsStore {
     this.gatewayTrust = new GatewayTrust(slot);
     this.naming = new Naming({
       petnames: new Petnames(slot),
-      machineNames: async () => this.membership.machineNames(),
+      issuerNames: async () => this.membership.issuerNames(),
       listAgents: async (requesterId) => this.listAgents(requesterId),
       saveMachineName: async (name) => this.membership.saveMachineName(name),
+      saveUserName: async (name) => this.membership.saveUserName(name),
     });
     this.connectionCodes = new ConnectionCodeLedger(slot);
     this.account = new AccountJoin({

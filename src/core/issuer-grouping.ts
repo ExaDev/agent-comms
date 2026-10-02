@@ -1,14 +1,14 @@
 /**
- * Which machine each listed agent runs on (agent-comms#343), for list_agents' machine-grouped output. This device's own machine is known directly; every other device's is read from the machine proof in its gossiped agent/self advert and identified cryptographically (membership-proof.ts's identifyMembershipProofIssuer), so a device is grouped under a machine only when that machine's key signed a current proof for it. A device with no such proof (a hidden agent, which sends no agent/self advert, or a bridge that predates machine proofs) has no machine here.
+ * Which grouping issuer each known device belongs to, for one kind of issuer: the machine (agent-comms#343, list_agents' machine-grouped output) or the user principal (agent-comms#266). This device's own issuer is known directly; every other device's is read from the proof of that kind in its gossiped agent/self advert and identified cryptographically (membership-proof.ts's identifyMembershipProofIssuer), so a device is placed under an issuer only when that issuer's key signed a current proof for it. A device with no such proof (a hidden agent, which sends no agent/self advert, or a bridge that predates the proof) has no issuer here.
  *
- * The same pass reads each machine's self display name claim (agent-comms#345) from the adverts of the devices it vouches for, and keeps a name only when the claim is signed by that very machine's key: the issuer is authentic, the content is the machine's own choice.
+ * The same pass reads each issuer's self display name claim (agent-comms#345, agent-comms#359) from the adverts of the devices it vouches for, and keeps a name only when the claim is signed by that very issuer's key: the issuer is authentic, the content is its own choice.
  *
  * Grouping is display, not trust: a proof names who vouches for a device id, not that the device gossiping it is that device, so nothing here is used to authorise anything. Identifying a proof is cryptography, so verdicts are remembered per proof text until the proof lapses, and the cache is bounded. For the same reason a failure to identify one proof is reported and leaves that device unplaced rather than failing the listing it feeds.
  */
 
 import {
-  readMachineNameClaim,
   readMembershipProof,
+  type MembershipProofField,
 } from "./gossip-directory.js";
 import type { IdentifiedMembershipProof } from "./membership-proof.js";
 import type { NameClaimVerdict } from "./name-claim.js";
@@ -16,7 +16,13 @@ import type { NameClaimVerdict } from "./name-claim.js";
 /** The most proofs, and separately the most name claims, whose verdict is remembered. */
 const VERDICT_CACHE_LIMIT = 1024;
 
-export interface MachineGroupingDeps {
+export interface IssuerGroupingDeps {
+  /** Which agent/self field carries the proofs of the issuer kind this grouping places devices under. */
+  field: MembershipProofField;
+  /** The name claim a peer gossiped for this kind of issuer, read from its advert. */
+  readNameClaim: (
+    advert: Readonly<Record<string, unknown>>,
+  ) => string | undefined;
   /** Every device this side has heard gossip from, with its latest advert. */
   listKnownDevices: () => readonly {
     deviceId: string;
@@ -28,16 +34,16 @@ export interface MachineGroupingDeps {
   ) => Promise<IdentifiedMembershipProof>;
   /** This device's own id (hex). */
   getPeerId: () => string;
-  /** This host's own machine id (hex), undefined before the store's identity is attached. */
-  getMachineId: () => string | undefined;
+  /** This device's own issuer's id (hex), undefined before the store's identity is attached. */
+  getOwnIssuerId: () => string | undefined;
   /** Where a proof that could not be identified at all (identify rejected) is reported. */
   onError: (error: Error) => void;
   /** Verifies a gossiped name claim about subject (name-claim.ts's verifyNameClaim, as this node sees it). */
   verifyName: (
     claim: Readonly<{ claim: string; subject: string }>,
   ) => Promise<NameClaimVerdict>;
-  /** This host's own machine name, read locally. */
-  getOwnMachineName: () => string | undefined;
+  /** This device's own issuer's name, read locally. */
+  getOwnName: () => string | undefined;
 }
 
 interface CachedName {
@@ -48,49 +54,49 @@ interface CachedName {
 
 interface CachedVerdict {
   deviceHex: string;
-  /** The machine the proof names, undefined for a proof that did not verify. */
-  machine: string | undefined;
+  /** The issuer the proof names, undefined for a proof that did not verify. */
+  issuer: string | undefined;
   /** When the verdict stops holding (epoch ms): the proof's own expiry, or never for a refusal, since the same text can never become valid later. */
   until: number;
 }
 
-export class MachineGrouping {
+export class IssuerGrouping {
   private readonly verdicts = new Map<string, CachedVerdict>();
   private readonly names = new Map<string, CachedName>();
 
-  constructor(private readonly deps: Readonly<MachineGroupingDeps>) {}
+  constructor(private readonly deps: Readonly<IssuerGroupingDeps>) {}
 
-  /** The machine (hex) of each device this side can place on one, keyed by device id: this device's own, and every gossiped device with a current, valid machine proof. */
-  async machinesByDevice(): Promise<Map<string, string>> {
-    const machines = new Map<string, string>();
-    const own = this.deps.getMachineId();
-    // Without an identity attached there is no clock or revocation view to identify a proof against, and no own machine either.
-    if (own === undefined) return machines;
-    machines.set(this.deps.getPeerId(), own);
+  /** The issuer (hex) of each device this side can place under one, keyed by device id: this device's own, and every gossiped device with a current, valid proof of this kind. */
+  async issuersByDevice(): Promise<Map<string, string>> {
+    const issuers = new Map<string, string>();
+    const own = this.deps.getOwnIssuerId();
+    // Without an identity attached there is no clock or revocation view to identify a proof against, and no own issuer either.
+    if (own === undefined) return issuers;
+    issuers.set(this.deps.getPeerId(), own);
     for (const { deviceId, advert } of this.deps.listKnownDevices()) {
-      if (machines.has(deviceId)) continue;
-      const proof = readMembershipProof(advert, "machine");
+      if (issuers.has(deviceId)) continue;
+      const proof = readMembershipProof(advert, this.deps.field);
       if (proof === undefined) continue;
-      const machine = await this.machineFor(proof, deviceId);
-      if (machine !== undefined) machines.set(deviceId, machine);
+      const issuer = await this.issuerFor(proof, deviceId);
+      if (issuer !== undefined) issuers.set(deviceId, issuer);
     }
-    return machines;
+    return issuers;
   }
 
-  /** The self display name of each machine this side can place a device on, keyed by machine id: this host's own from its file, every other one from a claim its own key signed, gossiped by a device it vouches for. */
-  async machineNames(): Promise<Map<string, string>> {
+  /** The self display name of each issuer this side can place a device under, keyed by issuer id: this device's own from its file, every other one from a claim its own key signed, gossiped by a device it vouches for. */
+  async issuerNames(): Promise<Map<string, string>> {
     const names = new Map<string, string>();
-    const machines = await this.machinesByDevice();
-    const own = this.deps.getMachineId();
-    const ownName = this.deps.getOwnMachineName();
+    const issuers = await this.issuersByDevice();
+    const own = this.deps.getOwnIssuerId();
+    const ownName = this.deps.getOwnName();
     if (own !== undefined && ownName !== undefined) names.set(own, ownName);
     for (const { deviceId, advert } of this.deps.listKnownDevices()) {
-      const machine = machines.get(deviceId);
-      if (machine === undefined || names.has(machine)) continue;
-      const claim = readMachineNameClaim(advert);
+      const issuer = issuers.get(deviceId);
+      if (issuer === undefined || names.has(issuer)) continue;
+      const claim = this.deps.readNameClaim(advert);
       if (claim === undefined) continue;
-      const name = await this.nameFor(claim, machine);
-      if (name !== undefined) names.set(machine, name);
+      const name = await this.nameFor(claim, issuer);
+      if (name !== undefined) names.set(issuer, name);
     }
     return names;
   }
@@ -114,13 +120,13 @@ export class MachineGrouping {
     return verdict.ok ? verdict.name : undefined;
   }
 
-  private async machineFor(
+  private async issuerFor(
     proof: string,
     deviceHex: string,
   ): Promise<string | undefined> {
     const cached = this.verdicts.get(proof);
     if (cached?.deviceHex === deviceHex && cached.until > Date.now()) {
-      return cached.machine;
+      return cached.issuer;
     }
     let verdict: IdentifiedMembershipProof;
     try {
@@ -128,9 +134,12 @@ export class MachineGrouping {
     } catch (err) {
       // Not remembered: the failure is in this side's own view (a revocation view that threw, say), not a verdict on the proof, so the next listing tries again.
       this.deps.onError(
-        new Error(`could not identify the machine proof of ${deviceHex}`, {
-          cause: err,
-        }),
+        new Error(
+          `could not identify the ${this.deps.field} proof of ${deviceHex}`,
+          {
+            cause: err,
+          },
+        ),
       );
       return undefined;
     }
@@ -138,8 +147,8 @@ export class MachineGrouping {
       this.verdicts,
       proof,
       verdict.ok
-        ? { deviceHex, machine: verdict.issuerHex, until: verdict.expires }
-        : { deviceHex, machine: undefined, until: Number.POSITIVE_INFINITY },
+        ? { deviceHex, issuer: verdict.issuerHex, until: verdict.expires }
+        : { deviceHex, issuer: undefined, until: Number.POSITIVE_INFINITY },
     );
     return verdict.ok ? verdict.issuerHex : undefined;
   }

@@ -76,6 +76,7 @@ export const MCP_TOOL_PARAMS = z.object({
     "petname_clear",
     "petname_list",
     "machine_name",
+    "principal_name",
     "dm_admit",
     "dm_use_grant",
     "dm_revoke",
@@ -454,6 +455,11 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
     case "machine_name":
       return {
         action: "machine_name",
+        ...(p.name !== undefined && { name: p.name }),
+      };
+    case "principal_name":
+      return {
+        action: "principal_name",
         ...(p.name !== undefined && { name: p.name }),
       };
     case "dm_admit":

@@ -1,5 +1,5 @@
 /**
- * CommsTool's naming actions (agent-comms#345): setting, clearing and listing the viewer's petnames, and naming this machine. Split out of tool.ts to keep that file under the repo's max-lines cap, as gateway-trust-actions.ts is.
+ * CommsTool's naming actions (agent-comms#345): setting, clearing and listing the viewer's petnames, naming this machine and naming this account. Split out of tool.ts to keep that file under the repo's max-lines cap, as gateway-trust-actions.ts is.
  */
 
 import type { CommsAction } from "./types.js";
@@ -69,6 +69,22 @@ export async function machineName(
       name === undefined
         ? "This machine no longer asserts a name."
         : `This machine now calls itself "${name}"; peers see it as its own claim, beside any name they gave it.`,
+    isError: false,
+  };
+}
+
+/** Names this account (the user principal every one of its machines shares), or clears its name when action.name is omitted. */
+export async function principalName(
+  naming: Naming | undefined,
+  action: CommsAction & { action: "principal_name" },
+): Promise<CommsResult> {
+  if (naming === undefined) return namingUnavailable();
+  const name = await naming.setPrincipalName(action.name);
+  return {
+    content:
+      name === undefined
+        ? "This account no longer asserts a name."
+        : `This account now calls itself "${name}"; peers see it as its own claim, beside any name they gave it.`,
     isError: false,
   };
 }

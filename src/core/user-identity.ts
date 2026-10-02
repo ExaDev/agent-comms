@@ -7,6 +7,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { AccountContents } from "./account-bundle.js";
 import { certifyKeyPair } from "./identity.js";
 import type { PeerIdentity } from "./identity.js";
 import { CommsError } from "./store.js";
@@ -26,6 +27,8 @@ export interface UserIdentityOptions {
 }
 
 interface StoredUserIdentity extends StoredIssuerKey {
+  /** The name the account asserts for itself (agent-comms#359), signed by the user key into every device's advert. Belongs to the account, so it is exported with the key and handed over by a join, unlike the writer nonce. */
+  displayName?: string;
   /** This machine's writer nonce for the account's replicated grant ledger (account-ledger.ts), base64. Belongs to the machine, not the account: it is never exported with the key, since two machines appending under one nonce would share a writer log and fork it. */
   ledgerWriter?: string;
   /** The token-id (base64) of each group:member grant this principal issued, keyed by the admitted device's hex id, as builds before the replicated ledger kept them. Read only to migrate them into the ledger on first start (account-ledger-store.ts), then removed. */
@@ -49,6 +52,8 @@ function isStoredUserIdentity(value: unknown): value is StoredUserIdentity {
   if ("issuedDmGrants" in value && !isStringRecord(value.issuedDmGrants))
     return false;
   if ("ledgerWriter" in value && typeof value.ledgerWriter !== "string")
+    return false;
+  if ("displayName" in value && typeof value.displayName !== "string")
     return false;
   return true;
 }
@@ -183,11 +188,36 @@ export function clearLegacyIssuedGrants(
   });
 }
 
-/** The account's PEM private key, for sealing into an export or a join. Throws if the principal has never been created. */
-export function readAccountPrivateKey(
+/** The name this account asserts for itself, or undefined when it has none or the account has not been created yet. Read from disk on every call, so a name set by any bridge on this machine is seen by all of them. */
+export function loadUserDisplayName(
+  options?: Readonly<UserIdentityOptions>,
+): string | undefined {
+  return readStoredUserIdentity(userIdentityFile(options))?.displayName;
+}
+
+/** Sets (or, given undefined, clears) the name this account asserts for itself, keeping the key material and every other field. Throws if the account has not been created yet. */
+export function saveUserDisplayName(
   options: Readonly<UserIdentityOptions> | undefined,
-): string {
-  return requireStoredUserIdentity(userIdentityFile(options)).privateKey;
+  displayName: string | undefined,
+): void {
+  const file = userIdentityFile(options);
+  const next: StoredUserIdentity = { ...requireStoredUserIdentity(file) };
+  if (displayName === undefined) delete next.displayName;
+  else next.displayName = displayName;
+  writeStoredUserIdentity(file, next);
+}
+
+/** What an export or a join carries of the account: its PEM private key and the name it asserts for itself, if any. Throws if the principal has never been created. */
+export function readAccountContents(
+  options: Readonly<UserIdentityOptions> | undefined,
+): AccountContents {
+  const { privateKey, displayName } = requireStoredUserIdentity(
+    userIdentityFile(options),
+  );
+  return {
+    privateKey,
+    ...(displayName === undefined ? {} : { displayName }),
+  };
 }
 
 /** Where a replaced account's record is kept when a different account is imported over it: its key is still the only one that can revoke what it issued, so it is set aside rather than destroyed. */
@@ -218,31 +248,43 @@ function setAside(
 }
 
 /**
- * Makes this machine hold the account whose PEM private key is given, the deliberate copy that lets one principal span machines. The key is re-certified here (the device-id, which is the account's identity, depends only on the key). This machine's own ledger writer nonce is kept, since it belongs to the machine, not the account. A different account already held here is moved aside to replacedUserIdentityFile first, never overwritten (see setAside for a record already set aside there); importing the account already held changes nothing. Returns the imported identity and, when one was replaced, where the old record now is.
+ * Makes this machine hold the account whose contents are given, the deliberate copy that lets one principal span machines. The key is re-certified here (the device-id, which is the account's identity, depends only on the key). The name the account asserts for itself comes with it; an import carrying none leaves the name of the account already held untouched. This machine's own ledger writer nonce is kept, since it belongs to the machine, not the account. A different account already held here is moved aside to replacedUserIdentityFile first, never overwritten (see setAside for a record already set aside there); importing the account already held changes nothing but that name. Returns the imported identity and, when one was replaced, where the old record now is.
  */
 export function importAccountKey(
   options: Readonly<UserIdentityOptions> | undefined,
-  privateKeyPem: string,
+  contents: Readonly<AccountContents>,
 ): { identity: PeerIdentity; replacedFile?: string } {
   const file = userIdentityFile(options);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const imported = certifyKeyPair(privateKeyPem);
+  const imported = certifyKeyPair(contents.privateKey);
+  const named = (record: StoredUserIdentity): StoredUserIdentity => ({
+    ...record,
+    ...(contents.displayName === undefined
+      ? {}
+      : { displayName: contents.displayName }),
+  });
   const existing = readStoredUserIdentity(file);
   if (existing === undefined) {
-    writeStoredUserIdentity(file, issuerKeyRecord(imported));
+    writeStoredUserIdentity(file, named(issuerKeyRecord(imported)));
     return { identity: imported };
   }
   const current = issuerPeerIdentity(existing);
   if (Buffer.from(current.deviceId).equals(Buffer.from(imported.deviceId))) {
+    if (contents.displayName !== undefined) {
+      writeStoredUserIdentity(file, named(existing));
+    }
     return { identity: current };
   }
   const replacedFile = replacedUserIdentityFile(options, current);
   setAside(replacedFile, existing, file);
-  writeStoredUserIdentity(file, {
-    ...issuerKeyRecord(imported),
-    ...(existing.ledgerWriter === undefined
-      ? {}
-      : { ledgerWriter: existing.ledgerWriter }),
-  });
+  writeStoredUserIdentity(
+    file,
+    named({
+      ...issuerKeyRecord(imported),
+      ...(existing.ledgerWriter === undefined
+        ? {}
+        : { ledgerWriter: existing.ledgerWriter }),
+    }),
+  );
   return { identity: imported, replacedFile };
 }
