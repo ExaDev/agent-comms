@@ -1,3 +1,9 @@
+## [8.13.1](https://github.com/ExaDev/agent-comms/compare/v8.13.0...v8.13.1) (2026-10-02)
+
+### Build
+
+* **deps:** bump @orpc/client from 2.0.0-beta.35 to 2.0.0-beta.40 ([1f17c75](https://github.com/ExaDev/agent-comms/commit/1f17c75e6f4eb6144bb60695c280fb68aeda9334))
+
 ## [8.13.0](https://github.com/ExaDev/agent-comms/compare/v8.12.0...v8.13.0) (2026-10-02)
 
 ### Features
