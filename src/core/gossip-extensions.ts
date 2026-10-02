@@ -2,6 +2,8 @@
  * The domain-qualified gossip extension keys this package reads and writes on a peer's own gossiped advert, and the gossip-safe shapes two of them carry -- split out of wire-mesh-transport.ts (which writes them) so gossip-directory.ts, agent-registry.ts, room-lifecycle.ts, mesh-store.ts and hub-forwarding.ts (which read or merge them) no longer import their own vocabulary from the transport that depends on them, and to keep that file under the repo's max-lines cap. Also the shared home for the re-advertise cadence itself and the staleness window agent-registry.ts derives from it (agent-comms#301): both sides of "how fresh must a gossiped fact be to trust it" belong together, not split across the file that writes the cadence and the file that judges freshness against it.
  */
 
+import type { Room } from "./types.js";
+
 const MS_PER_SECOND = 1000;
 
 /** How often a live device re-sends its own self-advert (WireMeshTransport's own presence-readvertisement timer) -- the producer half of agent-comms#301's own liveness signal. Chosen generously enough to avoid chattiness on an idle mesh while still keeping a remote peer's own picture of this device fresh well within the tens-of-minutes staleness window a status change is actually meaningful over. */
@@ -27,6 +29,25 @@ export interface HostedRoomAdvert {
   name: string;
   type: "public" | "private";
   description: string;
+}
+
+/** The rooms ownerId itself owns that are worth advertising, in the shape HostedRoomAdvert gives them: only its own public and private rooms. */
+export function hostedRoomAdverts(
+  rooms: ReadonlyMap<string, Room>,
+  ownerId: string,
+): HostedRoomAdvert[] {
+  const result: HostedRoomAdvert[] = [];
+  for (const room of rooms.values()) {
+    if (room.owner !== ownerId) continue;
+    if (room.type !== "public" && room.type !== "private") continue;
+    result.push({
+      path: room.id,
+      name: room.name,
+      type: room.type,
+      description: room.description,
+    });
+  }
+  return result;
 }
 
 /** What a hub is told about a room: where it is and what it is called, for a public room only. The description is left out because a project room's default one names the directory it was made for. */
