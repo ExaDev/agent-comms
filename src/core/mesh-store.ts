@@ -329,6 +329,7 @@ export class MeshStore implements CommsStore {
       connectionCodes: this.connectionCodes,
       gatewayTrust: this.gatewayTrust,
       reconsiderHub: this.reconsiderHub.bind(this),
+      setPetname: (deviceHex, name) => this.naming.setPetname(deviceHex, name),
       redeemConnectionCode: this.redeemConnectionCode.bind(this),
       setIdentity: this.setIdentity.bind(this),
     });

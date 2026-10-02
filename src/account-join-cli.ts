@@ -163,17 +163,21 @@ function verifyingOptions(
   };
 }
 
-/** Reads an invite at a prompt and makes this machine hold the account it came from. */
+/** Reads an invite at a prompt and makes this machine hold the account it came from. With --label, the issuing machine keeps the label as its own name for this one. */
 export async function joinAccount(
   args: readonly string[],
   io: Readonly<AccountCliIo>,
 ): Promise<void> {
-  const options = parseOptions(args, ["public-key", "fingerprint"]);
-  const redeemOptions = verifyingOptions(options);
+  const options = parseOptions(args, ["public-key", "fingerprint", "label"]);
+  const label = options.get("label");
+  const joinOptions = {
+    ...verifyingOptions(options),
+    ...(label !== undefined && { label }),
+  };
   const invite = parseInvite(await io.readSecret("Account invite: "));
   const store = await io.openStore();
   try {
-    const result = await store.account.join(invite, redeemOptions);
+    const result = await store.account.join(invite, joinOptions);
     io.log(`This machine now holds account ${result.principal}.`);
     if (result.replacedFile !== undefined) {
       io.log(

@@ -3,6 +3,8 @@
  *
  * The issuing device enforces the invite for real, not only the redeemer: it answers each invite once and never after its expiry, so a copied invite is worth nothing once used or stale, and it refuses to issue one that would stay valid for longer than an ordinary connection code (DEFAULT_CONNECTION_CODE_TTL_MS), which is already sized for a person relaying it by hand, since an invite is the account key to whoever redeems it first. Invites live only in the issuing store's memory, so a restart of that store before the invite is used cancels it.
  *
+ * A join can carry a label for the joining machine. The issuing device validates it and keeps it as its own petname for the joiner's machine (naming.ts), so the machine the person just admitted is listed by the name they typed without a second step. The label and the machine id it names are the joiner's own assertion, which is acceptable only because whoever redeems an invite already receives the whole account; the petname is nothing but the issuing person's own view and is never gossiped.
+ *
  * Neither half is an agent_comms tool action: an invite hands over the account key and a join replaces the machine's account, so both are `agent-comms account invite` and `agent-comms account join`, run by the person at the terminal (account-cli.ts), where nothing an agent is told can trigger them and the invite is never written into an agent's transcript.
  */
 
@@ -23,7 +25,9 @@ import {
 } from "./connection-code.js";
 import type { GatewayTrust } from "./gateway-trust.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
-import { CommsError } from "./store.js";
+import { parseDisplayName } from "./display-name.js";
+import { isDeviceIdHex } from "./room-path.js";
+import { CommsError, requireDisplayName } from "./store.js";
 import type { MeshTransport } from "./transport.js";
 import type { ConnectionCode } from "./types.js";
 import { importAccountKey, readAccountContents } from "./user-identity.js";
@@ -72,8 +76,15 @@ export interface AccountJoinDeps {
     candidate: Readonly<ConnectionCode>,
     options: Readonly<RedeemConnectionCodeOptions>,
   ) => Promise<unknown>;
+  /** Labels deviceHex as name in the viewer's own petnames (Naming.setPetname). */
+  setPetname: (deviceHex: string, name: string) => string;
   /** Re-attaches the store to the account it now holds, so its own proofs and ledger switch at once. */
   setIdentity: (identity: MeshStoreIdentity) => void;
+}
+
+export interface AccountJoinOptions extends RedeemConnectionCodeOptions {
+  /** What the issuing person calls this machine: kept by the issuing device as its petname for it. Must satisfy the display-name rules. */
+  label?: string;
 }
 
 export interface AccountJoinResult {
@@ -81,6 +92,24 @@ export interface AccountJoinResult {
   principal: string;
   /** Where the account this machine held before was set aside, when it held a different one. */
   replacedFile?: string;
+}
+
+/** The label a join request asks the issuer to keep for the joiner's machine: undefined when it asks for none, "invalid" when it asks for one that is not a usable label for a full machine id (a label with no machine id included). */
+function joinerPetname(
+  params: Readonly<Record<string, unknown>>,
+): { machine: string; label: string } | undefined | "invalid" {
+  const label: unknown = "label" in params ? params.label : undefined;
+  const machine: unknown = "machine" in params ? params.machine : undefined;
+  if (label === undefined && machine === undefined) return undefined;
+  if (
+    typeof label !== "string" ||
+    typeof machine !== "string" ||
+    !isDeviceIdHex(machine.toLowerCase()) ||
+    parseDisplayName(label) !== label
+  ) {
+    return "invalid";
+  }
+  return { machine, label };
 }
 
 export class AccountJoin {
@@ -136,6 +165,14 @@ export class AccountJoin {
     if (invite === undefined) {
       return Promise.resolve({ result: "error", code: "invalid_invite" });
     }
+    const petname = joinerPetname(params);
+    if (petname === "invalid") {
+      return Promise.resolve({ result: "error", code: "invalid_label" });
+    }
+    // Before the invite is spent, so a petname file that cannot be written fails the request with the invite still usable rather than losing the invite and the label together.
+    if (petname !== undefined) {
+      this.deps.setPetname(petname.machine, petname.label);
+    }
     this.invites.delete(invite.secret.code);
     const { userIdentityOptions } = this.deps.requireIdentity();
     const sealed = sealAccountKeyForInvite(
@@ -156,15 +193,20 @@ export class AccountJoin {
     }
   }
 
-  /** Redeems an account invite and makes this machine hold the account it names. Throws INVITE_REFUSED when the issuing device will not answer it (used, expired, cancelled by a restart, or unreachable), and whatever redeeming the connection code itself throws before that. Redeeming trusts the issuing device so the key request can reach it; when the join then fails, that trust is withdrawn again unless the device was already trusted before, so a refused or unanswered invite leaves this machine trusting no one new. */
+  /** Redeems an account invite and makes this machine hold the account it names. Throws INVALID_NAME for an unusable options.label before anything is redeemed, INVITE_REFUSED when the issuing device will not answer it (used, expired, cancelled by a restart, unreachable, or unwilling to take the label), and whatever redeeming the connection code itself throws before that. Redeeming trusts the issuing device so the key request can reach it; when the join then fails, that trust is withdrawn again unless the device was already trusted before, so a refused or unanswered invite leaves this machine trusting no one new. */
   async join(
     candidate: Readonly<ConnectionCode>,
-    options: Readonly<RedeemConnectionCodeOptions> = {},
+    options: Readonly<AccountJoinOptions> = {},
   ): Promise<AccountJoinResult> {
+    const { label, ...redeemOptions } = options;
+    const named =
+      label === undefined
+        ? undefined
+        : requireDisplayName(label, "A machine label");
     const trustedBefore = this.deps.gatewayTrust.isTrusted(candidate.deviceId);
-    await this.deps.redeemConnectionCode(candidate, options);
+    await this.deps.redeemConnectionCode(candidate, redeemOptions);
     try {
-      return await this.takeAccount(candidate);
+      return await this.takeAccount(candidate, named);
     } catch (error) {
       if (!trustedBefore) {
         this.deps.gatewayTrust.remove(candidate.deviceId);
@@ -177,8 +219,9 @@ export class AccountJoin {
   /** The half of join after the invite's issuer is trusted: fetch the account key from it and switch this machine to that account. */
   private async takeAccount(
     candidate: Readonly<ConnectionCode>,
+    label: string | undefined,
   ): Promise<AccountJoinResult> {
-    const outcome = await this.requestAccountKey(candidate);
+    const outcome = await this.requestAccountKey(candidate, label);
     const sealed: unknown =
       outcome.result === "ok" ? outcome.sealed : undefined;
     if (typeof sealed !== "string") {
@@ -212,15 +255,20 @@ export class AccountJoin {
   /** Asks the invite's issuing device for the account key. Redeeming the invite has only just trusted that device, so the route to it (a hub session this store opens because it now trusts someone) may still be coming up: a request that found no route yet is retried until JOIN_ROUTE_WAIT_MS has passed, and any answer from the device itself is returned as it is. */
   private async requestAccountKey(
     invite: Readonly<ConnectionCode>,
+    label: string | undefined,
   ): Promise<ManageOutcome> {
-    const { clock } = this.deps.requireIdentity();
+    const { clock, machineIdentity } = this.deps.requireIdentity();
+    const labelling =
+      label === undefined
+        ? {}
+        : { label, machine: deviceIdToHex(machineIdentity.deviceId) };
     const deadline = clock.now() + JOIN_ROUTE_WAIT_MS;
     for (;;) {
       const outcome = await this.deps.requireTransport().sendRoomRequest(
         invite.deviceId,
         {
           verb: ACCOUNT_JOIN_CAPABILITY_VERB,
-          params: { verb: ACCOUNT_JOIN_VERB, code: invite.code },
+          params: { verb: ACCOUNT_JOIN_VERB, code: invite.code, ...labelling },
         },
         { kind: "node" },
       );
