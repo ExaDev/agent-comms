@@ -7,12 +7,11 @@
  *   3. Return the result string to the LLM
  */
 
-import { detailsShared } from "./agent-registry.js";
-import { groupAgentsByMachine } from "./machine-list-groups.js";
+import { renderAgentList } from "./agent-list-format.js";
+import type { AgentDetailsExchange } from "./agent-details.js";
 import { plainNamer, type Namer, type Naming } from "./naming.js";
 import { lanWebUisAction } from "./lan-web-actions.js";
 import type { LanWebUiEntry } from "./lan-web-uis.js";
-import { agentTable, type AgentTableRow } from "./agent-table.js";
 import {
   machineName,
   principalName,
@@ -40,7 +39,6 @@ import { CommsError } from "./store.js";
 import { getOwnPackageVersion } from "./package-version.js";
 import { describeDeliveryFor } from "./send-outcome.js";
 import {
-  formatListedAgentVersions,
   formatSelfVersionLines,
   formatSelfVersionSuffix,
   handleQueryVersion,
@@ -199,6 +197,10 @@ export interface MeshOnlyFeatures {
   ) => Promise<{ version: string } | { error: string }>;
   /** The LAN web UI table this machine's first-contact presence feeds (agent-comms#353). */
   lanWebUis?: Readonly<{ list: () => readonly Readonly<LanWebUiEntry>[] }>;
+  /** The agent-details exchange with trusted remote peers (agent-comms#323). */
+  agentDetailsExchange?: Readonly<
+    Pick<AgentDetailsExchange, "refresh" | "cached">
+  >;
   meshGraph?: () => MeshGraph;
   meshTrace?: (target: string, timeoutMs?: number) => Promise<MeshTraceResult>;
 }
@@ -624,58 +626,13 @@ export class CommsTool {
     if (agents.length === 0)
       return { content: "No other agents online.", isError: false };
 
-    const homedir = process.env.HOME ?? "";
-    const abbreviateCwd = (cwd: string): string =>
-      homedir && cwd.startsWith(homedir)
-        ? `~${cwd.slice(homedir.length)}`
-        : cwd;
-
+    this.store.agentDetailsExchange?.refresh(agents, ctx.agentId);
     const namer = await this.namerFor(ctx);
-    // The full id is printed in its own column, so the name column carries the names alone.
-    const rowOf = (a: AgentIdentity): AgentTableRow => ({
-      id: a.id,
-      name: namer(a.id, { selfName: a.name, besideFullId: true }),
-      harness: a.harness,
-      status: a.status,
-      visibility: a.visibility,
-      cwd: `${detailsShared(a) ? abbreviateCwd(a.cwd) : "(not shared)"}${a.id === ctx.agentId ? " (you)" : ""}`,
-    });
-    const table = agentTable(agents.map(rowOf));
-    const describe = (a: AgentIdentity): string => {
-      const isSelf = a.id === ctx.agentId;
-      const shared = detailsShared(a);
-      const rooms = !shared
-        ? "not shared"
-        : a.subscribedRooms.length > 0
-          ? a.subscribedRooms.join(", ")
-          : "none";
-      const versions = formatListedAgentVersions(
-        this.store,
-        a.id,
-        isSelf,
-        this.store.getCcPeerVersion,
-      );
-      return `${table.line(rowOf(a))}\n        Rooms: ${rooms}\n        Versions: ${versions}`;
-    };
-    const machines = await this.store.listAgentMachines?.();
-    const groups = groupAgentsByMachine(
-      agents,
-      machines,
-      this.store.getMachineId?.(),
+    return renderAgentList(agents, {
+      selfId: ctx.agentId,
       namer,
-    );
-    const body = groups
-      .map((group) => {
-        const rows = group.agents.map((a) => `  ${describe(a)}`);
-        return group.heading === undefined
-          ? rows.join("\n")
-          : [`  ${group.heading}`, ...rows].join("\n");
-      })
-      .join("\n");
-    return {
-      content: `Agents:\n  ${table.header}\n${body}`,
-      isError: false,
-    };
+      store: this.store,
+    });
   }
 
   private async readRoom(
