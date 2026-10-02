@@ -21,12 +21,7 @@ import {
   DEVICE_MEMBER_CAPABILITY,
   groupPath,
 } from "./device-membership-verification.js";
-import {
-  deleteIssuedDeviceGrant,
-  loadIssuedDeviceGrant,
-  saveIssuedDeviceGrant,
-  type UserIdentityOptions,
-} from "./user-identity.js";
+import type { AccountLedger } from "./account-ledger.js";
 
 /** delegationsRemaining for every device-membership grant -- deliberately non-delegable: a device that could re-mint membership for another device would let any admitted device silently admit others, defeating the point of the principal being the one place admission is decided (the same reasoning room-lifecycle.ts's own mintOwnerRootGrant already documents for a room owner's self-grant). */
 const NOT_DELEGABLE = 0;
@@ -34,8 +29,8 @@ const NOT_DELEGABLE = 0;
 export interface AdmitDeviceOptions {
   /** The user principal's own identity -- signs the membership grant. */
   userIdentity: IdentityPort;
-  /** Directory override for tests, forwarded to user-identity.ts's own issued-grant storage -- must resolve to the same user-identity.json userIdentity's own key material lives in. */
-  userIdentityOptions?: UserIdentityOptions;
+  /** The account's replicated grant ledger, which records the admission so any machine holding the account key can revoke it. */
+  accountLedger: AccountLedger;
   clock: Clock;
   tokenId: Uint8Array<ArrayBuffer>;
   /** The device being admitted. */
@@ -73,7 +68,7 @@ export async function mintGroupMembership(
 }
 
 /**
- * Mints deviceId's own group:member grant from the user principal: a root-level, non-delegable token scoped to the principal's own group (groupPath). On success, records the grant's token-id under the principal's own issued-grant store so a later removeDevice call can find it to revoke: an admission without this bookkeeping would leave removal permanently unable to find what to revoke, so this is not optional side-book-keeping, it is what makes revocation possible at all.
+ * Mints deviceId's own group:member grant from the user principal: a root-level, non-delegable token scoped to the principal's own group (groupPath). On success, records the grant's token-id in the account's replicated ledger so a later removeDevice, on this machine or any other holding the account key, can find it to revoke. An admission without that record would leave removal permanently unable to find what to revoke, so it is what makes revocation possible at all.
  */
 export async function admitDevice(
   options: Readonly<AdmitDeviceOptions>,
@@ -84,8 +79,8 @@ export async function admitDevice(
   });
   if (!verdict.ok) return verdict;
 
-  saveIssuedDeviceGrant(
-    options.userIdentityOptions,
+  await options.accountLedger.recordGrant(
+    "device",
     deviceIdToHex(options.deviceId),
     options.tokenId,
   );
@@ -95,7 +90,7 @@ export async function admitDevice(
 export interface RemoveDeviceOptions {
   /** The user principal's own identity -- only the principal that issued a device's membership may revoke it. */
   userIdentity: IdentityPort;
-  userIdentityOptions?: UserIdentityOptions;
+  accountLedger: AccountLedger;
   clock: Clock;
   /** Recorded locally immediately, so this principal's own future verifications see the removal without waiting on gossip -- mirrors room-lifecycle.ts's own revokeMemberGrant ordering (record before broadcast). */
   revocation: RevocationView;
@@ -103,23 +98,33 @@ export interface RemoveDeviceOptions {
 }
 
 /**
- * Revokes deviceId's own group:member grant for real, if this principal ever recorded admitting it: mints a revocation-entry for its token-id, records it in the given RevocationView immediately, and forgets the issued-grant record (a later re-admission mints and records a genuinely fresh one rather than leaving a stale entry alongside it). Silently returns undefined when no issued-grant record exists (a device that was never actually admitted, or a grant predating this bookkeeping) -- mirrors room-lifecycle.ts's own revokeMemberGrant, which does the same for a room member.
+ * Revokes every group:member grant for deviceId that the account's ledger holds as outstanding, whichever machine of the account minted it: mints a revocation-entry for each token-id, records it in the given RevocationView immediately, and appends it to the ledger, so every other machine of the account sees the grant as revoked and a later re-admission starts from nothing outstanding. Returns no entries for a device the account never admitted.
  *
- * Returns the minted entry so the caller can broadcast it to the mesh (this module has no MeshTransport dependency to do so itself, mirroring the module-level "no assumption about locality" boundary documented above) -- every other device that might hold this device's grant, including other devices of this same user, needs the entry to independently start refusing it.
+ * Returns the minted entries so the caller can broadcast them to the mesh (this module has no MeshTransport dependency to do so itself, mirroring the module-level "no assumption about locality" boundary documented above): every other device that might hold one of this device's grants needs the entry to independently start refusing it.
  */
 export async function removeDevice(
   options: Readonly<RemoveDeviceOptions>,
-): Promise<RevocationEntry | undefined> {
+): Promise<RevocationEntry[]> {
   const deviceHex = deviceIdToHex(options.deviceId);
-  const tokenId = loadIssuedDeviceGrant(options.userIdentityOptions, deviceHex);
-  if (tokenId === undefined) return undefined;
-
-  const entry = await mintRevocationEntry({
-    identity: options.userIdentity,
-    tokenId,
-    revokedAt: options.clock.now(),
-  });
-  await options.revocation.record(entry, { identity: options.userIdentity });
-  deleteIssuedDeviceGrant(options.userIdentityOptions, deviceHex);
-  return entry;
+  const outstanding = await options.accountLedger.outstandingGrants(
+    "device",
+    deviceHex,
+  );
+  const entries: RevocationEntry[] = [];
+  for (const { tokenId } of outstanding) {
+    const entry = await mintRevocationEntry({
+      identity: options.userIdentity,
+      tokenId,
+      revokedAt: options.clock.now(),
+    });
+    await options.revocation.record(entry, { identity: options.userIdentity });
+    await options.accountLedger.recordRevocation(
+      "device",
+      deviceHex,
+      tokenId,
+      entry,
+    );
+    entries.push(entry);
+  }
+  return entries;
 }

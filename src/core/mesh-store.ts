@@ -16,7 +16,6 @@ import {
   ROOM_JOIN_APPROVAL_TIMEOUT_MS,
   ROOM_REQUEST_TIMEOUT_MS,
 } from "./request-timeouts.js";
-import { CommsError } from "./store.js";
 import { DiscoveryManager } from "./discovery.js";
 import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
 import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
@@ -39,6 +38,10 @@ import { ConnectionApproval } from "./connection-approval.js";
 import { CapabilityAskAdmission } from "./capability-ask.js";
 import type { IncomingManageRequest } from "wire-mesh-core/domain/mesh-session";
 import type { DeviceId } from "wire-mesh-core/generated/protocol";
+import {
+  followLedgerRevocations,
+  type AccountLedgerReplica,
+} from "./account-ledger.js";
 import { StaleAgentChecker } from "./stale-agent-checker.js";
 import { PeerLifecycle } from "./peer-lifecycle.js";
 import {
@@ -48,12 +51,14 @@ import {
 import type { RoomVerbHandler } from "./room-router.js";
 import { DEFAULT_PRESENCE_STALE_AFTER_MS } from "./gossip-extensions.js";
 import type { AgentSelfAdvert, HostedRoomAdvert } from "./gossip-extensions.js";
-import {
-  getPeerAgentCommsVersions,
-  getPeerWireMeshCoreVersion,
-  queryPeerVersion,
-} from "./peer-versions.js";
+import { peerVersionReaders } from "./peer-versions.js";
 import { listNetworkInterfaces } from "./network-interfaces.js";
+import {
+  parseListenerPolicy,
+  requireMeshGraph,
+  requireMeshTrace,
+} from "./transport-queries.js";
+import { ACCOUNT_JOIN_VERB, AccountJoin } from "./account-join.js";
 import type {
   MeshStatePatch,
   PeerInfo,
@@ -61,7 +66,6 @@ import type {
 } from "./wire-protocol.js";
 import type {
   ListenerInfo,
-  ListenerPolicy,
   MeshGraph,
   MeshTraceResult,
   MeshTransport,
@@ -150,6 +154,9 @@ export class MeshStore implements CommsStore {
 
   /** The connection-code generate/redeem pair (agent-comms#188) bootstrapping gatewayTrust above between two devices with no existing mesh connection. Persists across restarts per slot, from the slot passed to this store's own constructor, whereas gatewayTrust is shared by every slot in the slot's identity directory. generateConnectionCode/redeemConnectionCode below are the methods CommsTool actually calls through MeshOnlyFeatures; redeemConnectionCode is also where a successful redemption's deviceId gets fed into gatewayTrust.add, the actual point of this whole bootstrap. */
   private readonly connectionCodes: ConnectionCodeLedger;
+
+  /** Issues and answers account invites, and joins this machine to an account (agent-comms#344). Public so `agent-comms account invite` and `agent-comms account join` (account-cli.ts) reach it; deliberately not on CommsTool's surface (see account-join.ts). */
+  readonly account: AccountJoin;
 
   private readonly deliveryEngine: DeliveryEngine;
   private readonly roomProtocol: RoomProtocol;
@@ -314,6 +321,16 @@ export class MeshStore implements CommsStore {
       saveMachineName: async (name) => this.membership.saveMachineName(name),
     });
     this.connectionCodes = new ConnectionCodeLedger(slot);
+    this.account = new AccountJoin({
+      requireIdentity: () => this.requireIdentity(),
+      requireTransport: () => this.requireTransport(),
+      getPeerId: () => this.peerId,
+      connectionCodes: this.connectionCodes,
+      gatewayTrust: this.gatewayTrust,
+      reconsiderHub: this.reconsiderHub.bind(this),
+      redeemConnectionCode: this.redeemConnectionCode.bind(this),
+      setIdentity: this.setIdentity.bind(this),
+    });
 
     // Discovery manager — registers available backends
     this.discovery = new DiscoveryManager();
@@ -475,10 +492,23 @@ export class MeshStore implements CommsStore {
     return this.transport;
   }
 
+  /** Stops feeding the current account ledger's replicated revocations into the RevocationView; undefined until an identity is attached. */
+  private stopFollowingLedger: (() => void) | undefined;
+
   /** Sets the identity/clock/slot this store mints and persists room-membership grants against. Must be called before createRoom() or any other identity-using method, mirroring setTransport()'s own contract. */
   setIdentity(identity: MeshStoreIdentity): void {
     this.storeIdentity = identity;
     this.membership.start();
+    this.stopFollowingLedger?.();
+    this.stopFollowingLedger = followLedgerRevocations(
+      identity,
+      this.reportError,
+    );
+  }
+
+  /** The account's replicated grant ledger (agent-comms#344) once an identity is attached, for the transport to replicate. */
+  get accountLedger(): AccountLedgerReplica | undefined {
+    return this.storeIdentity?.accountLedger;
   }
 
   /** Every device this side trusts only because a trusted principal or machine vouches for it, with that issuer. */
@@ -550,7 +580,10 @@ export class MeshStore implements CommsStore {
    * Room verb handlers this store registers with its own WireMeshTransport, keyed by params.verb per room-router.ts's own dispatch discipline.
    */
   get roomVerbHandlers(): Partial<Record<string, RoomVerbHandler>> {
-    return this.roomProtocol.roomVerbHandlers;
+    return {
+      ...this.roomProtocol.roomVerbHandlers,
+      [ACCOUNT_JOIN_VERB]: this.account.handleJoinRequest,
+    };
   }
 
   // -----------------------------------------------------------------------
@@ -990,15 +1023,11 @@ export class MeshStore implements CommsStore {
     port: number,
     policy: string,
   ): Promise<string> {
-    function isListenerPolicy(v: string): v is ListenerPolicy {
-      return (
-        v === "full" || v === "observe" || v === "rooms-only" || v === "gateway"
-      );
-    }
-    if (!isListenerPolicy(policy)) {
-      throw new CommsError(`Invalid policy "${policy}"`, "INVALID_POLICY");
-    }
-    return this.requireTransport().addListener(host, port, policy);
+    return this.requireTransport().addListener(
+      host,
+      port,
+      parseListenerPolicy(policy),
+    );
   }
 
   async removeListener(id: string): Promise<void> {
@@ -1011,14 +1040,7 @@ export class MeshStore implements CommsStore {
 
   /** Delegates to the transport's own meshGraph, throwing if the current transport doesn't support it (agent-comms#199) -- CommsTool's own notMeshBacked distinguishes "no MeshStore at all" from this narrower "MeshStore, but a transport without this capability" case by catching the throw, the same way requireTransport's own "no transport set" throw is already handled. */
   meshGraph(): MeshGraph {
-    const graph = this.requireTransport().meshGraph?.();
-    if (graph === undefined) {
-      throw new CommsError(
-        "mesh_graph requires a transport that supports it",
-        "NOT_SUPPORTED",
-      );
-    }
-    return graph;
+    return requireMeshGraph(this.requireTransport());
   }
 
   /** Delegates to the transport's own meshTrace, same "throw if unsupported" contract as meshGraph above. */
@@ -1026,14 +1048,7 @@ export class MeshStore implements CommsStore {
     target: string,
     timeoutMs?: number,
   ): Promise<MeshTraceResult> {
-    const transport = this.requireTransport();
-    if (transport.meshTrace === undefined) {
-      throw new CommsError(
-        "mesh_trace requires a transport that supports it",
-        "NOT_SUPPORTED",
-      );
-    }
-    return transport.meshTrace(target, timeoutMs);
+    return requireMeshTrace(this.requireTransport(), target, timeoutMs);
   }
 
   getNetworkInterfaces(): NetworkInterface[] {
@@ -1041,35 +1056,24 @@ export class MeshStore implements CommsStore {
   }
 
   // -----------------------------------------------------------------------
-  // Peer versions (agent-comms#198) -- the cached, gossip-backed path
+  // Peer versions (agent-comms#198)
   // -----------------------------------------------------------------------
 
-  /** deviceId's own gossiped agent-comms package version, if this side has heard it advertised -- undefined for a device this side has never heard gossip from, or one running a version of agent-comms that predates this feature. */
-  getPeerAgentCommsVersion(deviceId: string): string | undefined {
-    return getPeerAgentCommsVersions(this.requireTransport(), deviceId)
-      ?.agentComms;
-  }
+  private readonly peerVersions = peerVersionReaders(() =>
+    this.requireTransport(),
+  );
 
-  /** deviceId's own gossiped cc-peer package version, present only while that device is actually fronting a cc-peer session or running the one-shot `bridge cc-peer` command -- undefined otherwise, or for a device this side has never heard gossip from. */
-  getPeerCcPeerVersion(deviceId: string): string | undefined {
-    return getPeerAgentCommsVersions(this.requireTransport(), deviceId)?.ccPeer;
-  }
+  /** deviceId's own gossiped agent-comms package version, if this side has heard it advertised. */
+  readonly getPeerAgentCommsVersion = this.peerVersions.agentComms;
 
-  /** deviceId's own gossiped wire-mesh-core version, self-advertised automatically by wire-mesh-core itself (wire-mesh#179) -- undefined for a device this side has never heard gossip from, or one running a wire-mesh-core older than #179. */
-  getPeerWireMeshCoreVersion(deviceId: string): string | undefined {
-    return getPeerWireMeshCoreVersion(this.requireTransport(), deviceId);
-  }
+  /** deviceId's own gossiped cc-peer package version, present only while that device is fronting a cc-peer session or running `bridge cc-peer`. */
+  readonly getPeerCcPeerVersion = this.peerVersions.ccPeer;
 
-  // -----------------------------------------------------------------------
-  // Peer versions (agent-comms#198) -- the live, cache-busting path
-  // -----------------------------------------------------------------------
+  /** deviceId's own gossiped wire-mesh-core version (wire-mesh#179). */
+  readonly getPeerWireMeshCoreVersion = this.peerVersions.wireMeshCore;
 
-  /** Asks deviceId for its own, currently-running wire-mesh-core version live, right now, rather than trusting whatever it last gossiped -- the query_version action's own backing call. Resolves to a plain, provider-neutral result rather than leaking wire-mesh-core's own ManageOutcome type up to CommsTool, which has no other reason to know that type exists. */
-  async queryVersion(
-    deviceId: string,
-  ): Promise<{ version: string } | { error: string }> {
-    return queryPeerVersion(this.requireTransport(), deviceId);
-  }
+  /** Asks deviceId for its own, currently-running wire-mesh-core version live rather than trusting whatever it last gossiped (the query_version action's backing call). */
+  readonly queryVersion = this.peerVersions.query;
 
   // -----------------------------------------------------------------------
   // Shutdown

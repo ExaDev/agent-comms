@@ -82,6 +82,13 @@ export class GroupProofs {
     });
   }
 
+  /** Whether a gossiped proof shows that deviceHex belongs to the account this store holds, judged against the user principal's own proofs (MembershipProofs.isAccountMember). */
+  async isAccountMember(
+    claim: Readonly<{ proof: string; deviceHex: string }>,
+  ): Promise<boolean> {
+    return this.principal.isAccountMember(claim);
+  }
+
   /** The agent/self advert fields carrying this device's current proofs, each absent until it has first been minted. */
   advertFields(): Pick<
     AgentSelfSummary,

@@ -3,13 +3,14 @@
  */
 
 import type { KeyValueStorage } from "wire-mesh-core/ports/storage";
+import type { AccountLedgerReplica } from "./account-ledger.js";
 import type { GatewayTrustReader } from "./gateway-trust.js";
 import type { RoomVerbHandler } from "./room-router.js";
 import type { AgentStatus } from "./types.js";
 import type { AgentSelfAdvert, HostedRoomAdvert } from "./gossip-extensions.js";
 import type { ListenerPolicy } from "./transport.js";
 
-/** roomVerbHandlers, getCurrentPresence, getHostedRooms, dataStorage, getSelfAgentAdvert, and gatewayTrust each match the field-level doc comment on the WireMeshTransport field they back; pendingConnectionTimeoutMs and presenceReadvertiseIntervalMs default to DEFAULT_PENDING_CONNECTION_TIMEOUT_MS/PRESENCE_READVERTISE_INTERVAL_MS. All eight are optional and bundled into this one options type -- a caller needing only gatewayTrust no longer has to pass `undefined` for every one before it. */
+/** roomVerbHandlers, getCurrentPresence, getHostedRooms, dataStorage, getSelfAgentAdvert, and gatewayTrust each match the field-level doc comment on the WireMeshTransport field they back; accountReplication, verifyMembership and roomJoinApprovalTimeoutMs are described by their own doc comments below. pendingConnectionTimeoutMs and presenceReadvertiseIntervalMs default to DEFAULT_PENDING_CONNECTION_TIMEOUT_MS and PRESENCE_READVERTISE_INTERVAL_MS. Every field is optional and they are bundled into this one options type, so a caller needing only one of them never passes `undefined` for the rest. */
 export interface WireMeshTransportOptions {
   roomVerbHandlers?: Partial<Record<string, RoomVerbHandler>>;
   pendingConnectionTimeoutMs?: number | undefined;
@@ -20,6 +21,13 @@ export interface WireMeshTransportOptions {
   getHostedRooms?: () => readonly HostedRoomAdvert[];
   dataStorage?: KeyValueStorage;
   getSelfAgentAdvert?: () => AgentSelfAdvert | undefined;
+  /** Replicates the account's grant ledger (agent-comms#344) with peers holding the same account: the ledger, read when a data frame for one of its writer logs arrives and on each re-advertise tick, and the check of a peer's gossiped membership proof against this machine's own principal that decides which peers those are. Absent for a caller with no account ledger. */
+  accountReplication?: Readonly<{
+    getLedger: () => AccountLedgerReplica | undefined;
+    isAccountMember: (
+      claim: Readonly<{ proof: string; deviceHex: string }>,
+    ) => Promise<boolean>;
+  }>;
   gatewayTrust?: Readonly<GatewayTrustReader>;
   /** Checks a gossiped membership proof against a principal or machine this side trusts (MembershipProofs.verify). Without it, a directory entry from a device not trusted by id is refused even when it carries a proof. */
   verifyMembership?: (
@@ -27,7 +35,7 @@ export interface WireMeshTransportOptions {
   ) => Promise<{ ok: true; expires: number } | { ok: false; reason: string }>;
 }
 
-/** WireMeshTransport.connectToRemote's own bundled parameters -- see MeshTransport's own connectToRemote doc comment (transport.ts) for what each one means. */
+/** WireMeshTransport.connectToRemote's own bundled parameters: see MeshTransport's own connectToRemote doc comment (transport.ts) for what each one means. */
 export interface ConnectToRemoteOptions {
   host: string;
   port: number;

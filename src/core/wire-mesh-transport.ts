@@ -58,7 +58,10 @@ import {
   handlePathTraceRequest,
   traceMeshPath,
 } from "./mesh-graph.js";
-import { routeDataFrame } from "./data-frame-routing.js";
+import {
+  accountReplicationFrom,
+  DataFrameRouter,
+} from "./data-frame-routing.js";
 import type {
   CapabilityScope,
   CapabilityToken,
@@ -75,7 +78,6 @@ import type {
   Listener,
   Transport,
 } from "wire-mesh-core/ports/transport";
-import type { KeyValueStorage } from "wire-mesh-core/ports/storage";
 import type { MeshMessage, PeerInfo } from "./wire-protocol.js";
 import type {
   ConnectionHandle,
@@ -227,17 +229,14 @@ export class WireMeshTransport implements MeshTransport {
   /** Holds this transport's session on the relay hub, once joinHub has named one. */
   private hubLink: HubLink | undefined;
 
-  /** Backs this side's own responder for an incoming data-have/data-request/data-entries frame (agent-comms#50's P5 integration) -- undefined for every existing construction site that predates this feature, in which case handleDataFrame is a no-op. Deciding when to proactively call sendDataFrame at all (the catch-up policy: which peers' logs to track, when to send an initial data-have) stays entirely the caller's own business; this field only ever backs the mechanical parts (answering a have/request, storing entries). */
-  private readonly dataStorage: KeyValueStorage | undefined;
-
   /** Reads this side's own gossip-safe agent-identity advert for the next gossip re-advertisement tick, the same pull-not-push shape getCurrentPresence/getHostedRooms already established. undefined when no agent-identity source was wired in, or when MeshStore's own getter decides this agent shouldn't advertise itself this way right now (e.g. not "visible", or no self-agent record yet). */
   private readonly getSelfAgentAdvert: WireMeshTransportOptions["getSelfAgentAdvert"];
 
   /** Reads this side's own currently-running cc-peer package version for the next gossip re-advertisement tick (agent-comms#198). Unlike getCurrentPresence/getHostedRooms/getSelfAgentAdvert (constructor-injected, since MeshStore already has a real value for each at construction time), this is a plain mutable field set post-construction -- bridge-mesh.ts assigns it right after building this transport, mirroring MeshStore's own onDelivery/onError/onCoordinatorRoleChanged convention, so this transport doesn't need its own constructor parameter for a fact only two of many bridges ever have. undefined for every bridge that never loads cc-peer at all. */
   getCcPeerVersion: (() => string | undefined) | undefined;
 
-  /** Every peer this side has ever received a frame from, keyed by device-id hex, tracking the raw wire-mesh-core Connection each frame arrived on -- what sendDataFrame needs, since neither AcceptedMeshSession nor MeshSession exposes a generic "send an arbitrary frame" method the way the raw Connection itself does. Registered eagerly on the very first frame from a connection (including one still in quarantine, e.g. before connect_request approval) so a later sendDataFrame call can reach it -- handleDataFrame's own trust gate (peerSessions.has) is what actually decides whether to act on anything received this way, not this map. */
-  private readonly connectionsByPeer = new Map<string, Connection>();
+  /** Answers, stores and offers this side's core/data frames: the room-notice oplog over dataStorage, and the account's replicated grant ledger (agent-comms#344). See DataFrameRouter. */
+  private readonly dataFrames: DataFrameRouter;
 
   /** The cross-machine trust boundary (agent-comms#156): gates outbound gossip advertisement (hasAny), inbound directory merge (bare-device trust, a principal's own device, or a verified membership proof, wired into HubSession as admitEntries), the legacy per-device frame path (isTrusted, bare-device trust only), and outbound targeted hub requests (isReachable); see GatewayTrust's own class doc. A real room-domain manage-request relayed through the hub is never gated on this at all since agent-comms#192: hub-session.ts's own dispatchHubRequest relies purely on that verb's own capability-token verification instead. Defaults to a fresh, empty (deny-all) instance when no caller wires one in, matching every existing construction site that predates this feature. */
   private readonly gatewayTrust: GatewayTrustReader;
@@ -257,6 +256,7 @@ export class WireMeshTransport implements MeshTransport {
       getHostedRooms,
       dataStorage,
       getSelfAgentAdvert,
+      accountReplication,
       gatewayTrust = new GatewayTrust(),
       verifyMembership,
     } = options ?? {};
@@ -274,6 +274,15 @@ export class WireMeshTransport implements MeshTransport {
       handlers: { "path.trace": handlePathTraceRequest, ...roomVerbHandlers },
     });
     this.roomJoinApprovalTimeoutMs = roomJoinApprovalTimeoutMs;
+    this.dataFrames = new DataFrameRouter({
+      dataStorage,
+      account: accountReplicationFrom(accountReplication, (deviceHex) =>
+        this.knownDevices.current().get(deviceHex),
+      ),
+      peerSessions: this.peerSessions,
+      onError: this.events.onError,
+      announceIntervalMs: presenceReadvertiseIntervalMs,
+    });
     this.hub = new HubSession({
       roomJoinApprovalTimeoutMs,
       identityReady: this.identityReady,
@@ -297,7 +306,6 @@ export class WireMeshTransport implements MeshTransport {
     this.pendingConnectionTimeoutMs = pendingConnectionTimeoutMs;
     this.getCurrentPresence = getCurrentPresence;
     this.getHostedRooms = getHostedRooms;
-    this.dataStorage = dataStorage;
     this.getSelfAgentAdvert = getSelfAgentAdvert;
     this.gossipInterval = startGossipInterval({
       ...this.gossipOptions(),
@@ -319,36 +327,21 @@ export class WireMeshTransport implements MeshTransport {
     };
   }
 
-  /** Sends one data-have or data-request frame directly to an already-connected peer -- the mechanical send primitive a future catch-up policy calls once it decides to (see the dataStorage field comment). Throws if this side has never received any frame from that peer yet (there is no connection to send on), matching sendManageRequest's own "no reachable session" failure mode for an unknown peer. */
+  /** Sends one data-have or data-request frame directly to an already-connected peer: the mechanical send primitive a future catch-up policy calls once it decides to (see DataFrameRouter's dataStorage doc comment). Throws if this side has never received any frame from that peer yet (there is no connection to send on), matching sendManageRequest's own "no reachable session" failure mode for an unknown peer. */
   async sendDataFrame(
     peerDeviceHex: string,
     frame: Readonly<DataHaveFrame> | Readonly<DataRequestFrame>,
   ): Promise<void> {
-    const connection = this.connectionsByPeer.get(peerDeviceHex);
-    if (connection === undefined) {
-      throw new Error(
-        `WireMeshTransport: no live connection for peer ${peerDeviceHex}`,
-      );
-    }
-    await connection.send(frame);
+    await this.dataFrames.send(peerDeviceHex, frame);
   }
 
   /** Registers (or refreshes) the raw connection a frame arrived on, then answers a data-have/data-request/data-entries frame in place, sending any resulting response frame back over the same connection -- every other frame type is ignored here (applyFrame's own dispatch already owns those). Trust-gated on peerSessions already tracking this device: a connection still in quarantine (pre-approval) gets its own frames observed here too (registration is unconditional, since a later approved sendDataFrame call still needs to find it), but never acted on until trackSession has actually run for it. A response or storage failure is reported via onError and otherwise dropped -- the peer's own next data-have/retry is what recovers, the same as any other best-effort gossip-driven exchange in this file. */
-  /** Routes one core/data frame -- see data-frame-routing.ts's own routeDataFrame for the actual dispatch, kept out of this already-large file. */
+  /** Routes one core/data frame: see data-frame-routing.ts's own DataFrameRouter for the actual dispatch, kept out of this already-large file. */
   private async handleDataFrame(
     connection: Readonly<Connection>,
     frame: Frame,
   ): Promise<void> {
-    await routeDataFrame(
-      {
-        connectionsByPeer: this.connectionsByPeer,
-        dataStorage: this.dataStorage,
-        peerSessions: this.peerSessions,
-        onError: this.events.onError,
-      },
-      connection,
-      frame,
-    );
+    await this.dataFrames.route(connection, frame);
   }
 
   // -- Public getters --
@@ -967,6 +960,7 @@ export class WireMeshTransport implements MeshTransport {
       clearInterval(this.gossipInterval);
       this.gossipInterval = undefined;
     }
+    this.dataFrames.stop();
     this.dataDials.clear();
 
     for (const pending of this.pendingConnections.values()) {

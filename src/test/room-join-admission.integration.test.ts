@@ -30,6 +30,7 @@ import type { IdentitySlot } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import { loadOrCreateMachineIdentity } from "../core/machine-identity.js";
+import { openAccountLedger } from "../core/account-ledger-store.js";
 import type { ConnectionHandle, MeshTransport } from "../core/transport.js";
 import { wireTestTransport } from "./test-transport.js";
 
@@ -188,15 +189,19 @@ describe("joinRoom (requester side, remote path)", () => {
         path.join(tmpdir(), "agent-comms-test-user-identity-"),
       ),
     };
+    const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
     store.setIdentity({
       identity: identityPort,
       clock: createSystemClock(),
       slot,
       revocation: createRevocationView(),
       dataStorage: createMemoryStorage(),
-      userIdentity: await toIdentityPort(
-        loadOrCreateUserIdentity(userIdentityOptions),
-      ),
+      userIdentity: await toIdentityPort(userIdentity),
+      accountLedger: await openAccountLedger({
+        userIdentityOptions,
+        userIdentity,
+        clock: createSystemClock(),
+      }),
       userIdentityOptions,
       machineIdentity: await toIdentityPort(
         loadOrCreateMachineIdentity(userIdentityOptions),

@@ -519,3 +519,29 @@ agent_comms({
 ```
 
 The fingerprint is never a trust anchor supplied by the keyserver — it's the thing the redeemer already independently trusts (from a business card, a prior verification, wherever), and the redeemer's own check is that the key actually fetched or pasted verifies to that exact fingerprint, not merely that _some_ key was found. Redemption never calls back to whoever generated the code: the whole point is bootstrapping trust before any connection between the two devices exists.
+
+### One account on several machines
+
+Your user principal is your account: the key in `~/.agent-comms/user-identity.json` that signs your devices' membership proofs and every DM grant you issue. The same account can live on several machines, and each of them then vouches for its own devices as that one principal, so anyone who trusts your principal covers every machine you run with no per-machine or per-pair step.
+
+A new machine joins with one deliberate act. On a machine that already holds the account, issue an invite, which is a connection code, and carry it to the new machine out of band:
+
+```bash
+npx agent-comms account invite   # on a machine that holds the account; keep it running
+npx agent-comms account join     # on the new machine; paste the invite at the prompt
+```
+
+Both are commands you run, not `agent_comms` tool actions: an invite is the account key to whoever redeems it first, and a join replaces the account the machine holds, so nothing an agent is told can do either, and the invite is printed only to your terminal, never into an agent's transcript. `join` reads the invite at a prompt that does not echo, so it stays out of shell history.
+
+`account invite` runs a store of its own and keeps it up until the invite is redeemed or expires, since the issuing device keeps invites only in memory and answers each one once and never after it expires. An invite is valid for as long as a connection code, and can be made shorter with `--ttl-minutes <n>` but not longer. Redeeming it trusts the issuing device, exactly as `gateway_redeem_connection_code` does, then asks that device for the account key over the mesh's end-to-end authenticated request path, directly or relayed by the hub; the key comes back sealed under a key derived from the invite, which only its holder can open. A join the issuing device refuses or never answers withdraws that trust again, so a failed join leaves the new machine trusting no one it did not trust before. An invite can be PGP-signed with `--sign-key <armored private key file>`, and a signed one is checked on `join` against `--public-key <file>`, pinned to `--fingerprint <hex>` when you give one. Issuing an invite also trusts your own principal on the issuing machine, and joining trusts it on the new one, so the two list each other's devices from then on. The account the new machine held before is kept beside it as `user-identity.replaced-<id>.json`, since its key is still the only one that can revoke what it issued, and the machine's running bridges pick up the account when they restart.
+
+To copy the account without the mesh, export it to a passphrase-sealed file and import that on the other machine. The key is never printed; the passphrase is read from `AGENT_COMMS_ACCOUNT_PASSPHRASE` or asked for without echo, and the file is written owner-only and never over an existing one:
+
+```bash
+npx agent-comms account export ~/account.bundle   # on a machine that holds the account
+npx agent-comms account import ~/account.bundle   # on the other machine, then delete the file
+```
+
+Copy the account this way or by joining, never by copying `~/.agent-comms` between machines: each machine keeps a writer id of its own for the grant ledger below, and two machines sharing one would corrupt it.
+
+Every grant your account issues, and every revocation of one, is recorded in a replicated ledger rather than on the machine that minted it: each machine appends to a data-domain log of its own (wire-mesh's replicated issuer grant ledger pattern, `spec/PATTERNS.md`), and the logs replicate to every machine holding the account, so `dm_revoke` on any of them finds and revokes a grant another one issued. Entries are sealed under a key derived from the account key, so a device that stores or relays them without holding the account sees only ciphertext, and writing to the ledger still needs the account's private key. The ledger replicates over direct peer connections (the local mesh, or machines that reach each other directly), not yet through the relay hub, which does not forward data-domain frames between devices; a revocation itself is also announced to every connected peer the moment it is made. Grants a build before the ledger recorded in `user-identity.json` are moved into it the first time a bridge starts, with nothing to do by hand.

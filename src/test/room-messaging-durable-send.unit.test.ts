@@ -86,6 +86,7 @@ async function makeHarness() {
       revocation: createRevocationView(),
       dataStorage,
       userIdentity: ownerIdentity,
+      accountLedger: {} as never,
       userIdentityOptions: {},
       machineIdentity: ownerIdentity,
       machineIdentityOptions: {},

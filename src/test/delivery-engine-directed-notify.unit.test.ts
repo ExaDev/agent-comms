@@ -156,6 +156,7 @@ function makeHarness() {
       userIdentity: {} as never,
       machineIdentity: {} as never,
       machineIdentityOptions: {},
+      accountLedger: {} as never,
       userIdentityOptions: {},
     }),
     requireTransport: () => transport,

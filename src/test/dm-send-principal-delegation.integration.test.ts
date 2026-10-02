@@ -12,6 +12,7 @@ import {
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { MeshStore } from "../core/mesh-store.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
+import { openAccountLedger } from "../core/account-ledger-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { randomId } from "../core/random-id.js";
 import { delegateDmSendToDevice } from "../core/dm-send-delegation.js";
@@ -59,9 +60,13 @@ test("a principal's own device, holding only a delegated dm:send token, auto-adm
 
   // Bob's own user-principal identity -- distinct from any bridge-slot device identity, and distinct from any of Bob's own devices below.
   const bobUserIdentityOptions = tempUserIdentityDir();
-  const bobPrincipal = await toIdentityPort(
-    loadOrCreateUserIdentity(bobUserIdentityOptions),
-  );
+  const bobUserIdentity = loadOrCreateUserIdentity(bobUserIdentityOptions);
+  const bobPrincipal = await toIdentityPort(bobUserIdentity);
+  const bobLedger = await openAccountLedger({
+    userIdentityOptions: bobUserIdentityOptions,
+    userIdentity: bobUserIdentity,
+    clock: createSystemClock(),
+  });
 
   // One of Bob's own devices -- an ordinary bridge slot, wired and connected to Alice exactly like any other peer.
   const d = new MeshStore({ coordinatorPort: port });
@@ -92,7 +97,7 @@ test("a principal's own device, holding only a delegated dm:send token, auto-adm
     const clock = createSystemClock();
     const delegated = await delegateDmSendToDevice({
       userIdentity: bobPrincipal,
-      userIdentityOptions: bobUserIdentityOptions,
+      accountLedger: bobLedger,
       clock,
       tokenId: randomId(),
       parent: grant,

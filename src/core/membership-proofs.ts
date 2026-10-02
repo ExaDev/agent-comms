@@ -3,7 +3,10 @@
  */
 
 import type { IdentityPort } from "wire-mesh-core/ports/identity";
-import { deviceIdFromHex } from "wire-mesh-core/domain/device-id";
+import {
+  deviceIdFromHex,
+  deviceIdToHex,
+} from "wire-mesh-core/domain/device-id";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import {
   MEMBERSHIP_PROOF_LIFETIME_MS,
@@ -30,10 +33,20 @@ export interface MembershipProofsDeps {
   onError: (error: Error) => void;
 }
 
+/** The last account-membership verdict for one device: which proof it was about, against which principal, and until when a positive one holds. */
+interface AccountMemberVerdict {
+  proof: string;
+  principal: string;
+  /** Epoch ms after which a positive verdict needs checking again; a negative one never changes for the same proof and principal. */
+  until: number | undefined;
+}
+
 export class MembershipProofs {
   private proof: string | undefined;
   private minting = false;
   private timer: ReturnType<typeof setInterval> | undefined;
+  /** Keyed by device-id hex. One entry per device this side has checked, replaced whenever that device's proof or this side's principal changes. */
+  private readonly accountVerdicts = new Map<string, AccountMemberVerdict>();
 
   constructor(private readonly deps: Readonly<MembershipProofsDeps>) {}
 
@@ -70,6 +83,30 @@ export class MembershipProofs {
       clock,
       revocation,
     });
+  }
+
+  /** Whether a gossiped proof shows that deviceHex belongs to the account this store holds: the proof verifies against this store's own user principal. A verdict is remembered per device, so a device re-gossiping the same proof is not re-verified on every advert; a positive one is trusted only until its proof expires, a negative one for as long as the proof and this side's principal are unchanged. */
+  async isAccountMember(
+    claim: Readonly<{ proof: string; deviceHex: string }>,
+  ): Promise<boolean> {
+    const { userIdentity, clock } = this.deps.getIdentity();
+    const principal = deviceIdToHex(userIdentity.deviceId);
+    const known = this.accountVerdicts.get(claim.deviceHex);
+    if (known?.proof === claim.proof && known.principal === principal) {
+      if (known.until === undefined) return false;
+      if (known.until > clock.now()) return true;
+    }
+    const verdict = await this.verify({
+      proof: claim.proof,
+      deviceHex: claim.deviceHex,
+      issuerHex: principal,
+    });
+    this.accountVerdicts.set(claim.deviceHex, {
+      proof: claim.proof,
+      principal,
+      until: verdict.ok ? verdict.expires : undefined,
+    });
+    return verdict.ok;
   }
 
   /** Which issuer a gossiped proof shows vouching for deviceHex, as this node sees it. */

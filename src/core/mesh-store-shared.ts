@@ -7,10 +7,11 @@ import type { IdentityPort } from "wire-mesh-core/ports/identity";
 import type { RevocationView } from "wire-mesh-core/domain/revocation-view";
 import type { KeyValueStorage } from "wire-mesh-core/ports/storage";
 import type { IdentitySlot } from "./identity-store.js";
+import type { AccountLedger } from "./account-ledger.js";
 import type { UserIdentityOptions } from "./user-identity.js";
 import type { MachineIdentityOptions } from "./machine-identity.js";
 
-/** The identity/clock/persistence collaborators MeshStore mints and persists room-membership grants against. Set via setIdentity(), mirroring the transport's own setTransport() contract. dataStorage backs this device's own room-notice oplog (P5, agent-comms#50): the same KeyValueStorage instance WireMeshTransport's own dataStorage constructor parameter is wired with, so a durable sendRoomMessage and the transport's own data-domain responder read and write the identical log. userIdentity/userIdentityOptions are the user-principal identity (user-identity.ts, agent-comms#160) this store's own bridge slot shares with every other bridge of this account, distinct from `identity`, which is this specific bridge's own per-slot device identity; userIdentity is what a dm:send grant (agent-comms#162) is minted and verified against. userIdentityOptions is threaded through purely so RoomLifecycle's own admit/revoke methods can find the same on-disk record userIdentity was loaded from, to persist issued-grant bookkeeping against it. machineIdentity is this account's machine identity for the host (machine-identity.ts, agent-comms#343), shared by every bridge the account runs there: the second grouping issuer this store's device is vouched for by. machineIdentityOptions locates the file it was loaded from, where the machine's self display name (agent-comms#345) is kept. */
+/** The identity/clock/persistence collaborators MeshStore mints and persists room-membership grants against. Set via setIdentity(), mirroring the transport's own setTransport() contract. dataStorage backs this device's own room-notice oplog (P5, agent-comms#50): the same KeyValueStorage instance WireMeshTransport's own dataStorage constructor parameter is wired with, so a durable sendRoomMessage and the transport's own data-domain responder read and write the identical log. userIdentity/userIdentityOptions are the user-principal identity (user-identity.ts, agent-comms#160) this store's own bridge slot shares with every other bridge of this account, distinct from `identity`, which is this specific bridge's own per-slot device identity; userIdentity is what a dm:send grant (agent-comms#162) is minted and verified against. accountLedger is the account's replicated, encrypted grant ledger (account-ledger.ts, agent-comms#344), where every grant this principal mints is recorded so any machine holding the account key can revoke it. userIdentityOptions locates the file userIdentity was loaded from, which the account's own join flow (account-join.ts) reads to seal the key for a joining machine and writes to import one it joins. machineIdentity is this account's machine identity for the host (machine-identity.ts, agent-comms#343), shared by every bridge the account runs there: the second grouping issuer this store's device is vouched for by. machineIdentityOptions locates the file it was loaded from, where the machine's self display name (agent-comms#345) is kept. */
 export interface MeshStoreIdentity {
   identity: IdentityPort;
   clock: Clock;
@@ -18,6 +19,8 @@ export interface MeshStoreIdentity {
   revocation: RevocationView;
   dataStorage: KeyValueStorage;
   userIdentity: IdentityPort;
+  accountLedger: AccountLedger;
+  /** Where userIdentity's key lives on this machine, for the account's own join flow (account-join.ts) to seal it for a joining machine and to import one it joins. */
   userIdentityOptions: Readonly<UserIdentityOptions>;
   machineIdentity: IdentityPort;
   machineIdentityOptions: Readonly<MachineIdentityOptions>;

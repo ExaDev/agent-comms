@@ -13,6 +13,10 @@
  *   npx agent-comms rooms                     # list rooms
  *   npx agent-comms agents                    # list agents
  *   npx agent-comms read <room>               # read room messages
+ *   npx agent-comms account export <file>     # write this machine's account key, passphrase-sealed
+ *   npx agent-comms account import <file>     # make this machine hold an exported account
+ *   npx agent-comms account invite            # print a one-use invite that joins another machine to this account
+ *   npx agent-comms account join              # join this machine to an account with an invite
  *
  * The bridge subcommand lets harnesses invoke the bridge via npx:
  *   .mcp.json:  \{ "command": "npx", "args": ["agent-comms", "bridge", "claude-code"] \}
@@ -28,6 +32,8 @@ import { bridges } from "./bridges/registry.js";
 import { resolveDefaultCommand } from "./core/default-command.js";
 import { runTui } from "./bridges/user/tui.js";
 import { runCli } from "./bridges/user/cli.js";
+import { readHiddenLine, runAccountCommand } from "./account-cli.js";
+import { openMachineAccountStore } from "./account-join-cli.js";
 
 // ---------------------------------------------------------------------------
 // Zod schemas for config files
@@ -227,9 +233,29 @@ switch (command) {
     runUserCli(command, cliArgs);
     break;
   }
+  case "account": {
+    runAccountCommand(resolvedArgs.slice(SUBCOMMAND_ARGS_START_INDEX), {
+      readSecret: readHiddenLine,
+      log: (line) => {
+        console.log(line);
+      },
+      env: process.env,
+      openStore: openMachineAccountStore,
+    }).then(
+      () => {
+        // The store an invite or join ran leaves timers and sockets behind it, so the command ends the process itself once it is done.
+        process.exit(0);
+      },
+      (err: unknown) => {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      },
+    );
+    break;
+  }
   default:
     console.log(
-      "Usage: agent-comms [setup|status|remove|bridge <id>|chat|send|dm|rooms|agents|read]",
+      "Usage: agent-comms [setup|status|remove|bridge <id>|chat|send|dm|rooms|agents|read|account <export|import|invite|join>]",
     );
     console.log(
       "With no subcommand: setup when stdin is a terminal, the MCP server when it is not.",

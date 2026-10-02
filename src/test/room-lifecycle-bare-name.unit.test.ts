@@ -90,6 +90,7 @@ async function makeHarness(): Promise<Harness> {
       userIdentity: {} as never,
       machineIdentity: {} as never,
       machineIdentityOptions: {},
+      accountLedger: {} as never,
       userIdentityOptions: {},
     }),
     requireTransport: () =>

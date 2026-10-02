@@ -36,11 +36,6 @@ import {
   saveIssuedRoomGrant,
   saveRoomToken,
 } from "./identity-store.js";
-import {
-  deleteIssuedDmGrant,
-  loadIssuedDmGrant,
-  saveIssuedDmGrant,
-} from "./user-identity.js";
 import { randomId } from "./random-id.js";
 import { listDiscoveredRooms } from "./room-discovery.js";
 import { resolveRoomId } from "./room-lookup.js";
@@ -737,7 +732,7 @@ export class RoomLifecycle {
     counterpart: string,
     grant: CapabilityToken,
   ): Promise<void> {
-    const { identity, clock, revocation, userIdentity, userIdentityOptions } =
+    const { identity, clock, revocation, userIdentity, accountLedger } =
       this.deps.requireIdentity();
     const forThisDevice = await verifyCapabilityToken(grant, {
       identity,
@@ -774,7 +769,7 @@ export class RoomLifecycle {
     }
     const delegated = await delegateDmSendToDevice({
       userIdentity,
-      userIdentityOptions,
+      accountLedger,
       clock,
       tokenId: randomId(),
       parent: grant,
@@ -792,7 +787,7 @@ export class RoomLifecycle {
   }
 
   /**
-   * Admits bearerId into this user's own DM-communication scope (agent-comms#162): mints a fresh dm:send grant, self-signed by this store's own user principal (userIdentity, distinct from the per-bridge-slot device identity every other room:member grant above is minted against), with no parent -- a root-level admission, exactly like mintOwnerRootGrant's own room-owner self-grant. Records the token-id the same way admitRoomJoin/inviteToRoom record theirs (saveIssuedDmGrant), so revokeAgentDmAccess can later name which one to revoke. Returns the minted token for the caller to get to bearerId out of band (there is no wire-level push here, deliberately: this issue adds the receiver-side check and the admission primitive it checks against, not a new delivery mechanism for the grant itself).
+   * Admits bearerId into this user's own DM-communication scope (agent-comms#162): mints a fresh dm:send grant, self-signed by this store's own user principal (userIdentity, distinct from the per-bridge-slot device identity every other room:member grant above is minted against), with no parent: a root-level admission, exactly like mintOwnerRootGrant's own room-owner self-grant. Records the token-id in the account's replicated grant ledger (account-ledger.ts), so revokeAgentDmAccess on this or any other machine holding the account key can later name which one to revoke. Returns the minted token for the caller to get to bearerId out of band (there is no wire-level push here, deliberately: this issue adds the receiver-side check and the admission primitive it checks against, not a new delivery mechanism for the grant itself).
    *
    * delegationsRemaining defaults to 0 -- the original, non-delegable behaviour, unchanged for a bearer that is just a bare device with no principal of its own. Passing a positive value admits bearerId as a user PRINCIPAL rather than a single device (agent-comms#187): the principal itself then holds enough delegation depth to mint further dm:send tokens (bearer = one of its own devices, parent = this grant) via dm-send-delegation.ts's delegateDmSendToDevice, the dm:send counterpart to how #161's device-membership tokens already let a principal admit its own devices. verifyDmSendToken needs no change to accept the result: its chain-walk already resolves rootIssuer through arbitrarily many hops back to this call's own userIdentity, regardless of how many of those hops this grant itself permits.
    */
@@ -800,8 +795,7 @@ export class RoomLifecycle {
     bearerId: string,
     delegationsRemaining = 0,
   ): Promise<CapabilityToken> {
-    const { userIdentity, userIdentityOptions, clock } =
-      this.deps.requireIdentity();
+    const { userIdentity, accountLedger, clock } = this.deps.requireIdentity();
     const tokenId = randomId();
     const verdict = await mintCapabilityToken({
       identity: userIdentity,
@@ -819,25 +813,26 @@ export class RoomLifecycle {
         "MINT_FAILED",
       );
     }
-    saveIssuedDmGrant(userIdentityOptions, bearerId, tokenId);
+    await accountLedger.recordGrant("dm", bearerId, tokenId);
     return verdict.token;
   }
 
   /**
-   * Revokes bearerId's own dm:send grant for real, if this user principal ever recorded issuing one: mints a revocation-entry for its token-id, records it in this store's own RevocationView immediately, announces it to every connected peer, and forgets the issued-grant record (a later re-admission mints and records a genuinely fresh one rather than leaving a stale entry alongside it) -- the same revocation shape revokeMemberGrant already gives room:member grants, applied to the user principal's own dm:send grants instead of a bridge-slot device identity's room grants. Silently does nothing when no issued-grant record exists (bearerId was never admitted, or the record predates this bookkeeping).
+   * Revokes every dm:send grant for bearerId that the account's replicated ledger holds as outstanding, whichever machine of the account minted it: mints a revocation-entry for each token-id, records it in this store's own RevocationView immediately, announces it to every connected peer, and appends it to the ledger so every machine of the account sees it revoked and a later re-admission starts from nothing outstanding. The same revocation shape revokeMemberGrant gives room:member grants, applied to the user principal's own dm:send grants. Does nothing when the ledger holds no outstanding grant for bearerId.
    */
   async revokeAgentDmAccess(bearerId: string): Promise<void> {
-    const { userIdentity, userIdentityOptions, clock, revocation } =
+    const { userIdentity, accountLedger, clock, revocation } =
       this.deps.requireIdentity();
-    const tokenId = loadIssuedDmGrant(userIdentityOptions, bearerId);
-    if (tokenId === undefined) return;
-    const entry = await mintRevocationEntry({
-      identity: userIdentity,
-      tokenId,
-      revokedAt: clock.now(),
-    });
-    await revocation.record(entry, { identity: userIdentity });
-    await this.deps.requireTransport().broadcastRevocation([entry]);
-    deleteIssuedDmGrant(userIdentityOptions, bearerId);
+    const outstanding = await accountLedger.outstandingGrants("dm", bearerId);
+    for (const { tokenId } of outstanding) {
+      const entry = await mintRevocationEntry({
+        identity: userIdentity,
+        tokenId,
+        revokedAt: clock.now(),
+      });
+      await revocation.record(entry, { identity: userIdentity });
+      await this.deps.requireTransport().broadcastRevocation([entry]);
+      await accountLedger.recordRevocation("dm", bearerId, tokenId, entry);
+    }
   }
 }
