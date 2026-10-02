@@ -62,6 +62,7 @@ import {
 import {
   accountReplicationFrom,
   DataFrameRouter,
+  hubDataChannel,
 } from "./data-frame-routing.js";
 import type {
   CapabilityScope,
@@ -295,6 +296,7 @@ export class WireMeshTransport implements MeshTransport {
       ),
       peerSessions: this.peerSessions,
       onError: this.events.onError,
+      hub: hubDataChannel(() => this.hub),
       announceIntervalMs: presenceReadvertiseIntervalMs,
     });
     this.hub = new HubSession({
@@ -304,6 +306,7 @@ export class WireMeshTransport implements MeshTransport {
       isShuttingDown: this.isShuttingDown.bind(this),
       advertisedAddresses: this.advertisedAddresses,
       onFrame: async (conn, frame) => this.handleDataFrame(conn, frame),
+      onRelayedDataFrame: this.dataFrames.routeRelayed,
       trackForShutdown: (session) => {
         this.allSessions.add(session);
       },
@@ -350,7 +353,6 @@ export class WireMeshTransport implements MeshTransport {
     await this.dataFrames.send(peerDeviceHex, frame);
   }
 
-  /** Registers (or refreshes) the raw connection a frame arrived on, then answers a data-have/data-request/data-entries frame in place, sending any resulting response frame back over the same connection -- every other frame type is ignored here (applyFrame's own dispatch already owns those). Trust-gated on peerSessions already tracking this device: a connection still in quarantine (pre-approval) gets its own frames observed here too (registration is unconditional, since a later approved sendDataFrame call still needs to find it), but never acted on until trackSession has actually run for it. A response or storage failure is reported via onError and otherwise dropped -- the peer's own next data-have/retry is what recovers, the same as any other best-effort gossip-driven exchange in this file. */
   /** Routes one core/data frame: see data-frame-routing.ts's own DataFrameRouter for the actual dispatch, kept out of this already-large file. */
   private async handleDataFrame(
     connection: Readonly<Connection>,
