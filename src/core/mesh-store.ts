@@ -64,6 +64,7 @@ import {
 } from "./transport-queries.js";
 import { ACCOUNT_JOIN_VERB, AccountJoin } from "./account-join.js";
 import { LanWebUis } from "./lan-web-uis.js";
+import { AGENT_DETAILS_VERB, AgentDetailsExchange } from "./agent-details.js";
 import type {
   MeshStatePatch,
   PeerInfo,
@@ -516,14 +517,12 @@ export class MeshStore implements CommsStore {
   }
 
   /** Every device this side trusts only because a trusted principal or machine vouches for it, with that issuer. */
-  listVerifiedMembers(): VerifiedMember[] {
-    return this.gatewayTrust.listVerifiedMembers();
-  }
+  readonly listVerifiedMembers = (): VerifiedMember[] =>
+    this.gatewayTrust.listVerifiedMembers();
 
   /** The machine (hex) of each device this side can place on one, keyed by device id (agent-comms#343): this device's own, and every gossiped device carrying a valid machine proof. Empty before this store's identity is attached. */
-  async listAgentMachines(): Promise<Map<string, string>> {
-    return this.membership.machinesByDevice();
-  }
+  readonly listAgentMachines = async (): Promise<Map<string, string>> =>
+    await this.membership.machinesByDevice();
 
   /** The set identity, or throws if setIdentity() hasn't been called yet -- the single place every identity-using method reads through, mirroring requireTransport() above. */
   private requireIdentity(): MeshStoreIdentity {
@@ -580,13 +579,19 @@ export class MeshStore implements CommsStore {
     });
   }
 
-  /**
-   * Room verb handlers this store registers with its own WireMeshTransport, keyed by params.verb per room-router.ts's own dispatch discipline.
-   */
+  /** Both halves of the agent-comms/agent-details exchange (agent-comms#323): the verb a trusted peer's request is answered by, and the background fetch filling this side's cache from peers this machine trusts. */
+  readonly agentDetailsExchange = new AgentDetailsExchange({
+    selfAgent: () => this.agents.get(this.peerId),
+    hostedRooms: () => this.hostedRooms,
+    isTrusted: (hex) => this.gatewayTrust.isTrusted(hex),
+    requireTransport: () => this.requireTransport(),
+  });
+  /** Room verb handlers this store registers with its own WireMeshTransport, keyed by params.verb per room-router.ts's own dispatch discipline. */
   get roomVerbHandlers(): Partial<Record<string, RoomVerbHandler>> {
     return {
       ...this.roomProtocol.roomVerbHandlers,
       [ACCOUNT_JOIN_VERB]: this.account.handleJoinRequest,
+      [AGENT_DETAILS_VERB]: this.agentDetailsExchange.handler,
     };
   }
 
@@ -958,9 +963,7 @@ export class MeshStore implements CommsStore {
   }
 
   /** Every currently trusted remote device-id (hex). */
-  listTrustedGateways(): string[] {
-    return this.gatewayTrust.list();
-  }
+  readonly listTrustedGateways = (): string[] => this.gatewayTrust.list();
 
   /** Trusts a remote user-principal device-id (hex, agent-comms#187): a peer presenting a token whose delegation chain roots at this principal is trusted via GatewayTrust.isTrustedFor, without its own bare device-id ever needing individual trust. Entirely independent of the bare-device allowlist addTrustedGateway manages. */
   addTrustedGatewayPrincipal(deviceHex: string): void {
@@ -975,9 +978,8 @@ export class MeshStore implements CommsStore {
   }
 
   /** Every currently trusted remote user-principal device-id (hex). */
-  listTrustedGatewayPrincipals(): string[] {
-    return this.gatewayTrust.listPrincipals();
-  }
+  readonly listTrustedGatewayPrincipals = (): string[] =>
+    this.gatewayTrust.listPrincipals();
 
   /** Trusts a remote machine device-id (hex, agent-comms#343): every device whose gossiped proof that machine vouches for becomes reachable without being trusted individually. */
   addTrustedGatewayMachine(deviceHex: string): void {
@@ -992,9 +994,8 @@ export class MeshStore implements CommsStore {
   }
 
   /** Every currently trusted remote machine device-id (hex). */
-  listTrustedGatewayMachines(): string[] {
-    return this.gatewayTrust.listMachines();
-  }
+  readonly listTrustedGatewayMachines = (): string[] =>
+    this.gatewayTrust.listMachines();
 
   // -----------------------------------------------------------------------
   // Connection codes (agent-comms#188) -- bootstrapping gateway trust with no existing mesh connection between the two devices
@@ -1035,12 +1036,11 @@ export class MeshStore implements CommsStore {
   }
 
   async removeListener(id: string): Promise<void> {
-    return this.requireTransport().removeListener(id);
+    await this.requireTransport().removeListener(id);
   }
 
-  listListeners(): ListenerInfo[] {
-    return this.requireTransport().listListeners();
-  }
+  readonly listListeners = (): ListenerInfo[] =>
+    this.requireTransport().listListeners();
 
   /** Delegates to the transport's own meshGraph, throwing if the current transport doesn't support it (agent-comms#199) -- CommsTool's own notMeshBacked distinguishes "no MeshStore at all" from this narrower "MeshStore, but a transport without this capability" case by catching the throw, the same way requireTransport's own "no transport set" throw is already handled. */
   meshGraph(): MeshGraph {
@@ -1055,9 +1055,8 @@ export class MeshStore implements CommsStore {
     return requireMeshTrace(this.requireTransport(), target, timeoutMs);
   }
 
-  getNetworkInterfaces(): NetworkInterface[] {
-    return listNetworkInterfaces();
-  }
+  readonly getNetworkInterfaces = (): NetworkInterface[] =>
+    listNetworkInterfaces();
 
   // -----------------------------------------------------------------------
   // Peer versions (agent-comms#198)

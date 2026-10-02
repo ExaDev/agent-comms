@@ -38,16 +38,16 @@ export const ACCOUNT_JOIN_VERB = "account.join";
 const ACCOUNT_JOIN_CAPABILITY_VERB = "account:join";
 
 /** The outcomes sendRoomRequest gives when this side has no route to the device yet, as opposed to an answer from the device. */
-const NO_ROUTE_CODES: ReadonlySet<string> = new Set([
+export const NO_ROUTE_CODES: ReadonlySet<string> = new Set([
   "no_route",
   "not_connected",
 ]);
 const MS_PER_SECOND = 1000;
 /** How long a join waits for a route to the issuing device to come up: a hub dial and its first directory exchange take seconds, so this is generous without leaving a person waiting on an unreachable issuer for long. */
 const JOIN_ROUTE_WAIT_SECONDS = 30;
-const JOIN_ROUTE_WAIT_MS = JOIN_ROUTE_WAIT_SECONDS * MS_PER_SECOND;
+export const JOIN_ROUTE_WAIT_MS = JOIN_ROUTE_WAIT_SECONDS * MS_PER_SECOND;
 /** Between attempts to reach the issuing device: short against the wait, long enough not to spin. */
-const JOIN_ROUTE_RETRY_MS = 250;
+export const JOIN_ROUTE_RETRY_MS = 250;
 
 /** What became of an invite: answered with the account key, or expired unanswered. */
 export type AccountInviteOutcome = "redeemed" | "expired";
