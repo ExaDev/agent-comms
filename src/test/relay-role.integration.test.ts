@@ -69,7 +69,10 @@ test("the machine's elected coordinator serves a relay once it holds an uplink, 
       expect.stringMatching(/^ws:\/\/127\.0\.0\.1:\d+\/$/),
     ]);
     expect(second.transport.relay.offer()).toBeUndefined();
-    expect(second.transport.hub.isConnected).toBe(true);
+    await waitFor(
+      () => second.transport.hub.isConnected,
+      "the second store's hub session is up over the relay",
+    );
     await waitFor(
       () => hub.connectionCount() === 1,
       "only the relay's own uplink is left on the public hub",
