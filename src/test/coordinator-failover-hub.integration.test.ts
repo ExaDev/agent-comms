@@ -2,16 +2,11 @@
  * The hub session across a local coordinator handover (agent-comms#293), against a real relay hub. Every store holds its own hub session from init, so losing the coordinator, gracefully or abruptly, must neither cost a surviving store its session nor make another machine lose sight of it. This is the property the coordinator-only gateway lacked: reachability from another machine followed whichever store won the coordinator role.
  */
 
-import { randomInt } from "node:crypto";
 import { expect, test } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import type { WireMeshTransport } from "../core/wire-mesh-transport.js";
-import { TeardownStack, realHubOverWs } from "./hub-helpers.js";
+import { TeardownStack, freeLocalPort, realHubOverWs } from "./hub-helpers.js";
 import { waitFor, wireTestTransportWithHub } from "./test-transport.js";
-
-/** Start of this file's own reserved port band, clear of the other integration tests' bands. */
-const HUB_FAILOVER_PORT_RANGE_START = 21_900;
-const HUB_FAILOVER_PORT_RANGE_WIDTH = 300;
 
 /** Short enough that a re-advertised agent reaches the other machine within a test's own wait, unlike the production default. */
 const FAST_GOSSIP_INTERVAL_MS = 50;
@@ -54,13 +49,12 @@ async function startMachines(teardown: TeardownStack): Promise<{
 }> {
   const hub = await realHubOverWs();
   teardown.push(hub.close);
-  const port =
-    HUB_FAILOVER_PORT_RANGE_START + randomInt(HUB_FAILOVER_PORT_RANGE_WIDTH);
+  const port = await freeLocalPort();
   const first = await startNode("first", port, hub.url, teardown);
   const second = await startNode("second", port, hub.url, teardown);
   const remote = await startNode(
     "remote",
-    port + HUB_FAILOVER_PORT_RANGE_WIDTH,
+    await freeLocalPort(),
     hub.url,
     teardown,
   );

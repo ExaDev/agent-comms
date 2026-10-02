@@ -11,12 +11,7 @@ import { CommsTool } from "../core/tool.js";
 import { dmRoomPath } from "../core/room-path.js";
 import type { CommsContext } from "../core/tool.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-let nextPort = 25_450;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
+import { freeLocalPort } from "./hub-helpers.js";
 
 interface Party {
   store: MeshStore;
@@ -49,7 +44,7 @@ async function party(port: number, name: string): Promise<Party> {
 }
 
 async function connectedPair(): Promise<{ sender: Party; receiver: Party }> {
-  const port = freshPort();
+  const port = await freeLocalPort();
   const sender = await party(port, "sender");
   const receiver = await party(port, "receiver");
   await waitFor(
@@ -233,7 +228,7 @@ test("whoami reports the user principal, so a person can hand it to someone who 
 });
 
 test("admitting a person's principal lets every one of their devices DM with no decision, from the same grant text", async () => {
-  const port = freshPort();
+  const port = await freeLocalPort();
   const receiver = await party(port, "receiver");
   const dir = fs.mkdtempSync(path.join(tmpdir(), "dm-grant-user-"));
   const first = await partyOfUser(port, "first-device", dir);
@@ -282,7 +277,7 @@ test("admitting a person's principal lets every one of their devices DM with no 
 });
 
 test("a principal-level grant is refused when presented from a device of some other user", async () => {
-  const port = freshPort();
+  const port = await freeLocalPort();
   const receiver = await party(port, "receiver");
   const owner = await party(port, "owner");
   const stranger = await party(port, "stranger");

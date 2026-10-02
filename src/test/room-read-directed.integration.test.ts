@@ -14,12 +14,7 @@ import { loadOrCreateIdentity, saveRoomToken } from "../core/identity-store.js";
 import type { IdentitySlot } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-let nextPort = 20_990;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
+import { freeLocalPort } from "./hub-helpers.js";
 
 async function makeConnectedPair(port: number): Promise<{
   owner: MeshStore;
@@ -88,8 +83,9 @@ async function grantMembership(
 }
 
 test("reading a directed room.send notifies only its own author via room.read", async () => {
-  const { owner, ownerSlot, member, memberSlot } =
-    await makeConnectedPair(freshPort());
+  const { owner, ownerSlot, member, memberSlot } = await makeConnectedPair(
+    await freeLocalPort(),
+  );
 
   try {
     const room = await owner.createRoom({
@@ -150,8 +146,9 @@ test("reading a directed room.send notifies only its own author via room.read", 
 });
 
 test("reading a message from a peer with no room:member token for it does nothing beyond the local readBy update", async () => {
-  const { owner, ownerSlot, member, memberSlot } =
-    await makeConnectedPair(freshPort());
+  const { owner, ownerSlot, member, memberSlot } = await makeConnectedPair(
+    await freeLocalPort(),
+  );
 
   try {
     const room = await owner.createRoom({

@@ -4,14 +4,8 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
-import { realHubOverWs, TeardownStack } from "./hub-helpers.js";
+import { freeLocalPort, realHubOverWs, TeardownStack } from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
-
-let nextPort = 22_500;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
 
 /** Short enough that a gossip re-advertisement fires within a test's own poll budget, matching hub-peer-per-store.integration.test.ts's own choice. */
 const FAST_GOSSIP_INTERVAL_MS = 50;
@@ -45,7 +39,10 @@ describe("gateway trust -- deny by default", () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
-    const a1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    const a1 = new MeshStore({
+      coordinatorPort: await freeLocalPort(),
+      hubUrl: hub.url,
+    });
     await wireTestTransport(a1, {
       presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
     });
@@ -60,7 +57,10 @@ describe("gateway trust -- deny by default", () => {
       tags: [],
     });
 
-    const b1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    const b1 = new MeshStore({
+      coordinatorPort: await freeLocalPort(),
+      hubUrl: hub.url,
+    });
     await wireTestTransport(b1, {
       presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
     });
@@ -75,7 +75,10 @@ describe("gateway trust -- deny by default", () => {
       tags: [],
     });
 
-    const c1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    const c1 = new MeshStore({
+      coordinatorPort: await freeLocalPort(),
+      hubUrl: hub.url,
+    });
     await wireTestTransport(c1, {
       presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
     });
@@ -109,7 +112,10 @@ describe("gateway trust -- deny by default", () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
-    const a1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    const a1 = new MeshStore({
+      coordinatorPort: await freeLocalPort(),
+      hubUrl: hub.url,
+    });
     await wireTestTransport(a1, {
       presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
     });
@@ -125,7 +131,10 @@ describe("gateway trust -- deny by default", () => {
     });
     // a1 trusts nobody at all -- the outbound gate (hasAny) should withhold every advertisement.
 
-    const b1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    const b1 = new MeshStore({
+      coordinatorPort: await freeLocalPort(),
+      hubUrl: hub.url,
+    });
     await wireTestTransport(b1, {
       presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
     });
@@ -141,7 +150,10 @@ describe("gateway trust -- deny by default", () => {
     });
     b1.addTrustedGateway(a1.peerId);
 
-    const c1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    const c1 = new MeshStore({
+      coordinatorPort: await freeLocalPort(),
+      hubUrl: hub.url,
+    });
     await wireTestTransport(c1, {
       presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
     });
@@ -174,7 +186,10 @@ describe("gateway trust -- deny by default", () => {
     const hub = await realHubOverWs();
     cleanups.push(hub.close);
 
-    const a1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    const a1 = new MeshStore({
+      coordinatorPort: await freeLocalPort(),
+      hubUrl: hub.url,
+    });
     await wireTestTransport(a1, {
       presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
     });
@@ -189,7 +204,10 @@ describe("gateway trust -- deny by default", () => {
       tags: [],
     });
 
-    const b1 = new MeshStore({ coordinatorPort: freshPort(), hubUrl: hub.url });
+    const b1 = new MeshStore({
+      coordinatorPort: await freeLocalPort(),
+      hubUrl: hub.url,
+    });
     await wireTestTransport(b1, {
       presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
     });

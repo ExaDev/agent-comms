@@ -19,18 +19,13 @@ import { randomId } from "../core/random-id.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import { DM_SEND_CAPABILITY } from "../core/dm-token-verification.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
+import { freeLocalPort } from "./hub-helpers.js";
 
 /** A device-id, hex-encoded, is always exactly this many characters (32 raw bytes). */
 const DEVICE_ID_HEX_LENGTH = 64;
 
 /** Expiry window for a delegated dm:send token minted directly in these tests (agent-comms#187) -- comfortably longer than any single test run, matching device-membership.test.ts's own TOKEN_TTL_MS convention. */
 const DELEGATED_TOKEN_TTL_MS = 60_000;
-
-let nextPort = 20_990;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
 
 async function makeConnectedPair(
   port: number,
@@ -67,7 +62,7 @@ async function makeConnectedPair(
 }
 
 test("presenting a dm:send grant B minted for A auto-admits A's DM request, with no pending decision for B", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const grant = await b.admitAgentForDm(a.peerId);
@@ -83,7 +78,7 @@ test("presenting a dm:send grant B minted for A auto-admits A's DM request, with
 });
 
 test("presenting a grant minted for a different bearer is refused outright, with no pending decision left open", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     // B admits some other device, never A -- A tries to present that grant as if it were its own.
@@ -104,7 +99,7 @@ test("presenting a grant minted for a different bearer is refused outright, with
 });
 
 test("after B revokes A's dm:send grant, presenting the stale token is refused", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const grant = await b.admitAgentForDm(a.peerId);
@@ -120,7 +115,7 @@ test("after B revokes A's dm:send grant, presenting the stale token is refused",
 });
 
 test("revoking a bearer that was never admitted is a harmless no-op", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     await expect(b.revokeAgentDmAccess(a.peerId)).resolves.toBeUndefined();
@@ -147,7 +142,7 @@ test("admitting a bearer with a positive delegationsRemaining lets that bearer i
   );
   const clock = createSystemClock();
 
-  const b = new MeshStore({ coordinatorPort: freshPort() });
+  const b = new MeshStore({ coordinatorPort: await freeLocalPort() });
   await wireTestTransport(b, { userIdentityOptions: bUserIdentityOptions });
   await b.init();
 
@@ -188,7 +183,7 @@ test("admitting a bearer with no delegationsRemaining given stays non-delegable,
   );
   const clock = createSystemClock();
 
-  const b = new MeshStore({ coordinatorPort: freshPort() });
+  const b = new MeshStore({ coordinatorPort: await freeLocalPort() });
   await wireTestTransport(b, { userIdentityOptions: bUserIdentityOptions });
   await b.init();
 

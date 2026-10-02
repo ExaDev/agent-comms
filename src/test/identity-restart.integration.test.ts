@@ -26,8 +26,8 @@ import { loadOrCreateMachineIdentity } from "../core/machine-identity.js";
 import { openAccountLedger } from "../core/account-ledger-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
+import { freeLocalPort } from "./hub-helpers.js";
 
-const TEST_PORT = 19889;
 /** Attempts {@link waitFor} polls before giving up. */
 const MAX_WAIT_ATTEMPTS = 20;
 /** Delay between {@link waitFor} poll attempts, in milliseconds. */
@@ -46,10 +46,11 @@ interface Peer {
 
 /** A peer wired like a real bridge: WireMeshTransport, device-id peer ID, and a persisted identity slot so createRoom can mint and persist the owner's own room:member grant. */
 async function makePeer(
+  coordinatorPort: number,
   identity: PeerIdentity,
   slot: Readonly<IdentitySlot>,
 ): Promise<Peer> {
-  const store = new MeshStore({ coordinatorPort: TEST_PORT });
+  const store = new MeshStore({ coordinatorPort });
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   store.setTransport(
     new WireMeshTransport(store.events, identity, {
@@ -95,6 +96,7 @@ async function waitFor(
 }
 
 async function main(): Promise<void> {
+  const port = await freeLocalPort();
   const dir = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-restart-test-"));
   const slot: IdentitySlot = { harness: "pi", cwd: "/tmp/project", dir };
   const slotB: IdentitySlot = {
@@ -104,7 +106,7 @@ async function main(): Promise<void> {
   };
 
   // Peer B is a normal ephemeral bridge that stays up throughout.
-  const b = await makePeer(loadOrCreateIdentity(slotB), slotB);
+  const b = await makePeer(port, loadOrCreateIdentity(slotB), slotB);
   await b.store.init();
   await b.store.registerAgent({
     name: "peer-b",
@@ -121,7 +123,7 @@ async function main(): Promise<void> {
 
   // First lifecycle of peer A: persistent identity, registers and creates a room.
   const identityA = loadOrCreateIdentity(slot);
-  const a1 = await makePeer(identityA, slot);
+  const a1 = await makePeer(port, identityA, slot);
   await a1.store.init();
   await a1.store.registerAgent({
     name: "peer-a",
@@ -162,7 +164,7 @@ async function main(): Promise<void> {
   expect(deviceIdToHex(Uint8Array.from(identityA2.deviceId))).toBe(
     deviceIdToHex(Uint8Array.from(identityA.deviceId)),
   );
-  const a2 = await makePeer(identityA2, slot);
+  const a2 = await makePeer(port, identityA2, slot);
   a2.store.onDelivery = (_id, ev) => {
     a2.deliveries.push(ev);
   };

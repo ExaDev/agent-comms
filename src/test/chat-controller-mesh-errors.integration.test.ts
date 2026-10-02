@@ -3,14 +3,8 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatController } from "../bridges/user/controller.js";
-import { unreachableHubUrl } from "./hub-helpers.js";
+import { freeLocalPort, unreachableHubUrl } from "./hub-helpers.js";
 import { waitFor } from "./test-transport.js";
-
-let nextPort = 22_450;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
 
 /** A device-id is a 64-character lowercase hex SHA-256 digest. */
 const DEVICE_ID_HEX_LENGTH = 64;
@@ -31,7 +25,7 @@ describe("ChatController mesh errors", () => {
   async function startController(): Promise<ChatController> {
     // A store with an agent whose machine trusts someone dials the hub, and this hub URL refuses connections, so the store reports a real error as soon as the test trusts a remote device.
     const controller = new ChatController("errors-test", {
-      coordinatorPort: freshPort(),
+      coordinatorPort: await freeLocalPort(),
       hubUrl: await unreachableHubUrl(),
     });
     controllers.push(controller);

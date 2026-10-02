@@ -5,14 +5,9 @@
 import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
+import { freeLocalPort } from "./hub-helpers.js";
 
 const REVOCATION_DRAIN_SETTLE_MS = 300;
-
-let nextPort = 21_410;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
 
 async function makeRegisteredStore(
   port: number,
@@ -50,7 +45,7 @@ async function joinAndAccept(
 }
 
 test("destroying a room revokes every member's own grant for every peer, not just the owner", async () => {
-  const port = freshPort();
+  const port = await freeLocalPort();
   const owner = await makeRegisteredStore(port, "owner");
   const memberA = await makeRegisteredStore(port, "member-a");
   const memberB = await makeRegisteredStore(port, "member-b");

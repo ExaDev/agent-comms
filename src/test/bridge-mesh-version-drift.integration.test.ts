@@ -22,17 +22,6 @@ function tempSlot(harness: string): IdentitySlot {
   return { harness, cwd: "/tmp/project", dir };
 }
 
-// Never rely on the default coordinator port (19876) in a test -- this machine routinely runs other, real agent-comms bridges (this very session's own MCP tool included) that are genuinely listening there, and a solo test store becoming a peer of that unrelated live mesh rather than its own coordinator hangs indefinitely on the first round trip that expects a same-test peer to answer. Matches the ephemeral port range bridge-mesh.test.ts's own multi-peer test already uses for the identical reason.
-const TEST_COORDINATOR_PORT_BASE = 21_100;
-const TEST_COORDINATOR_PORT_RANGE = 100;
-
-function testCoordinatorPort(): number {
-  return (
-    TEST_COORDINATOR_PORT_BASE +
-    Math.floor(Math.random() * TEST_COORDINATOR_PORT_RANGE)
-  );
-}
-
 const POLL_TIMEOUT_MS = 5000;
 const POLL_INTERVAL_MS = 20;
 
@@ -63,7 +52,7 @@ test("createBridgeMesh's tool reports an available update when the injected vers
   const slot = tempSlot("test-harness-drift");
   const newerVersion = "9999.0.0";
   const { store, tool } = await createBridgeMesh(slot, {
-    coordinatorPort: testCoordinatorPort(),
+    coordinatorPort: await freeLocalPort(),
     firstContactPort: await freeLocalPort(),
     fetchLatestVersion: async () => Promise.resolve(newerVersion),
   });
@@ -96,7 +85,7 @@ test("createBridgeMesh's tool reports an available update when the injected vers
 test("createBridgeMesh's tool reports its own version with no update line when no newer release is known", async () => {
   const slot = tempSlot("test-harness-no-drift");
   const { store, tool } = await createBridgeMesh(slot, {
-    coordinatorPort: testCoordinatorPort(),
+    coordinatorPort: await freeLocalPort(),
     firstContactPort: await freeLocalPort(),
     fetchLatestVersion: async () => Promise.resolve(undefined),
   });

@@ -8,12 +8,7 @@ import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-let nextPort = 21_110;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
+import { freeLocalPort } from "./hub-helpers.js";
 
 /** How long to wait for B's own drain loop to have processed the kick's revocation-announce off the wire, since there's no observable side effect from outside B's own store to wait on affirmatively instead. */
 const REVOCATION_ANNOUNCE_SETTLE_DELAY_MS = 300;
@@ -55,7 +50,7 @@ async function joinAndAccept(
 }
 
 test("kicking a member revokes their room:member token for every peer, not just the owner", async () => {
-  const port = freshPort();
+  const port = await freeLocalPort();
   const owner = await makeRegisteredStore(port, "owner");
   const memberA = await makeRegisteredStore(port, "member-a");
   const memberB = await makeRegisteredStore(port, "member-b");

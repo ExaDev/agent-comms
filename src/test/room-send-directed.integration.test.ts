@@ -14,14 +14,9 @@ import { loadOrCreateIdentity, saveRoomToken } from "../core/identity-store.js";
 import type { IdentitySlot } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
+import { freeLocalPort } from "./hub-helpers.js";
 
 const TOKEN_TTL_MS = 60_000;
-let nextPort = 20_970;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
-
 async function makeConnectedPair(port: number): Promise<{
   owner: MeshStore;
   ownerSlot: IdentitySlot;
@@ -87,8 +82,9 @@ async function grantMembership(
 }
 
 test("a directed room.send delivers to the recipient's own onDelivery", async () => {
-  const { owner, ownerSlot, member, memberSlot } =
-    await makeConnectedPair(freshPort());
+  const { owner, ownerSlot, member, memberSlot } = await makeConnectedPair(
+    await freeLocalPort(),
+  );
 
   try {
     const room = await owner.createRoom({
@@ -123,8 +119,9 @@ test("a directed room.send delivers to the recipient's own onDelivery", async ()
 });
 
 test("a directed room.send from a member (not just the owner) also delivers", async () => {
-  const { owner, ownerSlot, member, memberSlot } =
-    await makeConnectedPair(freshPort());
+  const { owner, ownerSlot, member, memberSlot } = await makeConnectedPair(
+    await freeLocalPort(),
+  );
 
   try {
     const room = await owner.createRoom({
@@ -153,7 +150,7 @@ test("a directed room.send from a member (not just the owner) also delivers", as
 });
 
 test("sendRoomMessageDirected throws when this store holds no token for the room", async () => {
-  const { owner, member } = await makeConnectedPair(freshPort());
+  const { owner, member } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const room = await owner.createRoom({

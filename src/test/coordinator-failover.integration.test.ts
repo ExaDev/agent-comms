@@ -2,22 +2,12 @@
  * Coordinator failover over real localhost sockets (agent-comms#285): several MeshStore instances, each on its own WireMeshTransport, with the coordinator's transport torn down abruptly (no handover, the way a killed process behaves) and again gracefully. Asserts what a survivor of either kind of loss actually ends up with -- a rebound coordinator port, a mesh a fresh store can still join, and no dead agent left listed as active. The decision logic these exercise is unit-tested against fakes in coordinator-failover.unit.test.ts.
  */
 
-import { randomInt } from "node:crypto";
 import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import type { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import type { AgentIdentity } from "../core/types.js";
-import { TeardownStack } from "./hub-helpers.js";
+import { TeardownStack, freeLocalPort } from "./hub-helpers.js";
 import { waitFor, wireTestTransportWithHub } from "./test-transport.js";
-
-/** Start of this file's own reserved port band -- clear of the fixed literals sibling integration tests hardcode (19878-19897) and of mesh-e2e's own randomised band (20100-20999), so a random pick here can never collide with one of those. */
-const FAILOVER_PORT_RANGE_START = 21_100;
-/** Width of the reserved band, wide enough that two concurrent runs of this file picking the same port by chance is negligible. */
-const FAILOVER_PORT_RANGE_WIDTH = 700;
-
-function freshCoordinatorPort(): number {
-  return FAILOVER_PORT_RANGE_START + randomInt(FAILOVER_PORT_RANGE_WIDTH);
-}
 
 interface Node {
   name: string;
@@ -67,7 +57,7 @@ async function killWithoutHandover(node: Node): Promise<void> {
 test("a survivor takes over the coordinator port after the coordinator is killed", async () => {
   const teardown = new TeardownStack();
   try {
-    const port = freshCoordinatorPort();
+    const port = await freeLocalPort();
     const first = await startNode("first", port, teardown);
     const second = await startNode("second", port, teardown);
     await waitFor(
@@ -104,7 +94,7 @@ test("a survivor takes over the coordinator port after the coordinator is killed
 test("a killed coordinator's agent stops being listed as active on every survivor", async () => {
   const teardown = new TeardownStack();
   try {
-    const port = freshCoordinatorPort();
+    const port = await freeLocalPort();
     const first = await startNode("first", port, teardown);
     const second = await startNode("second", port, teardown);
     const third = await startNode("third", port, teardown);
@@ -135,7 +125,7 @@ test("a killed coordinator's agent stops being listed as active on every survivo
 test("exactly one of three peers wins the race for the vacated coordinator port", async () => {
   const teardown = new TeardownStack();
   try {
-    const port = freshCoordinatorPort();
+    const port = await freeLocalPort();
     const first = await startNode("first", port, teardown);
     const second = await startNode("second", port, teardown);
     const third = await startNode("third", port, teardown);
@@ -177,7 +167,7 @@ test("exactly one of three peers wins the race for the vacated coordinator port"
 test("a graceful shutdown still hands the coordinator role to the longest-running peer", async () => {
   const teardown = new TeardownStack();
   try {
-    const port = freshCoordinatorPort();
+    const port = await freeLocalPort();
     const first = await startNode("first", port, teardown);
     const second = await startNode("second", port, teardown);
     await waitFor(
@@ -224,7 +214,7 @@ async function waitForStatus(
 }
 
 test("a running agent stays online everywhere when the mesh is told it is offline, as happens to a session the previous coordinator was fronting", async () => {
-  const port = freshCoordinatorPort();
+  const port = await freeLocalPort();
   const teardown = new TeardownStack();
   try {
     const coordinator = await startNode("coordinator", port, teardown);

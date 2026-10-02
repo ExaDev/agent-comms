@@ -7,12 +7,7 @@ import { MeshStore } from "../core/mesh-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { loadRoomTokens } from "../core/identity-store.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-let nextPort = 21_310;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
+import { freeLocalPort } from "./hub-helpers.js";
 
 async function makeRegisteredStore(
   port: number,
@@ -53,7 +48,7 @@ async function joinAndAccept(
 }
 
 test("a member leaving revokes its own grant and notifies the other members", async () => {
-  const port = freshPort();
+  const port = await freeLocalPort();
   const { store: owner } = await makeRegisteredStore(port, "owner");
   const { store: memberA, slot: aSlot } = await makeRegisteredStore(
     port,
@@ -107,7 +102,7 @@ test("a member leaving revokes its own grant and notifies the other members", as
 });
 
 test("declining an invite before ever joining revokes the pushed grant and notifies the owner", async () => {
-  const port = freshPort();
+  const port = await freeLocalPort();
   const { store: owner } = await makeRegisteredStore(port, "owner");
   const { store: target, slot: targetSlot } = await makeRegisteredStore(
     port,

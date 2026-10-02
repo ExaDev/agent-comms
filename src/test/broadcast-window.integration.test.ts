@@ -10,8 +10,8 @@ import { MeshStore } from "../core/mesh-store.js";
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import { generateIdentity } from "../core/identity.js";
 import type { PeerIdentity } from "../core/identity.js";
+import { freeLocalPort } from "./hub-helpers.js";
 
-const TEST_PORT = 19890;
 const POLL_ATTEMPTS = 20;
 const POLL_INTERVAL_MS = 100;
 const sleep = async (ms: number): Promise<void> =>
@@ -20,8 +20,8 @@ const sleep = async (ms: number): Promise<void> =>
   });
 
 /** A peer wired like a real bridge: WireMeshTransport, device-id peer ID. */
-function makePeer(identity: PeerIdentity): MeshStore {
-  const store = new MeshStore({ coordinatorPort: TEST_PORT });
+function makePeer(coordinatorPort: number, identity: PeerIdentity): MeshStore {
+  const store = new MeshStore({ coordinatorPort });
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   store.setTransport(new WireMeshTransport(store.events, identity));
   return store;
@@ -40,8 +40,9 @@ async function waitFor(
 }
 
 async function main(): Promise<void> {
+  const port = await freeLocalPort();
   // A is the coordinator and stays up throughout.
-  const a = makePeer(generateIdentity());
+  const a = makePeer(port, generateIdentity());
   await a.init();
   await a.registerAgent({
     name: "peer-a",
@@ -53,7 +54,7 @@ async function main(): Promise<void> {
   });
 
   // B joins and registers IMMEDIATELY after init() — no settle delay. This is exactly the production bridge pattern that used to race the dials.
-  const b = makePeer(generateIdentity());
+  const b = makePeer(port, generateIdentity());
   await b.init();
   await b.registerAgent({
     name: "peer-b",

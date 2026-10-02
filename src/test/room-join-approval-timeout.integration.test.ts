@@ -6,12 +6,7 @@ import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { dmRoomPath } from "../core/room-path.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
-
-let nextPort = 23_450;
-function freshPort(): number {
-  nextPort += 1;
-  return nextPort;
-}
+import { freeLocalPort } from "./hub-helpers.js";
 
 /** Short enough to keep the test fast, long enough that an immediate accept always lands inside it. */
 const APPROVAL_WINDOW_MS = 600;
@@ -55,7 +50,7 @@ async function makeConnectedPair(
 }
 
 test("an unanswered first sendDm rejects with a timeout once the approval window passes, and nothing is left pending or recorded", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const dmPath = dmRoomPath(a.peerId, b.peerId);
@@ -77,7 +72,7 @@ test("an unanswered first sendDm rejects with a timeout once the approval window
 });
 
 test("a decision inside the window still admits the requester, and the cleared window never fires afterwards", async () => {
-  const { a, b } = await makeConnectedPair(freshPort());
+  const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
     const dmPath = dmRoomPath(a.peerId, b.peerId);
