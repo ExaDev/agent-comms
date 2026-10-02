@@ -14,6 +14,8 @@ const FAST_GOSSIP_INTERVAL_MS = 50;
 interface Node {
   store: MeshStore;
   transport: WireMeshTransport;
+  /** Every error the store reported, so a timed-out wait can say what the store met rather than only that the wait ran out. */
+  errors: Error[];
 }
 
 async function startNode(
@@ -23,6 +25,10 @@ async function startNode(
   teardown: TeardownStack,
 ): Promise<Node> {
   const store = new MeshStore({ coordinatorPort, hubUrl });
+  const errors: Error[] = [];
+  store.onError = (error) => {
+    errors.push(error);
+  };
   const { transport } = await wireTestTransportWithHub(store, {
     presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
   });
@@ -38,7 +44,7 @@ async function startNode(
   teardown.push(async () => {
     await store.shutdown().catch(() => undefined);
   });
-  return { store, transport };
+  return { store, transport, errors };
 }
 
 /** Two stores on one machine (first is the coordinator) and one store on another machine, all on one hub, with both local stores trusting the remote one and the remote one trusting the survivor. */
@@ -113,7 +119,14 @@ test("a surviving store keeps its own hub session and stays visible to another m
     await waitFor(
       () => second.transport.isCoordinator,
       "the survivor rebound the vacated coordinator port",
-    );
+    ).catch((error: unknown) => {
+      const reported = second.errors.map(
+        (reportedError) => reportedError.message,
+      );
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}; the survivor reported: ${JSON.stringify(reported)}`,
+      );
+    });
     expect(second.transport.hub.isConnected).toBe(true);
     await waitFor(
       async () => remoteSees(remote, second.store.peerId),
