@@ -1,3 +1,15 @@
+## [8.9.3](https://github.com/ExaDev/agent-comms/compare/v8.9.2...v8.9.3) (2026-10-02)
+
+### Bug Fixes
+
+* **core:** drop coordinator claims whose term cannot be superseded ([5766555](https://github.com/ExaDev/agent-comms/commit/5766555802a1f883fdd76670b41aed4e338d3cfd))
+
+### Tests
+
+* **bridge:** give every dashboard test its own first-contact port ([d3acc17](https://github.com/ExaDev/agent-comms/commit/d3acc177f539f78054ae2b06bc5ec36e6267198d))
+* **core:** give the bridge-mesh init test its own coordinator port ([415861e](https://github.com/ExaDev/agent-comms/commit/415861eddbfb6b9ecc4481b3c3a97574e7984e15))
+* **core:** wait for the relayed store's hub session instead of asserting it at once ([a1b46a0](https://github.com/ExaDev/agent-comms/commit/a1b46a0bb9458374a08958cb27aeea7ed56e9d47))
+
 ## [8.9.2](https://github.com/ExaDev/agent-comms/compare/v8.9.1...v8.9.2) (2026-10-02)
 
 ### Build
