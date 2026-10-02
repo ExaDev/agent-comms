@@ -30,6 +30,7 @@ import {
 } from "./request-timeouts.js";
 import type { RoomRequestOrigin } from "./room-router.js";
 import { connectWsUrl } from "./ws-dial.js";
+import type { UplinkFeed } from "./relay-uplink.js";
 import { DOMAIN, FRAME_VERB } from "./wire-mesh-transport.js";
 
 /** How long a room-domain request routed through the hub's relay-connect/relay-data pairing waits for a response before giving up. Unlike an ordinary local peer session, a relay-connect naming an unknown target-device is silently dropped by the hub (spec/relay-hub's own documented behaviour -- no error frame exists for "no such device"), so a request to a device that turns out not to be reachable via any gateway would otherwise hang forever rather than surfacing as a normal "not reachable" outcome. */
@@ -71,6 +72,10 @@ export interface HubSessionDeps {
 
 export class HubSession {
   private session: AcceptedMeshSession | undefined;
+  /** The connection the held session runs over, which a relay served by this store takes as its uplink. */
+  private connection: Readonly<Connection> | undefined;
+  /** Where the frames read from the hub are also fed while a relay served by this store has taken the session's connection as its uplink. */
+  private uplink: UplinkFeed | undefined;
   /** The URL this side itself dialled to reach the hub -- tracePath's own local.hubAddress (agent-comms#199), the equivalent of wire-mesh-core's own TracePathOptions.localHubAddress. */
   private url: string | undefined;
   private readonly hubPeersKnown = new Set<string>();
@@ -106,9 +111,32 @@ export class HubSession {
   /** Forgets the held session and releases everyone waiting in whenDisconnected(). */
   private clearSession(): void {
     if (this.session !== undefined) this.deps.untrack(this.session);
+    this.detachUplink();
     this.session = undefined;
+    this.connection = undefined;
     this.url = undefined;
     for (const resolve of this.disconnectWaiters.splice(0)) resolve();
+  }
+
+  /** Lets a relay this store serves take the held session's connection as its uplink: attach receives the connection and returns the feed this session then hands every frame it reads from the hub, so the relay carries its clients over the same connection the session uses. Returns whether a session was held to attach to. The uplink ends with the session, or when detachUplink is called. */
+  attachUplink(
+    attach: (connection: Readonly<Connection>) => UplinkFeed,
+  ): boolean {
+    if (this.connection === undefined) return false;
+    this.detachUplink();
+    this.uplink = attach(this.connection);
+    return true;
+  }
+
+  /** Whether a relay currently has this session's connection as its uplink. */
+  get hasUplink(): boolean {
+    return this.uplink !== undefined;
+  }
+
+  /** Ends the uplink taken from this session, if any. The session itself is untouched. */
+  detachUplink(): void {
+    this.uplink?.end();
+    this.uplink = undefined;
   }
 
   /** Drops the held hub connection. A no-op if none is live (connect() was never called, disconnect() already ran, or the hub itself already closed the session). */
@@ -133,7 +161,10 @@ export class HubSession {
     }
     const identity = await this.deps.identityReady;
     const session = await acceptMeshSession(connection, identity, [DOMAIN], {
-      onFrame: async (conn, frame) => this.deps.onFrame(conn, frame),
+      onFrame: async (conn, frame) => {
+        this.uplink?.feed(frame);
+        await this.deps.onFrame(conn, frame);
+      },
       addresses: [...this.deps.advertisedAddresses],
     });
     if (this.deps.isShuttingDown()) {
@@ -141,6 +172,7 @@ export class HubSession {
       return;
     }
     this.session = session;
+    this.connection = connection;
     this.url = url;
     this.deps.trackForShutdown(session);
     void this.consumeEvents(session, deviceIdToHex(identity.deviceId)).catch(

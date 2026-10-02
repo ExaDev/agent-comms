@@ -4,10 +4,10 @@
  * Who serves: the store holding the elected coordinator role (agent-comms#341), and only while its hub session is to the configured public hub, its uplink. Tying serving to that single-holder role is what keeps one relay per machine: if every store holding an upstream session served, each would see the others' offers, move its own session onto one of them, lose its uplink, stop serving, and fall back to the public hub, over and over. For the same reason an eligible store always holds its session to the public hub and never selects another relay, so relays never chain.
  */
 
-import type { PeerAdvert } from "wire-mesh-core/generated/protocol";
 import { readRelayOffer } from "wire-mesh-core/domain/relay-advert";
 import { HubLink } from "./hub-link.js";
 import type { HubSession } from "./hub-session.js";
+import type { KnownDevices } from "./gossip-directory.js";
 import type { ElectionSessions } from "./election-sessions.js";
 import type { GatewayTrustReader } from "./gateway-trust.js";
 import type { TransportEvents } from "./transport.js";
@@ -20,7 +20,7 @@ export interface RelayRoleDeps {
   /** This store's own device-id (hex). */
   ownDeviceHex: string;
   /** Every device this store has heard gossip from, with its latest advert: where relay offers are read from. */
-  knownDevices: ReadonlyMap<string, Readonly<PeerAdvert>>;
+  knownDevices: Readonly<Pick<KnownDevices, "current">>;
   /** The live machine-local sessions: a device with one is a full member of this store's local mesh. */
   machineLocalPeers: Readonly<Pick<ElectionSessions, "hasPeer">>;
   /** Gateway trust, whose reachability check admits a device learned through a hub. */
@@ -38,6 +38,8 @@ export class RelayRole {
   private transition: Promise<void> = Promise.resolve();
   /** Holds this store's one hub session over the selected relay, once joinHub has named the configured hub. */
   private hubLink: HubLink | undefined;
+  /** The hub session whose connection a served relay takes as its uplink. */
+  private hub: HubSession | undefined;
 
   constructor(private readonly deps: Readonly<RelayRoleDeps>) {}
 
@@ -48,6 +50,7 @@ export class RelayRole {
     shouldConnect: () => boolean,
   ): void {
     if (this.hubLink !== undefined) return;
+    this.hub = hub;
     this.hubLink = new HubLink({
       hub,
       selectUrl: (excluded) => this.selectUrl(publicHubUrl, excluded),
@@ -117,7 +120,7 @@ export class RelayRole {
 
   private offers(): RelayOffer[] {
     const offers: RelayOffer[] = [];
-    for (const [deviceHex, advert] of this.deps.knownDevices) {
+    for (const [deviceHex, advert] of this.deps.knownDevices.current()) {
       const addresses = readRelayOffer(advert);
       if (addresses === undefined) continue;
       offers.push({
@@ -129,23 +132,38 @@ export class RelayRole {
     return offers;
   }
 
+  /** Gives the served relay the hub session's connection as its uplink when it has none, which carries its clients to and from devices on the public hub. A session that was replaced since (the hub dropped it and it was redialled) has no uplink yet, so this runs on every reconcile and not only when the relay starts. */
+  private frontClients(server: RelayServer): void {
+    const hub = this.hub;
+    if (hub === undefined || hub.hasUplink) return;
+    if (hub.attachUplink((connection) => server.attachUplink(connection))) {
+      this.deps.readvertise();
+    }
+  }
+
   private reconcile(): void {
     this.transition = this.transition
       .then(async () => {
         const wanted = this.eligible && this.upstream;
+        if (wanted && this.server !== undefined) this.frontClients(this.server);
         if (wanted && this.server === undefined) {
           const server = new RelayServer({
             host: this.deps.listenHost,
             isAdmitted: (deviceHex) =>
               this.deps.machineLocalPeers.hasPeer(deviceHex) ||
               this.deps.gatewayTrust.isReachable(deviceHex),
+            onError: (error) => {
+              this.deps.events.onError?.(error);
+            },
           });
           await server.start();
           this.server = server;
+          this.frontClients(server);
           this.deps.readvertise();
         } else if (!wanted && this.server !== undefined) {
           const server = this.server;
           this.server = undefined;
+          this.hub?.detachUplink();
           this.deps.readvertise();
           await server.stop();
         }
