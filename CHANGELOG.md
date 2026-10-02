@@ -1,3 +1,13 @@
+## [8.10.1](https://github.com/ExaDev/agent-comms/compare/v8.10.0...v8.10.1) (2026-10-02)
+
+### Refactoring
+
+* **bridge:** let a test start the bare command and the claude-code bridge in isolation ([12d0bd4](https://github.com/ExaDev/agent-comms/commit/12d0bd476d243a80034e859e0e9f0b01d5fa6bbd))
+
+### Tests
+
+* **bridge:** cover the bare command and the claude-code bridge in the stdout channel test ([f0d4a45](https://github.com/ExaDev/agent-comms/commit/f0d4a45cf44aac82b01c1443d5ca8d2f20f393cc))
+
 ## [8.10.0](https://github.com/ExaDev/agent-comms/compare/v8.9.4...v8.10.0) (2026-10-02)
 
 ### Features
