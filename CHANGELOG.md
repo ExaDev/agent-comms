@@ -1,3 +1,9 @@
+## [8.13.10](https://github.com/ExaDev/agent-comms/compare/v8.13.9...v8.13.10) (2026-10-02)
+
+### Documentation
+
+* use the shared badge set and stop rewriting the readme on release ([7a32acf](https://github.com/ExaDev/agent-comms/commit/7a32acf796b21d65d02a7eb102b95f3ef63aa34c))
+
 ## [8.13.9](https://github.com/ExaDev/agent-comms/compare/v8.13.8...v8.13.9) (2026-10-02)
 
 ### Build
