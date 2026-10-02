@@ -1,3 +1,10 @@
+## [8.8.0](https://github.com/ExaDev/agent-comms/compare/v8.7.0...v8.8.0) (2026-10-02)
+
+### Features
+
+* **core:** seed a petname from the label given when a machine joins ([956d28c](https://github.com/ExaDev/agent-comms/commit/956d28cbd6ba6c0df383d864f3803b8f91f5229b)), closes [#360](https://github.com/ExaDev/agent-comms/issues/360)
+* **core:** sign a self display name for the user principal ([5660c4f](https://github.com/ExaDev/agent-comms/commit/5660c4f409090517ec68e8f0e2a78428761bd086)), closes [#359](https://github.com/ExaDev/agent-comms/issues/359)
+
 ## [8.7.0](https://github.com/ExaDev/agent-comms/compare/v8.6.2...v8.7.0) (2026-10-02)
 
 ### Features
