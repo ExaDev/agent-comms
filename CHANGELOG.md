@@ -1,3 +1,9 @@
+## [8.10.0](https://github.com/ExaDev/agent-comms/compare/v8.9.4...v8.10.0) (2026-10-02)
+
+### Features
+
+* **core:** replicate the account grant ledger through the relay hub ([15222c9](https://github.com/ExaDev/agent-comms/commit/15222c93214d6a74d13a994b96bca301b512acc5))
+
 ## [8.9.4](https://github.com/ExaDev/agent-comms/compare/v8.9.3...v8.9.4) (2026-10-02)
 
 ### Bug Fixes
