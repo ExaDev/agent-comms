@@ -1,3 +1,9 @@
+## [8.9.1](https://github.com/ExaDev/agent-comms/compare/v8.9.0...v8.9.1) (2026-10-02)
+
+### Tests
+
+* take coordinator ports from freeLocalPort in integration tests ([33dac2a](https://github.com/ExaDev/agent-comms/commit/33dac2add3e7f388dab638d177e00bcd7ff1918a))
+
 ## [8.9.0](https://github.com/ExaDev/agent-comms/compare/v8.8.1...v8.9.0) (2026-10-02)
 
 ### Features
