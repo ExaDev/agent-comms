@@ -37,6 +37,8 @@ export class RelayServer {
   private readonly hub: RelayHub = createRelayHub({
     identity: { verify: verifyWithPublicKey, deriveDeviceId },
   });
+  /** The devices (hex) each connected client has registered, so an advert for one of them arriving from upstream never displaces the client's own registration. */
+  private readonly clientDevices = new Map<Readonly<Connection>, Set<string>>();
   private readonly http: Server = createServer();
   private readonly wss = new WebSocketServer({ server: this.http });
   private port = 0;
@@ -78,7 +80,15 @@ export class RelayServer {
           error instanceof Error ? error : new Error(String(error)),
         );
       });
-    return uplink.feed;
+    return {
+      feed: (frame) => {
+        const local = this.withoutClientDevices(frame);
+        if (local !== undefined) uplink.feed.feed(local);
+      },
+      end: () => {
+        uplink.feed.end();
+      },
+    };
   }
 
   /** The URLs this relay is reachable at, for its relay offer: loopback always, and each external IPv4 interface too when it listens on every interface. */
@@ -93,6 +103,15 @@ export class RelayServer {
   /** How many clients are connected, admitted or not. */
   connectionCount(): number {
     return this.wss.clients.size;
+  }
+
+  /** How many clients the hub can route to: those whose advert it has accepted. A client that has only just connected is not one until it gossips an advert the hub takes over any fresher one it already holds for that device, which a device moving here from another hub within the same second does not do until its next gossip. */
+  routableClientCount(): number {
+    let routable = 0;
+    for (const connection of this.clientDevices.keys()) {
+      if (this.hub.exportConnection(connection) !== undefined) routable += 1;
+    }
+    return routable;
   }
 
   /** Closes every client and the listener. */
@@ -114,9 +133,16 @@ export class RelayServer {
   /** Drives one connection: filters its gossip to admitted devices, registers it with the hub on its first admitted advert, and hands the hub every frame from then on. */
   private async serve(connection: Readonly<Connection>): Promise<void> {
     let registered = false;
+    const devices = new Set<string>();
+    this.clientDevices.set(connection, devices);
     try {
       for await (const frame of connection.receive()) {
         const admitted = this.admit(frame);
+        if (admitted?.type === "gossip") {
+          for (const advert of admitted.peers) {
+            devices.add(deviceIdToHex(advert.device));
+          }
+        }
         if (admitted === undefined) continue;
         if (!registered) {
           if (admitted.type !== "gossip") continue;
@@ -128,8 +154,23 @@ export class RelayServer {
     } catch {
       // A connection that fails mid-stream is simply gone; its registration is cleaned up below.
     } finally {
+      this.clientDevices.delete(connection);
       if (registered) this.hub.onDisconnect(connection);
     }
+  }
+
+  /** The frame from upstream without the adverts of devices a client of this relay has registered, or undefined when nothing is left of it. An advert that came back round through the upstream hub would otherwise displace the client's own registration whenever it was the fresher, and a relay-connect naming the client would then find no route to it. */
+  private withoutClientDevices(frame: Readonly<Frame>): Frame | undefined {
+    if (frame.type !== "gossip") return frame;
+    const peers = frame.peers.filter((advert) => {
+      const deviceHex = deviceIdToHex(advert.device);
+      for (const devices of this.clientDevices.values()) {
+        if (devices.has(deviceHex)) return false;
+      }
+      return true;
+    });
+    if (peers.length === 0) return undefined;
+    return { ...frame, peers };
   }
 
   /** The frame to pass on, or undefined to drop it: gossip keeps only admitted adverts, and nothing else passes before the connection has gossiped one. */
