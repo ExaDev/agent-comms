@@ -2,119 +2,34 @@
  * Integration tests for the account's replicated grant ledger over a real mesh (agent-comms#344): two machines holding the same account key, each with its own user-identity.json and ledger store, connected directly. A grant minted on one reaches the other by data-domain fan-out, and the other can then revoke it, which a machine-local ledger could never do.
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { createMemoryStorage } from "wire-mesh-core/adapters/memory-storage";
-import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
-import type { KeyValueStorage } from "wire-mesh-core/ports/storage";
-import {
-  createRevocationView,
-  type RevocationView,
-} from "wire-mesh-core/domain/revocation-view";
-import { MeshStore } from "../core/mesh-store.js";
-import type { WireMeshTransport } from "../core/wire-mesh-transport.js";
-import { openAccountLedger } from "../core/account-ledger-store.js";
-import type { AccountLedger } from "../core/account-ledger.js";
 import { generateIdentity } from "../core/identity.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { freeLocalPort, TeardownStack } from "./hub-helpers.js";
-import { waitFor, wireTestTransportWithHub } from "./test-transport.js";
-
-/** Short enough that the ledger's announcement round, which rides the re-advertise cadence, fires many times within a test's wait budget. */
-const FAST_GOSSIP_INTERVAL_MS = 50;
+import { waitFor } from "./test-transport.js";
+import {
+  copyAccountKey,
+  ledgerOn,
+  outstandingDm,
+  removeUserDirs,
+  startMachine,
+  userDir,
+} from "./account-ledger-helpers.js";
 
 const cleanups = new TeardownStack();
-const dirs: string[] = [];
 
 afterEach(async () => {
   await cleanups.run();
-  for (const dir of dirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  removeUserDirs();
 });
-
-function userDir(): string {
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "ledger-replication-user-"));
-  dirs.push(dir);
-  return dir;
-}
-
-/** Gives `toDir` a copy of the account key in `fromDir` and nothing else, as a deliberate copy of the key to a second machine would. */
-function copyAccountKey(fromDir: string, toDir: string): void {
-  const parsed: unknown = JSON.parse(
-    fs.readFileSync(path.join(fromDir, "user-identity.json"), "utf-8"),
-  );
-  if (
-    typeof parsed !== "object" ||
-    parsed === null ||
-    !("privateKey" in parsed) ||
-    !("certificate" in parsed) ||
-    !("expiresAt" in parsed)
-  ) {
-    throw new Error("user-identity.json has no key material");
-  }
-  const { privateKey, certificate, expiresAt } = parsed;
-  fs.writeFileSync(
-    path.join(toDir, "user-identity.json"),
-    JSON.stringify({ privateKey, certificate, expiresAt }),
-    { mode: 0o600 },
-  );
-}
-
-interface Machine {
-  store: MeshStore;
-  transport: WireMeshTransport;
-  revocation: RevocationView;
-  /** Where anything another device offers this one outside its own account ledger is stored. */
-  dataStorage: KeyValueStorage;
-}
 
 async function machine(
   coordinatorPort: number,
   userIdentityDir: string,
   name: string,
-): Promise<Machine> {
-  const store = new MeshStore({ coordinatorPort });
-  const revocation = createRevocationView();
-  const dataStorage = createMemoryStorage();
-  const { transport } = await wireTestTransportWithHub(store, {
-    presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
-    userIdentityOptions: { dir: userIdentityDir },
-    revocation,
-    dataStorage,
-  });
-  await store.init();
-  cleanups.push(async () => store.shutdown());
-  // A visible agent's advert carries its device's membership proof, which is how the other machine recognises it as holding the same account and offers it the ledger.
-  await store.registerAgent({
-    name,
-    harness: "test",
-    cwd: `/test/${name}`,
-    pid: process.pid,
-    visibility: "visible",
-    tags: [],
-  });
-  return { store, transport, revocation, dataStorage };
-}
-
-/** Another handle on a machine's ledger store, the way a second bridge on that machine would open it. */
-async function ledgerOn(dir: string): Promise<AccountLedger> {
-  return openAccountLedger({
-    userIdentityOptions: { dir },
-    userIdentity: loadOrCreateUserIdentity({ dir }),
-    clock: createSystemClock(),
-  });
-}
-
-async function outstandingDm(
-  ledger: AccountLedger,
-  bearer: string,
-): Promise<string[]> {
-  const grants = await ledger.outstandingGrants("dm", bearer);
-  return grants.map((grant) => Buffer.from(grant.tokenId).toString("hex"));
+): ReturnType<typeof startMachine> {
+  return startMachine(cleanups, { coordinatorPort, userIdentityDir, name });
 }
 
 describe("account ledger replication", () => {

@@ -5,6 +5,7 @@
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
+  type DataDomainFrame,
   type DirectoryEntry,
   type IncomingManageRequest,
   type ManageOutcome,
@@ -50,6 +51,11 @@ export interface HubSessionDeps {
     connection: Readonly<Connection>,
     frame: Readonly<Frame>,
   ) => void | Promise<void>;
+  /** Receives each core/data frame that arrived through a relay pairing, with the device (hex) the pairing's secure channel authenticated as its sender, never the one the hub stamps. Frames that arrived directly on the hub connection are the hub mailbox's, not a device's, and never reach it. */
+  onRelayedDataFrame: (
+    fromDeviceHex: string,
+    frame: Readonly<DataDomainFrame>,
+  ) => Promise<void>;
   /** Tracks the session for shutdown -- every session the transport ever creates, always. */
   trackForShutdown: (session: AcceptedMeshSession) => void;
   /** Stops tracking a session that has ended, so a store that redials the hub for as long as it runs does not accumulate dead sessions the transport would keep gossiping to. */
@@ -184,6 +190,7 @@ export class HubSession {
       },
     );
     this.consume(session);
+    this.consumeDataFrames(session);
   }
 
   /**
@@ -231,6 +238,40 @@ export class HubSession {
         });
       }
     })();
+  }
+
+  /** Consumes one hub session's inbound core/data frames until it ends, handing each one that came through a relay pairing to onRelayedDataFrame in arrival order. A failure in the handler is reported and the loop carries on, since one bad frame must not stop every later one. */
+  private consumeDataFrames(session: AcceptedMeshSession): void {
+    void (async () => {
+      for await (const incoming of session.incomingDataFrames) {
+        if (this.deps.isShuttingDown()) break;
+        if (incoming.fromDevice === undefined) continue;
+        await this.deps
+          .onRelayedDataFrame(
+            deviceIdToHex(incoming.fromDevice),
+            incoming.frame,
+          )
+          .catch((error: unknown) => {
+            this.deps.events.onError?.(
+              error instanceof Error ? error : new Error(String(error)),
+            );
+          });
+      }
+    })();
+  }
+
+  /** Sends one core/data frame to a specific hub-reachable device through a relay pairing, sealed end to end with that device. Rejects when no hub session is live. */
+  async sendDataFrame(
+    peerDeviceHex: string,
+    frame: Readonly<DataDomainFrame>,
+  ): Promise<void> {
+    const session = this.session;
+    if (session === undefined) {
+      throw new Error(
+        "HubSession: no live hub session to send a data frame on",
+      );
+    }
+    await session.sendDataFrame(frame, hexToBytes(peerDeviceHex));
   }
 
   /** Sends a real core/room manage-request to a specific hub-reachable peer, through the hub's relay-connect/relay-data pairing -- the local-to-remote leg of agent-comms#155's routing, mirroring MeshTransport.sendRoomRequest's own not_connected/outcome contract so WireMeshTransport can fall back to this uniformly when memberId isn't a local peer session. Bounded by HUB_ROOM_REQUEST_TIMEOUT_MS (see its own doc) since an unreachable target-device is silently dropped by the hub with no error frame, unlike a local session's own connection-level failure. */
