@@ -101,7 +101,7 @@ export class CoordinatorRole {
     await this.deps.requireTransport().sendCoordinatorClaim(handle, frame);
   }
 
-  /** Evaluates a claim a peer gossiped. An accepted claim is gossiped on to every peer so the supersession reaches peers the sender is not connected to, and when it names a holder this side has no session to, this side waits one claim wait for that holder to appear before claiming over it; a stale or tiebreak-losing claim is answered with the incumbent so its sender converges. Receiving the incumbent itself is neither, and is dropped without a reply, which is what stops two peers that agree from echoing it forever. */
+  /** Evaluates a claim a peer gossiped. An accepted claim is gossiped on to every peer so the supersession reaches peers the sender is not connected to, and when it names a holder this side has no session to, this side waits one claim wait for that holder to appear before claiming over it; a stale or tiebreak-losing claim is answered with the incumbent so its sender converges, and a claim whose term no later claim could supersede is dropped unevaluated, neither gossiped nor answered. Receiving the incumbent itself is neither, and is dropped without a reply, which is what stops two peers that agree from echoing it forever. */
   async handleClaim(
     handle: Readonly<ConnectionHandle>,
     frame: Readonly<CoordinatorFrame>,
@@ -112,7 +112,10 @@ export class CoordinatorRole {
       this.cancelClaimWait();
       if (this.incumbentUnreachable()) this.startClaimWait();
       await this.deps.requireTransport().broadcastCoordinatorClaim(frame);
-    } else if (!sameClaim(frame, result.incumbent)) {
+    } else if (
+      result.outcome === "retained" &&
+      !sameClaim(frame, result.incumbent)
+    ) {
       const incumbent = this.election.announceCurrent();
       if (incumbent !== undefined) {
         await this.deps

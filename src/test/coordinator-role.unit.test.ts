@@ -369,3 +369,35 @@ test("a role lost and regained while its duties are still stopping starts them a
   expect(role.isHolder()).toBe(true);
   expect(role.current()).toEqual({ term: 2, holder: selfId });
 });
+
+test("a claim at a term no later claim could supersede is dropped without gossip or reply, leaving the incumbent untouched", async () => {
+  const bus = new Bus();
+  const holder = bus.add(hexId("5"));
+  const peer = bus.add(hexId("9"));
+  await holder.role.claimIfVacant();
+  await bus.settle();
+  holder.sent.length = 0;
+
+  await holder.role.handleClaim(
+    { id: peer.id },
+    claimFor(peer.id, Number.MAX_SAFE_INTEGER),
+  );
+  await bus.settle();
+
+  expect(holder.sent).toEqual([]);
+  expect(holder.role.current()).toEqual({ term: 0, holder: holder.id });
+  expect(holder.role.isHolder()).toBe(true);
+});
+
+test("a vacant store hearing an unsupersedable claim stays vacant", async () => {
+  const bus = new Bus();
+  const listener = bus.add(hexId("5"));
+
+  await listener.role.handleClaim(
+    { id: hexId("9") },
+    claimFor(hexId("9"), Number.MAX_SAFE_INTEGER),
+  );
+
+  expect(listener.role.current()).toBeUndefined();
+  expect(listener.sent).toEqual([]);
+});
