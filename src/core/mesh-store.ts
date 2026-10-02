@@ -50,7 +50,11 @@ import {
 } from "./coordinator-role.js";
 import type { RoomVerbHandler } from "./room-router.js";
 import { DEFAULT_PRESENCE_STALE_AFTER_MS } from "./gossip-extensions.js";
-import type { AgentSelfAdvert, HostedRoomAdvert } from "./gossip-extensions.js";
+import {
+  hostedRoomAdverts,
+  type AgentSelfAdvert,
+  type HostedRoomAdvert,
+} from "./gossip-extensions.js";
 import { peerVersionReaders } from "./peer-versions.js";
 import { listNetworkInterfaces } from "./network-interfaces.js";
 import {
@@ -186,18 +190,7 @@ export class MeshStore implements CommsStore {
 
   /** This store's own currently-hosted public/private rooms, synchronously, in the lightweight gossip-safe shape WireMeshTransport's own hosted-rooms re-advertisement timer reads on every tick -- the write half of P3.8's room-discovery replacement for createRoom's own broadcastPatch (agent-comms#48). Secret rooms are never included (never worth advertising at all), and a room this store has merely replicated via the legacy room_upsert broadcast, rather than owns, is excluded too -- "hosted" means "this device is the one a joiner should actually reach", which only its own owner is. */
   get hostedRooms(): readonly HostedRoomAdvert[] {
-    const result: HostedRoomAdvert[] = [];
-    for (const room of this.rooms.values()) {
-      if (room.owner !== this.peerId) continue;
-      if (room.type !== "public" && room.type !== "private") continue;
-      result.push({
-        path: room.id,
-        name: room.name,
-        type: room.type,
-        description: room.description,
-      });
-    }
-    return result;
+    return hostedRoomAdverts(this.rooms, this.peerId);
   }
 
   /** This store's own gossip-safe agent-identity advert, synchronously, in the shape WireMeshTransport's own gossip re-advertisement timer reads on every tick -- the write half of P3.8's eventual agent register/update/offline retirement (agent-comms#48). undefined before registerAgent has ever run (nothing to advertise yet), or when this agent's own visibility isn't "visible" -- gossip already reaches every connected peer regardless of mesh-approval status (see wire-mesh-transport.ts's own allSessions/quarantine comments), so advertising a hidden or ghost agent's identity this way would leak exactly what those visibility levels exist to withhold. */
