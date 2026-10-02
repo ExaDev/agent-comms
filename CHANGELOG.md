@@ -1,3 +1,9 @@
+## [8.13.6](https://github.com/ExaDev/agent-comms/compare/v8.13.5...v8.13.6) (2026-10-02)
+
+### Bug Fixes
+
+* **core:** send the agent details request under a capability verb the secure channel can decode ([90b3b44](https://github.com/ExaDev/agent-comms/commit/90b3b44af9e552a6f3eaf80faa8a943102ba4d08))
+
 ## [8.13.5](https://github.com/ExaDev/agent-comms/compare/v8.13.4...v8.13.5) (2026-10-02)
 
 ### Documentation
