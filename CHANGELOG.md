@@ -1,3 +1,9 @@
+## [8.13.8](https://github.com/ExaDev/agent-comms/compare/v8.13.7...v8.13.8) (2026-10-02)
+
+### Build
+
+* **deps:** bump web-ui-primitives to 1.1.2 ([ccdbef6](https://github.com/ExaDev/agent-comms/commit/ccdbef6fc4a51de1912df49f348c010e723242ce))
+
 ## [8.13.7](https://github.com/ExaDev/agent-comms/compare/v8.13.6...v8.13.7) (2026-10-02)
 
 ### Documentation
