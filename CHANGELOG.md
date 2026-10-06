@@ -1,3 +1,9 @@
+## [8.13.15](https://github.com/ExaDev/agent-comms/compare/v8.13.14...v8.13.15) (2026-10-06)
+
+### Chores
+
+* upgrade turbo to 2.11.5 and disable agentGuidance ([b1769a8](https://github.com/ExaDev/agent-comms/commit/b1769a8541eb2783344f1c4214bdb22cd8808dab))
+
 ## [8.13.14](https://github.com/ExaDev/agent-comms/compare/v8.13.13...v8.13.14) (2026-10-05)
 
 ### Build
