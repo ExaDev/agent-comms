@@ -111,7 +111,7 @@
   },
   "pi": {
     "extensions": [
-      "./src/bridges/pi/extension.ts"
+      "./dist/bridges/pi/extension.js"
     ]
   },
   "publishConfig": {
