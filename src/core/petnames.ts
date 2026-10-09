@@ -5,8 +5,11 @@
  */
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
+import {
+  resolveDataDir,
+  type DataDirectoryLocation,
+} from "./data-directory.js";
 import { writeFileAtomic } from "./atomic-file.js";
 import { parseDisplayName } from "./display-name.js";
 import { isDeviceIdHex } from "./room-path.js";
@@ -17,7 +20,7 @@ const PETNAMES_FILE_MODE = 0o600;
 /** Owner-only directory, matching identity-store.ts's own base directory. */
 const PETNAMES_DIR_MODE = 0o700;
 
-export interface PetnamesLocation {
+export interface PetnamesLocation extends DataDirectoryLocation {
   /** Directory override; defaults to ~/.agent-comms. */
   dir?: string | undefined;
 }
@@ -50,7 +53,7 @@ export class Petnames {
       location === undefined
         ? undefined
         : path.join(
-            location.dir ?? path.join(os.homedir(), ".agent-comms"),
+            resolveDataDir({ dir: location.dataDir ?? location.dir }),
             "petnames.json",
           );
   }

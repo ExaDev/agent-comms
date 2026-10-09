@@ -94,6 +94,19 @@ Two more keys sit beside the slot files, each generated locally on first use and
 
 **Breaking change (v2):** earlier versions derived the peer ID from the SHA-256 fingerprint of the peer's self-signed X.509 certificate rather than its raw public key. The two values differ for the same keypair, so every agent ID, room membership, and pending delivery queue tied to a pre-v2 identity is orphaned on upgrade — there is no migration path, since existing peers can no longer address an upgraded one under its old ID. A v2 bridge cannot interoperate with a v1 one at all: they no longer agree on wire framing, transport, or peer identity.
 
+### Data directory
+
+Set `AGENT_COMMS_DATA_DIR` before starting a bridge or an `account` command to keep its persistent mesh data in a separate directory. Unset or blank keeps `~/.agent-comms`. The directory holds device, account and machine keys, identity locks, room and group tokens, gateway trust, connection codes, names, room-notice logs and the account grant ledger.
+
+Library callers can set `dataDir` on `IdentitySlot`, which is also used by the identity loaders and lock helpers:
+
+```ts
+const slot = { harness: "my-bridge", cwd: process.cwd(), dataDir: config.dataDir };
+const { store, tool } = await createBridgeMesh(slot);
+```
+
+An explicit `dataDir` wins over the environment and the existing `slot.dir` override. Without `dataDir`, `slot.dir` keeps its existing scope: device-slot files, trust and petnames; account and machine keys use the environment directory or the home-directory default. Bridges using the same data directory share the account and machine keys, while each harness/cwd keeps its own device key. Separate directories create separate identities; existing data is not copied or migrated. This is storage isolation: mesh ports, discovery and the hub are configured separately.
+
 ## Install
 
 ### pi
