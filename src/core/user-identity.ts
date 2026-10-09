@@ -5,8 +5,8 @@
  */
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
+import { resolveDataDir } from "./data-directory.js";
 import type { AccountContents } from "./account-bundle.js";
 import { certifyKeyPair } from "./identity.js";
 import type { PeerIdentity } from "./identity.js";
@@ -62,7 +62,7 @@ function isStoredUserIdentity(value: unknown): value is StoredUserIdentity {
 export function userIdentityDir(
   options?: Readonly<UserIdentityOptions>,
 ): string {
-  return options?.dir ?? path.join(os.homedir(), ".agent-comms");
+  return resolveDataDir({ dir: options?.dir });
 }
 
 function userIdentityFile(options?: Readonly<UserIdentityOptions>): string {

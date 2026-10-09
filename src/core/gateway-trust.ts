@@ -55,12 +55,13 @@ export class GatewayTrust {
     string,
     VerifiedMember & { expiresAt: number }
   >();
-  private readonly location: Readonly<Pick<IdentitySlot, "dir">> | undefined;
+  private readonly location:
+    Readonly<Pick<IdentitySlot, "dir" | "dataDir">> | undefined;
   /** gatewayTrustStamp as of the last load or write this instance made, so refresh() can tell when another process has replaced the file since. */
   private stamp: string | undefined;
 
   /** Constructs the trust boundary, optionally bound to an identity location for persistence (agent-comms#186); any IdentitySlot serves as one, since only its directory matters. See this class's own doc comment for what a location does and doesn't change. Given a location, immediately loads whatever devices and principals are already trusted into the in-memory sets. */
-  constructor(location?: Readonly<Pick<IdentitySlot, "dir">>) {
+  constructor(location?: Readonly<Pick<IdentitySlot, "dir" | "dataDir">>) {
     this.location = location;
     this.load();
   }
