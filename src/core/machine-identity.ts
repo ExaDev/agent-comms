@@ -4,8 +4,8 @@
  * Stored at ~/.agent-comms/machine-identity.json (mode 0600), so it belongs to the OS account whose home directory holds it: every bridge that account runs on the host reads the same file and is vouched for by the same machine key, while another account on the same host mints a machine key of its own and appears as a separate machine. Until the principal becomes portable across hosts (agent-comms#344) this is the same scope as the user principal; a key naming the host across every account needs a signer outside any one account and is agent-comms#367. The key is generated locally on first use and never derived from hardware (issuer-identity-file.ts says why); re-homing a rebuilt host is a deliberate copy of this file.
  */
 
-import * as os from "node:os";
 import * as path from "node:path";
+import { resolveDataDir } from "./data-directory.js";
 import type { PeerIdentity } from "./identity.js";
 import {
   isStoredIssuerKey,
@@ -24,7 +24,7 @@ export interface MachineIdentityOptions {
 export function machineIdentityFile(
   options?: Readonly<MachineIdentityOptions>,
 ): string {
-  const dir = options?.dir ?? path.join(os.homedir(), ".agent-comms");
+  const dir = resolveDataDir({ dir: options?.dir });
   return path.join(dir, "machine-identity.json");
 }
 

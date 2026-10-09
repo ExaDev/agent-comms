@@ -7,8 +7,11 @@
  */
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
+import {
+  resolveDataDir,
+  type DataDirectoryLocation,
+} from "./data-directory.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import {
   generateIdentity,
@@ -27,7 +30,7 @@ import {
 } from "./pid-lock-file.js";
 
 /** A bridge's identity slot: one persisted identity per harness and cwd. */
-export interface IdentitySlot {
+export interface IdentitySlot extends DataDirectoryLocation {
   harness: string;
   cwd: string;
   /** Directory override for tests. */
@@ -166,9 +169,11 @@ function slugifyCwd(cwd: string): string {
   return cwd.replace(/[\\/:*?"<>|]/g, "_");
 }
 
-/** The directory every file this module owns lives in: the slot's own override when it has one, else the per-user `.agent-comms` directory shared by every bridge on the machine. State that belongs to the machine or user rather than to one bridge slot is keyed by this alone. */
-function identityDir(location: Readonly<Pick<IdentitySlot, "dir">>): string {
-  return location.dir ?? path.join(os.homedir(), ".agent-comms");
+/** The directory every file this module owns lives in. */
+function identityDir(
+  location: Readonly<Pick<IdentitySlot, "dir" | "dataDir">>,
+): string {
+  return resolveDataDir({ dir: location.dataDir ?? location.dir });
 }
 
 function slotPaths(slot: Readonly<IdentitySlot>): {
@@ -539,7 +544,7 @@ export function deleteIssuedRoomGrant(
 
 /** The trusted-gateway allowlist lives in one JSON file per identity directory, not per bridge slot: who may see and reach this user's agents from another machine is an operator decision about the machine, and every store on it, including each session the default cc-peer front handles, advertises itself under it. It sits beside the identity files rather than inside one, because the trusted set has no dependency on any slot's key material and GatewayTrust can be constructed before an identity is ever loaded. */
 function gatewayTrustFilePath(
-  location: Readonly<Pick<IdentitySlot, "dir">>,
+  location: Readonly<Pick<IdentitySlot, "dir" | "dataDir">>,
 ): string {
   return path.join(identityDir(location), "gateway-trust.json");
 }
@@ -564,7 +569,7 @@ function isStringArray(value: unknown): value is string[] {
  * The trusted devices, principals (agent-comms#187) and machines (agent-comms#343) persisted for this identity directory before this call, each empty if nothing has been saved or the file is missing or unparseable. A file written before machines were trusted has no machines list and loads with an empty one.
  */
 export function loadGatewayTrust(
-  location: Readonly<Pick<IdentitySlot, "dir">>,
+  location: Readonly<Pick<IdentitySlot, "dir" | "dataDir">>,
 ): LoadedGatewayTrust {
   let parsed: unknown;
   try {
@@ -594,7 +599,7 @@ export function loadGatewayTrust(
  * Persists the complete trusted device, principal and machine sets for this identity directory, surviving a restart. Overwrites whatever was saved before in full: GatewayTrust calls this with its own current sets after every change, having first reloaded the file if another process replaced it, so there is no per-entry partial update to preserve here.
  */
 export function saveGatewayTrust(
-  location: Readonly<Pick<IdentitySlot, "dir">>,
+  location: Readonly<Pick<IdentitySlot, "dir" | "dataDir">>,
   trust: Readonly<LoadedGatewayTrust>,
 ): void {
   const dir = identityDir(location);
@@ -615,7 +620,7 @@ export function saveGatewayTrust(
  * A token that changes whenever the gateway trust file is replaced, or is created or removed, by any process: the file's inode, modification time and size, or a fixed marker while it does not exist. Every save goes through writeFileAtomic, a rename, so each write yields a new inode and the token differs even when two writes land within one timestamp tick. GatewayTrust compares it to notice that another bridge on the machine changed the shared allowlist.
  */
 export function gatewayTrustStamp(
-  location: Readonly<Pick<IdentitySlot, "dir">>,
+  location: Readonly<Pick<IdentitySlot, "dir" | "dataDir">>,
 ): string {
   try {
     const stat = fs.statSync(gatewayTrustFilePath(location));

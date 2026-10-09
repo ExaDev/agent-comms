@@ -32,6 +32,7 @@ import { VersionDriftChecker } from "./version-check.js";
 import { getOwnPackageVersion } from "./package-version.js";
 import { loadOrCreateUserIdentity } from "./user-identity.js";
 import { loadOrCreateMachineIdentity } from "./machine-identity.js";
+import { resolveDataDir } from "./data-directory.js";
 
 export interface BridgeMesh {
   store: MeshStore;
@@ -85,12 +86,10 @@ export function createBridgeMeshSyncFromIdentity(
     fetchLatestVersion,
     firstContactPort = FIRST_CONTACT_PORT,
   } = options ?? {};
-  // The user-principal identity (agent-comms#160) is shared by every bridge on this machine account -- deliberately not scoped to slot, unlike identity above. userIdentityOptions is empty (the default ~/.agent-comms location); every real bridge shares it, and only tests need an override.
-  const userIdentityOptions = {};
+  // Account and machine keys are shared within the configured data directory, not scoped to the device's harness/cwd. Legacy slot.dir still overrides only the device's own files.
+  const userIdentityOptions = { dir: resolveDataDir({ dir: slot.dataDir }) };
   const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
-  // The machine identity (agent-comms#343) is shared by every bridge this OS account runs on the host, from the default ~/.agent-comms location.
-  const machineIdentityOptions = {};
-  const machineIdentity = loadOrCreateMachineIdentity(machineIdentityOptions);
+  const machineIdentity = loadOrCreateMachineIdentity(userIdentityOptions);
   const store = new MeshStore({
     coordinatorPort,
     hubUrl,
@@ -146,7 +145,7 @@ export function createBridgeMeshSyncFromIdentity(
         }),
         userIdentityOptions,
         machineIdentity: await toIdentityPort(machineIdentity),
-        machineIdentityOptions,
+        machineIdentityOptions: userIdentityOptions,
       });
     },
   };
