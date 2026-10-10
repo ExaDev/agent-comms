@@ -13,7 +13,7 @@
     "@orpc/client": "2.0.0-beta.40",
     "@orpc/contract": "2.0.0-beta.35",
     "@orpc/server": "2.0.0-beta.35",
-    "@orpc/tanstack-query": "2.0.0-beta.36",
+    "@orpc/tanstack-query": "2.0.0-beta.42",
     "@tanstack/react-query": "5.103.2",
     "cbor2": "2.3.0",
     "cc-peer": "1.6.8",
