@@ -16,7 +16,7 @@
     "@orpc/tanstack-query": "2.0.0-beta.36",
     "@tanstack/react-query": "5.103.2",
     "cbor2": "2.3.0",
-    "cc-peer": "1.6.6",
+    "cc-peer": "1.6.7",
     "d3-force": "3.0.0",
     "openpgp": "6.3.2",
     "react": "19.3.0",
