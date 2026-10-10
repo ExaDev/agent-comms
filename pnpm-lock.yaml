@@ -207,8 +207,8 @@ importers:
         specifier: 2.3.0
         version: 2.3.0
       cc-peer:
-        specifier: 1.6.6
-        version: 1.6.6
+        specifier: 1.6.7
+        version: 1.6.7
       d3-force:
         specifier: 3.0.0
         version: 3.0.0
@@ -3245,8 +3245,8 @@ packages:
     resolution: {integrity: sha512-76WB3hq8BoaGkMkBVJ27fW5LJU+qqDLEpgRNCG/SYKhODWXpVPOTD4UcUto3IEzYLA52nsvbhb0wabhHDn3qXg==}
     engines: {node: '>=20'}
 
-  cc-peer@1.6.6:
-    resolution: {integrity: sha512-kpbztd9RNEaIUPiKGzcnnM/vk0pSwO7wqwhGrw28LFBZmrpfIZunUx8eXnX2YIe/E+RKnETMoerJNLeJOns3FQ==}
+  cc-peer@1.6.7:
+    resolution: {integrity: sha512-Yy9yTfU6L2WfUYj8sjtXQB66rDwhDUjxO9tbhoeqjLnH9iyhky7WdikRvkphcjy+By88Cbd28l1oproqXjaAVw==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -6591,6 +6591,9 @@ packages:
   zod@4.5.4:
     resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
 
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
@@ -9907,9 +9910,9 @@ snapshots:
     dependencies:
       '@cto.af/wtf8': 0.0.5
 
-  cc-peer@1.6.6:
+  cc-peer@1.6.7:
     dependencies:
-      zod: 4.5.4
+      zod: 4.6.5
 
   ccount@2.0.1: {}
 
@@ -13626,5 +13629,7 @@ snapshots:
   zod@4.4.3: {}
 
   zod@4.5.4: {}
+
+  zod@4.6.5: {}
 
   zwitch@2.0.4: {}
