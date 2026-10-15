@@ -207,8 +207,8 @@ importers:
         specifier: 2.3.0
         version: 2.3.0
       cc-peer:
-        specifier: 1.6.5
-        version: 1.6.5
+        specifier: 1.6.8
+        version: 1.6.8
       d3-force:
         specifier: 3.0.0
         version: 3.0.0
@@ -228,8 +228,8 @@ importers:
         specifier: 1.1.3
         version: 1.1.3(@mantine/core@9.6.1(@mantine/hooks@9.6.1(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       wire-mesh-core:
-        specifier: 4.0.3
-        version: 4.0.3
+        specifier: 4.0.4
+        version: 4.0.4
       ws:
         specifier: 8.21.1
         version: 8.21.1
@@ -3245,8 +3245,8 @@ packages:
     resolution: {integrity: sha512-76WB3hq8BoaGkMkBVJ27fW5LJU+qqDLEpgRNCG/SYKhODWXpVPOTD4UcUto3IEzYLA52nsvbhb0wabhHDn3qXg==}
     engines: {node: '>=20'}
 
-  cc-peer@1.6.5:
-    resolution: {integrity: sha512-Cgen9LoARZrxxh3A5EtykF2VNzGg49E1VGieyf0p2mbWjQobBbSzLX/qbNhpzG4IdEnLwfpcoOEOlDfDa6B+ow==}
+  cc-peer@1.6.8:
+    resolution: {integrity: sha512-2PbhowHYCaKA31vOKaSOztzt5Zg8Kly7IY+UODIDqJwVPvuHRC0jf0S0wDWWFFAKxrI5WFtmeTLHtiAPCcwgeg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -6444,8 +6444,8 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
-  wire-mesh-core@4.0.3:
-    resolution: {integrity: sha512-LWEFA2KQU7v+mAia0aYw6Xq/aB49cpR99i8qUbzsw/iWPt8ji8AqANLNVvxF2qkbiZx21nMt7cLQE/+qEWrjBg==}
+  wire-mesh-core@4.0.4:
+    resolution: {integrity: sha512-erMZ8bf2T1KlujGX/absTd7sUS2sU0io//iRXrjiNCw55D0YUWwDsxAqtoB8fVBqgM0mWyg8r7MblorTp5nyhw==}
 
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
@@ -6590,6 +6590,9 @@ packages:
 
   zod@4.5.4:
     resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
+
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
@@ -9907,9 +9910,9 @@ snapshots:
     dependencies:
       '@cto.af/wtf8': 0.0.5
 
-  cc-peer@1.6.5:
+  cc-peer@1.6.8:
     dependencies:
-      zod: 4.5.4
+      zod: 4.6.5
 
   ccount@2.0.1: {}
 
@@ -13432,7 +13435,7 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  wire-mesh-core@4.0.3:
+  wire-mesh-core@4.0.4:
     dependencies:
       cbor2: 2.3.0
       cddl.js: 1.0.1
@@ -13626,5 +13629,7 @@ snapshots:
   zod@4.4.3: {}
 
   zod@4.5.4: {}
+
+  zod@4.6.5: {}
 
   zwitch@2.0.4: {}

@@ -1,3 +1,27 @@
+## [8.13.20](https://github.com/ExaDev/agent-comms/compare/v8.13.19...v8.13.20) (2026-10-10)
+
+### Build
+
+* **deps:** bump cc-peer to 1.6.8 ([773bcdc](https://github.com/ExaDev/agent-comms/commit/773bcdce402f0255366c44ce4e01a1d340493178))
+
+## [8.13.19](https://github.com/ExaDev/agent-comms/compare/v8.13.18...v8.13.19) (2026-10-10)
+
+### Build
+
+* **deps:** bump cc-peer to 1.6.7 ([671a58a](https://github.com/ExaDev/agent-comms/commit/671a58abe0c0454ef2f0b350b73ecc0c5520f05d))
+
+## [8.13.18](https://github.com/ExaDev/agent-comms/compare/v8.13.17...v8.13.18) (2026-10-10)
+
+### Build
+
+* **deps:** bump wire-mesh-core to 4.0.4 ([9bbf90a](https://github.com/ExaDev/agent-comms/commit/9bbf90a2a5cdcf9eac11d50e18b42d0d80dee5b1))
+
+## [8.13.17](https://github.com/ExaDev/agent-comms/compare/v8.13.16...v8.13.17) (2026-10-10)
+
+### Build
+
+* **deps:** bump cc-peer to 1.6.6 ([03bb741](https://github.com/ExaDev/agent-comms/commit/03bb741707ce66ec0b73f340643bfc4b18f084de))
+
 ## [8.13.16](https://github.com/ExaDev/agent-comms/compare/v8.13.15...v8.13.16) (2026-10-06)
 
 ### Build
