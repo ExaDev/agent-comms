@@ -1,3 +1,9 @@
+## [8.14.2](https://github.com/ExaDev/agent-comms/compare/v8.14.1...v8.14.2) (2026-10-19)
+
+### Bug Fixes
+
+* **core:** explain stale-peer and no-network errors instead of raw socket codes ([49c8d73](https://github.com/ExaDev/agent-comms/commit/49c8d73b9dbd7ca2d3c602399256e714362da5a6)), references [#427](https://github.com/ExaDev/agent-comms/issues/427)
+
 ## [8.14.1](https://github.com/ExaDev/agent-comms/compare/v8.14.0...v8.14.1) (2026-10-19)
 
 ### Build
