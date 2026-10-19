@@ -23,6 +23,8 @@ import type {
 export interface SendRoomMessageOptions {
   replyTo?: string | undefined;
   streamingBehavior?: StreamingBehavior | undefined;
+  /** When true, `MeshStore` also records the message as a signed room-notice in the sender's own log for offline catch-up. `FileStore` ignores it, since it already persists every message. */
+  durable?: boolean | undefined;
 }
 
 /** What became of a room message for one specific member of that room. Delivery is per member because a room send fans out one directed request each, and a member that is unreachable right now is independent of every other. */

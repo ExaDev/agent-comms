@@ -51,11 +51,6 @@ export interface RoomMessagingDeps {
   resolveAgent: (id: string) => Promise<AgentIdentity | undefined>;
 }
 
-/** RoomMessaging's own richer sendRoomMessage options, extending the public CommsStore-facing SendRoomMessageOptions with durable -- see sendRoomMessage's own doc comment for what durable means. */
-export interface RoomMessagingSendOptions extends SendRoomMessageOptions {
-  durable?: boolean;
-}
-
 export class RoomMessaging {
   constructor(private readonly deps: RoomMessagingDeps) {}
 
@@ -70,7 +65,7 @@ export class RoomMessaging {
     roomIdOrName: string,
     from: string,
     content: string,
-    options?: RoomMessagingSendOptions,
+    options?: SendRoomMessageOptions,
   ): Promise<SentRoomMessage> {
     const { replyTo, streamingBehavior, durable } = options ?? {};
     const roomId = this.deps.resolveRoomId(roomIdOrName);
