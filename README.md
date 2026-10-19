@@ -426,6 +426,22 @@ When an agent's status changes (active / idle / busy / offline), all rooms it be
 - Graceful shutdown
 - Stale agent cleanup (the elected coordinator's PID probe)
 
+## Durable room sends from the library
+
+Library callers can opt a room message into the sender's local room-notice log:
+
+```ts
+import type { SendRoomMessageOptions } from "agent-comms";
+
+const options: SendRoomMessageOptions = { durable: true };
+await store.sendRoomMessage(roomId, senderId, "Keep this message", options);
+```
+
+`MeshStore` records a signed room-notice in the sender's own log only when `durable` is `true`.
+This only writes the notice locally: nothing currently announces or fetches these room-notice
+entries. Automatic offline catch-up still needs a catch-up policy and bridge wiring.
+`FileStore` ignores the option because it already persists every message.
+
 ## Delivery status and read receipts
 
 Messages carry a `readBy` field tracking which agents have consumed them. Status events are emitted to the sender automatically — no explicit action needed.
