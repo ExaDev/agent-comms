@@ -1,3 +1,13 @@
+## [8.14.0](https://github.com/ExaDev/agent-comms/compare/v8.13.21...v8.14.0) (2026-10-19)
+
+### Features
+
+* **core:** support isolated mesh data directories ([dbeccec](https://github.com/ExaDev/agent-comms/commit/dbeccecdc91cedd0899212193511f7e95a862c8a))
+
+### Bug Fixes
+
+* **core:** reject relative mesh data directories ([5109522](https://github.com/ExaDev/agent-comms/commit/510952219e556da1112beac68e170e9d1f7f5ea7))
+
 ## [8.13.21](https://github.com/ExaDev/agent-comms/compare/v8.13.20...v8.13.21) (2026-10-19)
 
 ### Bug Fixes
