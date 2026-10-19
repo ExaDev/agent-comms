@@ -1,3 +1,9 @@
+## [8.15.0](https://github.com/ExaDev/agent-comms/compare/v8.14.2...v8.15.0) (2026-10-19)
+
+### Features
+
+* **core:** expose durable room-send options ([2f83f48](https://github.com/ExaDev/agent-comms/commit/2f83f4817cb8fd5c5c3ef09c2834d9faf9851be1))
+
 ## [8.14.2](https://github.com/ExaDev/agent-comms/compare/v8.14.1...v8.14.2) (2026-10-19)
 
 ### Bug Fixes
