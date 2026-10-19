@@ -1,3 +1,9 @@
+## [8.13.21](https://github.com/ExaDev/agent-comms/compare/v8.13.20...v8.13.21) (2026-10-19)
+
+### Bug Fixes
+
+* **admission:** remember hub proof verdicts per proof, not per device ([095cd8a](https://github.com/ExaDev/agent-comms/commit/095cd8af96738ec7313aa4b1e3af275c4dd09d62))
+
 ## [8.13.20](https://github.com/ExaDev/agent-comms/compare/v8.13.19...v8.13.20) (2026-10-10)
 
 ### Build
