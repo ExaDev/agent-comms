@@ -41,7 +41,6 @@ export interface DirectoryAdmissionDeps {
 }
 
 interface Verdict {
-  proof: string;
   ok: boolean;
   /** When a refusal stops being remembered (epoch ms). */
   until: number;
@@ -65,7 +64,7 @@ export function directoryAdmission(
   deps: Readonly<DirectoryAdmissionDeps>,
 ): (entries: readonly DirectoryEntry[]) => Promise<DirectoryEntry[]> {
   const { gatewayTrust, verifyMembership } = deps;
-  /** Keyed by kind and device, since a device can carry one proof of each kind. */
+  /** Keyed by kind, device and proof. A directory event can carry several proofs for one device at once, a stale copy beside a fresh one, so a slot per device would be overwritten by each in turn and every event would verify them all again. */
   const verdicts = new Map<string, Verdict>();
 
   const remember = (key: string, verdict: Readonly<Verdict>): void => {
@@ -123,9 +122,9 @@ export function directoryAdmission(
         const proof = readMembershipProof(entry.advert, field);
         if (proof === undefined) continue;
 
-        const key = `${kind}:${deviceHex}`;
+        const key = `${kind}:${deviceHex}:${proof}`;
         const known = verdicts.get(key);
-        if (known?.proof === proof) {
+        if (known !== undefined) {
           if (known.ok && gatewayTrust.isVouchedBy(deviceHex, kind)) {
             vouched = true;
             continue;
@@ -137,7 +136,6 @@ export function directoryAdmission(
 
         const vouch = await vouchedFor(proof, deviceHex, kind);
         remember(key, {
-          proof,
           ok: vouch !== undefined,
           until: Date.now() + NEGATIVE_VERDICT_TTL_MS,
         });

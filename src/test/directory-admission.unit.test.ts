@@ -146,6 +146,28 @@ describe("directoryAdmission", () => {
     expect(verifyMembership).toHaveBeenCalledTimes(1);
   });
 
+  it("does not re-verify either of two proofs for one device that arrive in alternation", async () => {
+    const trust = new GatewayTrust();
+    trust.addPrincipal(PRINCIPAL);
+    const verifyMembership = verifier(false);
+    const admit = directoryAdmission({ gatewayTrust: trust, verifyMembership });
+
+    await admit([
+      entry("alternating", "proof-a"),
+      entry("alternating", "proof-b"),
+    ]);
+    await admit([
+      entry("alternating", "proof-a"),
+      entry("alternating", "proof-b"),
+    ]);
+    await admit([
+      entry("alternating", "proof-b"),
+      entry("alternating", "proof-a"),
+    ]);
+
+    expect(verifyMembership).toHaveBeenCalledTimes(2);
+  });
+
   it("verifies a device's new proof even while its old one is still good, so its trust is renewed before the old one lapses", async () => {
     const trust = new GatewayTrust();
     trust.addPrincipal(PRINCIPAL);
