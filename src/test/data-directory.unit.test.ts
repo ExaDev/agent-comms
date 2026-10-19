@@ -21,9 +21,30 @@ describe("resolveDataDir", () => {
   });
 
   it("keeps an explicit directory unchanged and ahead of the environment", () => {
-    const dir = "relative folder ";
+    const dir = path.join(os.tmpdir(), "folder with trailing space ");
     expect(
       resolveDataDir({ dir, env: { [DATA_DIR_ENV_VAR]: "another folder" } }),
     ).toBe(dir);
   });
+
+  it.each(["data", "./data", "../data", "~/x", " ~/x "])(
+    "rejects a non-absolute environment directory %j",
+    (value) => {
+      expect(() =>
+        resolveDataDir({ env: { [DATA_DIR_ENV_VAR]: value } }),
+      ).toThrow(`${DATA_DIR_ENV_VAR} or explicit dir must be an absolute path`);
+    },
+  );
+
+  it.each(["", " ", "data", "./data", "../data", "~/x"])(
+    "rejects a non-absolute explicit directory %j without falling back",
+    (dir) => {
+      expect(() =>
+        resolveDataDir({
+          dir,
+          env: { [DATA_DIR_ENV_VAR]: path.join(os.tmpdir(), "valid mesh") },
+        }),
+      ).toThrow(`${DATA_DIR_ENV_VAR} or explicit dir must be an absolute path`);
+    },
+  );
 });
