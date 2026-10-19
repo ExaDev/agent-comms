@@ -98,6 +98,8 @@ Two more keys sit beside the slot files, each generated locally on first use and
 
 Set `AGENT_COMMS_DATA_DIR` before starting a bridge or an `account` command to keep its persistent mesh data in a separate directory. Unset or blank keeps `~/.agent-comms`. The directory holds device, account and machine keys, identity locks, room and group tokens, gateway trust, connection codes, names, room-notice logs and the account grant ledger.
 
+Environment and explicit directories must be absolute paths. Relative paths, literal `~` paths and empty explicit directories are rejected with an error naming `AGENT_COMMS_DATA_DIR`; they are never resolved against the working directory.
+
 Library callers can set `dataDir` on `IdentitySlot`, which is also used by the identity loaders and lock helpers:
 
 ```ts
