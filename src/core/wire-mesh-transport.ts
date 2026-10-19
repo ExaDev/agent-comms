@@ -92,6 +92,7 @@ import type {
 } from "./transport.js";
 import type { PeerIdentity } from "./identity.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
+import { PeerLinkError } from "./peer-link-error.js";
 import {
   DATA_SERVER_ACCEPT,
   DEFAULT_LISTENER_ACCEPT,
@@ -664,11 +665,8 @@ export class WireMeshTransport implements MeshTransport {
     const connection = await this.wireTransport
       .connect(`${host}:${String(peer.port)}`)
       .catch((error: unknown) => {
-        const reason = error instanceof Error ? error.message : String(error);
         this.events.onError?.(
-          new Error(
-            `connectToPeer(${peer.id}, port ${String(peer.port)}): ${reason}`,
-          ),
+          new PeerLinkError("dial", peer.id, peer.port, error),
         );
         return undefined;
       });
@@ -720,9 +718,7 @@ export class WireMeshTransport implements MeshTransport {
     await this.sendFrame(session, buildCommand(message)).catch(
       (error: unknown) => {
         this.events.onError?.(
-          error instanceof Error
-            ? error
-            : new Error(`send(${handle.id}) failed: ${String(error)}`),
+          new PeerLinkError("send", handle.id, undefined, error),
         );
       },
     );
