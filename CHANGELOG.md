@@ -1,3 +1,9 @@
+## [8.15.3](https://github.com/ExaDev/agent-comms/compare/v8.15.2...v8.15.3) (2026-10-21)
+
+### Bug Fixes
+
+* **build:** commit the files eslint --fix changed, fixed ([3ee9f4c](https://github.com/ExaDev/agent-comms/commit/3ee9f4c2d675e4328356b717cde4e6211048476f))
+
 ## [8.15.2](https://github.com/ExaDev/agent-comms/compare/v8.15.1...v8.15.2) (2026-10-21)
 
 ### Bug Fixes
