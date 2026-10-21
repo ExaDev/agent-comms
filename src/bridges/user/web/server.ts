@@ -8,9 +8,7 @@
  * When AGENT_COMMS_WEB_CONSOLE_DIST points at a built wire-mesh web-console (see web-console-static.ts), GET /web-console/* also serves that as an alternate, generic reference-client UI alongside the frontend above.
  */
 
-import * as fs from "node:fs";
 import * as http from "node:http";
-import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { RPCHandler } from "@orpc/server/websocket";
@@ -60,6 +58,11 @@ import {
   type AccessPolicy,
 } from "./web-access.js";
 import { startWebBeacon } from "./web-beacon.js";
+import {
+  createFrontendAssetLoader,
+  FrontendNotBuiltError,
+  type FrontendAssets,
+} from "./web-assets.js";
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
@@ -67,45 +70,33 @@ const HTTP_UNAUTHORIZED = 401;
 const HTTP_NOT_FOUND = 404;
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 const HTTP_NOT_IMPLEMENTED = 501;
+const HTTP_SERVICE_UNAVAILABLE = 503;
 
 // ---------------------------------------------------------------------------
-// Static assets — loaded into memory at module load
+// Static assets — read from the frontend build on first request
 // ---------------------------------------------------------------------------
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const INDEX_HTML = fs.readFileSync(
-  path.join(__dirname, "dist", "index.html"),
-  "utf-8",
+const frontendAssets = createFrontendAssetLoader(
+  fileURLToPath(new URL("./dist", import.meta.url)),
 );
 
-const BUNDLE_JS = fs.readFileSync(
-  path.join(__dirname, "dist", "bundle.js"),
-  "utf-8",
-);
-
-const MESH_WORKER_JS = fs.existsSync(
-  path.join(__dirname, "dist", "mesh-worker.js"),
-)
-  ? fs.readFileSync(path.join(__dirname, "dist", "mesh-worker.js"), "utf-8")
-  : "/* mesh-worker not built */";
-
-const SW_JS = fs.readFileSync(path.join(__dirname, "dist", "sw.js"), "utf-8");
-
-const MANIFEST_JSON = fs.readFileSync(
-  path.join(__dirname, "dist", "manifest.json"),
-  "utf-8",
-);
-
-function loadIcon(filename: string): Buffer {
-  return fs.readFileSync(path.join(__dirname, "dist", "icons", filename));
+/**
+ * The frontend build output, or undefined after answering 503 because the build is absent. The server module is imported by every bridge, so a checkout without the build must still start; only the routes that serve the frontend are unavailable.
+ */
+function frontendOrUnavailable(
+  res: http.ServerResponse,
+): FrontendAssets | undefined {
+  try {
+    return frontendAssets();
+  } catch (error) {
+    if (!(error instanceof FrontendNotBuiltError)) throw error;
+    res.writeHead(HTTP_SERVICE_UNAVAILABLE, {
+      "Content-Type": "text/plain; charset=utf-8",
+    });
+    res.end(error.message);
+    return undefined;
+  }
 }
-
-const ICONS: Record<string, Buffer> = {
-  "icon-96x96.svg": loadIcon("icon-96x96.svg"),
-  "icon-192x192.svg": loadIcon("icon-192x192.svg"),
-  "icon-512x512.svg": loadIcon("icon-512x512.svg"),
-};
 
 // ---------------------------------------------------------------------------
 // Active handles — needed so HTTP handlers can reach the PushManager
@@ -456,52 +447,64 @@ function handleRequest(
     (url.pathname === "/" || url.pathname === "/index.html") &&
     req.method === "GET"
   ) {
+    const assets = frontendOrUnavailable(res);
+    if (assets === undefined) return;
     res.writeHead(HTTP_OK, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(INDEX_HTML);
+    res.end(assets.indexHtml);
     return;
   }
 
   // Frontend JS bundle
   if (url.pathname === "/bundle.js" && req.method === "GET") {
+    const assets = frontendOrUnavailable(res);
+    if (assets === undefined) return;
     res.writeHead(HTTP_OK, {
       "Content-Type": "application/javascript; charset=utf-8",
     });
-    res.end(BUNDLE_JS);
+    res.end(assets.bundleJs);
     return;
   }
 
   // Mesh SharedWorker bundle
   if (url.pathname === "/mesh-worker.js" && req.method === "GET") {
+    const assets = frontendOrUnavailable(res);
+    if (assets === undefined) return;
     res.writeHead(HTTP_OK, {
       "Content-Type": "application/javascript; charset=utf-8",
     });
-    res.end(MESH_WORKER_JS);
+    res.end(assets.meshWorkerJs);
     return;
   }
 
   // Service worker bundle
   if (url.pathname === "/sw.js" && req.method === "GET") {
+    const assets = frontendOrUnavailable(res);
+    if (assets === undefined) return;
     res.writeHead(HTTP_OK, {
       "Content-Type": "application/javascript; charset=utf-8",
       "Service-Worker-Allowed": "/",
     });
-    res.end(SW_JS);
+    res.end(assets.swJs);
     return;
   }
 
   // Web App Manifest
   if (url.pathname === "/manifest.json" && req.method === "GET") {
+    const assets = frontendOrUnavailable(res);
+    if (assets === undefined) return;
     res.writeHead(HTTP_OK, {
       "Content-Type": "application/manifest+json; charset=utf-8",
     });
-    res.end(MANIFEST_JSON);
+    res.end(assets.manifestJson);
     return;
   }
 
   // PWA icons
   if (url.pathname.startsWith("/icons/") && req.method === "GET") {
     const filename = url.pathname.slice("/icons/".length);
-    const icon = ICONS[filename];
+    const assets = frontendOrUnavailable(res);
+    if (assets === undefined) return;
+    const icon = assets.icons[filename];
     if (icon) {
       res.writeHead(HTTP_OK, {
         "Content-Type": "image/svg+xml",
