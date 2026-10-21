@@ -18,6 +18,9 @@ import {
 import type { CoordinatorFrame } from "wire-mesh-core/generated/protocol";
 import type { ConnectionHandle, MeshTransport } from "./transport.js";
 
+/** The longest delay setTimeout accepts: past it the timer fires at once, which would turn a long backoff into a burst of takeovers. */
+const MAX_TIMER_MS = 0x7fff_ffff;
+
 /** The claim this side currently accepts, in the hex form the rest of agent-comms addresses peers by. */
 export interface CoordinatorClaimView {
   term: number;
@@ -60,6 +63,8 @@ export class CoordinatorRole {
   /** Set while this side waits out claimWaitMs for an incumbent it can reach. */
   private claimWait: ReturnType<typeof setTimeout> | undefined;
   private stopped = false;
+  /** Takeovers this side has made in a row on an unreachable incumbent. Each doubles the next claim wait, so roles that cannot all reach one holder raise the term ever more slowly instead of at every wait; accepting a claim whose holder this side can reach ends the run. */
+  private takeoverStreak = 0;
   /** The claim, as `term:holder`, each peer was last answered with. A peer whose view lags keeps sending the claims it knows, and answering each one with the same incumbent only multiplies the traffic: the answer is repeated only when the incumbent changes or the peer's session is enrolled afresh, since the earlier answer may have been lost with the old session. */
   private readonly answered = new Map<string, string>();
 
@@ -115,6 +120,7 @@ export class CoordinatorRole {
       this.answered.clear();
       this.cancelClaimWait();
       if (this.incumbentUnreachable()) this.startClaimWait();
+      else this.takeoverStreak = 0;
       await this.deps.requireTransport().broadcastCoordinatorClaim(frame);
     } else if (
       result.outcome === "retained" &&
@@ -173,13 +179,18 @@ export class CoordinatorRole {
   /** Waits one claim wait, then claims at a raised term and runs onTakeover (when given) if the incumbent is still unreachable. Replaces any wait already running, since only the latest accepted claim decides whether a takeover is due. */
   private startClaimWait(onTakeover?: () => Promise<void>): void {
     this.cancelClaimWait();
+    const wait = Math.min(
+      this.deps.claimWaitMs * 2 ** this.takeoverStreak,
+      MAX_TIMER_MS,
+    );
     this.claimWait = setTimeout(() => {
       this.claimWait = undefined;
       if (this.stopped || !this.incumbentUnreachable()) return;
+      this.takeoverStreak += 1;
       void this.claim()
         .then(async () => onTakeover?.())
         .catch(this.deps.onError);
-    }, this.deps.claimWaitMs);
+    }, wait);
     // Never what keeps a process alive: a store shutting down stops the role anyway.
     this.claimWait.unref();
   }
