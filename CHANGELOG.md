@@ -1,3 +1,14 @@
+## [8.15.4](https://github.com/ExaDev/agent-comms/compare/v8.15.3...v8.15.4) (2026-10-21)
+
+### Bug Fixes
+
+* **core:** close a session that opens after the transport began shutting down ([223b63a](https://github.com/ExaDev/agent-comms/commit/223b63ad53d701191b5dd00be6ab5f74b82a4acc)), references [#372](https://github.com/ExaDev/agent-comms/issues/372)
+* **core:** release a coordinator port bound after the transport began shutting down ([2ac7d7b](https://github.com/ExaDev/agent-comms/commit/2ac7d7b244f12ee7e454949f73092f0cb0416e5a))
+
+### Tests
+
+* **core:** record the hub failover stores' errors after the helper wires its own logger ([4e7d2a6](https://github.com/ExaDev/agent-comms/commit/4e7d2a6556f86d219bbc5118b1ef76ddcd225304))
+
 ## [8.15.3](https://github.com/ExaDev/agent-comms/compare/v8.15.2...v8.15.3) (2026-10-21)
 
 ### Bug Fixes
