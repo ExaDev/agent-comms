@@ -645,6 +645,7 @@ export class WireMeshTransport implements MeshTransport {
       onAccepted: (connection) => {
         void this.handleAcceptedConnection(connection, DEFAULT_LISTENER_ACCEPT);
       },
+      isShuttingDown: () => this.isShuttingDown(),
     });
     this._isCoordinator = true;
     // This side now IS the coordinator, so it answers to no other one: leaving a departed coordinator's device-id here would keep coordinatorPeerId naming a peer whose disconnect has already been dealt with, and would leave a stale device-id where the coordinator role is now this side's own.

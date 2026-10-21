@@ -64,13 +64,14 @@ export async function registerListener(options: {
   return id;
 }
 
-/** Binds the default bootstrap coordinator listener at host:port and tracks it, returning its id -- WireMeshTransport.becomeCoordinator's own bookkeeping, kept beside the registry that owns the same Map. Unlike registerListener this retries a port conflict, because both routes to the coordinator role contend for an occupied port: a graceful handover names its successor while the outgoing coordinator's own listener is still open, and a crash race has every surviving peer attempting the bind at once. The entry is marked default, which is what keeps it out of the advertised-address list and unremovable through removeListener. */
+/** Binds the default bootstrap coordinator listener at host:port and tracks it, returning its id -- WireMeshTransport.becomeCoordinator's own bookkeeping, kept beside the registry that owns the same Map. Unlike registerListener this retries a port conflict, because both routes to the coordinator role contend for an occupied port: a graceful handover names its successor while the outgoing coordinator's own listener is still open, and a crash race has every surviving peer attempting the bind at once. The entry is marked default, which is what keeps it out of the advertised-address list and unremovable through removeListener. Closes the listener it bound and rejects when isShuttingDown() holds once the bind completes, which covers a shutdown that began before the bind as well as one during it: the transport's shutdown() closes only the listeners tracked when it began, so one bound later would hold the port for as long as the process lives (a crash-race contest still running when its store shuts down is one such caller). */
 export async function registerDefaultListener(options: {
   wireTransport: Readonly<Pick<Transport, "listen">>;
   coordinatorListeners: Map<string, TrackedListener>;
   host: string;
   port: number;
   onAccepted: (connection: Readonly<Connection>) => void;
+  isShuttingDown: () => boolean;
 }): Promise<string> {
   const { wireTransport, coordinatorListeners, host, port, onAccepted } =
     options;
@@ -80,6 +81,10 @@ export async function registerDefaultListener(options: {
     BECOME_COORDINATOR_BIND_RETRIES,
     BECOME_COORDINATOR_BIND_RETRY_DELAY_MS,
   );
+  if (options.isShuttingDown()) {
+    await listener.close();
+    throw new Error("becomeCoordinator: the transport has shut down");
+  }
   coordinatorListeners.set(id, {
     listener,
     policy: "full",
