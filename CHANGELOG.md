@@ -1,3 +1,9 @@
+## [8.15.1](https://github.com/ExaDev/agent-comms/compare/v8.15.0...v8.15.1) (2026-10-21)
+
+### Performance
+
+* **core:** recheck the shared trust file once per interval, not per read ([0d21103](https://github.com/ExaDev/agent-comms/commit/0d21103041f33fdebb201d190206013cc0fbf53b))
+
 ## [8.15.0](https://github.com/ExaDev/agent-comms/compare/v8.14.2...v8.15.0) (2026-10-19)
 
 ### Features
