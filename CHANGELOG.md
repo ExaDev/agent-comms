@@ -1,3 +1,9 @@
+## [8.15.5](https://github.com/ExaDev/agent-comms/compare/v8.15.4...v8.15.5) (2026-10-21)
+
+### Bug Fixes
+
+* **core:** back off consecutive coordinator takeovers ([712fab3](https://github.com/ExaDev/agent-comms/commit/712fab322d661e0790ab1bf9c0fbcb5317d2ab7f)), references [#438](https://github.com/ExaDev/agent-comms/issues/438)
+
 ## [8.15.4](https://github.com/ExaDev/agent-comms/compare/v8.15.3...v8.15.4) (2026-10-21)
 
 ### Bug Fixes
