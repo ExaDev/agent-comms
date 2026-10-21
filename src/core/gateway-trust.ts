@@ -9,12 +9,25 @@
  *
  * Principal-keyed trust (agent-comms#187): alongside the bare-device allowlist above, an operator may also trust a user-principal device-id (user-identity.ts) directly -- the root a remote peer's own dm:send-style delegation chain can terminate at, verified the same way device-membership-verification.ts already verifies a device's own group:member chain (`verifyCapabilityToken`'s chain-walk and its `rootIssuer` output). This is purely a second, parallel allowlist: `isTrusted`/`add`/`remove`/`list` keep checking only the bare-device set, unchanged, for a peer with no principal at all -- `isTrustedFor` is the additive entrypoint a caller who has already chain-verified a token uses to decide trust from that verified bearer and chain-root pair, accepting either a directly trusted device or a bearer rooted at a trusted principal. Persisted alongside the bare-device set (agent-comms#186's own persistence, extended here per that issue's own "agent-comms#187 covers what gets stored" framing): loadGatewayTrust/saveGatewayTrust now carry both sets.
  */
+import type { Clock } from "wire-mesh-core/ports/clock";
+import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import type { IdentitySlot, LoadedGatewayTrust } from "./identity-store.js";
 import {
   gatewayTrustStamp,
   loadGatewayTrust,
   saveGatewayTrust,
 } from "./identity-store.js";
+
+const MS_PER_SECOND = 1000;
+const TRUST_FILE_RECHECK_INTERVAL_SECONDS = 1;
+
+/**
+ * How long a read decision may rest on the last look at the trust file before the file is looked at again.
+ *
+ * Every directory entry a node merges asks the trust boundary several questions, so a hub node answers them thousands of times a second, and each used to cost a `stat`. This bound makes the cost one `stat` per interval. It is the longest another process's revocation can go unseen by a read, so it is chosen against the slowest thing a revocation already waits for: a device merged into the directory stays there until the next presence re-advertisement, many seconds on, so a one second bound adds no delay a user could observe to that path while leaving the check far below the rate at which it was being run. Writes never rely on it: each re-reads the file first, so one process cannot overwrite another's change.
+ */
+export const TRUST_FILE_RECHECK_INTERVAL_MS =
+  TRUST_FILE_RECHECK_INTERVAL_SECONDS * MS_PER_SECOND;
 
 /** The read-only slice of GatewayTrust every consumer of the trust boundary actually needs (WireMeshTransport, HubSession, hub-forwarding.ts) -- named so call sites that only ever read trust decisions, never mutate them, don't repeat the same `Pick<GatewayTrust, "isTrusted" | "hasAny" | "isTrustedPrincipal" | "isTrustedFor">` inline at every field/parameter that takes one. */
 export type GatewayTrustReader = Pick<
@@ -44,6 +57,12 @@ export interface VerifiedMember extends Voucher {
   device: string;
 }
 
+/** What a GatewayTrust is built from: where to persist (none for an in-memory boundary) and the clock its trust-file rechecks are paced by. */
+export interface GatewayTrustOptions {
+  location?: Readonly<Pick<IdentitySlot, "dir" | "dataDir">> | undefined;
+  clock?: Clock | undefined;
+}
+
 export class GatewayTrust {
   private readonly trusted = new Set<string>();
   private readonly trustedIssuers: Readonly<Record<GroupKind, Set<string>>> = {
@@ -59,16 +78,21 @@ export class GatewayTrust {
     Readonly<Pick<IdentitySlot, "dir" | "dataDir">> | undefined;
   /** gatewayTrustStamp as of the last load or write this instance made, so refresh() can tell when another process has replaced the file since. */
   private stamp: string | undefined;
+  /** When the file's stamp was last compared, so reads can skip the comparison inside TRUST_FILE_RECHECK_INTERVAL_MS. */
+  private checkedAt: number | undefined;
+  private readonly clock: Clock;
 
   /** Constructs the trust boundary, optionally bound to an identity location for persistence (agent-comms#186); any IdentitySlot serves as one, since only its directory matters. See this class's own doc comment for what a location does and doesn't change. Given a location, immediately loads whatever devices and principals are already trusted into the in-memory sets. */
-  constructor(location?: Readonly<Pick<IdentitySlot, "dir" | "dataDir">>) {
-    this.location = location;
+  constructor(options: Readonly<GatewayTrustOptions> = {}) {
+    this.location = options.location;
+    this.clock = options.clock ?? createSystemClock();
     this.load();
   }
 
   /** Replaces the in-memory sets with whatever the file currently holds, recording the file's stamp. A no-op without a location. Verified members are left alone: they are in memory only and are dropped on their own when their principal stops being trusted. */
   private load(): void {
     if (this.location === undefined) return;
+    this.checkedAt = this.clock.now();
     this.stamp = gatewayTrustStamp(this.location);
     const loaded = loadGatewayTrust(this.location);
     this.trusted.clear();
@@ -85,22 +109,36 @@ export class GatewayTrust {
     }
   }
 
-  /** Reloads from disk when another process has replaced the file since this instance last looked. Called first by every method that reads the sets, so a trust decision is never older than the file. */
+  /** Reloads from disk when another process has replaced the file since this instance last looked, looking at most once per TRUST_FILE_RECHECK_INTERVAL_MS. Called first by every method that only reads the sets, so a trust decision is never older than the file by more than that bound. */
   private refresh(): void {
     if (this.location === undefined) return;
+    const now = this.clock.now();
+    if (
+      this.checkedAt !== undefined &&
+      now - this.checkedAt < TRUST_FILE_RECHECK_INTERVAL_MS
+    ) {
+      return;
+    }
+    this.refreshNow();
+  }
+
+  /** Looks at the file now, whatever the last look was. Every method that changes the sets starts here, because it rewrites the whole file from them: starting from anything older would erase another process's change. */
+  private refreshNow(): void {
+    if (this.location === undefined) return;
+    this.checkedAt = this.clock.now();
     if (gatewayTrustStamp(this.location) !== this.stamp) this.load();
   }
 
   /** Marks a remote device-id (hex, case-insensitive) as trusted: this side will merge its gossiped directory entries, dispatch its relayed requests, and route outbound hub requests to it. Idempotent. Persists the updated set when this instance was constructed with a location. */
   add(deviceHex: string): void {
-    this.refresh();
+    this.refreshNow();
     this.trusted.add(deviceHex.toLowerCase());
     this.persist();
   }
 
   /** Withdraws a previously trusted device-id (hex, case-insensitive). A no-op if it was never trusted. Requests already in flight are unaffected; a directory entry merged from the hub because of this trust alone leaves the transport's view on its next read (KnownDevices, gossip-directory.ts). Persists the updated set when this instance was constructed with a location. */
   remove(deviceHex: string): void {
-    this.refresh();
+    this.refreshNow();
     this.trusted.delete(deviceHex.toLowerCase());
     this.persist();
   }
@@ -185,14 +223,14 @@ export class GatewayTrust {
   }
 
   private addIssuer(kind: GroupKind, deviceHex: string): void {
-    this.refresh();
+    this.refreshNow();
     this.trustedIssuers[kind].add(deviceHex.toLowerCase());
     this.persist();
   }
 
   /** Withdraws trust from one issuer and, in the same act, from every device reachable only through it; the transport's directory drops those devices on its next read (KnownDevices, gossip-directory.ts). */
   private removeIssuer(kind: GroupKind, deviceHex: string): void {
-    this.refresh();
+    this.refreshNow();
     const issuer = deviceHex.toLowerCase();
     this.trustedIssuers[kind].delete(issuer);
     for (const [key, member] of this.verifiedMembers) {

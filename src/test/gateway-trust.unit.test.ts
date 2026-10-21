@@ -5,8 +5,12 @@ import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GatewayTrust } from "../core/gateway-trust.js";
+import {
+  GatewayTrust,
+  TRUST_FILE_RECHECK_INTERVAL_MS,
+} from "../core/gateway-trust.js";
 import type { IdentitySlot } from "../core/identity-store.js";
+import { manualClock } from "./manual-clock.js";
 
 function tempSlot(harness: string): IdentitySlot {
   const dir = fs.mkdtempSync(
@@ -87,16 +91,16 @@ describe("GatewayTrust persistence (agent-comms#186)", () => {
 
   it("constructed with a slot that has never saved a trusted set, starts empty", () => {
     const slot = tempSlot("pi");
-    const trust = new GatewayTrust(slot);
+    const trust = new GatewayTrust({ location: slot });
     expect(trust.hasAny()).toBe(false);
     expect(trust.list()).toEqual([]);
   });
 
   it("loads a previously persisted trusted set on construction", () => {
     const slot = tempSlot("pi");
-    new GatewayTrust(slot).add("aabbcc");
+    new GatewayTrust({ location: slot }).add("aabbcc");
 
-    const restarted = new GatewayTrust(slot);
+    const restarted = new GatewayTrust({ location: slot });
 
     expect(restarted.isTrusted("aabbcc")).toBe(true);
     expect(restarted.list()).toEqual(["aabbcc"]);
@@ -104,31 +108,31 @@ describe("GatewayTrust persistence (agent-comms#186)", () => {
 
   it("persists an add immediately, visible to a fresh instance for the same slot without either instance restarting", () => {
     const slot = tempSlot("pi");
-    const trust = new GatewayTrust(slot);
+    const trust = new GatewayTrust({ location: slot });
     trust.add("aabbcc");
 
-    const other = new GatewayTrust(slot);
+    const other = new GatewayTrust({ location: slot });
 
     expect(other.isTrusted("aabbcc")).toBe(true);
   });
 
   it("persists a remove, so a restarted instance no longer trusts the removed device", () => {
     const slot = tempSlot("pi");
-    const first = new GatewayTrust(slot);
+    const first = new GatewayTrust({ location: slot });
     first.add("aabbcc");
     first.add("ddeeff");
     first.remove("aabbcc");
 
-    const restarted = new GatewayTrust(slot);
+    const restarted = new GatewayTrust({ location: slot });
 
     expect(restarted.list()).toEqual(["ddeeff"]);
   });
 
   it("normalises hex case in the persisted set the same way the in-memory set is normalised", () => {
     const slot = tempSlot("pi");
-    new GatewayTrust(slot).add("AaBbCc");
+    new GatewayTrust({ location: slot }).add("AaBbCc");
 
-    const restarted = new GatewayTrust(slot);
+    const restarted = new GatewayTrust({ location: slot });
 
     expect(restarted.list()).toEqual(["aabbcc"]);
   });
@@ -136,25 +140,29 @@ describe("GatewayTrust persistence (agent-comms#186)", () => {
   it("two identity directories keep separate trust", () => {
     const slotA = tempSlot("pi");
     const slotB = tempSlot("pi");
-    new GatewayTrust(slotA).add("aabbcc");
+    new GatewayTrust({ location: slotA }).add("aabbcc");
 
-    expect(new GatewayTrust(slotB).list()).toEqual([]);
+    expect(new GatewayTrust({ location: slotB }).list()).toEqual([]);
   });
 
   it("stores under different harnesses share one trusted set when they share an identity directory", () => {
     const pi = tempSlot("pi");
     const claudeCode: IdentitySlot = { ...pi, harness: "claude-code" };
-    new GatewayTrust(pi).add("aabbcc");
+    new GatewayTrust({ location: pi }).add("aabbcc");
 
-    expect(new GatewayTrust(claudeCode).isTrusted("aabbcc")).toBe(true);
+    expect(new GatewayTrust({ location: claudeCode }).isTrusted("aabbcc")).toBe(
+      true,
+    );
   });
 
   it("a running instance sees a device another instance trusted after it was constructed", () => {
     const slot = tempSlot("pi");
-    const running = new GatewayTrust(slot);
+    const clock = manualClock();
+    const running = new GatewayTrust({ location: slot, clock: clock });
     expect(running.hasAny()).toBe(false);
 
-    new GatewayTrust(slot).add("aabbcc");
+    new GatewayTrust({ location: slot }).add("aabbcc");
+    clock.advance(TRUST_FILE_RECHECK_INTERVAL_MS);
 
     expect(running.hasAny()).toBe(true);
     expect(running.isTrusted("aabbcc")).toBe(true);
@@ -163,10 +171,12 @@ describe("GatewayTrust persistence (agent-comms#186)", () => {
 
   it("a running instance stops trusting a device another instance removed", () => {
     const slot = tempSlot("pi");
-    const running = new GatewayTrust(slot);
+    const clock = manualClock();
+    const running = new GatewayTrust({ location: slot, clock: clock });
     running.add("aabbcc");
 
-    new GatewayTrust(slot).remove("aabbcc");
+    new GatewayTrust({ location: slot }).remove("aabbcc");
+    clock.advance(TRUST_FILE_RECHECK_INTERVAL_MS);
 
     expect(running.isTrusted("aabbcc")).toBe(false);
     expect(running.list()).toEqual([]);
@@ -174,9 +184,11 @@ describe("GatewayTrust persistence (agent-comms#186)", () => {
 
   it("a running instance sees a principal another instance trusted", () => {
     const slot = tempSlot("pi");
-    const running = new GatewayTrust(slot);
+    const clock = manualClock();
+    const running = new GatewayTrust({ location: slot, clock: clock });
 
-    new GatewayTrust(slot).addPrincipal("112233");
+    new GatewayTrust({ location: slot }).addPrincipal("112233");
+    clock.advance(TRUST_FILE_RECHECK_INTERVAL_MS);
 
     expect(running.isTrustedPrincipal("112233")).toBe(true);
     expect(running.listPrincipals()).toEqual(["112233"]);
@@ -184,24 +196,29 @@ describe("GatewayTrust persistence (agent-comms#186)", () => {
 
   it("a change applies on top of another instance's earlier change instead of overwriting it", () => {
     const slot = tempSlot("pi");
-    const first = new GatewayTrust(slot);
-    const second = new GatewayTrust(slot);
+    const clock = manualClock();
+    const first = new GatewayTrust({ location: slot, clock: clock });
+    const second = new GatewayTrust({ location: slot });
     first.add("aabbcc");
 
     second.add("ddeeff");
+    clock.advance(TRUST_FILE_RECHECK_INTERVAL_MS);
 
     expect(first.list()).toEqual(["aabbcc", "ddeeff"]);
-    expect(new GatewayTrust(slot).list()).toEqual(["aabbcc", "ddeeff"]);
+    expect(new GatewayTrust({ location: slot }).list()).toEqual([
+      "aabbcc",
+      "ddeeff",
+    ]);
   });
 
   // Principal persistence (agent-comms#187) -- extends #186's own device-only persistence to the second, parallel principal allowlist, per #186's own issue text naming #187 as the one that decides what gets stored.
   it("persists a trusted principal, surviving a restart alongside the bare-device set", () => {
     const slot = tempSlot("pi");
-    const first = new GatewayTrust(slot);
+    const first = new GatewayTrust({ location: slot });
     first.add("aabbcc");
     first.addPrincipal("112233");
 
-    const restarted = new GatewayTrust(slot);
+    const restarted = new GatewayTrust({ location: slot });
 
     expect(restarted.list()).toEqual(["aabbcc"]);
     expect(restarted.listPrincipals()).toEqual(["112233"]);
@@ -209,12 +226,12 @@ describe("GatewayTrust persistence (agent-comms#186)", () => {
 
   it("persists a principal removal independently of the bare-device set", () => {
     const slot = tempSlot("pi");
-    const first = new GatewayTrust(slot);
+    const first = new GatewayTrust({ location: slot });
     first.addPrincipal("112233");
     first.addPrincipal("445566");
     first.removePrincipal("112233");
 
-    const restarted = new GatewayTrust(slot);
+    const restarted = new GatewayTrust({ location: slot });
 
     expect(restarted.listPrincipals()).toEqual(["445566"]);
   });
@@ -518,9 +535,9 @@ describe("GatewayTrust: machine-keyed trust (agent-comms#343)", () => {
 
   it("persists trusted machines for a fresh instance, and counts one as a reason to advertise", () => {
     const slot = tempSlot("pi");
-    new GatewayTrust(slot).addMachine(MACHINE.toUpperCase());
+    new GatewayTrust({ location: slot }).addMachine(MACHINE.toUpperCase());
 
-    const restarted = new GatewayTrust(slot);
+    const restarted = new GatewayTrust({ location: slot });
 
     expect(restarted.listMachines()).toEqual([MACHINE]);
     expect(restarted.listPrincipals()).toEqual([]);
