@@ -5,6 +5,7 @@
 import * as net from "node:net";
 import { test, describe, expect, vi } from "vitest";
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
+import type { Connection } from "wire-mesh-core/ports/transport";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
@@ -295,6 +296,51 @@ describe("WireMeshTransport shutdown -- coordinator listener release ordering (a
     } finally {
       await connection?.close().catch(() => undefined);
       await transportA.shutdown();
+    }
+  });
+});
+
+describe("WireMeshTransport shutdown -- dials still in flight (agent-comms#372)", () => {
+  /** A coordinator lost abruptly can have its own data dial to a survivor still connecting when its transport shuts down. If that connection is left open, the survivor keeps a live session to the lost coordinator and never learns it departed, so it never contests the vacated port. */
+  test("closes a data dial whose connection completes after shutdown has begun", async () => {
+    const identityA = generateIdentity();
+    const identityB = generateIdentity();
+    const idB = await peerId(await toIdentityPort(identityB));
+    const transportA = new WireMeshTransport(noopTransportEvents(), identityA);
+    const serverB = createTlsTransport({
+      certificatePem: identityB.certificate,
+      privateKeyPem: identityB.privateKey,
+    });
+    // Held so the test can close B's end itself: a listener's close() waits for every connection it accepted, so a connection A leaves open would otherwise hang the cleanup rather than fail the wait below.
+    let acceptedByB: Readonly<Connection> | undefined;
+    const listenerB = await serverB.listen("127.0.0.1:0", (connection) => {
+      acceptedByB = connection;
+    });
+    try {
+      const portB = Number(listenerB.address.split(":").at(-1));
+      // Started together, so shutdown() has begun before the dial's TLS handshake can complete.
+      const dialling = transportA.connectToPeer(
+        { id: idB, port: portB, startedAt: new Date().toISOString() },
+        await peerId(await toIdentityPort(identityA)),
+      );
+      const stopping = transportA.shutdown();
+      await dialling;
+      await stopping;
+
+      await waitFor(() => acceptedByB !== undefined, "B accepts A's dial");
+      const connection = acceptedByB;
+      if (connection === undefined) throw new Error("expected B's connection");
+      let ended = false;
+      void (async () => {
+        for await (const _frame of connection.receive()) {
+          // Nothing to read: only the end of the stream matters.
+        }
+        ended = true;
+      })();
+      await waitFor(() => ended, "B sees A's late dial closed");
+    } finally {
+      await acceptedByB?.close();
+      await listenerB.close();
     }
   });
 });
