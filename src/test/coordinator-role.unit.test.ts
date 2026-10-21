@@ -10,6 +10,14 @@ import { ROOM_REQUEST_TIMEOUT_MS } from "../core/request-timeouts.js";
 import type { ConnectionHandle } from "../core/transport.js";
 
 const DEVICE_ID_HEX_LENGTH = 64;
+/** The term a holder is raised to before a lower-term claim from a lagging peer counts as stale. */
+const RAISED_TERM = 2;
+/** A term above RAISED_TERM, as a later takeover would use. */
+const LATER_TERM = RAISED_TERM + 1;
+/** How many times a lagging peer repeats the same stale claim. */
+
+/** Answers a holder has sent after: one to the first peer, one to the second, none to the first's repeat. */
+const FIRST_ANSWERS = 2;
 
 interface Member {
   id: string;
@@ -186,6 +194,74 @@ test("a stale claim is answered with the incumbent, and its sender converges on 
     holder: holder.id,
   });
   expect(bus.holders()).toEqual([holder.id]);
+});
+
+test("a peer that keeps sending the same stale claim is answered with the incumbent once, not once per claim", async () => {
+  const bus = new Bus();
+  const holder = bus.add(hexId("9"));
+  await holder.role.claimIfVacant();
+  await holder.role.handleClaim(
+    { id: holder.id },
+    claimFor(holder.id, RAISED_TERM),
+  );
+  holder.sent.length = 0;
+  const stale = claimFor(hexId("1"), 0);
+
+  for (let repeat = 0; repeat < DEVICE_ID_HEX_LENGTH; repeat += 1) {
+    await holder.role.handleClaim({ id: hexId("1") }, stale);
+  }
+
+  expect(holder.sent).toEqual([claimFor(holder.id, RAISED_TERM)]);
+});
+
+test("each peer is answered once per incumbent, and again once the incumbent changes", async () => {
+  const bus = new Bus();
+  const holder = bus.add(hexId("9"));
+  await holder.role.claimIfVacant();
+  await holder.role.handleClaim(
+    { id: holder.id },
+    claimFor(holder.id, RAISED_TERM),
+  );
+  holder.sent.length = 0;
+  const staleFromOne = claimFor(hexId("1"), 0);
+  const staleFromTwo = claimFor(hexId("2"), 0);
+  await holder.role.handleClaim({ id: hexId("1") }, staleFromOne);
+  await holder.role.handleClaim({ id: hexId("2") }, staleFromTwo);
+  await holder.role.handleClaim({ id: hexId("1") }, staleFromOne);
+  expect(holder.sent).toEqual([
+    claimFor(holder.id, RAISED_TERM),
+    claimFor(holder.id, RAISED_TERM),
+  ]);
+
+  await holder.role.handleClaim(
+    { id: hexId("3") },
+    claimFor(hexId("3"), LATER_TERM + 1),
+  );
+  holder.sent.length = 0;
+  await holder.role.handleClaim({ id: hexId("1") }, staleFromOne);
+  await holder.role.handleClaim({ id: hexId("1") }, staleFromOne);
+
+  expect(holder.sent).toEqual([claimFor(hexId("3"), LATER_TERM + 1)]);
+});
+
+test("a peer whose session was enrolled afresh is answered again, since its earlier answer may have been lost with the old session", async () => {
+  const bus = new Bus();
+  const holder = bus.add(hexId("9"));
+  await holder.role.claimIfVacant();
+  await holder.role.handleClaim(
+    { id: holder.id },
+    claimFor(holder.id, RAISED_TERM),
+  );
+  holder.sent.length = 0;
+  const stale = claimFor(hexId("1"), 0);
+  await holder.role.handleClaim({ id: hexId("1") }, stale);
+  await holder.role.handleClaim({ id: hexId("1") }, stale);
+  expect(holder.sent).toHaveLength(1);
+
+  await holder.role.announceTo({ id: hexId("1") });
+  await holder.role.handleClaim({ id: hexId("1") }, stale);
+
+  expect(holder.sent).toHaveLength(FIRST_ANSWERS + 1);
 });
 
 test("two stores that agree on the incumbent never echo it back and forth", async () => {
