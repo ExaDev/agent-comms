@@ -84,6 +84,12 @@
   },
   "files": [
     "dist",
+    "src",
+    "!src/test",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
+    "!src/bridges/user/web/e2e",
+    "!src/bridges/user/web/frontend",
     ".claude-plugin/",
     "commands/",
     "hooks/"
