@@ -1,3 +1,14 @@
+## [8.15.2](https://github.com/ExaDev/agent-comms/compare/v8.15.1...v8.15.2) (2026-10-21)
+
+### Bug Fixes
+
+* **core:** answer a lagging peer's stale claim once per incumbent ([c074881](https://github.com/ExaDev/agent-comms/commit/c074881cb76590809e73cc49dc22772b971908fa)), references [#434](https://github.com/ExaDev/agent-comms/issues/434)
+* **core:** keep at most one coordinator claim queued per session ([01de04b](https://github.com/ExaDev/agent-comms/commit/01de04b27c56c0e93a8e5c593d294b3a136adeb6)), references [#434](https://github.com/ExaDev/agent-comms/issues/434)
+
+### Build
+
+* **deps:** bump wire-mesh-core to 4.0.6 ([69db2a5](https://github.com/ExaDev/agent-comms/commit/69db2a5db2ada0917ede57be0147ad69adae7b98))
+
 ## [8.15.1](https://github.com/ExaDev/agent-comms/compare/v8.15.0...v8.15.1) (2026-10-21)
 
 ### Performance
