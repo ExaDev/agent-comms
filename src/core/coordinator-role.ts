@@ -60,6 +60,8 @@ export class CoordinatorRole {
   /** Set while this side waits out claimWaitMs for an incumbent it can reach. */
   private claimWait: ReturnType<typeof setTimeout> | undefined;
   private stopped = false;
+  /** The claim, as `term:holder`, each peer was last answered with. A peer whose view lags keeps sending the claims it knows, and answering each one with the same incumbent only multiplies the traffic: the answer is repeated only when the incumbent changes or the peer's session is enrolled afresh, since the earlier answer may have been lost with the old session. */
+  private readonly answered = new Map<string, string>();
 
   constructor(private readonly deps: Readonly<CoordinatorRoleDeps>) {}
 
@@ -96,6 +98,7 @@ export class CoordinatorRole {
 
   /** Tells a peer whose machine-local session was just enrolled which claim this side accepts, so a joiner learns the incumbent instead of claiming over it. A no-op while this side knows of none. */
   async announceTo(handle: Readonly<ConnectionHandle>): Promise<void> {
+    this.answered.delete(handle.id);
     const frame = this.electionInstance?.announceCurrent();
     if (frame === undefined) return;
     await this.deps.requireTransport().sendCoordinatorClaim(handle, frame);
@@ -109,6 +112,7 @@ export class CoordinatorRole {
     if (this.stopped) return;
     const result = this.election.evaluate(frame);
     if (result.outcome === "accepted") {
+      this.answered.clear();
       this.cancelClaimWait();
       if (this.incumbentUnreachable()) this.startClaimWait();
       await this.deps.requireTransport().broadcastCoordinatorClaim(frame);
@@ -117,7 +121,9 @@ export class CoordinatorRole {
       !sameClaim(frame, result.incumbent)
     ) {
       const incumbent = this.election.announceCurrent();
-      if (incumbent !== undefined) {
+      const answer = `${String(result.incumbent.term)}:${deviceIdToHex(result.incumbent.coordinator)}`;
+      if (incumbent !== undefined && this.answered.get(handle.id) !== answer) {
+        this.answered.set(handle.id, answer);
         await this.deps
           .requireTransport()
           .sendCoordinatorClaim(handle, incumbent);
