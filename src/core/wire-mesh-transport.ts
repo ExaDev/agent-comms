@@ -390,10 +390,6 @@ export class WireMeshTransport implements MeshTransport {
   ): Promise<void> {
     const { policy, fireOnPeerConnected, requiresApproval, machineLocal } =
       accept;
-    if (this.shutDown) {
-      await connection.close();
-      return;
-    }
     const peerDeviceId = connection.peerDeviceId;
     if (peerDeviceId === undefined) {
       // No certificate presented at all -- nothing to authenticate this peer against.
@@ -402,10 +398,7 @@ export class WireMeshTransport implements MeshTransport {
     }
     const deviceIdHex = deviceIdToHex(peerDeviceId);
     const session = await this.openSession(connection);
-    if (this.isShuttingDown()) {
-      await session.close();
-      return;
-    }
+    if (session === undefined) return;
     // ConnectionHandle.policy is `?: ListenerPolicy`, not `?: ListenerPolicy | undefined` -- under exactOptionalPropertyTypes these are genuinely different types, so the key must be entirely absent rather than present-with-undefined-value when this listener has no policy of its own.
     const handle: ConnectionHandle = {
       id: deviceIdHex,
@@ -509,17 +502,22 @@ export class WireMeshTransport implements MeshTransport {
     })();
   }
 
-  /** Opens a mesh session over an already-established connection, wired to this transport's own frame dispatch and advertised addresses. Every session this transport owns is built exactly this way, whether the connection was accepted by a listener or dialled at a peer, at the coordinator, or at a remote gateway, so the wiring lives here rather than being restated at each call site. */
+  /** Opens a mesh session over an already-established connection, wired to this transport's own frame dispatch and advertised addresses. Every session this transport owns is built exactly this way, whether the connection was accepted by a listener or dialled at a peer, at the coordinator, or at a remote gateway, so the wiring lives here rather than being restated at each call site. Resolves undefined, with the session closed, when shutdown() has begun by the time the session is open, whether it began before the connection arrived or while the session was opening: shutdown() closes only the sessions it can see, so one opened after it started would stay open, and its peer would never learn that this side had gone (agent-comms#372). */
   private async openSession(
     connection: Readonly<Connection>,
-  ): Promise<AcceptedMeshSession> {
+  ): Promise<AcceptedMeshSession | undefined> {
     const identity = await this.identityReady;
-    return acceptMeshSession(connection, identity, [DOMAIN], {
+    const session = await acceptMeshSession(connection, identity, [DOMAIN], {
       onFrame: async (conn, frame) => {
         await this.handleDataFrame(conn, frame);
       },
       addresses: this.advertisedAddresses,
     });
+    if (this.isShuttingDown()) {
+      await session.close();
+      return undefined;
+    }
+    return session;
   }
 
   /** Delegates the whole post-approval drain loop to roomRouter: this transport no longer decodes or routes a MeshMessage itself, only hands the session off. Also starts this session's own independent revocationAnnouncements drain, since a gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch, and its coordinator-frame watch for the same reason, enrolling the session in the election only when machineLocal says it reaches this machine. */
@@ -612,6 +610,9 @@ export class WireMeshTransport implements MeshTransport {
       `${host}:${String(port)}`,
     );
     const session = await this.openSession(connection);
+    if (session === undefined) {
+      throw new Error("connectToCoordinator: the transport has shut down");
+    }
     this.coordinatorSession = session;
     // Fire-and-forget, matching the previous transport's own contract: this resolves once the introduction is sent, not once a response arrives; peer_list/peer_joined/become_coordinator arrive asynchronously via the normal dispatch path below, independent of this call's own promise. Written before the session is enrolled below, because enrolling announces the elected coordinator over it and the port holder drops any claim that reaches it ahead of the introduce.
     void this.sendFrame(
@@ -670,7 +671,7 @@ export class WireMeshTransport implements MeshTransport {
         );
         return undefined;
       });
-    if (connection === undefined || this.isShuttingDown()) {
+    if (connection === undefined) {
       this.dataDials.delete(peer.id);
       return;
     }
@@ -693,9 +694,8 @@ export class WireMeshTransport implements MeshTransport {
       return;
     }
     const session = await this.openSession(connection);
-    if (this.isShuttingDown()) {
+    if (session === undefined) {
       this.dataDials.delete(peer.id);
-      await session.close();
       return;
     }
     this.trackSession(deviceIdHex, session);
@@ -822,6 +822,9 @@ export class WireMeshTransport implements MeshTransport {
     const { host, port, peerId, dataPort, name, fingerprint } = options;
     const connection = await dialRemote(this.wireTransport, host, port);
     const session = await this.openSession(connection);
+    if (session === undefined) {
+      throw new Error("connectToRemote: the transport has shut down");
+    }
     const outcome = await session.sendManageRequest(
       buildCommand({
         method: "connect_request",
