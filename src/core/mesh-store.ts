@@ -311,7 +311,7 @@ export class MeshStore implements CommsStore {
     this.coordinatorPort = coordinatorPort;
     this.hubUrl = hubUrl;
     this.roomJoinApprovalTimeoutMs = roomJoinApprovalTimeoutMs;
-    this.gatewayTrust = new GatewayTrust(slot);
+    this.gatewayTrust = new GatewayTrust({ location: slot });
     this.naming = new Naming({
       petnames: new Petnames(slot),
       issuerNames: async () => this.membership.issuerNames(),
