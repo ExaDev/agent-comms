@@ -134,7 +134,7 @@
     "generate:server-json": "tsx scripts/sync-release-metadata.ts",
     "lint": "turbo run _lint",
     "mutation": "stryker run stryker.config.ts",
-    "prepare": "husky",
+    "prepare": "husky || true",
     "prepush": "turbo run _prepush",
     "publish:mcp-registry": "tsx scripts/publish-mcp-registry.ts",
     "test": "turbo run _test",
