@@ -10,6 +10,10 @@ import { ROOM_REQUEST_TIMEOUT_MS } from "../core/request-timeouts.js";
 import type { ConnectionHandle } from "../core/transport.js";
 
 const DEVICE_ID_HEX_LENGTH = 64;
+/** How many times a run of takeovers may double its wait within the test's simulated span. */
+const BACKOFF_DOUBLINGS = 5;
+/** The roles in that run that cannot reach the other's claim's holder, and so keep taking over. */
+const MUTUALLY_UNREACHABLE_ROLES = 2;
 /** The term a holder is raised to before a lower-term claim from a lagging peer counts as stale. */
 const RAISED_TERM = 2;
 /** A term above RAISED_TERM, as a later takeover would use. */
@@ -31,11 +35,26 @@ interface Member {
 /** Delivers every frame a member sends to its recipients, one hop, the way a machine-local session does. Frames are queued rather than delivered inline so a reply cannot re-enter the sender mid-evaluation, matching the asynchronous delivery a real session gives. */
 class Bus {
   readonly members = new Map<string, Member>();
+  /** Who has a machine-local session with whom, when the mesh is not fully connected; undefined means every pair is connected. */
+  private links: Map<string, Set<string>> | undefined;
   private readonly queue: {
     from: string;
     to: string;
     frame: CoordinatorFrame;
   }[] = [];
+
+  /** Connects exactly these pairs; every other pair has no session, so frames between them are never delivered and neither counts as the other's election peer. */
+  linkOnly(pairs: readonly (readonly [string, string])[]): void {
+    this.links = new Map();
+    for (const [a, b] of pairs) {
+      this.links.set(a, (this.links.get(a) ?? new Set()).add(b));
+      this.links.set(b, (this.links.get(b) ?? new Set()).add(a));
+    }
+  }
+
+  private reaches(from: string, to: string): boolean {
+    return this.links === undefined || this.links.get(from)?.has(to) === true;
+  }
 
   add(id: string): Member {
     const member: Member = {
@@ -47,16 +66,24 @@ class Bus {
           broadcastCoordinatorClaim: async (frame) => {
             member.sent.push(frame);
             for (const other of this.members.keys()) {
-              if (other !== id) this.queue.push({ from: id, to: other, frame });
+              if (other !== id && this.reaches(id, other)) {
+                this.queue.push({ from: id, to: other, frame });
+              }
             }
           },
           sendCoordinatorClaim: async (handle, frame) => {
             member.sent.push(frame);
-            this.queue.push({ from: id, to: handle.id, frame });
+            if (this.reaches(id, handle.id)) {
+              this.queue.push({ from: id, to: handle.id, frame });
+            }
           },
           // Every other member on the bus has a machine-local session to this one; remove() is a session closing.
           electionPeerIds: () =>
-            new Set([...this.members.keys()].filter((other) => other !== id)),
+            new Set(
+              [...this.members.keys()].filter(
+                (other) => other !== id && this.reaches(id, other),
+              ),
+            ),
         }),
         onGained: async () => {
           member.gains += 1;
@@ -476,4 +503,29 @@ test("a vacant store hearing an unsupersedable claim stays vacant", async () => 
 
   expect(listener.role.current()).toBeUndefined();
   expect(listener.sent).toEqual([]);
+});
+
+test("in a mesh where the incumbent is unreachable to some roles, takeovers back off instead of raising the term at every claim wait", async () => {
+  vi.useFakeTimers();
+  const bus = new Bus();
+  const left = bus.add(hexId("1"));
+  const middle = bus.add(hexId("5"));
+  const right = bus.add(hexId("9"));
+  // The outer two share no session, so whichever claims, the other has no session to the holder.
+  bus.linkOnly([
+    [left.id, middle.id],
+    [middle.id, right.id],
+  ]);
+  await left.role.claimIfVacant();
+  await bus.settle();
+
+  for (let wait = 0; wait < 2 ** BACKOFF_DOUBLINGS; wait += 1) {
+    await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
+    await bus.settle();
+  }
+
+  // Each takeover waits twice as long as the last, so the simulated span holds one claim per doubling from each of the two roles that cannot reach each other, plus the first claim; without backoff every wait raises the term once.
+  expect(middle.role.current()?.term).toBeLessThanOrEqual(
+    MUTUALLY_UNREACHABLE_ROLES * (BACKOFF_DOUBLINGS + 1),
+  );
 });
