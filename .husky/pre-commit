@@ -1,4 +1,2 @@
-STAGED=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx)$' | grep -v '\.d\.ts$' || true)
-if [ -n "$STAGED" ]; then
-  pnpm exec eslint --fix $STAGED 2>&1
-fi
+# eslint --fix on the staged files through lint-staged, which stages what the fix changed and restores the tree if the hook fails.
+pnpm exec lint-staged
