@@ -25,13 +25,16 @@ async function startNode(
   teardown: TeardownStack,
 ): Promise<Node> {
   const store = new MeshStore({ coordinatorPort, hubUrl });
-  const errors: Error[] = [];
-  store.onError = (error) => {
-    errors.push(error);
-  };
   const { transport } = await wireTestTransportWithHub(store, {
     presenceReadvertiseIntervalMs: FAST_GOSSIP_INTERVAL_MS,
   });
+  // Set after wiring, because wireTestTransportWithHub installs its own console-logging onError and would replace this one.
+  const errors: Error[] = [];
+  const logError = store.onError;
+  store.onError = (error) => {
+    errors.push(error);
+    logError?.(error);
+  };
   await store.init();
   await store.registerAgent({
     name,
