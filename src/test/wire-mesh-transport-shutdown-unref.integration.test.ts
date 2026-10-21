@@ -343,4 +343,32 @@ describe("WireMeshTransport shutdown -- dials still in flight (agent-comms#372)"
       await listenerB.close();
     }
   });
+
+  /** A crash-race contest runs detached, so its store can shut down between rounds or while a bind is in flight. A listener bound then is one shutdown() never saw, and would hold the well-known port for as long as the process lives. */
+  test("releases a coordinator port whose bind completes after shutdown has begun", async () => {
+    const transport = new WireMeshTransport(
+      noopTransportEvents(),
+      generateIdentity(),
+    );
+    const port = await findFreePort();
+    const binding = transport.becomeCoordinator("127.0.0.1", port);
+    const stopping = transport.shutdown();
+    await expect(binding).rejects.toThrow("the transport has shut down");
+    await stopping;
+    await expect(
+      transport.becomeCoordinator("127.0.0.1", port),
+    ).rejects.toThrow("the transport has shut down");
+
+    expect(transport.listListeners()).toEqual([]);
+    const probe = net.createServer();
+    await new Promise<void>((resolve, reject) => {
+      probe.once("error", reject);
+      probe.listen(port, "127.0.0.1", resolve);
+    });
+    await new Promise<void>((resolve) => {
+      probe.close(() => {
+        resolve();
+      });
+    });
+  });
 });
