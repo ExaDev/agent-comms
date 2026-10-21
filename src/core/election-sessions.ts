@@ -10,12 +10,20 @@ import type { AcceptedMeshSession } from "wire-mesh-core/domain/mesh-session";
 import type { CoordinatorFrame } from "wire-mesh-core/generated/protocol";
 import type { ConnectionHandle, TransportEvents } from "./transport.js";
 
+/** Where a session's outbound claims stand: whether a send is unresolved, and the newest claim that arrived meanwhile. */
+interface OutboundSlot {
+  sending: boolean;
+  waiting: Readonly<CoordinatorFrame> | undefined;
+}
+
 export class ElectionSessions {
   /** Each enrolled session, with the handle its claims are reported under. */
   private readonly enrolled = new Map<
     AcceptedMeshSession,
     Readonly<ConnectionHandle>
   >();
+  /** Outbound state per session. A claim is state a later claim supersedes, so a session holds at most one send in flight and one waiting claim: a peer that reads slowly can never make this side's write queue grow with every claim it is answered with. */
+  private readonly outbound = new Map<AcceptedMeshSession, OutboundSlot>();
 
   constructor(
     private readonly events: Readonly<
@@ -52,10 +60,12 @@ export class ElectionSessions {
   /** Forgets a closed session. A no-op for one never enrolled. */
   delete(session: AcceptedMeshSession): void {
     this.enrolled.delete(session);
+    this.outbound.delete(session);
   }
 
   clear(): void {
     this.enrolled.clear();
+    this.outbound.clear();
   }
 
   /** Whether this store holds a live machine-local session with the device (hex): a full member of its local mesh on this same machine. */
@@ -91,17 +101,35 @@ export class ElectionSessions {
     );
   }
 
+  /** Sends a claim over one session. While an earlier send on it is still unresolved the claim replaces any one already waiting and this call returns at once; the send in flight then writes the newest waiting claim when it settles, so every send that does happen is awaited and the claim a peer finally reads is the newest one. */
   private async sendOver(
     session: AcceptedMeshSession,
     handle: Readonly<ConnectionHandle>,
     frame: Readonly<CoordinatorFrame>,
   ): Promise<void> {
-    await session.sendCoordinatorClaim(frame).catch((error: unknown) => {
-      this.events.onError?.(
-        error instanceof Error
-          ? error
-          : new Error(`sendCoordinatorClaim(${handle.id}): ${String(error)}`),
-      );
-    });
+    const slot = this.outbound.get(session) ?? {
+      sending: false,
+      waiting: undefined,
+    };
+    this.outbound.set(session, slot);
+    if (slot.sending) {
+      slot.waiting = frame;
+      return;
+    }
+    slot.sending = true;
+    let next: Readonly<CoordinatorFrame> | undefined = frame;
+    while (next !== undefined) {
+      await session.sendCoordinatorClaim(next).catch((error: unknown) => {
+        this.events.onError?.(
+          error instanceof Error
+            ? error
+            : new Error(`sendCoordinatorClaim(${handle.id}): ${String(error)}`),
+        );
+      });
+      // A session closed meanwhile has no one left to read what waits.
+      next = this.outbound.get(session) === slot ? slot.waiting : undefined;
+      slot.waiting = undefined;
+    }
+    slot.sending = false;
   }
 }
