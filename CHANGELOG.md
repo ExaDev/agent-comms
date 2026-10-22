@@ -1,3 +1,13 @@
+## [8.15.11](https://github.com/ExaDev/agent-comms/compare/v8.15.10...v8.15.11) (2026-10-22)
+
+### Documentation
+
+* explain how one pi manifest entry serves both install routes ([c553bb5](https://github.com/ExaDev/agent-comms/commit/c553bb5e016cd8380df6f659b0ccb5d4fccc0710))
+
+### Tests
+
+* **build:** every extension the pi manifest names ships in the published package ([4ed9a88](https://github.com/ExaDev/agent-comms/commit/4ed9a8848b418c91657cb48fdad648517e8c867f))
+
 ## [8.15.10](https://github.com/ExaDev/agent-comms/compare/v8.15.9...v8.15.10) (2026-10-22)
 
 ### Bug Fixes
