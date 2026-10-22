@@ -1,3 +1,9 @@
+## [8.15.7](https://github.com/ExaDev/agent-comms/compare/v8.15.6...v8.15.7) (2026-10-22)
+
+### Bug Fixes
+
+* **ci:** let the registry job publish a named version's server.json ([e906454](https://github.com/ExaDev/agent-comms/commit/e906454f18278125bc4a87ec5f588e0eb71b4d01))
+
 ## [8.15.6](https://github.com/ExaDev/agent-comms/compare/v8.15.5...v8.15.6) (2026-10-22)
 
 ### Bug Fixes
