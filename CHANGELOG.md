@@ -1,3 +1,9 @@
+## [8.15.15](https://github.com/ExaDev/agent-comms/compare/v8.15.14...v8.15.15) (2026-10-22)
+
+### CI
+
+* pin the registry action to the release that retries the version check ([e559deb](https://github.com/ExaDev/agent-comms/commit/e559deb910370ba8e26b602a8d2aa1f6130f7c74))
+
 ## [8.15.14](https://github.com/ExaDev/agent-comms/compare/v8.15.13...v8.15.14) (2026-10-22)
 
 ### CI
