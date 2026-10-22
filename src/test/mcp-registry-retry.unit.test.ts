@@ -65,6 +65,12 @@ describe("isRetryablePublishFailure", () => {
     expect(isRetryablePublishFailure(output)).toBe(true);
   });
 
+  it("recognises the registry failing to fetch the package's metadata from npm, which it reports as an HTTP 400 naming a client timeout: the request was valid and the registry's own call to npm timed out (ExaDev/agent-comms release run 39737960080, v8.15.10), so neither the status pattern nor the propagation-lag text matched and the job failed on its second attempt", () => {
+    const output =
+      'Error: publish failed: server returned status 400: {"title":"Bad Request","status":400,"detail":"Failed to publish server","errors":[{"message":"registry validation failed for package 0 (agent-comms): failed to fetch package metadata from NPM: Get \\"https://registry.npmjs.org/agent-comms/8.15.10\\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"}]}';
+    expect(isRetryablePublishFailure(output)).toBe(true);
+  });
+
   it("does not retry a database error that is not a resource shortage, such as a constraint violation, which a retry would hit again", () => {
     const output =
       'Error: publish failed: server returned status 400: {"title":"Bad Request","status":400,"detail":"Failed to publish server","errors":[{"message":"duplicate key value violates unique constraint (SQLSTATE 23505)"}]}';

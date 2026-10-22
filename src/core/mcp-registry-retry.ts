@@ -57,13 +57,22 @@ function isDatabaseResourceShortage(output: string): boolean {
   return DATABASE_RESOURCE_SHORTAGE_PATTERN.test(output);
 }
 
-/** Recognises a publish failure worth retrying (npm propagation lag, a transient 5xx from the registry's own infrastructure, a connection-level failure that never reached the registry, a login JWT that expired mid-retry-window, or the registry's database running short of resources) as opposed to any other failure -- a genuinely invalid publish request or authorisation failure, for instance, which retrying can never fix. */
+// Confirmed as a sixth retryable failure mode (ExaDev/agent-comms, 2026-10-22, release run 39737960080, v8.15.10): the registry validates a publish by fetching the package's metadata from npm itself, and when that call timed out ("context deadline exceeded (Client.Timeout exceeded while awaiting headers)") it reported the failure as an HTTP 400, so the status pattern did not match, and the propagation-lag text did not either because npm never answered. The registry's own outbound call to npm failing is a fault between two other services that says nothing about this request, so it is retryable whatever the cause it names (a timeout, a reset, a bad gateway).
+const NPM_METADATA_FETCH_FAILURE_TEXT =
+  "failed to fetch package metadata from NPM";
+
+function isNpmMetadataFetchFailure(output: string): boolean {
+  return output.includes(NPM_METADATA_FETCH_FAILURE_TEXT);
+}
+
+/** Recognises a publish failure worth retrying (npm propagation lag, a transient 5xx from the registry's own infrastructure, a connection-level failure that never reached the registry, a login JWT that expired mid-retry-window, the registry's database running short of resources, or the registry's own call to npm failing) as opposed to any other failure -- a genuinely invalid publish request or authorisation failure, for instance, which retrying can never fix. */
 export function isRetryablePublishFailure(output: string): boolean {
   return (
     isNpmPropagationLag(output) ||
     isRetryableServerError(output) ||
     isConnectionError(output) ||
     isExpiredJwt(output) ||
-    isDatabaseResourceShortage(output)
+    isDatabaseResourceShortage(output) ||
+    isNpmMetadataFetchFailure(output)
   );
 }
