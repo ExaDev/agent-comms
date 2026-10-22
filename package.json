@@ -142,7 +142,6 @@
     "mutation": "stryker run stryker.config.ts",
     "prepare": "husky || true",
     "prepush": "turbo run _prepush",
-    "publish:mcp-registry": "tsx scripts/publish-mcp-registry.ts",
     "test": "turbo run _test",
     "test:all": "pnpm test && pnpm test:delivery && pnpm test:smoke",
     "test:delivery": "tsx src/test/delivery-receipt.runner.ts",
