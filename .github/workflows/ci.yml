@@ -220,6 +220,10 @@ jobs:
     if: ${{ !cancelled() && needs.release.result != 'failure' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch') }}
     needs: [release]
     runs-on: ubuntu-latest
+    # The workflow-level permissions are broad enough for the release job (contents, issues and pull requests, all write). This job runs a third-party-shaped action with the OIDC token that publishes under this repository's registry namespace, so it gets only what the action's own README asks for: a read checkout and the OIDC token. A moved tag on that action then cannot write to this repository.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       # A push to main publishes what the release job just committed, which is main's new tip and not the commit this run started from. The publisher is the pinned `ExaDev/mcp-registry-publish` action, never code from a release tag, so a backfill of an old version runs today's retry handling; a dispatch naming a `registry_ref` takes only that tag's server.json from it.
       - uses: actions/checkout@v7
@@ -232,5 +236,6 @@ jobs:
         run: |
           git fetch --depth=1 origin "refs/tags/${REGISTRY_REF}"
           git show FETCH_HEAD:server.json > server.json
-      - uses: ExaDev/mcp-registry-publish@v1
+      # Pinned to the commit of the release, not the moving major tag: GitHub's secure use guidance is a full-length SHA, since a tag can be moved, and this step holds the registry publishing identity. Dependabot's github-actions updates keep the pin current.
+      - uses: ExaDev/mcp-registry-publish@4de3ca0cf0f9cf19184c4c65f97d22e3caf18fb3 # v1.0.1
 
