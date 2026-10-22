@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      registry_ref:
+        description: A version's tag (for example v8.15.4) whose server.json the registry job publishes, for a version an outage of the MCP registry missed. Leave empty to publish the checked-out branch's own.
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -208,17 +213,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # The registry publish is separate from the release job so that an outage of the MCP registry fails only this job, never the release: semantic-release stops at the first failing publish step, and a publish step here once left a version on npm and tagged without its GitHub release (run 39670379457, v8.15.4). It is re-runnable and skips a version the registry already lists, so a failed run is fixed by re-running it, and a version missed by an outage is published by dispatching this workflow on that version's tag.
+  # The registry publish is separate from the release job so that an outage of the MCP registry fails only this job, never the release: semantic-release stops at the first failing publish step, and a publish step here once left a version on npm and tagged without its GitHub release (run 39670379457, v8.15.4). It is re-runnable and skips a version the registry already lists, so a failed run is fixed by re-running it, and a version missed by an outage is published by dispatching this workflow with `registry_ref` set to that version's tag (a dispatch runs the workflow file of the ref it is dispatched on, and a tag carries the older file without this job, so it is dispatched on main).
   registry:
     name: MCP registry
     if: ${{ !cancelled() && needs.release.result != 'failure' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch') }}
     needs: [release]
     runs-on: ubuntu-latest
     steps:
-      # A push to main publishes what the release job just committed, which is main's new tip and not the commit this run started from. A dispatch on a tag publishes that tag's own server.json.
+      # A push to main publishes what the release job just committed, which is main's new tip and not the commit this run started from. A dispatch publishes the server.json of `registry_ref` when it is given.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.ref == 'refs/heads/main' && 'main' || github.ref }}
+          ref: ${{ inputs.registry_ref || (github.ref == 'refs/heads/main' && 'main' || github.ref) }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
