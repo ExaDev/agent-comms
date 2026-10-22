@@ -1,3 +1,15 @@
+## [8.15.6](https://github.com/ExaDev/agent-comms/compare/v8.15.5...v8.15.6) (2026-10-22)
+
+### Bug Fixes
+
+* **release:** publish to the MCP registry from its own job ([55a803c](https://github.com/ExaDev/agent-comms/commit/55a803c4ad303bd36ffd043ed4e16fd44778d952))
+* **release:** retry the registry publish when its database is out of resources ([78939a4](https://github.com/ExaDev/agent-comms/commit/78939a4236755ab7c669056fa7236003bff54d91))
+* **release:** skip a version the MCP registry already lists ([694d80f](https://github.com/ExaDev/agent-comms/commit/694d80f9f134e2f6b3cb93d11699c1633b7fb4cc))
+
+### CI
+
+* skip the npm audit when pnpm/action-setup bootstraps pnpm ([4521f3a](https://github.com/ExaDev/agent-comms/commit/4521f3a40b31e9dab2727ef3b64db46da2903adb))
+
 ## [8.15.5](https://github.com/ExaDev/agent-comms/compare/v8.15.4...v8.15.5) (2026-10-21)
 
 ### Bug Fixes
