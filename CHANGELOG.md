@@ -1,3 +1,10 @@
+## [8.15.17](https://github.com/ExaDev/agent-comms/compare/v8.15.16...v8.15.17) (2026-10-22)
+
+### Build
+
+* **deps:** bump @modelcontextprotocol/sdk ([ce2005a](https://github.com/ExaDev/agent-comms/commit/ce2005aa1a1a60368227078f73687b4a531dd8f2))
+* **deps:** bump @orpc/tanstack-query ([951ab23](https://github.com/ExaDev/agent-comms/commit/951ab235d7ebb6407479b80b7f532de3289ae3df))
+
 ## [8.15.16](https://github.com/ExaDev/agent-comms/compare/v8.15.15...v8.15.16) (2026-10-22)
 
 ### Build
