@@ -59,6 +59,18 @@ describe("isRetryablePublishFailure", () => {
     expect(isRetryablePublishFailure(output)).toBe(true);
   });
 
+  it("recognises the registry's own database running out of connection slots, which it reports as an HTTP 400 and not a 5xx: the request was valid and the registry could not begin a transaction for it (ExaDev/agent-comms release run 39670379457, v8.15.4), so the 5xx pattern never matched and the release job failed without a single retry", () => {
+    const output =
+      'Error: publish failed: server returned status 400: {"title":"Bad Request","status":400,"detail":"Failed to publish server","errors":[{"message":"failed to begin transaction: failed to connect to `user=app database=app`:\\n\\t34.118.233.51:5432 (registry-pg-rw.default): server error: FATAL: remaining connection slots are reserved for roles with the SUPERUSER attribute (SQLSTATE 53300)"}]}';
+    expect(isRetryablePublishFailure(output)).toBe(true);
+  });
+
+  it("does not retry a database error that is not a resource shortage, such as a constraint violation, which a retry would hit again", () => {
+    const output =
+      'Error: publish failed: server returned status 400: {"title":"Bad Request","status":400,"detail":"Failed to publish server","errors":[{"message":"duplicate key value violates unique constraint (SQLSTATE 23505)"}]}';
+    expect(isRetryablePublishFailure(output)).toBe(false);
+  });
+
   it("does not retry a 4xx other than the specific propagation-lag 404 -- a genuinely invalid publish request, which retrying can never fix", () => {
     const output =
       "Error: publish failed: server returned status 400: Bad Request";
