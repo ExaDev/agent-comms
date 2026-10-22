@@ -221,7 +221,7 @@ jobs:
     needs: [release]
     runs-on: ubuntu-latest
     steps:
-      # A push to main publishes what the release job just committed, which is main's new tip and not the commit this run started from. The code that runs is always the dispatched branch's own, never a release tag's: a tag carries the scripts of its day, which lack later fixes (a backfill that ran a tag's own publish script published again a version the registry already listed and failed on the duplicate). A dispatch naming a `registry_ref` therefore takes only that tag's server.json from it.
+      # A push to main publishes what the release job just committed, which is main's new tip and not the commit this run started from. The publisher is the pinned `ExaDev/mcp-registry-publish` action, never code from a release tag, so a backfill of an old version runs today's retry handling; a dispatch naming a `registry_ref` takes only that tag's server.json from it.
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref == 'refs/heads/main' && 'main' || github.ref }}
@@ -232,9 +232,5 @@ jobs:
         run: |
           git fetch --depth=1 origin "refs/tags/${REGISTRY_REF}"
           git show FETCH_HEAD:server.json > server.json
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .tool-versions
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec tsx scripts/publish-mcp-registry.ts
+      - uses: ExaDev/mcp-registry-publish@v1
+
