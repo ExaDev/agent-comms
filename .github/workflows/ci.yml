@@ -221,10 +221,17 @@ jobs:
     needs: [release]
     runs-on: ubuntu-latest
     steps:
-      # A push to main publishes what the release job just committed, which is main's new tip and not the commit this run started from. A dispatch publishes the server.json of `registry_ref` when it is given.
+      # A push to main publishes what the release job just committed, which is main's new tip and not the commit this run started from. The code that runs is always the dispatched branch's own, never a release tag's: a tag carries the scripts of its day, which lack later fixes (a backfill that ran a tag's own publish script published again a version the registry already listed and failed on the duplicate). A dispatch naming a `registry_ref` therefore takes only that tag's server.json from it.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.registry_ref || (github.ref == 'refs/heads/main' && 'main' || github.ref) }}
+          ref: ${{ github.ref == 'refs/heads/main' && 'main' || github.ref }}
+      - name: Take the named version's server.json
+        if: ${{ inputs.registry_ref != '' }}
+        env:
+          REGISTRY_REF: ${{ inputs.registry_ref }}
+        run: |
+          git fetch --depth=1 origin "refs/tags/${REGISTRY_REF}"
+          git show FETCH_HEAD:server.json > server.json
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
