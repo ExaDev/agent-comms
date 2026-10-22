@@ -1,3 +1,9 @@
+## [8.15.8](https://github.com/ExaDev/agent-comms/compare/v8.15.7...v8.15.8) (2026-10-22)
+
+### CI
+
+* skip mutation testing on a dispatch that only publishes to the registry ([3c3bc0f](https://github.com/ExaDev/agent-comms/commit/3c3bc0f33706411691b9e5187b799e3e942143b0))
+
 ## [8.15.7](https://github.com/ExaDev/agent-comms/compare/v8.15.6...v8.15.7) (2026-10-22)
 
 ### Bug Fixes
