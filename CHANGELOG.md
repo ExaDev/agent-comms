@@ -1,3 +1,15 @@
+## [8.15.10](https://github.com/ExaDev/agent-comms/compare/v8.15.9...v8.15.10) (2026-10-22)
+
+### Bug Fixes
+
+* **bridge:** read the web frontend build on first request instead of at import ([e1af446](https://github.com/ExaDev/agent-comms/commit/e1af4465f720abb6c1c17d4382303e9e7548b63b)), references [#440](https://github.com/ExaDev/agent-comms/issues/440)
+* **build:** let the prepare script pass where husky is not installed ([d827457](https://github.com/ExaDev/agent-comms/commit/d827457d2e41bddd61498f5d932e9589d11fa9e5)), references [#440](https://github.com/ExaDev/agent-comms/issues/440)
+* **build:** publish the source the pi extension loads ([6963916](https://github.com/ExaDev/agent-comms/commit/6963916d7d6d006ec7d3cc87ad3def0a1a7fe43b)), references [#440](https://github.com/ExaDev/agent-comms/issues/440) [#412](https://github.com/ExaDev/agent-comms/issues/412)
+
+### Documentation
+
+* **build:** describe why the test task depends on the frontend build ([bd6d094](https://github.com/ExaDev/agent-comms/commit/bd6d094610bcc87e743ef1ef14e55c83dd0b4ea5)), references [#440](https://github.com/ExaDev/agent-comms/issues/440)
+
 ## [8.15.9](https://github.com/ExaDev/agent-comms/compare/v8.15.8...v8.15.9) (2026-10-22)
 
 ### Bug Fixes
