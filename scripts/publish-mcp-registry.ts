@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -8,6 +8,10 @@ import {
   isRetryablePublishFailure,
   nextRetryDelayMs,
 } from "../src/core/mcp-registry-retry.js";
+import {
+  isPublishedOnRegistry,
+  registryVersionUrl,
+} from "../src/core/mcp-registry-version.js";
 
 const MS_PER_SECOND = 1000;
 
@@ -61,7 +65,29 @@ function binaryArchFor(arch: string): string {
   throw new Error(`Unsupported architecture: ${arch}`);
 }
 
-function main(): void {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readServerIdentity(): { name: string; version: string } {
+  const server: unknown = JSON.parse(readFileSync("server.json", "utf8"));
+  if (
+    !isRecord(server) ||
+    typeof server.name !== "string" ||
+    typeof server.version !== "string"
+  ) {
+    throw new Error("server.json must hold a string name and version");
+  }
+  return { name: server.name, version: server.version };
+}
+
+async function main(): Promise<void> {
+  const { name, version } = readServerIdentity();
+  const response = await fetch(registryVersionUrl(name, version));
+  if (isPublishedOnRegistry(response.status)) {
+    console.log(`${name} ${version} is already listed on the MCP registry`);
+    return;
+  }
   const archiveUrl = `https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${process.platform}_${binaryArchFor(process.arch)}.tar.gz`;
   const tempDir = mkdtempSync(path.join(tmpdir(), "agent-comms-mcp-"));
 
@@ -79,8 +105,8 @@ function main(): void {
   }
 }
 
-// Only run as a side effect when executed directly (semantic-release's own exec step), never on a plain import, which is how the test suite reaches nextRetryDelayMs()/isRetryablePublishFailure() (via src/core/mcp-registry-retry.ts) without downloading mcp-publisher or attempting a real publish.
+// Only run as a side effect when executed directly (the `registry` job in .github/workflows/ci.yml), never on a plain import, which is how the test suite reaches nextRetryDelayMs()/isRetryablePublishFailure() (via src/core/mcp-registry-retry.ts) without downloading mcp-publisher or attempting a real publish.
 const invokedPath = process.argv[1];
 if (invokedPath !== undefined && import.meta.url === `file://${invokedPath}`) {
-  main();
+  await main();
 }
