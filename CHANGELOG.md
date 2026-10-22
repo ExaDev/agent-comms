@@ -1,3 +1,9 @@
+## [8.15.13](https://github.com/ExaDev/agent-comms/compare/v8.15.12...v8.15.13) (2026-10-22)
+
+### CI
+
+* publish to the MCP registry with the shared action ([d931157](https://github.com/ExaDev/agent-comms/commit/d93115711e613127aeb18fb50f75ce126ad03633))
+
 ## [8.15.12](https://github.com/ExaDev/agent-comms/compare/v8.15.11...v8.15.12) (2026-10-22)
 
 ### Documentation
