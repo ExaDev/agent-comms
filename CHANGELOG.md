@@ -1,3 +1,9 @@
+## [8.15.9](https://github.com/ExaDev/agent-comms/compare/v8.15.8...v8.15.9) (2026-10-22)
+
+### Bug Fixes
+
+* **ci:** run the registry job's own code when backfilling a version ([c9cefd3](https://github.com/ExaDev/agent-comms/commit/c9cefd3b71632d8ab8212b4a08b48ced79d0a5d2))
+
 ## [8.15.8](https://github.com/ExaDev/agent-comms/compare/v8.15.7...v8.15.8) (2026-10-22)
 
 ### CI
