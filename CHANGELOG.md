@@ -1,3 +1,10 @@
+## [8.15.14](https://github.com/ExaDev/agent-comms/compare/v8.15.13...v8.15.14) (2026-10-22)
+
+### CI
+
+* give the registry job least privilege and pin its action to a commit ([abc6745](https://github.com/ExaDev/agent-comms/commit/abc67457aae0e692586573b6fc25e5230f785a91))
+* pin the registry action to the release that logs each retry's cause ([0953d70](https://github.com/ExaDev/agent-comms/commit/0953d7091d3d28238f9e4be383b7054bc2973aac))
+
 ## [8.15.13](https://github.com/ExaDev/agent-comms/compare/v8.15.12...v8.15.13) (2026-10-22)
 
 ### CI
