@@ -13,6 +13,10 @@ permissions:
   issues: write
   pull-requests: write
 
+env:
+  # pnpm/action-setup bootstraps pnpm with `npm install`, which also runs `npm audit` against the registry's legacy audit endpoint. That endpoint is being retired ("This endpoint is being retired. Use the bulk advisory endpoint instead"), and on 2026-10-22 it stalled the bootstrap for five minutes in every job (a green run earlier completed the same step in seven seconds), pushing the Test job past its timeout. The audit of a one-package bootstrap install tells nothing, so it is switched off for every job.
+  NPM_CONFIG_AUDIT: "false"
+
 jobs:
   lint:
     name: Lint
