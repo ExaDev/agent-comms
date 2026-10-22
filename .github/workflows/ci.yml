@@ -203,3 +203,21 @@ jobs:
       - run: HUSKY=0 pnpm exec semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The registry publish is separate from the release job so that an outage of the MCP registry fails only this job, never the release: semantic-release stops at the first failing publish step, and a publish step here once left a version on npm and tagged without its GitHub release (run 39670379457, v8.15.4). It is re-runnable and skips a version the registry already lists, so a failed run is fixed by re-running it, and a version missed by an outage is published by dispatching this workflow on that version's tag.
+  registry:
+    name: MCP registry
+    if: ${{ !cancelled() && needs.release.result != 'failure' && ((github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch') }}
+    needs: [release]
+    runs-on: ubuntu-latest
+    steps:
+      # A push to main publishes what the release job just committed, which is main's new tip and not the commit this run started from. A dispatch on a tag publishes that tag's own server.json.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref == 'refs/heads/main' && 'main' || github.ref }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsx scripts/publish-mcp-registry.ts
