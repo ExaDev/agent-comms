@@ -44,11 +44,11 @@ const config: GlobalConfig = {
     ],
     "@semantic-release/changelog",
     "@semantic-release/npm",
+    // The MCP registry publish is deliberately not a publish step here: semantic-release stops at the first failing publish step, so a registry outage that outlasted the retry budget (run 39670379457, v8.15.4) left the version on npm and tagged with no GitHub release. The registry publish is its own CI job after the release (the `registry` job in ci.yml), where an outage fails only that job, which can be re-run and skips a version the registry already lists.
     [
       "@semantic-release/exec",
       {
         prepareCmd: "tsx scripts/sync-release-metadata.ts",
-        publishCmd: "tsx scripts/publish-mcp-registry.ts",
       },
     ],
     [
