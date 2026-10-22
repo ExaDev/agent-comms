@@ -50,12 +50,20 @@ function isExpiredJwt(output: string): boolean {
   return EXPIRED_JWT_STATUS_PATTERN.test(output) && output.includes("expired");
 }
 
-/** Recognises a publish failure worth retrying (npm propagation lag, a transient 5xx from the registry's own infrastructure, a connection-level failure that never reached the registry, or a login JWT that expired mid-retry-window) as opposed to any other failure -- a genuinely invalid publish request or authorisation failure, for instance, which retrying can never fix. */
+// Confirmed as a fifth retryable failure mode (ExaDev/agent-comms, 2026-10-21, release run 39670379457, v8.15.4): the registry's own Postgres had no free connection slots (SQLSTATE 53300), and the registry reported that as an HTTP 400 "Failed to publish server" and not a 5xx, so the status pattern above never matched and the release job failed on its first attempt, before the GitHub release was created. PostgreSQL's SQLSTATE class 53 is "insufficient resources" (no connection slots, disk full, out of memory, configuration limit): a shortage on the registry's side that clears by itself and has nothing to do with the request, so it is retryable whatever HTTP status carries it. Any other SQLSTATE class (a constraint violation, say) describes the request or its data and would fail again.
+const DATABASE_RESOURCE_SHORTAGE_PATTERN = /\bSQLSTATE 53\d{3}\b/;
+
+function isDatabaseResourceShortage(output: string): boolean {
+  return DATABASE_RESOURCE_SHORTAGE_PATTERN.test(output);
+}
+
+/** Recognises a publish failure worth retrying (npm propagation lag, a transient 5xx from the registry's own infrastructure, a connection-level failure that never reached the registry, a login JWT that expired mid-retry-window, or the registry's database running short of resources) as opposed to any other failure -- a genuinely invalid publish request or authorisation failure, for instance, which retrying can never fix. */
 export function isRetryablePublishFailure(output: string): boolean {
   return (
     isNpmPropagationLag(output) ||
     isRetryableServerError(output) ||
     isConnectionError(output) ||
-    isExpiredJwt(output)
+    isExpiredJwt(output) ||
+    isDatabaseResourceShortage(output)
   );
 }
