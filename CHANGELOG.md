@@ -1,3 +1,9 @@
+## [8.15.12](https://github.com/ExaDev/agent-comms/compare/v8.15.11...v8.15.12) (2026-10-22)
+
+### Documentation
+
+* explain how one pi manifest entry serves both install routes ([561edb0](https://github.com/ExaDev/agent-comms/commit/561edb0fbadf4b048796c47b6242e477573da8ab))
+
 ## [8.15.11](https://github.com/ExaDev/agent-comms/compare/v8.15.10...v8.15.11) (2026-10-22)
 
 ### Documentation
