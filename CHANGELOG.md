@@ -1,3 +1,9 @@
+## [8.15.16](https://github.com/ExaDev/agent-comms/compare/v8.15.15...v8.15.16) (2026-10-22)
+
+### Build
+
+* **deps-dev:** bump vite from 8.3.0 to 8.3.2 ([8bb68be](https://github.com/ExaDev/agent-comms/commit/8bb68be1f737d83cbfe90ee2748cfcb0ff8b7edf))
+
 ## [8.15.15](https://github.com/ExaDev/agent-comms/compare/v8.15.14...v8.15.15) (2026-10-22)
 
 ### CI
