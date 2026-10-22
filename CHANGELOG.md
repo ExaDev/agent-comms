@@ -1,3 +1,9 @@
+## [8.15.18](https://github.com/ExaDev/agent-comms/compare/v8.15.17...v8.15.18) (2026-10-22)
+
+### Build
+
+* **deps:** bump @tanstack/react-query from 5.103.2 to 5.104.5 ([eeb1217](https://github.com/ExaDev/agent-comms/commit/eeb1217558b15eec11f408cc6a25fd467f0f0bcb))
+
 ## [8.15.17](https://github.com/ExaDev/agent-comms/compare/v8.15.16...v8.15.17) (2026-10-22)
 
 ### Build
