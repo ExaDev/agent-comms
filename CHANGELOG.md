@@ -1,3 +1,9 @@
+## [8.15.20](https://github.com/ExaDev/agent-comms/compare/v8.15.19...v8.15.20) (2026-10-27)
+
+### Tests
+
+* count only packet-handling errors in the malformed-packet test ([44478a8](https://github.com/ExaDev/agent-comms/commit/44478a8384062eb8de20ced7fb75ad700b46dff6)), closes [#466](https://github.com/ExaDev/agent-comms/issues/466)
+
 ## [8.15.19](https://github.com/ExaDev/agent-comms/compare/v8.15.18...v8.15.19) (2026-10-27)
 
 ### Build
