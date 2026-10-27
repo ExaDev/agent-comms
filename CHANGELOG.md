@@ -1,3 +1,9 @@
+## [8.15.21](https://github.com/ExaDev/agent-comms/compare/v8.15.20...v8.15.21) (2026-10-27)
+
+### Tests
+
+* remove the temporary directories tests create ([c1eb377](https://github.com/ExaDev/agent-comms/commit/c1eb37781e0e274ccb39acfd34628c70bd6482b6)), closes [#462](https://github.com/ExaDev/agent-comms/issues/462)
+
 ## [8.15.20](https://github.com/ExaDev/agent-comms/compare/v8.15.19...v8.15.20) (2026-10-27)
 
 ### Tests
