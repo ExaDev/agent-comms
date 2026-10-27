@@ -1,3 +1,13 @@
+## [8.15.19](https://github.com/ExaDev/agent-comms/compare/v8.15.18...v8.15.19) (2026-10-27)
+
+### Build
+
+* **deps:** bump @orpc/client from 2.0.0-beta.40 to 2.0.0-beta.44 ([1a0e61a](https://github.com/ExaDev/agent-comms/commit/1a0e61a9ae5eb80c4cd55eb010e9fa77051e47d8))
+
+### Chores
+
+* **build:** run only the tests related to a push in the pre-push hook ([0bd23c5](https://github.com/ExaDev/agent-comms/commit/0bd23c5991922b3f04a0b035cba0c17a228b629e)), closes [#463](https://github.com/ExaDev/agent-comms/issues/463)
+
 ## [8.15.18](https://github.com/ExaDev/agent-comms/compare/v8.15.17...v8.15.18) (2026-10-22)
 
 ### Build
