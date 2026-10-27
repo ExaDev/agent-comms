@@ -1,9 +1,6 @@
 /**
  * How often GatewayTrust looks at the shared trust file. A node answers trust questions for every directory entry it merges, so the look has to be rare by construction; these tests count the looks (never time them) through an injected clock and pin both halves of the bound: reads inside the interval cost none, and a change made by another process is seen once the interval has passed.
  */
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   GatewayTrust,
@@ -12,6 +9,7 @@ import {
 import type * as identityStore from "../core/identity-store.js";
 import type { IdentitySlot } from "../core/identity-store.js";
 import { manualClock } from "./manual-clock.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const stamps = vi.hoisted(() => ({ calls: 0 }));
 
@@ -34,7 +32,7 @@ vi.mock("../core/identity-store.js", async (importOriginal) => {
 const QUESTIONS = 500;
 
 function tempSlot(): IdentitySlot {
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-trust-recheck-"));
+  const dir = scratchDirectory("agent-comms-trust-recheck-");
 
   return { harness: "pi", cwd: "/tmp/project", dir };
 }

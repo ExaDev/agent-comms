@@ -3,7 +3,6 @@
  */
 
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -11,6 +10,7 @@ import { afterEach, expect, test } from "vitest";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { openAccountLedger } from "../core/account-ledger-store.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_SCRIPT = path.join(__dirname, "account-ledger-lock-worker.ts");
@@ -64,7 +64,7 @@ test(
   "concurrent processes appending to one machine's ledger lose no grant",
   { timeout: START_DELAY_MS + TIMEOUT_HEADROOM_MS },
   async () => {
-    const dir = fs.mkdtempSync(path.join(tmpdir(), "account-ledger-lock-"));
+    const dir = scratchDirectory("account-ledger-lock-");
     dirs.push(dir);
     const userIdentityOptions = { dir };
     const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);

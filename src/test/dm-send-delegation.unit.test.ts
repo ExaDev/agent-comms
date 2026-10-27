@@ -1,9 +1,6 @@
 /**
  * Unit tests for core/dm-send-delegation: delegateDmSendToDevice, the primitive that lets a user principal already admitted into a remote user's DM-communication scope (room-lifecycle.ts's admitAgentForDm, minted with delegationsRemaining \> 0) sub-delegate that admission to one of its own devices (agent-comms#187) -- the dm:send counterpart to device-membership.test.ts's own admitDevice/removeDevice coverage.
  */
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { describe, it, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
@@ -21,13 +18,14 @@ import {
   verifyDmSendToken,
 } from "../core/dm-token-verification.js";
 import { delegateDmSendToDevice } from "../core/dm-send-delegation.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const TOKEN_TTL_MS = 60_000;
 const NON_DELEGABLE = 0;
 const ONE_HOP_DELEGABLE = 1;
 
 function tempDir(): string {
-  return fs.mkdtempSync(path.join(tmpdir(), "agent-comms-dm-delegation-test-"));
+  return scratchDirectory("agent-comms-dm-delegation-test-");
 }
 
 /** A real, persisted user-principal identity and its account ledger, which delegateDmSendToDevice records the delegation in, opened the way device-membership.test.ts's own makeUser() opens them. */

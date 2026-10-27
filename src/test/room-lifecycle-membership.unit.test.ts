@@ -2,9 +2,6 @@
  * Direct, DI-based unit tests for RoomLifecycle's membership-grant half -- leaveRoom/leaveRemoteRoom, inviteToRoom, kickFromRoom, and destroyRoom. Split from room-lifecycle.test.ts (createRoom/listRooms/joinRoom) and room-lifecycle-remote.test.ts (refreshRoomMembers/requestDmAccess/getRoom/revokeMemberGrant/declineInvite) to stay under this repo's max-lines cap. All three files share an identical preamble (helpers, fakes, makeHarness) by necessity of the split -- see room-lifecycle.test.ts's own header for the full rationale (real identities/tokens, not opaque placeholders, since this class genuinely mints and revokes capability tokens).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { bytesToHex, deviceIdFromHex } from "wire-mesh-core/domain/device-id";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
@@ -27,6 +24,7 @@ import {
   type RoomLifecycleDeps,
 } from "../core/room-lifecycle.js";
 import type { AgentIdentity, Room } from "../core/types.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const TOKEN_TTL_MS = 60_000;
 
@@ -120,9 +118,7 @@ interface Harness {
 
 async function makeHarness(): Promise<Harness> {
   const ids = await makeIdentities();
-  const slotDir = fs.mkdtempSync(
-    path.join(tmpdir(), "room-lifecycle-membership-test-"),
-  );
+  const slotDir = scratchDirectory("room-lifecycle-membership-test-");
   const slot = { harness: "test", cwd: "room-lifecycle", dir: slotDir };
   // saveRoomToken/saveIssuedRoomGrant write into this slot's own persisted identity file, which must already exist on disk -- unrelated to which crypto identity requireIdentity() uses for minting/verifying, purely a filesystem bookkeeping precondition.
   loadOrCreateIdentity(slot);

@@ -1,9 +1,6 @@
 /**
  * Unit tests for core/device-membership: admitDevice (mint, recorded in the account's grant ledger) and removeDevice (revoke every outstanding grant, recorded in the same ledger), the mint/revoke half of agent-comms#161. verifyDeviceMembership itself is covered separately in device-membership-verification.test.ts.
  */
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { describe, it, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
@@ -20,13 +17,12 @@ import {
   groupPath,
   verifyDeviceMembership,
 } from "../core/device-membership-verification.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const TOKEN_TTL_MS = 60_000;
 
 function tempDir(): string {
-  return fs.mkdtempSync(
-    path.join(tmpdir(), "agent-comms-device-membership-test-"),
-  );
+  return scratchDirectory("agent-comms-device-membership-test-");
 }
 
 /** A real, persisted user-principal identity and its account ledger, opened the way a real bridge process opens them. */

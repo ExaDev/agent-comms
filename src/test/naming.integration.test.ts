@@ -3,8 +3,6 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
@@ -19,6 +17,7 @@ import {
 } from "./hub-helpers.js";
 import { waitFor, wireTestTransportWithHub } from "./test-transport.js";
 import type { WireMeshTransport } from "../core/wire-mesh-transport.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** A device-id is a 64-character lowercase hex SHA-256 digest. */
 const DEVICE_ID_HEX_LENGTH = 64;
@@ -43,7 +42,7 @@ afterEach(async () => {
 });
 
 function hostDir(): string {
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "naming-host-"));
+  const dir = scratchDirectory("naming-host-");
   dirs.push(dir);
   return dir;
 }

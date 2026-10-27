@@ -1,8 +1,5 @@
 /** Wires a real WireMeshTransport plus a persisted identity slot onto a freshly constructed MeshStore -- the same setTransport()/setIdentity() calls every production bridge makes immediately after construction (via createBridgeMesh). MeshStore has no default transport or identity, so every test that constructs one needs this (or an equivalent explicit wiring) before init(), createRoom(), or any other transport- or identity-using method runs. */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { WireMeshTransport } from "../core/wire-mesh-transport.js";
 import type { TransportEvents } from "../core/transport.js";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
@@ -27,6 +24,7 @@ import {
 import { openAccountLedger } from "../core/account-ledger-store.js";
 import { nanoid } from "../core/nanoid.js";
 import type { MeshStore } from "../core/mesh-store.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** Short enough to keep generated test identity slots readable, long enough that two concurrent test runs won't collide on the same throwaway cwd. */
 const TEST_IDENTITY_CWD_ID_LENGTH = 8;
@@ -67,20 +65,18 @@ async function wireTransportInternal(
   const resolvedSlot: IdentitySlot = slot ?? {
     harness: "test",
     cwd: nanoid(TEST_IDENTITY_CWD_ID_LENGTH),
-    dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-identity-")),
+    dir: scratchDirectory("agent-comms-test-identity-"),
   };
   const identity = identityLoader(resolvedSlot);
   // A fresh throwaway directory per call, matching resolvedSlot's own default: each test MeshStore represents a separate device belonging to a separate person, so it needs its own user-principal identity, never the real machine-wide ~/.agent-comms/user-identity.json a production bridge shares. A caller that needs to know this store's own principal device-id ahead of time (agent-comms#187's own principal-keyed admission tests) passes an explicit userIdentityOptions naming a directory it already loaded itself, rather than this store minting one it can never be told about afterwards.
   const resolvedUserIdentityOptions: Readonly<UserIdentityOptions> =
     userIdentityOptions ?? {
-      dir: fs.mkdtempSync(
-        path.join(tmpdir(), "agent-comms-test-user-identity-"),
-      ),
+      dir: scratchDirectory("agent-comms-test-user-identity-"),
     };
   const userIdentity = loadOrCreateUserIdentity(resolvedUserIdentityOptions);
   const resolvedMachineIdentityOptions: Readonly<MachineIdentityOptions> =
     machineIdentityOptions ?? {
-      dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-machine-")),
+      dir: scratchDirectory("agent-comms-test-machine-"),
     };
   const machineIdentity = loadOrCreateMachineIdentity(
     resolvedMachineIdentityOptions,

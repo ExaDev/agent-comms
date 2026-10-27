@@ -5,9 +5,6 @@
  */
 
 import { afterEach, describe, expect, it } from "vitest";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { MeshStore } from "../core/mesh-store.js";
 import {
   loadIdentityForFront,
@@ -20,6 +17,7 @@ import {
   waitFor as waitForCondition,
 } from "./test-transport.js";
 import { nanoid } from "../core/nanoid.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const cleanups = new TeardownStack();
 
@@ -52,7 +50,7 @@ describe("front and real bridge sharing one identity slot (agent-comms#299)", ()
     const slot: IdentitySlot = {
       harness: "claude-code",
       cwd: "/test/fronted-session",
-      dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-identity-")),
+      dir: scratchDirectory("agent-comms-test-identity-"),
     };
 
     // The front: loadIdentityForFront never takes the slot lock, matching front.ts's own real behaviour.

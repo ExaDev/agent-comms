@@ -2,9 +2,6 @@
  * Unit tests for createBridgeMesh -- the shared factory every bridge builds its own MeshStore/WireMeshTransport/CommsTool from, replacing the identical four-line block each of the six bridges used to repeat against TlsTransport directly.
  */
 
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { test, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import {
@@ -20,14 +17,13 @@ import {
 import { waitFor } from "./test-transport.js";
 import { freeLocalPort } from "./hub-helpers.js";
 import { realHubOverWs, waitForCondition } from "./hub-helpers.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** A device-id is a 64-character lowercase hex SHA-256 digest. */
 const DEVICE_ID_HEX_LENGTH = 64;
 
 function tempSlot(harness: string): IdentitySlot {
-  const dir = fs.mkdtempSync(
-    path.join(tmpdir(), "agent-comms-bridge-mesh-test-"),
-  );
+  const dir = scratchDirectory("agent-comms-bridge-mesh-test-");
   return { harness, cwd: "/tmp/project", dir };
 }
 

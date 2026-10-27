@@ -7,8 +7,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
 import net from "node:net";
-import { tmpdir } from "node:os";
-import * as path from "node:path";
 import WsWebSocket from "ws";
 import { createORPCClient, getEventMeta } from "@orpc/client";
 import { RPCLink, type WebSocketLike } from "@orpc/client/websocket";
@@ -19,6 +17,7 @@ import {
   freeLocalPort,
   unreachableHubUrl,
 } from "../../../../test/hub-helpers.js";
+import { scratchDirectory } from "../../../../test/scratch-directory.helper.js";
 
 type MeshClient = ContractRouterClient<typeof meshContract>;
 
@@ -70,7 +69,7 @@ async function setup(): Promise<{ client: MeshClient; port: number }> {
 let isolatedHome: string | undefined;
 
 beforeEach(() => {
-  isolatedHome = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-orpc-home-"));
+  isolatedHome = scratchDirectory("agent-comms-orpc-home-");
   vi.stubEnv("HOME", isolatedHome);
 });
 

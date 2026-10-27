@@ -3,7 +3,6 @@
  */
 
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect } from "vitest";
 import {
@@ -11,11 +10,10 @@ import {
   saveConnectionCodeLedger,
   type IdentitySlot,
 } from "../core/identity-store.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 function tempSlot(harness: string): IdentitySlot {
-  const dir = fs.mkdtempSync(
-    path.join(tmpdir(), "agent-comms-connection-code-ledger-test-"),
-  );
+  const dir = scratchDirectory("agent-comms-connection-code-ledger-test-");
   return { harness, cwd: "/tmp/project", dir };
 }
 

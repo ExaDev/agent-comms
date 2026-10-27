@@ -3,8 +3,6 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { test, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
@@ -12,6 +10,7 @@ import { dmRoomPath } from "../core/room-path.js";
 import type { CommsContext } from "../core/tool.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 import { freeLocalPort } from "./hub-helpers.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 interface Party {
   store: MeshStore;
@@ -230,7 +229,7 @@ test("whoami reports the user principal, so a person can hand it to someone who 
 test("admitting a person's principal lets every one of their devices DM with no decision, from the same grant text", async () => {
   const port = await freeLocalPort();
   const receiver = await party(port, "receiver");
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "dm-grant-user-"));
+  const dir = scratchDirectory("dm-grant-user-");
   const first = await partyOfUser(port, "first-device", dir);
   const second = await partyOfUser(port, "second-device", dir);
 

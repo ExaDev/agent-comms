@@ -10,7 +10,10 @@ export default defineConfig({
     environment: "node",
     fileParallelism: false,
     testTimeout: 30_000,
-    setupFiles: ["src/bridges/user/web/frontend/test/vitest-setup.ts"],
+    setupFiles: [
+      "src/bridges/user/web/frontend/test/vitest-setup.ts",
+      "src/test/scratch-directory.setup.ts",
+    ],
     exclude: [
       ...defaultExclude,
       // Compiled output of the *.test.ts sources vitest already runs -- vitest 5's defaultExclude no longer excludes dist/ on its own.

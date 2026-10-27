@@ -1,9 +1,6 @@
 /**
  * End-to-end integration test for agent-comms#187: a user principal admitted into another user's DM-communication scope with room delegation depth (admitAgentForDm) mints, via delegateDmSendToDevice, a further dm:send token naming one of its own devices as bearer -- and that device's own requestDmAccess, presenting only the delegated token, auto-admits exactly the way a directly-admitted bare device already does in dm-send-capability-admission.integration.test.ts. Proves the full "trust this whole person, not just one of their devices" flow the issue names, end to end over a real wire connection.
  */
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { test, expect } from "vitest";
 import {
   deviceIdFromHex,
@@ -18,6 +15,7 @@ import { randomId } from "../core/random-id.js";
 import { delegateDmSendToDevice } from "../core/dm-send-delegation.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 import { freeLocalPort } from "./hub-helpers.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** Delegated token expiry -- comfortably longer than a single test run, matching this file's sibling integration tests' own convention. */
 const DELEGATED_TOKEN_TTL_MS = 60_000;
@@ -26,9 +24,7 @@ const ONE_HOP_DELEGABLE = 1;
 
 function tempUserIdentityDir(): { dir: string } {
   return {
-    dir: fs.mkdtempSync(
-      path.join(tmpdir(), "agent-comms-principal-delegation-test-"),
-    ),
+    dir: scratchDirectory("agent-comms-principal-delegation-test-"),
   };
 }
 

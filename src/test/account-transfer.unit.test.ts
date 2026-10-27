@@ -3,7 +3,6 @@
  */
 
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
@@ -32,11 +31,12 @@ import {
   runAccountCommand,
   type AccountCliIo,
 } from "../account-cli.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const PASSPHRASE = "correct horse battery staple";
 
 function tempDir(): string {
-  return fs.mkdtempSync(path.join(tmpdir(), "agent-comms-account-transfer-"));
+  return scratchDirectory("agent-comms-account-transfer-");
 }
 
 function principalIn(dir: string): string {

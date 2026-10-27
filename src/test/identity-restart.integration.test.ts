@@ -4,9 +4,6 @@
  * Before persistent identities, every restart generated a fresh keypair, so the device-id-derived agent ID changed and peers kept targeting the old ID: their messages queued for an agent whose local handler (gated on agentId === peerId) never fired again.
  */
 
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { test, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
@@ -27,6 +24,7 @@ import { openAccountLedger } from "../core/account-ledger-store.js";
 import type { DeliveryEvent } from "../core/types.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
 import { freeLocalPort } from "./hub-helpers.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** Attempts {@link waitFor} polls before giving up. */
 const MAX_WAIT_ATTEMPTS = 20;
@@ -58,7 +56,7 @@ async function makePeer(
     }),
   );
   const userIdentityOptions = {
-    dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-user-identity-")),
+    dir: scratchDirectory("agent-comms-test-user-identity-"),
   };
   const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
   store.setIdentity({
@@ -97,12 +95,12 @@ async function waitFor(
 
 async function main(): Promise<void> {
   const port = await freeLocalPort();
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-restart-test-"));
+  const dir = scratchDirectory("agent-comms-restart-test-");
   const slot: IdentitySlot = { harness: "pi", cwd: "/tmp/project", dir };
   const slotB: IdentitySlot = {
     harness: "claude-code",
     cwd: "/tmp/b",
-    dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-restart-test-b-")),
+    dir: scratchDirectory("agent-comms-restart-test-b-"),
   };
 
   // Peer B is a normal ephemeral bridge that stays up throughout.

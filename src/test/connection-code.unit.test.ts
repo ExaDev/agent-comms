@@ -2,9 +2,6 @@
  * Unit tests for ConnectionCodeLedger (agent-comms#188): the generate/redeem pair backing gateway_generate_connection_code/gateway_redeem_connection_code. Covers the always-checked nonce/expiry path standalone from the optional PGP-signature path, mirroring gateway-trust.test.ts's own split between plain-trust and slot-persistence describe blocks for the sibling allowlist class.
  */
 
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import * as openpgp from "openpgp";
 import { describe, expect, it, beforeAll } from "vitest";
 import {
@@ -13,11 +10,10 @@ import {
 } from "../core/connection-code.js";
 import type { IdentitySlot } from "../core/identity-store.js";
 import type { ConnectionCode } from "../core/types.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 function tempSlot(harness: string): IdentitySlot {
-  const dir = fs.mkdtempSync(
-    path.join(tmpdir(), "agent-comms-connection-code-test-"),
-  );
+  const dir = scratchDirectory("agent-comms-connection-code-test-");
   return { harness, cwd: "/tmp/project", dir };
 }
 

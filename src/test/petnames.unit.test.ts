@@ -3,10 +3,10 @@
  */
 
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Petnames } from "../core/petnames.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** Mask isolating the permission bits from a stat mode's file-type bits. */
 const PERMISSION_BITS_MASK = 0o777;
@@ -24,7 +24,7 @@ function petnamesFile(dir: string): string {
 }
 
 function tempDir(): string {
-  return fs.mkdtempSync(path.join(tmpdir(), "agent-comms-petnames-"));
+  return scratchDirectory("agent-comms-petnames-");
 }
 
 describe("Petnames", () => {

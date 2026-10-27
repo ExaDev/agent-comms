@@ -1,6 +1,4 @@
 import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { decode, cdeDecodeOptions } from "cbor2";
 import { createNodeFsStorage } from "wire-mesh-core/adapters/node-fs-storage";
@@ -19,12 +17,13 @@ import {
 } from "../core/index.js";
 import { oplogDirFor } from "../core/identity-store.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 describe("public room-send durability", () => {
   it.each([undefined, false, true])(
     "records a notice only when durable is true (received %j)",
     async (durable) => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), "mesh-durable-"));
+      const root = scratchDirectory("mesh-durable-");
       const slot = { harness: "durable-test", cwd: root, dataDir: root };
       const mesh = await createBridgeMesh(slot, {
         fetchLatestVersion: async () => undefined,

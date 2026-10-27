@@ -6,7 +6,6 @@
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import type * as FsModule from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
@@ -15,6 +14,7 @@ import {
   loadRoomTokens,
   saveRoomToken,
 } from "../core/identity-store.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const hooks = vi.hoisted(() => ({
   onRead: undefined as ((filePath: string) => void) | undefined,
@@ -61,7 +61,7 @@ describe("saveRoomToken racing a concurrent identity creation", () => {
   });
 
   function scratchDir(): string {
-    const dir = fs.mkdtempSync(path.join(tmpdir(), "identity-wait-"));
+    const dir = scratchDirectory("identity-wait-");
     dirs.push(dir);
     return dir;
   }

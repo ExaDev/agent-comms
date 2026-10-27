@@ -1,5 +1,4 @@
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
@@ -36,13 +35,14 @@ import {
   unreachableHubUrl,
 } from "./hub-helpers.js";
 import { waitFor } from "./test-transport.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 let root: string;
 let defaultDir: string;
 const cleanups = new TeardownStack();
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-comms-data-dir-"));
+  root = scratchDirectory("agent-comms-data-dir-");
   defaultDir = path.join(root, "environment-default");
   vi.stubEnv(DATA_DIR_ENV_VAR, defaultDir);
 });

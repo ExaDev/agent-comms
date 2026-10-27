@@ -4,7 +4,6 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { createMemoryStorage } from "wire-mesh-core/adapters/memory-storage";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import type { KeyValueStorage } from "wire-mesh-core/ports/storage";
@@ -19,6 +18,7 @@ import type { AccountLedger } from "../core/account-ledger.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import type { TeardownStack } from "./hub-helpers.js";
 import { wireTestTransportWithHub } from "./test-transport.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** Short enough that the ledger's announcement round, which rides the re-advertise cadence, fires many times within a test's wait budget. */
 export const FAST_GOSSIP_INTERVAL_MS = 50;
@@ -27,7 +27,7 @@ const dirs: string[] = [];
 
 /** A fresh throwaway directory for one machine's user-identity.json, removed by removeUserDirs. */
 export function userDir(): string {
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "ledger-replication-user-"));
+  const dir = scratchDirectory("ledger-replication-user-");
   dirs.push(dir);
   return dir;
 }

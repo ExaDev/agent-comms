@@ -3,13 +3,12 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { dmRoomPath } from "../core/room-path.js";
 import { freeLocalPort, realHubOverWs, TeardownStack } from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** Short enough that a gossip re-advertisement fires within a test's own poll budget. */
 const FAST_GOSSIP_INTERVAL_MS = 50;
@@ -45,7 +44,7 @@ afterEach(async () => {
 });
 
 function userDir(): string {
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "principal-trust-user-"));
+  const dir = scratchDirectory("principal-trust-user-");
   dirs.push(dir);
   return dir;
 }

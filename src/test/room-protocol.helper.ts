@@ -2,9 +2,7 @@
  * The shared DI harness every RoomProtocol unit-test file builds against: real identities and real minted tokens (token verification here is genuinely cryptographic, unlike room-messaging.ts's sending side, which never inspects a token's own structure), a fake transport whose sendRoomRequest each test drives, and a fake delivery engine whose calls each test asserts on. Extracted so the three RoomProtocol test files share one harness rather than each carrying its own copy of it.
  */
 import { vi } from "vitest";
-import * as fs from "node:fs";
 import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { bytesToHex, deviceIdFromHex } from "wire-mesh-core/domain/device-id";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
@@ -20,6 +18,7 @@ import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { RoomProtocol, type RoomProtocolDeps } from "../core/room-protocol.js";
 import { randomId } from "../core/random-id.js";
 import type { AgentIdentity, Room } from "../core/types.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** Far longer than any test runs, so a pending join is never expired unless a test says so. */
 export const JOIN_DECISION_TIMEOUT_MS = 600_000;
@@ -131,7 +130,7 @@ export async function makeHarness(): Promise<Harness> {
   const systemClock = createSystemClock();
   let clockOffsetMs = 0;
   const clock = { now: () => systemClock.now() + clockOffsetMs };
-  const slotDir = fs.mkdtempSync(path.join(tmpdir(), "room-protocol-test-"));
+  const slotDir = scratchDirectory("room-protocol-test-");
   const slot = { harness: "test", cwd: "room-protocol", dir: slotDir };
   // saveRoomToken/saveIssuedRoomGrant write into this slot's own persisted identity file, which must already exist on disk -- unrelated to which crypto identity requireIdentity() uses for minting/verifying, purely a filesystem bookkeeping precondition.
   loadOrCreateIdentity(slot);
