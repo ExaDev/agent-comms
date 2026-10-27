@@ -3,8 +3,6 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Clock } from "wire-mesh-core/ports/clock";
 import { DEFAULT_CONNECTION_CODE_TTL_MS } from "../core/connection-code.js";
@@ -14,6 +12,7 @@ import type { Visibility } from "../core/types.js";
 import { runAccountCommand, type AccountCliIo } from "../account-cli.js";
 import { freeLocalPort, realHubOverWs, TeardownStack } from "./hub-helpers.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** A device-id is a 64-character lowercase hex SHA-256 digest. */
 const DEVICE_ID_HEX_LENGTH = 64;
@@ -33,7 +32,7 @@ afterEach(async () => {
 });
 
 function userDir(): string {
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "account-join-user-"));
+  const dir = scratchDirectory("account-join-user-");
   dirs.push(dir);
   return dir;
 }

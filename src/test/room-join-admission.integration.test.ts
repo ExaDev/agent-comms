@@ -4,9 +4,7 @@
  * Deliberately unit-level, not a full two-peer integration test: MeshStore's own legacy full-state-sync (still active per P3.3's "both paths coexist" transition) makes any two mesh-connected stores instantly aware of every room the moment they connect, so a genuinely two-peer test can never actually exercise the "room I've never heard of" case this code exists for -- exactly the scenario section 4 of the design doc names as a real regression, not something a live two-store test can reach today. Testing the handler and the remote-join path directly, against fakes, is the only way to exercise this code before P3.8 retires the legacy path.
  */
 
-import * as fs from "node:fs";
 import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { describe, it, expect } from "vitest";
 import type {
   IncomingManageRequest,
@@ -33,6 +31,7 @@ import { loadOrCreateMachineIdentity } from "../core/machine-identity.js";
 import { openAccountLedger } from "../core/account-ledger-store.js";
 import type { ConnectionHandle, MeshTransport } from "../core/transport.js";
 import { wireTestTransport } from "./test-transport.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const DEVICE_ID_HEX_LENGTH = 64;
 const TOKEN_TTL_MS = 60_000;
@@ -179,15 +178,13 @@ describe("joinRoom (requester side, remote path)", () => {
     const slot: IdentitySlot = {
       harness: "test",
       cwd: "req",
-      dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-join-remote-")),
+      dir: scratchDirectory("agent-comms-join-remote-"),
     };
     const identity = loadOrCreateIdentity(slot);
     store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
     const identityPort = await toIdentityPort(identity);
     const userIdentityOptions = {
-      dir: fs.mkdtempSync(
-        path.join(tmpdir(), "agent-comms-test-user-identity-"),
-      ),
+      dir: scratchDirectory("agent-comms-test-user-identity-"),
     };
     const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
     store.setIdentity({

@@ -3,7 +3,6 @@
  */
 
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
 import {
@@ -13,6 +12,7 @@ import {
   saveMachineDisplayName,
 } from "../core/machine-identity.js";
 import { loadOrCreateUserIdentity } from "../core/user-identity.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** Mask isolating the permission bits from a stat mode's file-type bits. */
 const PERMISSION_BITS_MASK = 0o777;
@@ -20,7 +20,7 @@ const PERMISSION_BITS_MASK = 0o777;
 const OWNER_ONLY_RW_PERMISSIONS = 0o600;
 
 function tempDir(): string {
-  return fs.mkdtempSync(path.join(tmpdir(), "agent-comms-machine-identity-"));
+  return scratchDirectory("agent-comms-machine-identity-");
 }
 
 test("the machine identity is created once and reloaded unchanged from machine-identity.json", () => {

@@ -2,9 +2,6 @@
  * Unit tests for per-room capability token persistence (core/identity-store).
  */
 
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { test, expect } from "vitest";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import {
@@ -15,11 +12,10 @@ import {
   releaseIdentityLock,
   type IdentitySlot,
 } from "../core/identity-store.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 function tempSlot(harness: string): { slot: IdentitySlot; dir: string } {
-  const dir = fs.mkdtempSync(
-    path.join(tmpdir(), "agent-comms-room-token-test-"),
-  );
+  const dir = scratchDirectory("agent-comms-room-token-test-");
   return { slot: { harness, cwd: "/tmp/project", dir }, dir };
 }
 

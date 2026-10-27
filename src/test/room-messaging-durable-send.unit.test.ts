@@ -2,9 +2,7 @@
  * sendRoomMessage's opt-in durable flag (P5's mint-and-append half, agent-comms#50, wired via recordRoomSendNotice from #135): a caller that passes durable: true also gets the message recorded as a room-notice in the sender's own oplog, verifiable end to end via a real verifyRoomNotice, not just an opaque append. Real identities and a real minted token throughout, matching room-lifecycle.test.ts's own established convention for this class of test -- recordRoomSendNotice genuinely mints and signs, so an opaque placeholder token would fail the mint outright.
  */
 import { describe, expect, it } from "vitest";
-import * as fs from "node:fs";
 import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { decode as cborDecode, cdeDecodeOptions } from "cbor2";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
@@ -24,6 +22,7 @@ import {
   type RoomMessagingDeps,
 } from "../core/room-messaging.js";
 import type { Room } from "../core/types.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const NO_DELEGATIONS_REMAINING = 0;
 const MINUTES_PER_HOUR = 60;
@@ -51,9 +50,7 @@ async function makeHarness() {
   if (!verdict.ok) throw new Error(`mint failed: ${verdict.reason}`);
 
   // saveRoomToken writes into this slot's own persisted identity file, which must already exist on disk -- unrelated to which crypto identity requireIdentity() uses for minting/verifying (room-lifecycle.test.ts's own established convention for this exact precondition).
-  const slotDir = fs.mkdtempSync(
-    path.join(tmpdir(), "room-messaging-durable-send-test-"),
-  );
+  const slotDir = scratchDirectory("room-messaging-durable-send-test-");
   const slot = { harness: "test", cwd: "room-messaging", dir: slotDir };
   loadOrCreateIdentity(slot);
   saveRoomToken(slot, roomPath, verdict.token);

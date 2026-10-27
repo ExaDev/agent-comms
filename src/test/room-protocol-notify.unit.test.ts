@@ -2,9 +2,6 @@
  * Direct, DI-based unit tests for RoomProtocol's handleRoomNotify (P3.8's directed-delivery replacement for informational events, agent-comms#48) -- moved into its own file to stay under the repo's max-lines cap once room-protocol.test.ts and room-protocol-admission.test.ts were already at capacity. Real identities and real minted tokens throughout, matching those two files' own established convention (handleRoomNotify genuinely verifies tokens cryptographically, so an opaque placeholder string fails the mint/verify outright).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { bytesToHex, deviceIdFromHex } from "wire-mesh-core/domain/device-id";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
@@ -21,6 +18,7 @@ import { ownerNamedRoomPath } from "../core/room-path.js";
 import { RoomProtocol, type RoomProtocolDeps } from "../core/room-protocol.js";
 import { randomId } from "../core/random-id.js";
 import type { DeliveryEvent, Room } from "../core/types.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** Far longer than any test runs, so a pending join is never expired unless a test says so. */
 const JOIN_DECISION_TIMEOUT_MS = 600_000;
@@ -93,9 +91,7 @@ interface Harness {
 
 async function makeHarness(): Promise<Harness> {
   const ids = await makeIdentities();
-  const slotDir = fs.mkdtempSync(
-    path.join(tmpdir(), "room-protocol-notify-test-"),
-  );
+  const slotDir = scratchDirectory("room-protocol-notify-test-");
   const slot = { harness: "test", cwd: "room-protocol-notify", dir: slotDir };
   loadOrCreateIdentity(slot);
   const queueDelivery =

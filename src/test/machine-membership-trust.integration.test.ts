@@ -3,14 +3,13 @@
  */
 
 import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
 import { CommsTool } from "../core/tool.js";
 import { shortId } from "../core/display-name.js";
 import { freeLocalPort, realHubOverWs, TeardownStack } from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** Short enough that a gossip re-advertisement fires within a test's own poll budget. */
 const FAST_GOSSIP_INTERVAL_MS = 50;
@@ -45,7 +44,7 @@ afterEach(async () => {
 
 /** One host's identity directory: its machine key and its account's user key live here, as they do in ~/.agent-comms. */
 function hostDir(): string {
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "machine-trust-host-"));
+  const dir = scratchDirectory("machine-trust-host-");
   dirs.push(dir);
   return dir;
 }

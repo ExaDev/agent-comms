@@ -4,7 +4,6 @@
 
 import * as fs from "node:fs";
 import type * as FsModule from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect, vi, afterEach } from "vitest";
 import {
@@ -18,6 +17,7 @@ import {
 import { CERTIFICATE_VALIDITY_MS } from "../core/identity.js";
 import { generateWriterNonce } from "../core/account-ledger-crypto.js";
 import { randomId } from "../core/random-id.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 // node:fs's linkSync is wrapped (not replaced) so every test gets the real filesystem by default; only the one race test below overrides it, via mockImplementationOnce, to simulate a concurrent writer winning the exclusive create. vi.spyOn cannot target an ESM named export directly ("Module namespace is not configurable"), so the wrap has to happen at vi.mock time instead.
 vi.mock("node:fs", async (importOriginal) => {
@@ -35,7 +35,7 @@ class ExistsError extends Error {
 }
 
 function tempDir(): string {
-  return fs.mkdtempSync(path.join(tmpdir(), "agent-comms-user-identity-test-"));
+  return scratchDirectory("agent-comms-user-identity-test-");
 }
 
 function identityFile(dir: string): string {

@@ -2,9 +2,6 @@
  * Direct, DI-based unit tests for how RoomLifecycle resolves a bare room name (agent-comms#246): listRooms surfaces a room discovered through another device's gossiped hosted-room advert under its bare `name`, so every room action that accepts a name has to resolve against the same discovered rooms, not only against rooms already replicated into this store's own map.
  */
 import { describe, expect, it, vi } from "vitest";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { bytesToHex, deviceIdFromHex } from "wire-mesh-core/domain/device-id";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
@@ -20,6 +17,7 @@ import {
   type RoomLifecycleDeps,
 } from "../core/room-lifecycle.js";
 import type { Room } from "../core/types.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const TOKEN_TTL_MS = 60_000;
 
@@ -68,7 +66,7 @@ async function makeHarness(): Promise<Harness> {
   const selfId = bytesToHex(Uint8Array.from(self.deviceId));
   const hostAId = bytesToHex(Uint8Array.from(hostA.deviceId));
   const hostBId = bytesToHex(Uint8Array.from(hostB.deviceId));
-  const slotDir = fs.mkdtempSync(path.join(tmpdir(), "room-bare-name-test-"));
+  const slotDir = scratchDirectory("room-bare-name-test-");
   const slot = { harness: "test", cwd: "room-bare-name", dir: slotDir };
   loadOrCreateIdentity(slot);
 

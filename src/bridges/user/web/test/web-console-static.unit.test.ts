@@ -4,7 +4,6 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import type http from "node:http";
 import {
@@ -12,6 +11,7 @@ import {
   serveWebConsole,
   WEB_CONSOLE_MOUNT,
 } from "../web-console-static.js";
+import { scratchDirectory } from "../../../../test/scratch-directory.helper.js";
 
 const ENV_VAR = "AGENT_COMMS_WEB_CONSOLE_DIST";
 const HTTP_OK = 200;
@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 function makeDistDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "web-console-dist-"));
+  const dir = scratchDirectory("web-console-dist-");
   fs.writeFileSync(
     path.join(dir, "index.html"),
     "<!doctype html><title>web-console</title>",
@@ -62,7 +62,7 @@ describe("resolveWebConsoleDist", () => {
   });
 
   it("returns undefined when the configured directory has no index.html", () => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "web-console-empty-"));
+    tmpDir = scratchDirectory("web-console-empty-");
     process.env[ENV_VAR] = tmpDir;
     expect(resolveWebConsoleDist()).toBeUndefined();
   });

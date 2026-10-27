@@ -2,9 +2,6 @@
  * Direct, DI-based unit tests for RoomLifecycle's own remote-request-sending half -- refreshRoomMembers, requestDmAccess, getRoom, revokeMemberGrant, and declineInvite, moved here from room-lifecycle.test.ts/room-lifecycle-membership.test.ts to stay under this repo's max-lines cap after later gap-closing passes. See room-lifecycle.test.ts for createRoom/listRooms/joinRoom/joinRemoteRoom, and room-lifecycle-membership.test.ts for leaveRoom/leaveRemoteRoom/inviteToRoom/kickFromRoom/destroyRoom -- and either file's own header for the full rationale. Real identities and real minted tokens throughout (not opaque placeholders): RoomLifecycle genuinely mints capability tokens and parses roomJoinOkSchema/roomMembersOkSchema's own structural shape (a real COSE_Sign1 tuple, though never signature-verified by this class), so an arbitrary placeholder string fails the schema outright where room-messaging.test.ts's forwarding-only case could get away with one.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { bytesToHex, deviceIdFromHex } from "wire-mesh-core/domain/device-id";
 import { mintCapabilityToken } from "wire-mesh-core/domain/tokens";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
@@ -27,6 +24,7 @@ import {
   type RoomLifecycleDeps,
 } from "../core/room-lifecycle.js";
 import type { AgentIdentity, Room } from "../core/types.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const TOKEN_TTL_MS = 60_000;
 
@@ -120,7 +118,7 @@ interface Harness {
 
 async function makeHarness(): Promise<Harness> {
   const ids = await makeIdentities();
-  const slotDir = fs.mkdtempSync(path.join(tmpdir(), "room-lifecycle-test-"));
+  const slotDir = scratchDirectory("room-lifecycle-test-");
   const slot = { harness: "test", cwd: "room-lifecycle", dir: slotDir };
   // saveRoomToken/saveIssuedRoomGrant write into this slot's own persisted identity file, which must already exist on disk -- unrelated to which crypto identity requireIdentity() uses for minting/verifying, purely a filesystem bookkeeping precondition.
   loadOrCreateIdentity(slot);

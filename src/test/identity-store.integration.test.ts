@@ -3,7 +3,6 @@
  */
 
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { test, expect } from "vitest";
@@ -26,6 +25,7 @@ import {
   saveGroupToken,
   type IdentitySlot,
 } from "../core/identity-store.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const TOKEN_TTL_MS = 60_000;
 
@@ -50,7 +50,7 @@ async function mintGroupToken(groupPath: string): Promise<CapabilityToken> {
 }
 
 function tempSlot(harness: string): { slot: IdentitySlot; dir: string } {
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-identity-test-"));
+  const dir = scratchDirectory("agent-comms-identity-test-");
   return { slot: { harness, cwd: "/tmp/project", dir }, dir };
 }
 

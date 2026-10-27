@@ -4,7 +4,6 @@
 
 import { describe, it, expect, afterEach } from "vitest";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import http from "node:http";
 import net from "node:net";
@@ -14,6 +13,7 @@ import {
   freeLocalPort,
   unreachableHubUrl,
 } from "../../../../test/hub-helpers.js";
+import { scratchDirectory } from "../../../../test/scratch-directory.helper.js";
 
 const ENV_VAR = "AGENT_COMMS_WEB_CONSOLE_DIST";
 const HTTP_OK = 200;
@@ -105,7 +105,7 @@ describe("web-console route (opt-in)", () => {
 
   it("serves web-console's index.html and assets when the dist dir is configured", async () => {
     originalEnv = process.env[ENV_VAR];
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "web-console-dist-"));
+    tmpDir = scratchDirectory("web-console-dist-");
     fs.writeFileSync(
       path.join(tmpDir, "index.html"),
       "<!doctype html><title>web-console</title>",

@@ -3,13 +3,13 @@
  */
 
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, expect } from "vitest";
 import { FileStore } from "../core/store.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 function tempStore(): FileStore {
-  const root = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-filestore-"));
+  const root = scratchDirectory("agent-comms-filestore-");
   return new FileStore(root);
 }
 

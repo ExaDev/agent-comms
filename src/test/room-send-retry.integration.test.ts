@@ -2,9 +2,6 @@
  * Integration test for issue #28's own acceptance behaviour, re-verified against P3.5's directed fan-out: a room message sent while its recipient is offline must still reach the recipient once it reconnects. Unlike the legacy full-state-sync this replaces, a directed room.send to a disconnected member fails immediately rather than eventually converging, so the fan-out queues it for retry (pendingRoomSends) and flushes that queue the moment the member's connection is (re)established (handlePeerConnected). Replaces downtime-replay.integration.test.ts, whose own scenario relied on deliveryQueues/applyStateSync -- machinery this fan-out no longer uses for message delivery.
  */
 
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { test, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
@@ -25,6 +22,7 @@ import type { DeliveryEvent } from "../core/types.js";
 import type { PeerIdentity } from "../core/identity.js";
 import { ownerNamedRoomPath } from "../core/room-path.js";
 import { freeLocalPort } from "./hub-helpers.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** How many polling attempts {@link waitFor} makes before failing. */
 const WAIT_FOR_MAX_ATTEMPTS = 20;
@@ -62,7 +60,7 @@ async function makePeer(
     }),
   );
   const userIdentityOptions = {
-    dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-test-user-identity-")),
+    dir: scratchDirectory("agent-comms-test-user-identity-"),
   };
   const userIdentity = loadOrCreateUserIdentity(userIdentityOptions);
   store.setIdentity({
@@ -101,12 +99,12 @@ async function waitFor(
 
 async function main(): Promise<void> {
   const port = await freeLocalPort();
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-send-retry-"));
+  const dir = scratchDirectory("agent-comms-send-retry-");
   const slot: IdentitySlot = { harness: "pi", cwd: "/tmp/project", dir };
   const slotA: IdentitySlot = {
     harness: "claude-code",
     cwd: "/tmp/a",
-    dir: fs.mkdtempSync(path.join(tmpdir(), "agent-comms-send-retry-a-")),
+    dir: scratchDirectory("agent-comms-send-retry-a-"),
   };
 
   // A is a normal ephemeral bridge that stays up throughout.

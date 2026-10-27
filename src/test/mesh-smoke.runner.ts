@@ -9,6 +9,7 @@
 import * as assert from "node:assert/strict";
 import * as child_process from "node:child_process";
 import * as net from "node:net";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const SMOKE_PORT = 19877;
 const SMOKE_HOST = "127.0.0.1";
@@ -34,8 +35,11 @@ function spawnPeer(name: string, actions: string): PeerHandle {
   const messages: TestMessage[] = [];
   const script = buildScript(name, actions);
 
+  // The child makes its identity directories under os.tmpdir(). Pointing that at a directory this process owns lets the exit cleanup in scratch-directory.helper.ts remove them even when the child is killed on a timeout, which a cleanup inside the child could not survive.
+  const childTmp = scratchDirectory("agent-comms-smoke-tmp-");
   const child = child_process.spawn("node", ["-e", script], {
     stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, TMPDIR: childTmp, TEMP: childTmp, TMP: childTmp },
   });
 
   let buffer = "";

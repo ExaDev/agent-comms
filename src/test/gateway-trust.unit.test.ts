@@ -1,9 +1,6 @@
 /**
  * Direct unit tests for GatewayTrust -- the cross-machine trust boundary's own allowlist (agent-comms#156), tested standalone against no real transport or hub socket, Also covers persistence (agent-comms#186) and its sharing across every store in an identity directory (agent-comms#293): loading a previously trusted set on construction, writing it back on every change, and picking up a change another instance made.
  */
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GatewayTrust,
@@ -11,11 +8,10 @@ import {
 } from "../core/gateway-trust.js";
 import type { IdentitySlot } from "../core/identity-store.js";
 import { manualClock } from "./manual-clock.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 function tempSlot(harness: string): IdentitySlot {
-  const dir = fs.mkdtempSync(
-    path.join(tmpdir(), "agent-comms-gateway-trust-test-"),
-  );
+  const dir = scratchDirectory("agent-comms-gateway-trust-test-");
   return { harness, cwd: "/tmp/project", dir };
 }
 

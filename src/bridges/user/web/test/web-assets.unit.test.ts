@@ -4,13 +4,13 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import {
   createFrontendAssetLoader,
   FrontendNotBuiltError,
   loadFrontendAssets,
 } from "../web-assets.js";
+import { scratchDirectory } from "../../../../test/scratch-directory.helper.js";
 
 const ICON_FILENAMES = [
   "icon-96x96.svg",
@@ -21,7 +21,7 @@ const ICON_FILENAMES = [
 let assetDir: string;
 
 beforeEach(() => {
-  assetDir = fs.mkdtempSync(path.join(os.tmpdir(), "web-assets-"));
+  assetDir = scratchDirectory("web-assets-");
 });
 
 afterEach(() => {

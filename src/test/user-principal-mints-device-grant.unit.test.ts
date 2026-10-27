@@ -4,9 +4,6 @@
  * The capability/scope minted here (`room:member`, scope kind `group`) is a syntactically valid probe only, borrowed from the one capability string already proven to mint and verify elsewhere in this codebase -- the real device-to-user membership grant shape (what capability and scope a device actually presents to prove "the user principal admitted me") is agent-comms#161's own scope, deliberately not decided here.
  */
 
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { test, expect } from "vitest";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import {
@@ -18,14 +15,13 @@ import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import { generateIdentity } from "../core/identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { randomId } from "../core/random-id.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** The probe grant's expiry window. */
 const TOKEN_TTL_MS = 60_000;
 
 function tempDir(): string {
-  return fs.mkdtempSync(
-    path.join(tmpdir(), "agent-comms-user-principal-mint-test-"),
-  );
+  return scratchDirectory("agent-comms-user-principal-mint-test-");
 }
 
 test("the user principal mints a capability token bearing a device it owns", async () => {

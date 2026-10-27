@@ -5,7 +5,6 @@
 import { afterEach, expect, it } from "vitest";
 import * as child_process from "node:child_process";
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -15,6 +14,7 @@ import {
   TeardownStack,
   unreachableHubUrl,
 } from "./hub-helpers.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const cleanups = new TeardownStack();
 
@@ -54,9 +54,7 @@ const ENTRIES: readonly Entry[] = ["mcp", "claude-code", "bare-command"];
 it.each(ENTRIES)(
   "writes only JSON-RPC messages to stdout and puts the web UI banner on stderr (%s)",
   async (entry) => {
-    const slotDir = fs.mkdtempSync(
-      path.join(tmpdir(), "agent-comms-mcp-test-"),
-    );
+    const slotDir = scratchDirectory("agent-comms-mcp-test-");
     cleanups.push(async () => {
       fs.rmSync(slotDir, { recursive: true, force: true });
     });

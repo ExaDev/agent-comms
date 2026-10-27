@@ -1,9 +1,6 @@
 /**
  * Unit tests for the membership proof a device gossips to show its user principal vouches for it: minted by that principal for that one device, carried as text, and verified by a receiver that trusts the principal.
  */
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createSystemClock } from "wire-mesh-core/adapters/system-clock";
 import { createRevocationView } from "wire-mesh-core/domain/revocation-view";
@@ -23,9 +20,10 @@ import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { DEVICE_MEMBER_CAPABILITY } from "../core/device-membership-verification.js";
 import { encodeTokenText } from "../core/token-text.js";
 import { randomId } from "../core/random-id.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 async function makeUser(): Promise<Awaited<ReturnType<typeof toIdentityPort>>> {
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "membership-proof-user-"));
+  const dir = scratchDirectory("membership-proof-user-");
   return toIdentityPort(loadOrCreateUserIdentity({ dir }));
 }
 
@@ -185,7 +183,7 @@ describe("membership proof", () => {
   });
 
   it("verifies a machine's proof exactly as it verifies a principal's, and not against the principal", async () => {
-    const dir = fs.mkdtempSync(path.join(tmpdir(), "membership-proof-host-"));
+    const dir = scratchDirectory("membership-proof-host-");
     const machine = await toIdentityPort(loadOrCreateMachineIdentity({ dir }));
     const user = await toIdentityPort(loadOrCreateUserIdentity({ dir }));
     const device = await toIdentityPort(generateIdentity());
@@ -215,7 +213,7 @@ describe("membership proof", () => {
   });
 
   it("identifies the issuer a proof names without being told it beforehand", async () => {
-    const dir = fs.mkdtempSync(path.join(tmpdir(), "membership-proof-host-"));
+    const dir = scratchDirectory("membership-proof-host-");
     const machine = await toIdentityPort(loadOrCreateMachineIdentity({ dir }));
     const device = await toIdentityPort(generateIdentity());
     const proof = await mintMembershipProof({
@@ -236,7 +234,7 @@ describe("membership proof", () => {
   });
 
   it("does not identify a proof for a different device", async () => {
-    const dir = fs.mkdtempSync(path.join(tmpdir(), "membership-proof-host-"));
+    const dir = scratchDirectory("membership-proof-host-");
     const machine = await toIdentityPort(loadOrCreateMachineIdentity({ dir }));
     const device = await toIdentityPort(generateIdentity());
     const other = await toIdentityPort(generateIdentity());

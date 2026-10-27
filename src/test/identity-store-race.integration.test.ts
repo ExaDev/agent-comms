@@ -2,12 +2,11 @@
  * agent-comms#222 -- two or more real processes sharing one identity slot (harness, cwd) racing loadOrCreateIdentity+saveRoomToken concurrently against a slot that has never been touched before must never throw or corrupt the persisted identity, mirroring several independent Playwright e2e workers each starting a ChatController against the same cwd-derived slot.
  */
 
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { test, expect } from "vitest";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_SCRIPT = path.join(__dirname, "identity-store-race-worker.ts");
@@ -49,7 +48,7 @@ async function runWorker(
 }
 
 async function raceRound(): Promise<WorkerResult[]> {
-  const dir = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-identity-race-"));
+  const dir = scratchDirectory("agent-comms-identity-race-");
   const startAt = Date.now() + START_DELAY_MS;
   const workers = Array.from({ length: WORKER_COUNT }, async () =>
     runWorker(dir, "user", startAt),

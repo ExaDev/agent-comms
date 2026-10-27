@@ -3,7 +3,6 @@
  */
 
 import * as fs from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createMemoryStorage } from "wire-mesh-core/adapters/memory-storage";
@@ -38,6 +37,7 @@ import {
   readLegacyIssuedGrants,
 } from "../core/user-identity.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 type LedgerFrame = DataHaveFrame | DataRequestFrame | DataEntriesFrame;
 
@@ -249,7 +249,7 @@ describe("account ledger replication", () => {
   it("never misses a replicated grant while another bridge on the machine is storing that log", async () => {
     const account = generateIdentity();
     const origin = machineLedger(account);
-    const dir = fs.mkdtempSync(path.join(tmpdir(), "agent-comms-ledger-fs-"));
+    const dir = scratchDirectory("agent-comms-ledger-fs-");
     const tornWrite = pausingHeadWrites(createNodeFsStorage({ dir }));
     const machineLock = `${dir}.lock`;
     const replicator = new AccountLedger({
@@ -319,7 +319,7 @@ describe("account ledger replication", () => {
 
 describe("openAccountLedger", () => {
   function userDir(): string {
-    return fs.mkdtempSync(path.join(tmpdir(), "agent-comms-account-ledger-"));
+    return scratchDirectory("agent-comms-account-ledger-");
   }
 
   function writeLegacyGrants(dir: string): void {

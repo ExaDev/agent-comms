@@ -2,9 +2,6 @@
  * Integration test for receiver-side DM gating with a user-issued capability (agent-comms#162): a receiver's own user principal can admit an agent into its DM-communication scope by minting a dm:send grant, which the agent then presents alongside its DM join request to auto-admit without needing a fresh human decision each time -- the durable admission list this issue adds, distinct from (and additive to) dm-admission.integration.test.ts's own two-round human-consent flow, which remains the fallback when no dm:send grant is presented at all.
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { tmpdir } from "node:os";
 import { test, expect } from "vitest";
 import {
   deviceIdFromHex,
@@ -20,6 +17,7 @@ import { loadOrCreateUserIdentity } from "../core/user-identity.js";
 import { DM_SEND_CAPABILITY } from "../core/dm-token-verification.js";
 import { waitFor, wireTestTransport } from "./test-transport.js";
 import { freeLocalPort } from "./hub-helpers.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** A device-id, hex-encoded, is always exactly this many characters (32 raw bytes). */
 const DEVICE_ID_HEX_LENGTH = 64;
@@ -128,9 +126,7 @@ test("revoking a bearer that was never admitted is a harmless no-op", async () =
 /** B's own user-principal identity, loaded from a directory this test controls directly (rather than the throwaway one wireTestTransport would otherwise generate internally and never disclose), so a test can compute the exact "user" scope path (B's own principal device-id, hex) a dm:send grant B mints is rooted at -- agent-comms#187's own principal-keyed admission tests need this to construct a further delegation whose scope actually narrows the grant it chains from. */
 function tempUserIdentityDir(): { dir: string } {
   return {
-    dir: fs.mkdtempSync(
-      path.join(tmpdir(), "agent-comms-b-user-identity-test-"),
-    ),
+    dir: scratchDirectory("agent-comms-b-user-identity-test-"),
   };
 }
 

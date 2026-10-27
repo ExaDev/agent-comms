@@ -1,8 +1,6 @@
 /**
  * CommsTool's mesh_graph/mesh_trace actions (agent-comms#199) -- the tool-layer dispatch/formatting on top of MeshStore.meshGraph/meshTrace, mirroring web-url-tool-action.test.ts's own real-MeshStore-plus-CommsTool pattern. The underlying wire-level behaviour (real gossip-derived topology/peers, a real path.trace round trip, direct vs hub-relayed routing) is already proven end-to-end against WireMeshTransport directly in mesh-graph-trace.integration.test.ts; this file covers what's unique to the tool layer: notMeshBacked, empty-graph/unreachable-device formatting, and buildAction parsing.
  */
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, describe, expect } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
@@ -10,6 +8,7 @@ import { CommsTool } from "../core/tool.js";
 import { buildAction } from "../core/bridge.js";
 import { FileStore } from "../core/store.js";
 import { wireTestTransport } from "./test-transport.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 /** A device-id is SHA-256(public key) -- 32 raw bytes, 64 hex characters. */
 const DEVICE_ID_BYTE_LENGTH = 32;
@@ -17,9 +16,7 @@ const DEVICE_ID_BYTE_LENGTH = 32;
 const TEST_TIMEOUT_MS = 5000;
 
 function tempFileStore(): FileStore {
-  const root = fs.mkdtempSync(
-    path.join(tmpdir(), "agent-comms-mesh-graph-trace-tool-"),
-  );
+  const root = scratchDirectory("agent-comms-mesh-graph-trace-tool-");
   return new FileStore(root);
 }
 

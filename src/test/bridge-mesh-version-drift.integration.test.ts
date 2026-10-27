@@ -4,9 +4,6 @@
  * fetchLatestVersion is injected in every test here specifically so this file never makes a real network call to the npm registry -- see bridge-mesh.ts's own header on why that parameter exists.
  */
 
-import * as fs from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import { test, expect } from "vitest";
 import { createBridgeMesh } from "../core/bridge-mesh.js";
 import { freeLocalPort } from "./hub-helpers.js";
@@ -14,11 +11,10 @@ import { getOwnPackageVersion } from "../core/package-version.js";
 import { buildAction } from "../core/bridge.js";
 import type { IdentitySlot } from "../core/identity-store.js";
 import type { CommsTool } from "../core/tool.js";
+import { scratchDirectory } from "./scratch-directory.helper.js";
 
 function tempSlot(harness: string): IdentitySlot {
-  const dir = fs.mkdtempSync(
-    path.join(tmpdir(), "agent-comms-bridge-mesh-version-drift-test-"),
-  );
+  const dir = scratchDirectory("agent-comms-bridge-mesh-version-drift-test-");
   return { harness, cwd: "/tmp/project", dir };
 }
 
