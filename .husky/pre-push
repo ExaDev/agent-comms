@@ -1,1 +1,7 @@
-pnpm run prepush 2>&1
+# Run lint, typecheck and the frontend build, then the tests related to what the push changes. The full suite is CI's job: it runs there on every pull request, so repeating it here only repeats the same work for each push attempt, and again for each attempt that fails.
+# The related tests are those vitest finds from the module graph for the files changed since the push diverged from origin/main, and a push that changes no source file has none to run, which is a pass. A change to the vitest config, package.json or the lockfile still reruns everything, as vitest treats those as triggers.
+# Workers are the cores the machine's run queue leaves free, and at least one: vitest starts a pool the size of the core count by default, so several pushes at once on a shared machine each oversubscribe it, and every test slows until the guards against a hang fire on tests that did nothing wrong.
+base=$(git merge-base origin/main HEAD) &&
+workers=$(node -p "Math.max(1, os.availableParallelism() - Math.ceil(os.loadavg()[0]))") &&
+pnpm run prepush 2>&1 &&
+pnpm exec vitest run --changed "$base" --passWithNoTests --maxWorkers="$workers" 2>&1

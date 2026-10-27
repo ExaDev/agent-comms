@@ -17,11 +17,14 @@
       "inputs": ["$TURBO_DEFAULT$", "eslint.config.ts"]
     },
     "_prepush": {
-      "dependsOn": ["_lint", "_typecheck", "_test"]
+      // The checks the pre-push hook runs before its related-tests run. The build is here because the web-bridge
+      // integration tests the hook may select need it (see _test), and turbo caches it, so it costs nothing when
+      // the frontend sources are unchanged.
+      "dependsOn": ["_lint", "_typecheck", "_build:frontend"]
     },
     "_test": {
-      // The web-bridge integration tests request the frontend routes, which serve src/bridges/user/web/dist
-      // -- without this dependency, a fresh checkout with no prior build (a new worktree's pre-push hook, in
+      // The web-bridge integration tests request the frontend routes, which serve src/bridges/user/web/dist.
+      // Without this dependency, a fresh checkout with no prior build (a new worktree running the tests, in
       // particular) gets 503 from those routes and fails those suites rather than actually exercising them.
       "dependsOn": ["_build:frontend"]
     },
