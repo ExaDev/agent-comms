@@ -51,6 +51,11 @@ function send(socket: dgram.Socket, payload: unknown, port: number): void {
   socket.send(JSON.stringify(payload), port, "127.0.0.1");
 }
 
+/** The presence reports its own failed sends through onError (a host with no broadcast route fails every limited-broadcast send with EHOSTUNREACH), which says nothing about how it handled a received packet. */
+function isOwnSendFailure(error: Error): boolean {
+  return "syscall" in error && error.syscall === "send";
+}
+
 async function settle(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, SETTLE_MS);
@@ -222,7 +227,7 @@ describe("FirstContact", () => {
     await settle();
 
     expect(discovered).toEqual([]);
-    expect(errors).toEqual([]);
+    expect(errors.filter((error) => !isOwnSendFailure(error))).toEqual([]);
     presence.stop();
   });
 
