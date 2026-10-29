@@ -237,5 +237,5 @@ jobs:
           git fetch --depth=1 origin "refs/tags/${REGISTRY_REF}"
           git show FETCH_HEAD:server.json > server.json
       # Pinned to the commit of the release, not the moving major tag: GitHub's secure use guidance is a full-length SHA, since a tag can be moved, and this step holds the registry publishing identity. Dependabot's github-actions updates keep the pin current.
-      - uses: ExaDev/mcp-registry-publish@438589653ab51681ce140c2dec1ee58798ed16cd # v1.0.4
+      - uses: ExaDev/mcp-registry-publish@d625f35c3afdc0a0624f1fd6cb6d4e176f44b613 # v1.0.6
 
