@@ -44,12 +44,12 @@ export interface BridgeMeshSync extends BridgeMesh {
   attachIdentity: () => Promise<void>;
 }
 
-/** coordinatorPort/hubUrl thread straight into MeshStore's own constructor, hubUrl defaulting here and nowhere below to resolveHubUrl() (AGENT_COMMS_HUB_URL, else the production hub); fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup). firstContactPort defaults to FIRST_CONTACT_PORT, the default-on coordinator-free formation presence (agent-comms#341); a bridge-level test overrides it with an OS-assigned free port so test bridges never cross-discover each other. */
+/** coordinatorPort/hubUrl thread straight into MeshStore's own constructor, hubUrl defaulting here and nowhere below to resolveHubUrl() (AGENT_COMMS_HUB_URL, else the production hub); fetchLatestVersion is exposed purely for tests -- every real caller omits it and gets VersionDriftChecker's own default (a real npm registry lookup). firstContactPort defaults to FIRST_CONTACT_PORT, the default-on coordinator-free formation presence (agent-comms#341); a bridge-level test overrides it with an OS-assigned free port so test bridges never cross-discover each other, and false builds a store with no presence at all, for a store that lives in a process whose own store already runs one (the cc-peer front's per-session stores, agent-comms#476). */
 export interface BridgeMeshOptions {
   coordinatorPort?: number | undefined;
   hubUrl?: string | undefined;
   fetchLatestVersion?: (() => Promise<string | undefined>) | undefined;
-  firstContactPort?: number | undefined;
+  firstContactPort?: number | false | undefined;
 }
 
 /** Seams that let a test run a real bridge against an isolated mesh; every real launch omits them. */
@@ -94,7 +94,7 @@ export function createBridgeMeshSyncFromIdentity(
     coordinatorPort,
     hubUrl,
     slot,
-    firstContactPort,
+    firstContactPort: firstContactPort === false ? undefined : firstContactPort,
   });
   store.peerId = deviceIdToHex(Uint8Array.from(identity.deviceId));
   // One shared dataStorage instance for both the transport's own data-domain frame responder and the store's own durable-send mint path (P5, agent-comms#50) -- oplogDirFor(slot) needs only the slot, not the async identity below, so this can be constructed synchronously right here.

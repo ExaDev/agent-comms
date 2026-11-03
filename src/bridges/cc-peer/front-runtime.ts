@@ -1,7 +1,7 @@
 /**
  * Real cc-peer/MeshStore construction for the default coordinator-run front (agent-comms#157) -- the counterpart to bridges/cc-peer/run.ts's own real CcPeer.create()/createBridgeMesh construction for the one-shot `bridge cc-peer` command. Wires front-controller.ts's CcPeerFront (attach/detach diffing across ticks) to front-relay.ts's buildFrontedSessionRecord/detachFrontedSession (one session's own relay) against one shared, front-wide CcPeer instance and a fresh per-session MeshStore built from loadIdentityForFront's lock-free identity.
  *
- * Untested directly, exactly like run.ts's own real construction (see cc-peer-bridge.test.ts's header comment): front.ts, front-controller.ts, and front-relay.ts already carry the front's entire decision/diffing/relay logic under direct DI-based unit tests, so this file's only remaining job -- calling the real cc-peer/core APIs in the right order -- is exercised by actually running a bridge as this machine's coordinator.
+ * front.ts, front-controller.ts, and front-relay.ts carry the front's decision, diffing and relay logic under direct DI-based unit tests, so this file's remaining job is calling the real cc-peer/core APIs in the right order. Its own tests cover what it decides there: a borrowed peer's ownership (cc-peer-front-runtime.unit.test.ts) and the options each fronted store is built with (cc-peer-front-runtime-mesh.unit.test.ts).
  */
 
 import { parseDisplayName } from "../../core/display-name.js";
@@ -140,6 +140,8 @@ export function createDefaultCcPeerFront(
     const { store, tool } = await createBridgeMeshFromIdentity(identity, slot, {
       coordinatorPort: options.coordinatorPort,
       hubUrl: options.hubUrl,
+      // The front runs in the coordinator's process, whose own store already holds the first-contact presence and reaches this store over the coordinator port. A presence per fronted store would put one more socket on the shared beacon port for every fronted session, each answering every probe on the machine (agent-comms#476).
+      firstContactPort: false,
     });
     store.getCcPeerVersion = () => CC_PEER_VERSION;
 
