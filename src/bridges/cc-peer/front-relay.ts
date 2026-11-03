@@ -186,6 +186,23 @@ export function buildFrontedSessionRecord(
 export async function detachFrontedSession(
   record: Readonly<Pick<FrontedRelayRecord, "agentId" | "store">>,
 ): Promise<void> {
-  await record.store.setAgentOffline(record.agentId);
-  await record.store.shutdown();
+  try {
+    await record.store.setAgentOffline(record.agentId);
+  } finally {
+    // The record is gone from the front either way, so a store left running here would hold its sockets and timers for the rest of the process.
+    await record.store.shutdown();
+  }
+}
+
+/** Builds a fronted session's record on a store attach() has just constructed for it, shutting that store down when building fails (registration, the project room's join) and rethrowing. The front retries a failed attach on a later tick with a new store, so a failed one left running would be one more running store, with its own sockets and timers, per failed attempt. */
+export async function attachFrontedSession<TRecord>(
+  store: Readonly<Pick<FrontRelayStore, "shutdown">>,
+  build: () => Promise<TRecord>,
+): Promise<TRecord> {
+  try {
+    return await build();
+  } catch (error) {
+    await store.shutdown();
+    throw error;
+  }
 }

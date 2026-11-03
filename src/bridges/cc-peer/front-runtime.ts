@@ -22,6 +22,7 @@ import { computeFrontSlot } from "./front.js";
 import type { CcPeerRosterEntryLike } from "./front.js";
 import type { CcPeerInboundMessage } from "./bridge.js";
 import {
+  attachFrontedSession,
   buildFrontedSessionRecord,
   detachFrontedSession,
   type FrontedRelayRecord,
@@ -142,26 +143,28 @@ export function createDefaultCcPeerFront(
     });
     store.getCcPeerVersion = () => CC_PEER_VERSION;
 
-    const reg = await ensureRegistered({
-      store,
-      harness: "claude-code",
-      cwd: entry.cwd,
-      defaultName: defaultSessionName(entry),
-      visibility: "visible",
-    });
-    const roomId = await ensureProjectRoom(store, reg.agentId, entry.cwd);
+    return attachFrontedSession(store, async () => {
+      const reg = await ensureRegistered({
+        store,
+        harness: "claude-code",
+        cwd: entry.cwd,
+        defaultName: defaultSessionName(entry),
+        visibility: "visible",
+      });
+      const roomId = await ensureProjectRoom(store, reg.agentId, entry.cwd);
 
-    return buildFrontedSessionRecord({
-      entry,
-      peerName,
-      agentId: reg.agentId,
-      roomId,
-      store,
-      tool,
-      peer,
-      aliasPool: ensureAliasPool(),
-      aliasDirectory,
-      onError: options.onError,
+      return buildFrontedSessionRecord({
+        entry,
+        peerName,
+        agentId: reg.agentId,
+        roomId,
+        store,
+        tool,
+        peer,
+        aliasPool: ensureAliasPool(),
+        aliasDirectory,
+        onError: options.onError,
+      });
     });
   }
 }
