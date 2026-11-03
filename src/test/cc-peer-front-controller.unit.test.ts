@@ -329,6 +329,90 @@ describe("CcPeerFront — attach/detach diffing across ticks", () => {
   });
 });
 
+describe("CcPeerFront: an attach outlasting the poll interval", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** An attach that stays pending until the test settles it, standing in for a real one waiting on a room join's approval window, which runs far longer than one poll interval. */
+  function pendingAttach(h: Harness): {
+    finish: () => void;
+    fail: (error: Error) => void;
+  } {
+    let finish: (() => void) | undefined;
+    let fail: ((error: Error) => void) | undefined;
+    h.attach.mockImplementationOnce(
+      async (entry) =>
+        new Promise<StubRecord>((resolve, reject) => {
+          finish = () => {
+            resolve(stubRecord(entry));
+          };
+          fail = reject;
+        }),
+    );
+    return {
+      finish: () => {
+        if (finish === undefined) throw new Error("attach() never started");
+        finish();
+      },
+      fail: (error) => {
+        if (fail === undefined) throw new Error("attach() never started");
+        fail(error);
+      },
+    };
+  }
+
+  it("never starts a second attach for a session whose first attach is still in flight", async () => {
+    const h = harness([rosterEntry({ pid: 1 })]);
+    const attaching = pendingAttach(h);
+    h.front.start();
+
+    await vi.advanceTimersByTimeAsync(
+      POLL_INTERVAL_MS * HALT_CHECK_INTERVAL_COUNT,
+    );
+    expect(h.attach).toHaveBeenCalledTimes(1);
+
+    attaching.finish();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+    expect(h.attach).toHaveBeenCalledTimes(1);
+
+    await h.front.stop();
+    expect(h.detach).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a session on a later tick once its in-flight attach has failed", async () => {
+    const h = harness([rosterEntry({ pid: 1 })]);
+    const attaching = pendingAttach(h);
+    h.front.start();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
+
+    attaching.fail(new Error("room join approval timed out"));
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+    expect(h.attach).toHaveBeenCalledTimes(2);
+    await h.front.stop();
+  });
+
+  it("detaches a session whose attach finishes after stop(), instead of keeping it fronted", async () => {
+    const h = harness([rosterEntry({ pid: 1 })]);
+    const attaching = pendingAttach(h);
+    h.front.start();
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+    await h.front.stop();
+    attaching.finish();
+    await vi.advanceTimersByTimeAsync(0);
+
+    const record = await attachResult(h.attach);
+    expect(h.detach).toHaveBeenCalledTimes(1);
+    expect(record.detached).toBe(true);
+  });
+});
+
 describe("CcPeerFront — handleAliasMessage", () => {
   beforeEach(() => {
     vi.useFakeTimers();
