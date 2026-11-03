@@ -66,6 +66,8 @@ export function toError(value: unknown): Error {
 
 export class CcPeerFront<TRecord extends FrontedSessionRecord> {
   private readonly fronted = new Map<number, TRecord>();
+  /** Sessions whose attach is still in flight. Ticks run on a fixed interval whether or not the previous one has finished, and an attach can wait out a room join's approval window, many intervals long: without this, every tick in that window would attach the same session again, each attach building another mesh store whose record the last one to finish overwrites, leaving the rest running and never detached. */
+  private readonly attaching = new Set<number>();
   private timer: ReturnType<typeof setInterval> | undefined;
 
   constructor(private readonly deps: Readonly<CcPeerFrontDeps<TRecord>>) {}
@@ -140,12 +142,22 @@ export class CcPeerFront<TRecord extends FrontedSessionRecord> {
     }
 
     for (const entry of selected) {
-      if (this.fronted.has(entry.pid)) continue;
+      if (this.fronted.has(entry.pid) || this.attaching.has(entry.pid)) {
+        continue;
+      }
+      this.attaching.add(entry.pid);
       try {
         const record = await this.deps.attach(entry);
-        this.fronted.set(entry.pid, record);
+        if (this.timer === undefined) {
+          // stop() ran while this attach was in flight and has already detached everything it knew of, so this record is detached here or nothing ever would.
+          await this.detachOne(record);
+        } else {
+          this.fronted.set(entry.pid, record);
+        }
       } catch (err) {
         this.deps.onError?.(toError(err));
+      } finally {
+        this.attaching.delete(entry.pid);
       }
     }
   }
