@@ -1,3 +1,13 @@
+## [8.15.23](https://github.com/ExaDev/agent-comms/compare/v8.15.22...v8.15.23) (2026-11-03)
+
+### Bug Fixes
+
+* **bridge:** attach each fronted session once, and detach a late attach ([280d4dc](https://github.com/ExaDev/agent-comms/commit/280d4dc79f644533df4b0ad2941cf951ad37fd3e)), references [#476](https://github.com/ExaDev/agent-comms/issues/476)
+* **bridge:** build fronted session stores without a first-contact presence ([e6768fb](https://github.com/ExaDev/agent-comms/commit/e6768fb1988875335b4f983e759af02218b64260)), closes [#476](https://github.com/ExaDev/agent-comms/issues/476)
+* **bridge:** shut down a fronted store whose attach or detach fails ([e970426](https://github.com/ExaDev/agent-comms/commit/e970426a7ec7ab36d0861b772a22726716186daf)), references [#476](https://github.com/ExaDev/agent-comms/issues/476)
+* **core:** hold at most one beacon socket in the mDNS backend ([173dad2](https://github.com/ExaDev/agent-comms/commit/173dad2aab7b2088cdf1b217b32cb9a97f678810)), references [#476](https://github.com/ExaDev/agent-comms/issues/476)
+* **core:** stop discovery backends when a mesh store shuts down ([ff7d171](https://github.com/ExaDev/agent-comms/commit/ff7d17128e578c457ebf213f1fe077e373c1308e)), references [#476](https://github.com/ExaDev/agent-comms/issues/476)
+
 ## [8.15.22](https://github.com/ExaDev/agent-comms/compare/v8.15.21...v8.15.22) (2026-10-29)
 
 ### Build
