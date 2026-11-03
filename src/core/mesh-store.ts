@@ -16,9 +16,8 @@ import {
   ROOM_JOIN_APPROVAL_TIMEOUT_MS,
   ROOM_REQUEST_TIMEOUT_MS,
 } from "./request-timeouts.js";
-import { DiscoveryManager } from "./discovery.js";
-import { MdnsDiscoveryBackend } from "./discovery-mdns.js";
-import { TailscaleDiscoveryBackend } from "./discovery-tailscale.js";
+import type { DiscoveryManager } from "./discovery.js";
+import { createDefaultDiscovery } from "./discovery-default.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import { GatewayTrust, type VerifiedMember } from "./gateway-trust.js";
 import { ReceiverSet } from "./receiver-set.js";
@@ -332,10 +331,7 @@ export class MeshStore implements CommsStore {
       setIdentity: this.setIdentity.bind(this),
     });
 
-    // Discovery manager — registers available backends
-    this.discovery = new DiscoveryManager();
-    this.discovery.registerBackend(new MdnsDiscoveryBackend());
-    this.discovery.registerBackend(new TailscaleDiscoveryBackend());
+    this.discovery = createDefaultDiscovery();
 
     this.deliveryEngine = new DeliveryEngine({
       agents: this.agents,
@@ -1088,6 +1084,7 @@ export class MeshStore implements CommsStore {
     this.isShutDown = true;
     this.membership.stop();
     this.peerLifecycle.stopFirstContact();
+    await this.discovery.stop();
     // Clear any pending markRead timers so they don't fire after the transport is shut down (which would attempt sends on closed sockets) or keep the event loop alive after process.exit().
     for (const timer of this.pendingMarkReadTimers) {
       clearTimeout(timer);

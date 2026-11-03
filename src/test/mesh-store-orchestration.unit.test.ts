@@ -685,6 +685,21 @@ describe("MeshStore — shutdown()", () => {
     expect(transport.shutdown).toHaveBeenCalledTimes(1);
   });
 
+  it("stops every discovery backend, so an advertisement's beacon socket does not outlive the store", async () => {
+    const stop = vi.fn(async () => Promise.resolve());
+    store.discovery.registerBackend({
+      name: "recording",
+      startAdvertising: async () => Promise.resolve("recording-1"),
+      stopAdvertising: async () => Promise.resolve(),
+      discover: async () => Promise.resolve([]),
+      stop,
+    });
+
+    await store.shutdown();
+
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
   it("does not wait on a peer that never answers its farewell: the notice goes out first, and closing the transport is what ends the wait", async () => {
     const agents = collaborator(store, "agents") as Map<string, unknown>;
     agents.set(store.peerId, {
