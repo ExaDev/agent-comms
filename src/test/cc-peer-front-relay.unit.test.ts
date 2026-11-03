@@ -3,6 +3,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import {
+  attachFrontedSession,
   buildFrontedSessionRecord,
   detachFrontedSession,
 } from "../bridges/cc-peer/front-relay.js";
@@ -741,6 +742,43 @@ describe("detachFrontedSession", () => {
     await detachFrontedSession({ agentId: "agent-1", store });
 
     expect(order).toEqual(["offline", "shutdown"]);
+  });
+
+  it("still shuts the store down when marking the agent offline fails, and reports that failure", async () => {
+    const store = fakeStore();
+    const failure = new Error("offline patch not delivered");
+    vi.mocked(store.setAgentOffline).mockRejectedValueOnce(failure);
+
+    await expect(
+      detachFrontedSession({ agentId: "agent-1", store }),
+    ).rejects.toBe(failure);
+
+    expect(store.shutdownCalls).toBe(1);
+  });
+});
+
+describe("attachFrontedSession", () => {
+  it("returns the record built on the store and leaves the store running", async () => {
+    const store = fakeStore();
+    const record = { agentId: "agent-1" };
+
+    const attached = await attachFrontedSession(store, async () =>
+      Promise.resolve(record),
+    );
+
+    expect(attached).toBe(record);
+    expect(store.shutdownCalls).toBe(0);
+  });
+
+  it("shuts the store down when building its record fails, and rethrows the failure", async () => {
+    const store = fakeStore();
+    const failure = new Error("room join approval timed out");
+
+    await expect(
+      attachFrontedSession(store, async () => Promise.reject(failure)),
+    ).rejects.toBe(failure);
+
+    expect(store.shutdownCalls).toBe(1);
   });
 });
 
