@@ -103,6 +103,13 @@ export class DiscoveryManager {
     return id;
   }
 
+  /** Stops every backend (timers and sockets) and forgets every advertisement, live or paused. The owning store calls this on shutdown, since nothing will resume them and an advertisement's beacon socket would otherwise outlive the store for the life of the process. */
+  async stop(): Promise<void> {
+    this.activeAdvertisements.clear();
+    this.pausedAdvertisements.clear();
+    await this.stopAllBackends();
+  }
+
   /**
    * Set mesh-wide visibility level.
    *
