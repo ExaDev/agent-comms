@@ -39,13 +39,29 @@ interface BeaconPayload {
 // mDNS (UDP beacon) backend
 // ---------------------------------------------------------------------------
 
+export interface MdnsDiscoveryBackendOptions {
+  /** The UDP port beacons are bound, sent and heard on. Defaults to the shared beacon port; overridable so tests take an OS-assigned free port rather than contending with a real machine presence. */
+  port?: number;
+  /** Creates the backend's UDP socket. Defaults to dgram.createSocket; overridable so tests can observe every socket the backend opens and closes. */
+  createSocket?: (options: dgram.SocketOptions) => dgram.Socket;
+}
+
 export class MdnsDiscoveryBackend implements DiscoveryBackend {
   readonly name = "mdns";
 
+  private readonly port: number;
+  private readonly createSocket: (options: dgram.SocketOptions) => dgram.Socket;
+  /** The one bind this backend has in flight or has completed: every caller needing the socket awaits this same promise, so concurrent advertise and discover calls share one socket rather than each binding their own. Cleared when the socket is closed or its bind fails, so the next caller binds afresh. */
+  private listening: Promise<dgram.Socket> | undefined;
+  /** The bound socket, set once its bind completes and cleared when it is closed. */
   private socket: dgram.Socket | undefined;
   private beaconTimer: ReturnType<typeof setInterval> | undefined;
   private currentPayload: BeaconPayload | undefined;
-  private isListening = false;
+
+  constructor(options: Readonly<MdnsDiscoveryBackendOptions> = {}) {
+    this.port = options.port ?? BEACON_PORT;
+    this.createSocket = options.createSocket ?? dgram.createSocket;
+  }
 
   async startAdvertising(opts: Readonly<AdvertiseOptions>): Promise<string> {
     const id = `mdns-${String(opts.port)}`;
@@ -57,53 +73,28 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
       policies: opts.policy === "name-only" ? ["name-only"] : ["full"],
     };
 
-    await this.ensureListening();
-    this.startBeacon();
+    const socket = await this.ensureListening();
+    // A stop() that arrived while the socket was binding has already closed it; beaconing now would start a timer nothing ever clears.
+    if (this.socket === socket) this.startBeacon();
 
     return id;
   }
 
   async stopAdvertising(): Promise<void> {
-    if (this.beaconTimer !== undefined) {
-      clearInterval(this.beaconTimer);
-      this.beaconTimer = undefined;
-    }
-
+    await this.settleBinding();
+    this.stopBeacon();
     this.currentPayload = undefined;
 
     // Only close the socket if we're not also discovering
-    if (this.socket && !this.hasActiveListeners()) {
-      await this.closeSocket();
-    }
+    await this.releaseIfIdle();
   }
 
   /** Stop all beacon activity and close the socket. */
   async stop(): Promise<void> {
-    if (this.beaconTimer !== undefined) {
-      clearInterval(this.beaconTimer);
-      this.beaconTimer = undefined;
-    }
-
+    await this.settleBinding();
+    this.stopBeacon();
     this.currentPayload = undefined;
-
-    if (this.socket) {
-      await this.closeSocket();
-    }
-  }
-
-  /** Close the UDP socket and wait for the underlying handle to actually release before resolving. */
-  private async closeSocket(): Promise<void> {
-    const socket = this.socket;
-    if (!socket) return;
-
-    await new Promise<void>((resolve) => {
-      socket.close(() => {
-        resolve();
-      });
-    });
-
-    this.socket = undefined;
-    this.isListening = false;
+    await this.closeSocket();
   }
 
   async discover(
@@ -111,10 +102,7 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
   ): Promise<DiscoveredMesh[]> {
     const discovered = new Map<string, DiscoveredMesh>();
 
-    await this.ensureListening();
-
-    const socket = this.socket;
-    if (socket === undefined) return [];
+    const socket = await this.ensureListening();
 
     // Collect beacons for the specified duration
     const handler = (msg: Buffer, rinfo: dgram.RemoteInfo) => {
@@ -132,7 +120,7 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
     });
 
     socket.off("message", handler);
-    this.cleanupSocket();
+    await this.releaseIfIdle();
 
     return [...discovered.values()];
   }
@@ -141,29 +129,72 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
   // Internals
   // -----------------------------------------------------------------------
 
-  private async ensureListening(): Promise<void> {
-    if (this.isListening && this.socket) return;
+  private async ensureListening(): Promise<dgram.Socket> {
+    this.listening ??= this.bindSocket();
+    return this.listening;
+  }
 
-    const socket = dgram.createSocket({
+  /** Creates and binds the backend's one socket. A failed bind closes the socket it created (Node leaves a socket whose bind failed open) and rejects, so the caller learns the beacon port is unusable instead of waiting forever on a bind callback that never fires. */
+  private async bindSocket(): Promise<dgram.Socket> {
+    const socket = this.createSocket({
       type: "udp4",
       reuseAddr: true,
     });
 
-    socket.on("error", () => {
-      // Binding errors are non-fatal for discovery — the beacon simply
-      // won't reach anyone on this interface.
-      this.isListening = false;
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        socket.once("error", reject);
+        socket.bind(this.port, () => {
+          socket.off("error", reject);
+          resolve();
+        });
+      });
+    } catch (error) {
+      this.listening = undefined;
+      socket.close();
+      throw error;
+    }
 
+    socket.setBroadcast(true);
+    // An error on a bound socket leaves it bound and usable, so it is neither closed nor replaced: replacing it is what used to leave the old socket open beside a new one. The listener exists because an "error" event with none would crash the process.
+    socket.on("error", () => undefined);
+    this.socket = socket;
+    return socket;
+  }
+
+  /** Waits for a bind still in flight to finish, so the socket it produces is the one a stop closes rather than one that appears after the stop has returned. */
+  private async settleBinding(): Promise<void> {
+    if (this.listening !== undefined) {
+      await Promise.allSettled([this.listening]);
+    }
+  }
+
+  /** Close the UDP socket and wait for the underlying handle to actually release before resolving. The fields are cleared first, so a caller arriving while the close is in progress binds a fresh socket rather than reusing a closing one. */
+  private async closeSocket(): Promise<void> {
+    const socket = this.socket;
+    if (!socket) return;
+
+    this.socket = undefined;
+    this.listening = undefined;
     await new Promise<void>((resolve) => {
-      socket.bind(BEACON_PORT, () => {
-        socket.setBroadcast(true);
-        this.isListening = true;
+      socket.close(() => {
         resolve();
       });
     });
+  }
 
-    this.socket = socket;
+  /** Closes the socket once nothing uses it: no advertisement and no discover() still listening on it. */
+  private async releaseIfIdle(): Promise<void> {
+    if (this.currentPayload === undefined && !this.hasActiveListeners()) {
+      await this.closeSocket();
+    }
+  }
+
+  private stopBeacon(): void {
+    if (this.beaconTimer !== undefined) {
+      clearInterval(this.beaconTimer);
+      this.beaconTimer = undefined;
+    }
   }
 
   private startBeacon(): void {
@@ -183,7 +214,7 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
 
     const payload = Buffer.from(JSON.stringify(this.currentPayload));
     // Broadcast to the beacon port on the standard broadcast address
-    this.socket.send(payload, BEACON_PORT, "255.255.255.255", (err) => {
+    this.socket.send(payload, this.port, "255.255.255.255", (err) => {
       if (err) {
         // Broadcast failures are non-fatal — the network may not
         // support broadcast (e.g. some cloud environments).
@@ -235,13 +266,5 @@ export class MdnsDiscoveryBackend implements DiscoveryBackend {
     // Check if there are message listeners beyond our own
     if (!this.socket) return false;
     return this.socket.listenerCount("message") > 0;
-  }
-
-  private cleanupSocket(): void {
-    if (this.socket && !this.currentPayload && !this.hasActiveListeners()) {
-      this.socket.close();
-      this.socket = undefined;
-      this.isListening = false;
-    }
   }
 }
