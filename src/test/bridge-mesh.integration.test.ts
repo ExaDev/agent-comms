@@ -144,6 +144,51 @@ test("createBridgeMeshFromIdentity wires the given identity's own device-id as p
   }
 });
 
+/** How many UDP sockets this process holds open, read from Node's own active-resource list once any close already under way has finished (a socket's handle is released after close() returns), so a test can tell whether a store bound a first-contact presence without reaching into it. */
+async function openUdpSocketCount(): Promise<number> {
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+  return process
+    .getActiveResourcesInfo()
+    .filter((resource) => resource === "UDPWrap").length;
+}
+
+test("createBridgeMeshFromIdentity with a firstContactPort starts a store that binds one first-contact socket", async () => {
+  const slot = tempSlot("cc-peer-front");
+  const before = await openUdpSocketCount();
+  const { store } = await createBridgeMeshFromIdentity(
+    loadIdentityForFront(slot),
+    slot,
+    {
+      coordinatorPort: await freeLocalPort(),
+      firstContactPort: await freeLocalPort(),
+    },
+  );
+  try {
+    await store.init();
+    expect(await openUdpSocketCount()).toBe(before + 1);
+  } finally {
+    await store.shutdown();
+  }
+});
+
+test("createBridgeMeshFromIdentity with firstContactPort false starts a store that binds no first-contact socket", async () => {
+  const slot = tempSlot("cc-peer-front");
+  const before = await openUdpSocketCount();
+  const { store } = await createBridgeMeshFromIdentity(
+    loadIdentityForFront(slot),
+    slot,
+    { coordinatorPort: await freeLocalPort(), firstContactPort: false },
+  );
+  try {
+    await store.init();
+    expect(await openUdpSocketCount()).toBe(before);
+  } finally {
+    await store.shutdown();
+  }
+});
+
 /** A remote device id to trust, so the store under test has something to say to another machine. */
 const REMOTE_DEVICE_HEX = "f".repeat(DEVICE_ID_HEX_LENGTH);
 
