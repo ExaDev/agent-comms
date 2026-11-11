@@ -42,6 +42,7 @@ import {
   getWebUrlStatus,
 } from "../user/web/server.js";
 import { nanoid } from "../../core/nanoid.js";
+import { isClaudeCodeComm } from "./claudeCommand.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -70,7 +71,7 @@ function pendingDir(): string {
  *
  * The bridge runs ~3 hops below claude (tsx wrapper → tsx loader → bridge),
  * so process.ppid alone isn't enough. We walk until we find an ancestor
- * whose command basename is "claude".
+ * whose command is a Claude Code CLI (`isClaudeCodeComm`).
  *
  * Two Claude Code instances in the same cwd would otherwise share one
  * pending file and consume each other's messages. Keying by Claude PID
@@ -93,7 +94,7 @@ function findClaudeCodePid(): number | undefined {
     if (!match) return undefined;
     const parentPid = Number.parseInt(match[1] ?? "", 10);
     const comm = (match[2] ?? "").trim();
-    if (/(^|\/)claude$/.test(comm)) return pid;
+    if (isClaudeCodeComm(comm)) return pid;
     if (!Number.isFinite(parentPid)) return undefined;
     pid = parentPid;
   }

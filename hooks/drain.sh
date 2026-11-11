@@ -28,7 +28,7 @@ find_claude_pid() {
     comm=${info#*[[:space:]]}
     comm=${comm#"${comm%%[![:space:]]*}"}
     case "$comm" in
-      */claude|claude) echo "$pid"; return 0 ;;
+      */claude|claude|*/claude/versions/[0-9]*) echo "$pid"; return 0 ;;
     esac
     pid=$ppid
   done
