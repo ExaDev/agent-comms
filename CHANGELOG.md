@@ -1,3 +1,9 @@
+## [8.15.25](https://github.com/ExaDev/agent-comms/compare/v8.15.24...v8.15.25) (2026-11-11)
+
+### Bug Fixes
+
+* find the Claude Code PID when the CLI is the native versioned binary ([51246ff](https://github.com/ExaDev/agent-comms/commit/51246ffd0b235f559217970c01000d388cd73279))
+
 ## [8.15.24](https://github.com/ExaDev/agent-comms/compare/v8.15.23...v8.15.24) (2026-11-04)
 
 ### Build
