@@ -139,4 +139,62 @@ describe("web-console route (opt-in)", () => {
     expect(own.status).toBe(HTTP_OK);
     expect(own.body).toContain("Agent Comms");
   });
+
+  it("serves nothing under the mount to a request that is not a GET, and nothing to a name that only starts like the mount", async () => {
+    originalEnv = process.env[ENV_VAR];
+    tmpDir = scratchDirectory("web-console-dist-");
+    fs.writeFileSync(
+      path.join(tmpDir, "index.html"),
+      "<title>web-console</title>",
+    );
+    process.env[ENV_VAR] = tmpDir;
+    const port = await startAndGetPort(await freeLocalPort());
+
+    const posted = await new Promise<number>((resolve, reject) => {
+      const req = http.request(
+        {
+          hostname: "127.0.0.1",
+          port,
+          path: `${WEB_CONSOLE_MOUNT}/index.html`,
+          method: "POST",
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+    const lookalike = await fetchText(port, `${WEB_CONSOLE_MOUNT}x/index.html`);
+
+    expect(posted).toBe(HTTP_NOT_FOUND);
+    expect(lookalike.status).toBe(HTTP_NOT_FOUND);
+    expect(lookalike.body).not.toContain("web-console");
+  });
+
+  it("does not serve a file reached through a symbolic link that leaves the served directory", async () => {
+    originalEnv = process.env[ENV_VAR];
+    tmpDir = scratchDirectory("web-console-dist-");
+    const outside = scratchDirectory("web-console-outside-");
+    fs.writeFileSync(
+      path.join(tmpDir, "index.html"),
+      "<title>web-console</title>",
+    );
+    fs.writeFileSync(path.join(outside, "secret.txt"), "outside the directory");
+    fs.symlinkSync(
+      path.join(outside, "secret.txt"),
+      path.join(tmpDir, "link.txt"),
+    );
+    fs.symlinkSync(outside, path.join(tmpDir, "linked-dir"));
+    process.env[ENV_VAR] = tmpDir;
+    const port = await startAndGetPort(await freeLocalPort());
+
+    for (const requested of ["link.txt", "linked-dir/secret.txt"]) {
+      const answer = await fetchText(port, `${WEB_CONSOLE_MOUNT}/${requested}`);
+      expect(answer.status, requested).toBe(HTTP_NOT_FOUND);
+      expect(answer.body, requested).not.toContain("outside the directory");
+    }
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
 });
