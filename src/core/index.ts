@@ -33,6 +33,7 @@ export {
   releaseIdentityLock,
 } from "./identity-store.js";
 export type { IdentitySlot } from "./identity-store.js";
+export { UnusableIdentityRecordError } from "./issuer-identity-file.js";
 export type { CommsContext, CommsResult } from "./tool.js";
 export {
   buildAction,
