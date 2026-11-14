@@ -1,0 +1,196 @@
+{
+  "cases": [
+    {
+      "expect": {
+        "ok": true,
+        "value": {
+          "action": "whoami"
+        }
+      },
+      "from": "recorded: src/core/bridge.ts (MCP_TOOL_PARAMS, an action alone)",
+      "id": "tool-params-accepts-an-action-alone",
+      "input": {
+        "action": "whoami"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    },
+    {
+      "expect": {
+        "issues": [
+          {
+            "message": [
+              "Invalid option: expected one of \"register\"|\"update\"|\"whoami\"|\"web_url\"|\"create_room\"|\"list_rooms\"|\"join_room\"|\"leave_room\"|\"send\"|\"dm\"|\"list_agents\"|\"read_room\"|\"invite\"|\"decline_invite\"|\"kick\"|\"destroy_room\"|\"mesh_connect\"|\"mesh_accept\"|\"mesh_reject\"|\"mesh_pending\"|\"room_accept\"|\"room_reject\"|\"room_pending\"|\"capability_accept\"|\"capability_reject\"|\"capability_pending\"|\"mesh_discover\"|\"mesh_advertise\"|\"mesh_unadvertise\"|\"mesh_interfaces\"|\"mesh_listen\"|\"mesh_unlisten\"|\"mesh_listeners\"|\"mesh_set_visibility\"|\"mesh_get_visibility\"|\"gateway_trust\"|\"gateway_untrust\"|\"gateway_list_trusted\"|\"petname_set\"|\"petname_clear\"|\"petname_list\"|\"machine_name\"|\"principal_name\"|\"dm_admit\"|\"dm_use_grant\"|\"dm_revoke\"|\"gateway_generate_connection_code\"|\"gateway_redeem_connection_code\"|\"query_version\"|\"mesh_graph\"|\"mesh_trace\""
+            ],
+            "path": [
+              "action"
+            ]
+          }
+        ],
+        "ok": false
+      },
+      "from": "recorded: src/core/bridge.ts (MCP_TOOL_PARAMS, the lan_web_uis action)",
+      "id": "tool-params-accepts-lan-web-uis",
+      "input": {
+        "action": "lan_web_uis"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    },
+    {
+      "expect": {
+        "ok": true,
+        "value": {
+          "action": "send",
+          "content": "hello",
+          "target": "room"
+        }
+      },
+      "from": "recorded: src/core/bridge.ts (MCP_TOOL_PARAMS, a send)",
+      "id": "tool-params-accepts-send-with-target-and-content",
+      "input": {
+        "action": "send",
+        "content": "hello",
+        "target": "room"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    },
+    {
+      "expect": {
+        "ok": true,
+        "value": {
+          "action": "mesh_listen",
+          "host": "0.0.0.0",
+          "port": 4100
+        }
+      },
+      "from": "recorded: src/core/bridge.ts (MCP_TOOL_PARAMS, a listen with a port)",
+      "id": "tool-params-accepts-mesh-listen-with-port",
+      "input": {
+        "action": "mesh_listen",
+        "host": "0.0.0.0",
+        "port": 4100
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    },
+    {
+      "expect": {
+        "issues": [
+          {
+            "message": [
+              "Invalid option: expected one of \"register\"|\"update\"|\"whoami\"|\"web_url\"|\"create_room\"|\"list_rooms\"|\"join_room\"|\"leave_room\"|\"send\"|\"dm\"|\"list_agents\"|\"read_room\"|\"invite\"|\"decline_invite\"|\"kick\"|\"destroy_room\"|\"mesh_connect\"|\"mesh_accept\"|\"mesh_reject\"|\"mesh_pending\"|\"room_accept\"|\"room_reject\"|\"room_pending\"|\"capability_accept\"|\"capability_reject\"|\"capability_pending\"|\"mesh_discover\"|\"mesh_advertise\"|\"mesh_unadvertise\"|\"mesh_interfaces\"|\"mesh_listen\"|\"mesh_unlisten\"|\"mesh_listeners\"|\"mesh_set_visibility\"|\"mesh_get_visibility\"|\"gateway_trust\"|\"gateway_untrust\"|\"gateway_list_trusted\"|\"petname_set\"|\"petname_clear\"|\"petname_list\"|\"machine_name\"|\"principal_name\"|\"dm_admit\"|\"dm_use_grant\"|\"dm_revoke\"|\"gateway_generate_connection_code\"|\"gateway_redeem_connection_code\"|\"query_version\"|\"mesh_graph\"|\"mesh_trace\""
+            ],
+            "path": [
+              "action"
+            ]
+          }
+        ],
+        "ok": false
+      },
+      "from": "recorded: src/core/bridge.ts (MCP_TOOL_PARAMS, an unknown action)",
+      "id": "tool-params-refuses-an-unknown-action",
+      "input": {
+        "action": "no_such_action"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    },
+    {
+      "expect": {
+        "issues": [
+          {
+            "message": [
+              "Invalid option: expected one of \"register\"|\"update\"|\"whoami\"|\"web_url\"|\"create_room\"|\"list_rooms\"|\"join_room\"|\"leave_room\"|\"send\"|\"dm\"|\"list_agents\"|\"read_room\"|\"invite\"|\"decline_invite\"|\"kick\"|\"destroy_room\"|\"mesh_connect\"|\"mesh_accept\"|\"mesh_reject\"|\"mesh_pending\"|\"room_accept\"|\"room_reject\"|\"room_pending\"|\"capability_accept\"|\"capability_reject\"|\"capability_pending\"|\"mesh_discover\"|\"mesh_advertise\"|\"mesh_unadvertise\"|\"mesh_interfaces\"|\"mesh_listen\"|\"mesh_unlisten\"|\"mesh_listeners\"|\"mesh_set_visibility\"|\"mesh_get_visibility\"|\"gateway_trust\"|\"gateway_untrust\"|\"gateway_list_trusted\"|\"petname_set\"|\"petname_clear\"|\"petname_list\"|\"machine_name\"|\"principal_name\"|\"dm_admit\"|\"dm_use_grant\"|\"dm_revoke\"|\"gateway_generate_connection_code\"|\"gateway_redeem_connection_code\"|\"query_version\"|\"mesh_graph\"|\"mesh_trace\""
+            ],
+            "path": [
+              "action"
+            ]
+          }
+        ],
+        "ok": false
+      },
+      "from": "recorded: src/core/bridge.ts (MCP_TOOL_PARAMS, no action)",
+      "id": "tool-params-refuses-a-missing-action",
+      "input": {},
+      "kind": "validate",
+      "schema": "tool-params"
+    },
+    {
+      "expect": {
+        "issues": [
+          {
+            "message": [
+              "Invalid input: expected number, received string"
+            ],
+            "path": [
+              "port"
+            ]
+          }
+        ],
+        "ok": false
+      },
+      "from": "recorded: src/core/bridge.ts (MCP_TOOL_PARAMS, a string port)",
+      "id": "tool-params-refuses-a-string-port",
+      "input": {
+        "action": "mesh_listen",
+        "host": "h",
+        "port": "4100"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    },
+    {
+      "expect": {
+        "issues": [
+          {
+            "message": [
+              "Invalid option: expected one of \"visible\"|\"hidden\"|\"ghost\""
+            ],
+            "path": [
+              "visibility"
+            ]
+          }
+        ],
+        "ok": false
+      },
+      "from": "recorded: src/core/bridge.ts (MCP_TOOL_PARAMS, an unknown visibility)",
+      "id": "tool-params-refuses-an-unknown-visibility",
+      "input": {
+        "action": "register",
+        "name": "n",
+        "visibility": "loud"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    },
+    {
+      "expect": {
+        "issues": [
+          {
+            "message": [
+              "Invalid input: expected string, received number"
+            ],
+            "path": [
+              "tags",
+              0
+            ]
+          }
+        ],
+        "ok": false
+      },
+      "from": "recorded: src/core/bridge.ts (MCP_TOOL_PARAMS, tags that are not strings)",
+      "id": "tool-params-refuses-tags-that-are-not-strings",
+      "input": {
+        "action": "register",
+        "name": "n",
+        "tags": [
+          1
+        ]
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    }
+  ]
+}

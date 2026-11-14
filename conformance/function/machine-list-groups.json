@@ -1,0 +1,172 @@
+{
+  "cases": [
+    {
+      "args": [
+        [
+          "remote-b",
+          "local",
+          "unplaced",
+          "remote-a"
+        ],
+        [
+          [
+            "remote-b",
+            "bbbb"
+          ],
+          [
+            "local",
+            "mine"
+          ],
+          [
+            "remote-a",
+            "aaaa"
+          ]
+        ],
+        "mine",
+        "{id}"
+      ],
+      "expect": [
+        {
+          "agents": [
+            "local"
+          ],
+          "heading": "Machine mine (this machine):"
+        },
+        {
+          "agents": [
+            "remote-a"
+          ],
+          "heading": "Machine aaaa:"
+        },
+        {
+          "agents": [
+            "remote-b"
+          ],
+          "heading": "Machine bbbb:"
+        },
+        {
+          "agents": [
+            "unplaced"
+          ],
+          "heading": "Machine not proven:"
+        }
+      ],
+      "from": "machine-list-groups.unit.test.ts: groupAgentsByMachine > puts this machine first, then other machines by id, then agents no proof places",
+      "function": "machine-list-groups.groupAgentsByMachine",
+      "id": "this-machine-first-then-others-by-id-then-unplaced",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "one",
+          "other",
+          "two"
+        ],
+        [
+          [
+            "one",
+            "mine"
+          ],
+          [
+            "other",
+            "theirs"
+          ],
+          [
+            "two",
+            "mine"
+          ]
+        ],
+        "mine",
+        "{id}"
+      ],
+      "expectSubset": [
+        {
+          "agents": [
+            "one",
+            "two"
+          ]
+        },
+        {
+          "agents": [
+            "other"
+          ]
+        }
+      ],
+      "from": "machine-list-groups.unit.test.ts: groupAgentsByMachine > keeps several agents of one machine together in their listed order",
+      "function": "machine-list-groups.groupAgentsByMachine",
+      "id": "agents-of-one-machine-stay-together",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "a",
+          "b"
+        ],
+        [],
+        "mine",
+        "{id}"
+      ],
+      "expect": [
+        {
+          "agents": [
+            "a",
+            "b"
+          ]
+        }
+      ],
+      "from": "machine-list-groups.unit.test.ts: groupAgentsByMachine > lists everything as one ungrouped run when no agent is placed on a machine, or the store has no machine identity",
+      "function": "machine-list-groups.groupAgentsByMachine",
+      "id": "no-agent-placed-is-one-ungrouped-run",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "a",
+          "b"
+        ],
+        null,
+        null,
+        "{id}"
+      ],
+      "expect": [
+        {
+          "agents": [
+            "a",
+            "b"
+          ]
+        }
+      ],
+      "from": "machine-list-groups.unit.test.ts: groupAgentsByMachine > lists everything as one ungrouped run when no agent is placed on a machine, or the store has no machine identity",
+      "function": "machine-list-groups.groupAgentsByMachine",
+      "id": "no-machine-identity-is-one-ungrouped-run",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "local"
+        ],
+        [
+          [
+            "local",
+            "mine"
+          ]
+        ],
+        "mine",
+        "laptop \"{id}\""
+      ],
+      "expectSubset": [
+        {
+          "heading": "Machine laptop \"mine\" (this machine):"
+        }
+      ],
+      "from": "machine-list-groups.unit.test.ts: groupAgentsByMachine > names each machine heading through the namer it is given",
+      "function": "machine-list-groups.groupAgentsByMachine",
+      "id": "heading-uses-the-given-namer",
+      "kind": "function"
+    }
+  ]
+}

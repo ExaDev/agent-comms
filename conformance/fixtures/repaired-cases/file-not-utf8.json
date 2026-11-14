@@ -1,0 +1,14 @@
+{
+  "cases": [
+    {
+      "args": [
+        "ÿ"
+      ],
+      "expect": 2,
+      "from": "example.test.ts: group > test",
+      "function": "module.helper",
+      "id": "a",
+      "kind": "function"
+    }
+  ]
+}

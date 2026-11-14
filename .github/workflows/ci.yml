@@ -155,6 +155,47 @@ jobs:
           path: reports/mutation/mutation.html
           retention-days: 30
 
+  # The Rust workspace under rust/ is built and tested by cargo, not turbo, so these jobs sit beside the turbo-driven ones and need no pnpm install. The toolchain is whatever rust/rust-toolchain.toml pins, so the file stays the one place that names a version, and every cargo command runs against the committed Cargo.lock. The commands live in scripts/rust-checks.sh so the pre-push hook runs the same ones.
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the pinned toolchain
+        working-directory: rust
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: rust
+      - name: Guards, their tests, format, clippy (warnings denied) and tests
+        run: sh scripts/rust-checks.sh
+
+  # The deny check (bans, licences and sources) fails on any crate not allowlisted in rust/deny.toml, on a licence outside its list and on a source outside crates.io and the sibling repositories deny.toml names. Advisories are left out on purpose: the database changes without any change here, so a required check that read it would turn every open pull request red at once; .github/workflows/advisories.yml runs them on a schedule and when the lock file changes. The job name contains cargo-deny on purpose: it is how a check on main's head is recognised as the one enforcing the allowlist. The tool is pinned to an exact release and installed as a prebuilt binary, so a new cargo-deny cannot change what passes without a change here. It runs from rust/ so the pinned toolchain resolves the graph, against the committed Cargo.lock.
+  cargo-deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the pinned toolchain
+        working-directory: rust
+        run: rustup toolchain install
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: cargo-deny@0.20.2
+      - name: Check the dependency allowlist
+        run: sh scripts/rust.sh deny
+      # cargo-deny cannot fail on an allowed crate nothing uses, so the allowlist is compared with the graph cargo-deny itself reports, separately.
+      - name: Check the allowlist lists exactly the dependency graph
+        run: python3 -I scripts/check-deny-allowlist.py
+      - name: Test that check against a platform-gated crate
+        run: python3 -I scripts/test_check_deny_allowlist.py
+
   pages:
     name: GitHub Pages
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'

@@ -1,0 +1,86 @@
+{
+  "cases": [
+    {
+      "args": [
+        [
+          {
+            "resolves": "bound"
+          }
+        ],
+        3,
+        10
+      ],
+      "expect": {
+        "attempts": 1,
+        "result": "bound"
+      },
+      "from": "bind-retry.unit.test.ts: retryOnAddrInUse > returns the result immediately when the first attempt succeeds",
+      "function": "bind-retry.retryOnAddrInUse",
+      "id": "returns-first-success",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "rejects": "listen EADDRINUSE: address already in use 127.0.0.1:1"
+          },
+          {
+            "rejects": "listen EADDRINUSE: address already in use 127.0.0.1:1"
+          },
+          {
+            "resolves": "bound"
+          }
+        ],
+        3,
+        10
+      ],
+      "expect": {
+        "attempts": 3,
+        "result": "bound"
+      },
+      "from": "bind-retry.unit.test.ts: retryOnAddrInUse > retries on an EADDRINUSE-shaped rejection and returns once a later attempt succeeds",
+      "function": "bind-retry.retryOnAddrInUse",
+      "id": "retries-then-succeeds",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "rejects": "listen EACCES: permission denied"
+          }
+        ],
+        3,
+        10
+      ],
+      "expect": {
+        "attempts": 1,
+        "error": "listen EACCES: permission denied"
+      },
+      "from": "bind-retry.unit.test.ts: retryOnAddrInUse > rethrows immediately for a rejection that isn't EADDRINUSE, without retrying",
+      "function": "bind-retry.retryOnAddrInUse",
+      "id": "rethrows-other-error-without-retrying",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "rejects": "listen EADDRINUSE: address already in use 127.0.0.1:1"
+          }
+        ],
+        3,
+        10
+      ],
+      "expect": {
+        "attempts": 4,
+        "error": "listen EADDRINUSE: address already in use 127.0.0.1:1"
+      },
+      "from": "bind-retry.unit.test.ts: retryOnAddrInUse > rethrows the last EADDRINUSE error once the retry budget is exhausted",
+      "function": "bind-retry.retryOnAddrInUse",
+      "id": "rethrows-after-budget-exhausted",
+      "kind": "function"
+    }
+  ]
+}

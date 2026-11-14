@@ -1,0 +1,132 @@
+{
+  "cases": [
+    {
+      "args": [
+        [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general",
+            "name": "general"
+          }
+        ],
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general"
+      ],
+      "expect": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general",
+      "from": "room-lookup.unit.test.ts: resolveRoomId > returns an id that already names a known room unchanged",
+      "function": "room-lookup.resolveRoomId",
+      "id": "known-id-unchanged",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/e2e-test",
+            "name": "e2e-test"
+          },
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/other",
+            "name": "other"
+          }
+        ],
+        "e2e-test"
+      ],
+      "expect": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/e2e-test",
+      "from": "room-lookup.unit.test.ts: resolveRoomId > resolves a bare name to the id of the single room carrying it",
+      "function": "room-lookup.resolveRoomId",
+      "id": "bare-name-resolves-to-single-room",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general",
+            "name": "general"
+          }
+        ],
+        "unknown"
+      ],
+      "expect": "unknown",
+      "from": "room-lookup.unit.test.ts: resolveRoomId > returns a string matching no known room unchanged, leaving not-found handling to the caller",
+      "function": "room-lookup.resolveRoomId",
+      "id": "unknown-string-unchanged",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [],
+        "unknown"
+      ],
+      "expect": "unknown",
+      "from": "room-lookup.unit.test.ts: resolveRoomId > returns a string matching no known room unchanged, leaving not-found handling to the caller",
+      "function": "room-lookup.resolveRoomId",
+      "id": "unknown-string-with-no-candidates-unchanged",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general",
+            "name": "general"
+          },
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general",
+            "name": "general"
+          }
+        ],
+        "general"
+      ],
+      "expect": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general",
+      "from": "room-lookup.unit.test.ts: resolveRoomId > counts the same room supplied twice as one candidate",
+      "function": "room-lookup.resolveRoomId",
+      "id": "same-room-twice-is-one-candidate",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general",
+            "name": "general"
+          },
+          {
+            "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/general",
+            "name": "general"
+          }
+        ],
+        "general"
+      ],
+      "from": "room-lookup.unit.test.ts: resolveRoomId > throws AMBIGUOUS_ROOM_NAME listing every candidate id when distinct rooms share the name",
+      "function": "room-lookup.resolveRoomId",
+      "id": "ambiguous-name-throws",
+      "kind": "function",
+      "throws": {
+        "code": "AMBIGUOUS_ROOM_NAME",
+        "message": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general, bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/general"
+        ]
+      }
+    },
+    {
+      "args": [
+        [
+          {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general",
+            "name": "general"
+          },
+          {
+            "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/x",
+            "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general"
+          }
+        ],
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general"
+      ],
+      "expect": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/general",
+      "from": "room-lookup.unit.test.ts: resolveRoomId > prefers an exact id match over a name match on another room",
+      "function": "room-lookup.resolveRoomId",
+      "id": "exact-id-beats-name-match",
+      "kind": "function"
+    }
+  ]
+}

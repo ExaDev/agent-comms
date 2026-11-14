@@ -1,0 +1,1599 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "localhost:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > allows a loopback client with a loopback Host and no token, under a loopback bind",
+      "function": "web-access.authorise",
+      "id": "allows-loopback-client-host-localhost",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > allows a loopback client with a loopback Host and no token, under a loopback bind",
+      "function": "web-access.authorise",
+      "id": "allows-loopback-client-host-127.0.0.1",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "[::1]:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > allows a loopback client with a loopback Host and no token, under a loopback bind",
+      "function": "web-access.authorise",
+      "id": "allows-loopback-client-host-1",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "rebind.example:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > rejects a rebound Host from a loopback client, under a loopback bind and under a LAN bind",
+      "function": "web-access.authorise",
+      "id": "rejects-rebound-host-under-loopback-bind",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "host": "rebind.example:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > rejects a rebound Host from a loopback client, under a loopback bind and under a LAN bind",
+      "function": "web-access.authorise",
+      "id": "rejects-rebound-host-under-lan-bind",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "0.0.0.0",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "host": "0.0.0.0:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > rejects the wildcard address as a Host even from loopback, under a wildcard bind",
+      "function": "web-access.authorise",
+      "id": "rejects-wildcard-host-from-loopback",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "host": "localhost:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > allows a loopback client without a token under a LAN bind",
+      "function": "web-access.authorise",
+      "id": "allows-loopback-client-under-lan-bind",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [
+            "192.168.1.10"
+          ],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.10",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > allows a client connecting from one of this machine's own interface addresses without a token",
+      "function": "web-access.authorise",
+      "id": "allows-own-interface-address-client",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "localhost:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 401
+      },
+      "from": "web-access.unit.test.ts: authorise > answers 401 to a remote client under a loopback bind, which has no token to present",
+      "function": "web-access.authorise",
+      "id": "remote-client-under-loopback-bind-gets-401",
+      "kind": "function"
+    },
+    {
+      "args": [
+        41001
+      ],
+      "expect": "agent_comms_web_token_41001",
+      "from": "web-access.unit.test.ts: authorise > scopes the cookie to the server's port so two servers on one host keep separate cookies",
+      "function": "web-access.accessCookieName",
+      "id": "cookie-name-for-port-a",
+      "kind": "function"
+    },
+    {
+      "args": [
+        41002
+      ],
+      "expect": "agent_comms_web_token_41002",
+      "from": "web-access.unit.test.ts: authorise > scopes the cookie to the server's port so two servers on one host keep separate cookies",
+      "function": "web-access.accessCookieName",
+      "id": "cookie-name-for-port-b",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41001,
+          "token": "token-a"
+        },
+        {
+          "headers": {
+            "cookie": "agent_comms_web_token_41001=token-a; agent_comms_web_token_41002=token-b",
+            "host": "192.168.1.10:41001"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > scopes the cookie to the server's port so two servers on one host keep separate cookies",
+      "function": "web-access.authorise",
+      "id": "each-port-accepts-its-own-cookie-a",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41002,
+          "token": "token-b"
+        },
+        {
+          "headers": {
+            "cookie": "agent_comms_web_token_41001=token-a; agent_comms_web_token_41002=token-b",
+            "host": "192.168.1.10:41002"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > scopes the cookie to the server's port so two servers on one host keep separate cookies",
+      "function": "web-access.authorise",
+      "id": "each-port-accepts-its-own-cookie-b",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41001,
+          "token": "token-a"
+        },
+        {
+          "headers": {
+            "cookie": "agent_comms_web_token_41002=token-b",
+            "host": "192.168.1.10:41001"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 401
+      },
+      "from": "web-access.unit.test.ts: authorise > scopes the cookie to the server's port so two servers on one host keep separate cookies",
+      "function": "web-access.authorise",
+      "id": "port-a-refuses-port-b-cookie",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41002,
+          "token": "token-b"
+        },
+        {
+          "headers": {
+            "cookie": "agent_comms_web_token_41001=token-a",
+            "host": "192.168.1.10:41002"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 401
+      },
+      "from": "web-access.unit.test.ts: authorise > scopes the cookie to the server's port so two servers on one host keep separate cookies",
+      "function": "web-access.authorise",
+      "id": "port-b-refuses-port-a-cookie",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 401
+      },
+      "from": "web-access.unit.test.ts: authorise > answers 401 to a non-loopback client with no token",
+      "function": "web-access.authorise",
+      "id": "non-loopback-client-without-token-gets-401",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "authorization": "Bearer wrong",
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 401
+      },
+      "from": "web-access.unit.test.ts: authorise > answers 401 to a wrong bearer token",
+      "function": "web-access.authorise",
+      "id": "wrong-bearer-token-gets-401",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "authorization": "Bearer tok-secret",
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > allows a correct bearer token",
+      "function": "web-access.authorise",
+      "id": "correct-bearer-token-allowed",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "cookie": "a=b; agent_comms_web_token_41234=tok-secret",
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > allows a correct cookie and rejects a wrong one",
+      "function": "web-access.authorise",
+      "id": "correct-cookie-allowed",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "cookie": "agent_comms_web_token_41234=wrong",
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 401
+      },
+      "from": "web-access.unit.test.ts: authorise > allows a correct cookie and rejects a wrong one",
+      "function": "web-access.authorise",
+      "id": "wrong-cookie-gets-401",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/room?x=1&token=tok-secret"
+        }
+      ],
+      "expect": {
+        "cookie": "agent_comms_web_token_41234=tok-secret; HttpOnly; SameSite=Lax; Path=/",
+        "kind": "exchange",
+        "location": "/room?x=1",
+        "status": 302
+      },
+      "from": "web-access.unit.test.ts: authorise > exchanges a correct ?token= on a GET for a cookie and a redirect without the token",
+      "function": "web-access.authorise",
+      "id": "correct-query-token-exchanged-for-cookie",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/?token=wrong"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 401
+      },
+      "from": "web-access.unit.test.ts: authorise > does not exchange a wrong ?token=, nor any ?token= on a POST",
+      "function": "web-access.authorise",
+      "id": "wrong-query-token-not-exchanged",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "host": "192.168.1.10:41234"
+          },
+          "method": "POST",
+          "remoteAddress": "192.168.1.50",
+          "url": "/api/action?token=tok-secret"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 401
+      },
+      "from": "web-access.unit.test.ts: authorise > does not exchange a wrong ?token=, nor any ?token= on a POST",
+      "function": "web-access.authorise",
+      "id": "query-token-on-post-not-exchanged",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "authorization": "Bearer tok-secret",
+            "host": "rebind.example:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > rejects a Host naming another domain with 403 even when the token is right (DNS rebinding)",
+      "function": "web-access.authorise",
+      "id": "rebound-host-with-right-token-gets-403",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "authorization": "Bearer tok-secret",
+            "host": "192.168.1.10:1"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > rejects a Host on the right address but the wrong port, and a missing Host",
+      "function": "web-access.authorise",
+      "id": "wrong-port-host-gets-403",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "authorization": "Bearer tok-secret"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > rejects a Host on the right address but the wrong port, and a missing Host",
+      "function": "web-access.authorise",
+      "id": "missing-host-gets-403",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "cookie": "agent_comms_web_token_41234=tok-secret",
+            "host": "192.168.1.10:41234",
+            "origin": "http://192.168.1.10:9999"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > rejects a cross-origin request carrying a valid cookie",
+      "function": "web-access.authorise",
+      "id": "cross-origin-with-valid-cookie-gets-403",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "cookie": "agent_comms_web_token_41234=tok-secret",
+            "host": "192.168.1.10:41234",
+            "origin": "http://192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > allows a same-origin request carrying a valid cookie",
+      "function": "web-access.authorise",
+      "id": "same-origin-with-valid-cookie-allowed",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://evil.example"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > rejects a foreign Origin from a loopback client, under a loopback bind and a wildcard bind",
+      "function": "web-access.authorise",
+      "id": "foreign-origin-from-loopback-under-loopback-bind-gets-403",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "0.0.0.0",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://evil.example"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > rejects a foreign Origin from a loopback client, under a loopback bind and a wildcard bind",
+      "function": "web-access.authorise",
+      "id": "foreign-origin-from-loopback-under-wildcard-bind-gets-403",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [
+            "192.168.1.50"
+          ],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "host": "192.168.1.10:41234",
+            "origin": "https://evil.example"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > rejects a foreign Origin from a client on this machine's own interface address",
+      "function": "web-access.authorise",
+      "id": "foreign-origin-from-own-interface-address-gets-403",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://127.0.0.1:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > rejects an https Origin whose host and port match this server",
+      "function": "web-access.authorise",
+      "id": "https-origin-matching-this-server-gets-403",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "http://localhost:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > allows an http Origin naming a loopback name on the bound port from a loopback client",
+      "function": "web-access.authorise",
+      "id": "http-loopback-name-origin-allowed",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > allows the hosted dashboard's Origin from a loopback client only",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-allowed-from-loopback",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "cookie": "agent_comms_web_token_41234=tok-secret",
+            "host": "192.168.1.10:41234",
+            "origin": "https://exadev.github.io"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "web-access.unit.test.ts: authorise > allows the hosted dashboard's Origin from a loopback client only",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-from-remote",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "authorization": "Bearer tok-secret",
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > accepts the Bearer scheme in any letter case and rejects other schemes",
+      "function": "web-access.authorise",
+      "id": "bearer-scheme-spelling-0-allowed",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "authorization": "bearer tok-secret",
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > accepts the Bearer scheme in any letter case and rejects other schemes",
+      "function": "web-access.authorise",
+      "id": "bearer-scheme-spelling-1-allowed",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "authorization": "BEARER tok-secret",
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > accepts the Bearer scheme in any letter case and rejects other schemes",
+      "function": "web-access.authorise",
+      "id": "bearer-scheme-spelling-2-allowed",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "authorization": "Basic tok-secret",
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 401
+      },
+      "from": "web-access.unit.test.ts: authorise > accepts the Bearer scheme in any letter case and rejects other schemes",
+      "function": "web-access.authorise",
+      "id": "basic-scheme-gets-401",
+      "kind": "function"
+    },
+    {
+      "args": [
+        null,
+        {}
+      ],
+      "expect": "127.0.0.1",
+      "from": "web-access.unit.test.ts: resolveWebBindHost > defaults to loopback with no option and no environment variable",
+      "function": "web-access.resolveWebBindHost",
+      "id": "bind-host-defaults-to-loopback",
+      "kind": "function"
+    },
+    {
+      "args": [
+        null,
+        {
+          "AGENT_COMMS_WEB_HOST": "0.0.0.0"
+        }
+      ],
+      "expect": "0.0.0.0",
+      "from": "web-access.unit.test.ts: resolveWebBindHost > takes the environment variable as the opt-in",
+      "function": "web-access.resolveWebBindHost",
+      "id": "bind-host-from-environment",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::",
+        {
+          "AGENT_COMMS_WEB_HOST": "0.0.0.0"
+        }
+      ],
+      "expect": "::",
+      "from": "web-access.unit.test.ts: resolveWebBindHost > prefers an explicit option over the environment",
+      "function": "web-access.resolveWebBindHost",
+      "id": "bind-host-option-beats-environment",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::0"
+      ],
+      "expect": {
+        "requiresAccessToken": true,
+        "wildcard": true
+      },
+      "from": "web-access.unit.test.ts: resolveWebBindHost > canonicalises the wildcard spelling ::0 so it is classified as a wildcard",
+      "function": "web-access.wildcardAfterResolve",
+      "id": "wildcard-spelling---0-is-classified-as-wildcard",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "0:0:0:0:0:0:0:0"
+      ],
+      "expect": {
+        "requiresAccessToken": true,
+        "wildcard": true
+      },
+      "from": "web-access.unit.test.ts: resolveWebBindHost > canonicalises the wildcard spelling 0:0:0:0:0:0:0:0 so it is classified as a wildcard",
+      "function": "web-access.wildcardAfterResolve",
+      "id": "wildcard-spelling-0-0-0-0-0-0-0-0-is-classified-as-wildcard",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::ffff:0.0.0.0"
+      ],
+      "expect": {
+        "requiresAccessToken": true,
+        "wildcard": true
+      },
+      "from": "web-access.unit.test.ts: resolveWebBindHost > canonicalises the wildcard spelling ::ffff:0.0.0.0 so it is classified as a wildcard",
+      "function": "web-access.wildcardAfterResolve",
+      "id": "wildcard-spelling---ffff-0-0-0-0-is-classified-as-wildcard",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::ffff:0:0"
+      ],
+      "expect": {
+        "requiresAccessToken": true,
+        "wildcard": true
+      },
+      "from": "web-access.unit.test.ts: resolveWebBindHost > canonicalises the wildcard spelling ::ffff:0:0 so it is classified as a wildcard",
+      "function": "web-access.wildcardAfterResolve",
+      "id": "wildcard-spelling---ffff-0-0-is-classified-as-wildcard",
+      "kind": "function"
+    },
+    {
+      "args": [
+        null,
+        {
+          "AGENT_COMMS_WEB_HOST": "lan"
+        }
+      ],
+      "from": "web-access.unit.test.ts: resolveWebBindHost > rejects a value that is not an IP address instead of falling back",
+      "function": "web-access.resolveWebBindHost",
+      "id": "bind-host-rejects-non-address",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "AGENT_COMMS_WEB_HOST"
+        ]
+      }
+    },
+    {
+      "args": [
+        "::0"
+      ],
+      "expect": "::",
+      "from": "web-access.unit.test.ts: canonicalAddress > spells ::0 as ::",
+      "function": "web-access.canonicalAddress",
+      "id": "canonical-address-0",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "0:0:0:0:0:0:0:1"
+      ],
+      "expect": "::1",
+      "from": "web-access.unit.test.ts: canonicalAddress > spells 0:0:0:0:0:0:0:1 as ::1",
+      "function": "web-access.canonicalAddress",
+      "id": "canonical-address-1",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::ffff:127.0.0.1"
+      ],
+      "expect": "127.0.0.1",
+      "from": "web-access.unit.test.ts: canonicalAddress > spells ::ffff:127.0.0.1 as 127.0.0.1",
+      "function": "web-access.canonicalAddress",
+      "id": "canonical-address-2",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::ffff:7f00:1"
+      ],
+      "expect": "127.0.0.1",
+      "from": "web-access.unit.test.ts: canonicalAddress > spells ::ffff:7f00:1 as 127.0.0.1",
+      "function": "web-access.canonicalAddress",
+      "id": "canonical-address-3",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "192.168.1.10"
+      ],
+      "expect": "192.168.1.10",
+      "from": "web-access.unit.test.ts: canonicalAddress > spells 192.168.1.10 as 192.168.1.10",
+      "function": "web-access.canonicalAddress",
+      "id": "canonical-address-4",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "fe80::1%en0"
+      ],
+      "expect": "fe80::1%en0",
+      "from": "web-access.unit.test.ts: canonicalAddress > spells fe80::1%en0 as fe80::1%en0",
+      "function": "web-access.canonicalAddress",
+      "id": "canonical-address-5",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "0.0.0.0"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: isWildcardHost > 0.0.0.0 binds every interface",
+      "function": "web-access.isWildcardHost",
+      "id": "wildcard-host-0",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: isWildcardHost > :: binds every interface",
+      "function": "web-access.isWildcardHost",
+      "id": "wildcard-host-1",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::0"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: isWildcardHost > ::0 binds every interface",
+      "function": "web-access.isWildcardHost",
+      "id": "wildcard-host-2",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "0:0:0:0:0:0:0:0"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: isWildcardHost > 0:0:0:0:0:0:0:0 binds every interface",
+      "function": "web-access.isWildcardHost",
+      "id": "wildcard-host-3",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::ffff:0.0.0.0"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: isWildcardHost > ::ffff:0.0.0.0 binds every interface",
+      "function": "web-access.isWildcardHost",
+      "id": "wildcard-host-4",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "192.168.1.10"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: isWildcardHost > 192.168.1.10 binds one interface",
+      "function": "web-access.isWildcardHost",
+      "id": "specific-host-0",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "127.0.0.1"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: isWildcardHost > 127.0.0.1 binds one interface",
+      "function": "web-access.isWildcardHost",
+      "id": "specific-host-1",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::1"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: isWildcardHost > ::1 binds one interface",
+      "function": "web-access.isWildcardHost",
+      "id": "specific-host-2",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "fe80::1%en0"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: isWildcardHost > fe80::1%en0 binds one interface",
+      "function": "web-access.isWildcardHost",
+      "id": "specific-host-3",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "0.0.0.0",
+        41234
+      ],
+      "expect": "http://127.0.0.1:41234",
+      "from": "web-access.unit.test.ts: localWebUrl > maps a wildcard bind to loopback and keeps a specific bind",
+      "function": "web-access.localWebUrl",
+      "id": "local-url-wildcard-ipv4",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::",
+        41234
+      ],
+      "expect": "http://127.0.0.1:41234",
+      "from": "web-access.unit.test.ts: localWebUrl > maps a wildcard bind to loopback and keeps a specific bind",
+      "function": "web-access.localWebUrl",
+      "id": "local-url-wildcard-ipv6",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "192.168.1.10",
+        41234
+      ],
+      "expect": "http://192.168.1.10:41234",
+      "from": "web-access.unit.test.ts: localWebUrl > maps a wildcard bind to loopback and keeps a specific bind",
+      "function": "web-access.localWebUrl",
+      "id": "local-url-specific-bind",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::1",
+        41234
+      ],
+      "expect": "http://[::1]:41234",
+      "from": "web-access.unit.test.ts: localWebUrl > brackets an IPv6 bind",
+      "function": "web-access.localWebUrl",
+      "id": "local-url-brackets-ipv6",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "127.0.0.1"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: requiresAccessToken > 127.0.0.1 needs no token",
+      "function": "web-access.requiresAccessToken",
+      "id": "loopback-bind-needs-no-token-0",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "127.0.0.5"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: requiresAccessToken > 127.0.0.5 needs no token",
+      "function": "web-access.requiresAccessToken",
+      "id": "loopback-bind-needs-no-token-1",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::1"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: requiresAccessToken > ::1 needs no token",
+      "function": "web-access.requiresAccessToken",
+      "id": "loopback-bind-needs-no-token-2",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "0.0.0.0"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: requiresAccessToken > 0.0.0.0 needs a token",
+      "function": "web-access.requiresAccessToken",
+      "id": "other-bind-needs-a-token-0",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: requiresAccessToken > :: needs a token",
+      "function": "web-access.requiresAccessToken",
+      "id": "other-bind-needs-a-token-1",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "192.168.1.10"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: requiresAccessToken > 192.168.1.10 needs a token",
+      "function": "web-access.requiresAccessToken",
+      "id": "other-bind-needs-a-token-2",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "127.0.0.1"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: isLoopbackAddress > 127.0.0.1 is loopback",
+      "function": "web-access.isLoopbackAddress",
+      "id": "loopback-address-0",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::1"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: isLoopbackAddress > ::1 is loopback",
+      "function": "web-access.isLoopbackAddress",
+      "id": "loopback-address-1",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::ffff:127.0.0.1"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: isLoopbackAddress > ::ffff:127.0.0.1 is loopback",
+      "function": "web-access.isLoopbackAddress",
+      "id": "loopback-address-2",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "192.168.1.50"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: isLoopbackAddress > 192.168.1.50 is not loopback",
+      "function": "web-access.isLoopbackAddress",
+      "id": "non-loopback-address-0",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "::ffff:192.168.1.50"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: isLoopbackAddress > ::ffff:192.168.1.50 is not loopback",
+      "function": "web-access.isLoopbackAddress",
+      "id": "non-loopback-address-1",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "fe80::1"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: isLoopbackAddress > fe80::1 is not loopback",
+      "function": "web-access.isLoopbackAddress",
+      "id": "non-loopback-address-2",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "0123456789abcdef0123456789abcdef",
+        "0123456789abcdef0123456789abcdef"
+      ],
+      "expect": true,
+      "from": "web-access.unit.test.ts: tokensMatch > accepts an identical token",
+      "function": "web-access.tokensMatch",
+      "id": "tokens-match-identical",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "0123456789abcdef0123456789abcde",
+        "0123456789abcdef0123456789abcdef"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: tokensMatch > rejects a prefix, an extension, a different token and the empty string without throwing on length",
+      "function": "web-access.tokensMatch",
+      "id": "tokens-match-refuses-prefix",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "0123456789abcdef0123456789abcdef0",
+        "0123456789abcdef0123456789abcdef"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: tokensMatch > rejects a prefix, an extension, a different token and the empty string without throwing on length",
+      "function": "web-access.tokensMatch",
+      "id": "tokens-match-refuses-extension",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "ffffffffffffffffffffffffffffffff",
+        "0123456789abcdef0123456789abcdef"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: tokensMatch > rejects a prefix, an extension, a different token and the empty string without throwing on length",
+      "function": "web-access.tokensMatch",
+      "id": "tokens-match-refuses-different-token",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "",
+        "0123456789abcdef0123456789abcdef"
+      ],
+      "expect": false,
+      "from": "web-access.unit.test.ts: tokensMatch > rejects a prefix, an extension, a different token and the empty string without throwing on length",
+      "function": "web-access.tokensMatch",
+      "id": "tokens-match-refuses-empty",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "::",
+          "port": 41234,
+          "token": "t"
+        },
+        [
+          {
+            "address": "192.168.1.10",
+            "family": "IPv4",
+            "internal": false,
+            "name": "en0"
+          },
+          {
+            "address": "fe80::1",
+            "family": "IPv6",
+            "internal": false,
+            "name": "en0"
+          },
+          {
+            "address": "2001:db8::10",
+            "family": "IPv6",
+            "internal": false,
+            "name": "en0"
+          },
+          {
+            "address": "127.0.0.1",
+            "family": "IPv4",
+            "internal": true,
+            "name": "lo0"
+          }
+        ]
+      ],
+      "expect": [
+        "http://192.168.1.10:41234/?token=t",
+        "http://[2001:db8::10]:41234/?token=t"
+      ],
+      "from": "web-access.unit.test.ts: accessUrls > lists external IPv4 and non-link-local IPv6 addresses, bracketed, under the IPv6 wildcard",
+      "function": "web-access.accessUrls",
+      "id": "lists-external-ipv4-and-global-ipv6-under-ipv6-wildcard",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "0.0.0.0",
+          "port": 41234,
+          "token": "t"
+        },
+        [
+          {
+            "address": "192.168.1.10",
+            "family": "IPv4",
+            "internal": false,
+            "name": "en0"
+          },
+          {
+            "address": "fe80::1",
+            "family": "IPv6",
+            "internal": false,
+            "name": "en0"
+          },
+          {
+            "address": "2001:db8::10",
+            "family": "IPv6",
+            "internal": false,
+            "name": "en0"
+          },
+          {
+            "address": "127.0.0.1",
+            "family": "IPv4",
+            "internal": true,
+            "name": "lo0"
+          }
+        ]
+      ],
+      "expect": [
+        "http://192.168.1.10:41234/?token=t"
+      ],
+      "from": "web-access.unit.test.ts: accessUrls > lists only IPv4 addresses under the IPv4 wildcard, which accepts no IPv6 connection",
+      "function": "web-access.accessUrls",
+      "id": "lists-only-ipv4-under-ipv4-wildcard",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "0.0.0.0",
+          "port": 41234,
+          "token": "t"
+        },
+        [
+          {
+            "address": "127.0.0.1",
+            "family": "IPv4",
+            "internal": true,
+            "name": "lo0"
+          }
+        ]
+      ],
+      "expect": [],
+      "from": "web-access.unit.test.ts: accessUrls > lists nothing when a wildcard bind finds no external address",
+      "function": "web-access.accessUrls",
+      "id": "lists-nothing-when-wildcard-finds-no-external-address",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "port": 41234,
+          "token": "t"
+        },
+        [
+          {
+            "address": "127.0.0.1",
+            "family": "IPv4",
+            "internal": true,
+            "name": "lo0"
+          }
+        ]
+      ],
+      "expect": [
+        "http://192.168.1.10:41234/?token=t"
+      ],
+      "from": "web-access.unit.test.ts: accessUrls > lists the bound address under a specific bind",
+      "function": "web-access.accessUrls",
+      "id": "lists-the-bound-address-under-specific-bind",
+      "kind": "function"
+    }
+  ]
+}

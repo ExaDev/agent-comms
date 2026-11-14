@@ -1,0 +1,172 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "agent": "abc123",
+          "newName": "Bob",
+          "oldName": "Alice",
+          "type": "name_changed"
+        }
+      ],
+      "expect": "Alice is now known as Bob",
+      "from": "bridge.unit.test.ts: formatDeliveryEvent > formats name_changed event",
+      "function": "bridge.formatDeliveryEvent",
+      "id": "format-name-changed",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "message": {
+            "content": "hello",
+            "from": "a1",
+            "id": "m1",
+            "readBy": [],
+            "room": "r1",
+            "timestamp": "2025-01-01T00:00:00Z"
+          },
+          "type": "room_message"
+        }
+      ],
+      "expect": "[r1] a1: hello",
+      "from": "bridge.unit.test.ts: formatDeliveryEvent > formats room_message",
+      "function": "bridge.formatDeliveryEvent",
+      "id": "format-room-message",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agent": "a1",
+          "room": "r1",
+          "status": "busy",
+          "type": "member_status"
+        }
+      ],
+      "expect": "a1 is now busy in r1",
+      "from": "bridge.unit.test.ts: formatDeliveryEvent > formats member_status",
+      "function": "bridge.formatDeliveryEvent",
+      "id": "format-member-status",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "message": {
+            "content": "hello",
+            "from": "a1",
+            "id": "m1",
+            "readBy": [],
+            "room": "r1",
+            "timestamp": "2025-01-01T00:00:00Z"
+          },
+          "type": "room_message"
+        }
+      ],
+      "expect": true,
+      "from": "bridge.unit.test.ts: isActionableEvent > classifies room_message as actionable",
+      "function": "bridge.isActionableEvent",
+      "id": "room-message-is-actionable",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "message": {
+            "content": "hey",
+            "from": "a1",
+            "id": "dm1",
+            "readBy": [],
+            "timestamp": "2025-01-01T00:00:00Z",
+            "to": "a2"
+          },
+          "type": "dm"
+        }
+      ],
+      "expect": true,
+      "from": "bridge.unit.test.ts: isActionableEvent > classifies dm as actionable",
+      "function": "bridge.isActionableEvent",
+      "id": "dm-is-actionable",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "from": "a1",
+          "fromCwd": "/home",
+          "fromName": "Alice",
+          "room": "r1",
+          "roomDescription": "",
+          "type": "room_invite"
+        }
+      ],
+      "expect": true,
+      "from": "bridge.unit.test.ts: isActionableEvent > classifies room_invite as actionable",
+      "function": "bridge.isActionableEvent",
+      "id": "room-invite-is-actionable",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agent": "a1",
+          "room": "r1",
+          "type": "member_joined"
+        }
+      ],
+      "expect": false,
+      "from": "bridge.unit.test.ts: isActionableEvent > classifies member_joined as informational",
+      "function": "bridge.isActionableEvent",
+      "id": "member-joined-is-informational",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agent": "a1",
+          "room": "r1",
+          "status": "offline",
+          "type": "member_status"
+        }
+      ],
+      "expect": false,
+      "from": "bridge.unit.test.ts: isActionableEvent > classifies member_status as informational",
+      "function": "bridge.isActionableEvent",
+      "id": "member-status-is-informational",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agent": "a1",
+          "newName": "Bob",
+          "oldName": "Alice",
+          "type": "name_changed"
+        }
+      ],
+      "expect": false,
+      "from": "bridge.unit.test.ts: isActionableEvent > classifies name_changed as informational",
+      "function": "bridge.isActionableEvent",
+      "id": "name-changed-is-informational",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agent": "a1",
+          "delivery": {
+            "status": "delivered"
+          },
+          "messageId": "m1",
+          "type": "delivery_status"
+        }
+      ],
+      "expect": false,
+      "from": "bridge.unit.test.ts: isActionableEvent > classifies delivery_status as informational",
+      "function": "bridge.isActionableEvent",
+      "id": "delivery-status-is-informational",
+      "kind": "function"
+    }
+  ]
+}

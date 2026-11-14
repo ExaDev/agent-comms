@@ -1,0 +1,172 @@
+{
+  "cases": [
+    {
+      "args": [
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        "general"
+      ],
+      "expect": "1111111111111111111111111111111111111111111111111111111111111111/general",
+      "from": "room-path.unit.test.ts: ownerNamedRoomPath joins the owner and local name with a slash",
+      "function": "room-path.ownerNamedRoomPath",
+      "id": "owner-named-path-joins-with-slash",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "not-hex",
+        "general"
+      ],
+      "from": "room-path.unit.test.ts: ownerNamedRoomPath rejects an owner that isn't 64-character lowercase hex",
+      "function": "room-path.ownerNamedRoomPath",
+      "id": "owner-named-path-rejects-non-hex-owner",
+      "kind": "function",
+      "throws": {}
+    },
+    {
+      "args": [
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        "has spaces"
+      ],
+      "from": "room-path.unit.test.ts: ownerNamedRoomPath rejects a local name outside [A-Za-z0-9_-]+",
+      "function": "room-path.ownerNamedRoomPath",
+      "id": "owner-named-path-rejects-spaces",
+      "kind": "function",
+      "throws": {}
+    },
+    {
+      "args": [
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        "has.dots"
+      ],
+      "from": "room-path.unit.test.ts: ownerNamedRoomPath rejects a local name outside [A-Za-z0-9_-]+",
+      "function": "room-path.ownerNamedRoomPath",
+      "id": "owner-named-path-rejects-dots",
+      "kind": "function",
+      "throws": {}
+    },
+    {
+      "args": [
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        "2222222222222222222222222222222222222222222222222222222222222222"
+      ],
+      "expect": "1111111111111111111111111111111111111111111111111111111111111111+2222222222222222222222222222222222222222222222222222222222222222",
+      "from": "room-path.unit.test.ts: dmRoomPath joins the bytewise-ascending sorted pair with a plus",
+      "function": "room-path.dmRoomPath",
+      "id": "dm-path-sorted-ascending",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        "1111111111111111111111111111111111111111111111111111111111111111"
+      ],
+      "expect": "1111111111111111111111111111111111111111111111111111111111111111+2222222222222222222222222222222222222222222222222222222222222222",
+      "from": "room-path.unit.test.ts: dmRoomPath joins the bytewise-ascending sorted pair with a plus",
+      "function": "room-path.dmRoomPath",
+      "id": "dm-path-sorted-ascending-reversed-arguments",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        "1111111111111111111111111111111111111111111111111111111111111111"
+      ],
+      "from": "room-path.unit.test.ts: dmRoomPath refuses to name the same device twice",
+      "function": "room-path.dmRoomPath",
+      "id": "dm-path-refuses-same-device-twice",
+      "kind": "function",
+      "throws": {}
+    },
+    {
+      "args": [
+        "not-hex",
+        "2222222222222222222222222222222222222222222222222222222222222222"
+      ],
+      "from": "room-path.unit.test.ts: dmRoomPath rejects a participant that isn't 64-character lowercase hex",
+      "function": "room-path.dmRoomPath",
+      "id": "dm-path-rejects-non-hex-participant",
+      "kind": "function",
+      "throws": {}
+    },
+    {
+      "args": [
+        "1111111111111111111111111111111111111111111111111111111111111111/general"
+      ],
+      "expect": {
+        "kind": "owner-named",
+        "localName": "general",
+        "owner": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "from": "room-path.unit.test.ts: parseRoomPath recognises an owner-named path",
+      "function": "room-path.parseRoomPath",
+      "id": "parse-path-owner-named",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "1111111111111111111111111111111111111111111111111111111111111111+2222222222222222222222222222222222222222222222222222222222222222"
+      ],
+      "expect": {
+        "kind": "dm",
+        "participants": [
+          "1111111111111111111111111111111111111111111111111111111111111111",
+          "2222222222222222222222222222222222222222222222222222222222222222"
+        ]
+      },
+      "from": "room-path.unit.test.ts: parseRoomPath recognises a DM path",
+      "function": "room-path.parseRoomPath",
+      "id": "parse-path-dm",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "just-a-name"
+      ],
+      "from": "room-path.unit.test.ts: parseRoomPath rejects a path shaped like neither",
+      "function": "room-path.parseRoomPath",
+      "id": "parse-path-rejects-neither",
+      "kind": "function",
+      "throws": {}
+    },
+    {
+      "args": [
+        "documents.js"
+      ],
+      "expect": "documents-js",
+      "from": "room-path.unit.test.ts: slugRoomName replaces every character outside [A-Za-z0-9_-] with a hyphen",
+      "function": "room-path.slugRoomName",
+      "id": "slug-replaces-invalid-characters-dot",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "my project"
+      ],
+      "expect": "my-project",
+      "from": "room-path.unit.test.ts: slugRoomName replaces every character outside [A-Za-z0-9_-] with a hyphen",
+      "function": "room-path.slugRoomName",
+      "id": "slug-replaces-invalid-characters-space",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "agent-comms_2"
+      ],
+      "expect": "agent-comms_2",
+      "from": "room-path.unit.test.ts: slugRoomName leaves an already-valid name unchanged",
+      "function": "room-path.slugRoomName",
+      "id": "slug-leaves-valid-name",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "..."
+      ],
+      "from": "room-path.unit.test.ts: slugRoomName rejects a name with nothing left to slug",
+      "function": "room-path.slugRoomName",
+      "id": "slug-rejects-nothing-left",
+      "kind": "function",
+      "throws": {}
+    }
+  ]
+}

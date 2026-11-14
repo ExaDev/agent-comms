@@ -1,0 +1,108 @@
+{
+  "files": {
+    "function/agent-table.json": {
+      "cases": 1,
+      "only": []
+    },
+    "function/bind-retry.json": {
+      "cases": 4,
+      "only": []
+    },
+    "function/boot-logic.json": {
+      "cases": 9,
+      "only": []
+    },
+    "function/build-action.json": {
+      "cases": 106,
+      "only": []
+    },
+    "function/claude-command.json": {
+      "cases": 10,
+      "only": []
+    },
+    "function/dashboard-input.json": {
+      "cases": 27,
+      "only": []
+    },
+    "function/default-command.json": {
+      "cases": 10,
+      "only": []
+    },
+    "function/delegation-policy.json": {
+      "cases": 8,
+      "only": []
+    },
+    "function/delivery-events.json": {
+      "cases": 10,
+      "only": []
+    },
+    "function/display-name.json": {
+      "cases": 17,
+      "only": []
+    },
+    "function/error-reporting.json": {
+      "cases": 14,
+      "only": []
+    },
+    "function/machine-list-groups.json": {
+      "cases": 5,
+      "only": []
+    },
+    "function/messages.json": {
+      "cases": 15,
+      "only": []
+    },
+    "function/project-tree.json": {
+      "cases": 13,
+      "only": []
+    },
+    "function/relay-selection.json": {
+      "cases": 10,
+      "only": []
+    },
+    "function/request-timeouts.json": {
+      "cases": 7,
+      "only": []
+    },
+    "function/room-discovery.json": {
+      "cases": 6,
+      "only": []
+    },
+    "function/room-lookup.json": {
+      "cases": 7,
+      "only": []
+    },
+    "function/room-path.json": {
+      "cases": 15,
+      "only": []
+    },
+    "function/send-outcome.json": {
+      "cases": 12,
+      "only": []
+    },
+    "function/served-by-bridge.json": {
+      "cases": 7,
+      "only": []
+    },
+    "function/url-sync.json": {
+      "cases": 18,
+      "only": []
+    },
+    "function/version-report-actions.json": {
+      "cases": 6,
+      "only": []
+    },
+    "function/web-access.json": {
+      "cases": 87,
+      "only": []
+    },
+    "validate/comms-action.json": {
+      "cases": 6,
+      "only": []
+    },
+    "validate/tool-params.json": {
+      "cases": 9,
+      "only": []
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "cases": [
+    {
+      "expect": {
+        "issues": [
+          {
+            "path": [
+              0
+            ]
+          }
+        ],
+        "ok": false
+      },
+      "from": "example.test.ts: group > test",
+      "id": "v",
+      "input": {
+        "action": "whoami"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    }
+  ]
+}

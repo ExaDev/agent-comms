@@ -1,0 +1,21 @@
+[package]
+name = "agent-comms-conformance"
+description = "Loads the language-neutral conformance corpus and checks every file against its format."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[[test]]
+name = "conformance"
+path = "tests/conformance/main.rs"
+# A plain main that prints the failing case ids, rather than libtest, so a corpus failure names the case.
+harness = false
+
+[lints]
+workspace = true

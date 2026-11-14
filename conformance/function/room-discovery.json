@@ -1,0 +1,88 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "description": "d",
+          "name": "room",
+          "path": "owner/room",
+          "type": "public"
+        }
+      ],
+      "expect": true,
+      "from": "room-discovery.unit.test.ts: isHostedRoomAdvert > accepts a room advertised with its description",
+      "function": "room-discovery.isHostedRoomAdvert",
+      "id": "accepts-with-description",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "name": "room",
+          "path": "owner/room",
+          "type": "public"
+        }
+      ],
+      "expect": true,
+      "from": "room-discovery.unit.test.ts: isHostedRoomAdvert > accepts a room advertised without one, as a hub receives it",
+      "function": "room-discovery.isHostedRoomAdvert",
+      "id": "accepts-without-description",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "description": 1,
+          "name": "room",
+          "path": "owner/room",
+          "type": "public"
+        }
+      ],
+      "expect": false,
+      "from": "room-discovery.unit.test.ts: isHostedRoomAdvert > refuses a description that is not a string",
+      "function": "room-discovery.isHostedRoomAdvert",
+      "id": "refuses-non-string-description",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "name": "room",
+          "type": "public"
+        }
+      ],
+      "expect": false,
+      "from": "room-discovery.unit.test.ts: isHostedRoomAdvert > refuses an advert missing its path, name or a known type",
+      "function": "room-discovery.isHostedRoomAdvert",
+      "id": "refuses-missing-path",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "path": "p",
+          "type": "public"
+        }
+      ],
+      "expect": false,
+      "from": "room-discovery.unit.test.ts: isHostedRoomAdvert > refuses an advert missing its path, name or a known type",
+      "function": "room-discovery.isHostedRoomAdvert",
+      "id": "refuses-missing-name",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "name": "n",
+          "path": "p",
+          "type": "secret"
+        }
+      ],
+      "expect": false,
+      "from": "room-discovery.unit.test.ts: isHostedRoomAdvert > refuses an advert missing its path, name or a known type",
+      "function": "room-discovery.isHostedRoomAdvert",
+      "id": "refuses-unknown-type",
+      "kind": "function"
+    }
+  ]
+}

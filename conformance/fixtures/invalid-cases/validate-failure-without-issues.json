@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {
+      "expect": {
+        "ok": false
+      },
+      "from": "example.test.ts: group > test",
+      "id": "v",
+      "input": {
+        "action": "whoami"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    }
+  ]
+}

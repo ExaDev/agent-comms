@@ -1,0 +1,14 @@
+{
+  "files": {
+    "function/a.json": {
+      "cases": 0,
+      "only": [
+        "a"
+      ]
+    },
+    "validate/b.json": {
+      "cases": 1,
+      "only": []
+    }
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "cases": [
+    {
+      "args": [
+        {},
+        {
+          "device": "abc123"
+        }
+      ],
+      "expect": {
+        "content": "query_version requires a mesh-backed store (this session is running on FileStore)",
+        "isError": true
+      },
+      "from": "version-report-actions.unit.test.ts: handleQueryVersion > reports not-mesh-backed when the store has no queryVersion method",
+      "function": "version-report-actions.handleQueryVersion",
+      "id": "query-version-without-mesh-backed-store",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "queryVersion": {
+            "version": "1.2.3"
+          }
+        },
+        {
+          "device": "abc123"
+        }
+      ],
+      "expect": {
+        "content": "abc123 is running wire-mesh-core 1.2.3.",
+        "isError": false
+      },
+      "from": "version-report-actions.unit.test.ts: handleQueryVersion > reports the peer's live version on success",
+      "function": "version-report-actions.handleQueryVersion",
+      "id": "query-version-reports-peers-live-version",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "queryVersion": {
+            "error": "unauthorized"
+          }
+        },
+        {
+          "device": "abc123"
+        }
+      ],
+      "expect": {
+        "content": "Failed to query abc123's version: unauthorized",
+        "isError": true
+      },
+      "from": "version-report-actions.unit.test.ts: handleQueryVersion > reports the store's own error on failure",
+      "function": "version-report-actions.handleQueryVersion",
+      "id": "query-version-reports-stores-own-error",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agentComms": "3.0.0",
+          "wireMeshCore": "1.50.0"
+        },
+        "peer-device"
+      ],
+      "expect": "agent-comms 3.0.0, wire-mesh-core 1.50.0",
+      "from": "version-report-actions.unit.test.ts: formatListedAgentVersions > reads gossiped versions for another peer, defaulting to unknown when never gossiped",
+      "function": "version-report-actions.formatListedAgentVersions",
+      "id": "listed-versions-for-known-peer",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {},
+        "peer-device"
+      ],
+      "expect": "agent-comms unknown, wire-mesh-core unknown",
+      "from": "version-report-actions.unit.test.ts: formatListedAgentVersions > reads gossiped versions for another peer, defaulting to unknown when never gossiped",
+      "function": "version-report-actions.formatListedAgentVersions",
+      "id": "listed-versions-default-to-unknown",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agentComms": "3.0.0",
+          "ccPeer": "1.5.0",
+          "wireMeshCore": "1.50.0"
+        },
+        "peer-device"
+      ],
+      "expect": "agent-comms 3.0.0, wire-mesh-core 1.50.0, cc-peer 1.5.0",
+      "from": "version-report-actions.unit.test.ts: formatListedAgentVersions > includes a peer's cc-peer version only when the store actually reports one",
+      "function": "version-report-actions.formatListedAgentVersions",
+      "id": "listed-versions-include-cc-peer-when-reported",
+      "kind": "function"
+    }
+  ]
+}

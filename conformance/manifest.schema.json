@@ -1,0 +1,45 @@
+{
+  "$id": "https://github.com/ExaDev/agent-comms/tree/main/conformance/manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "What the corpus holds: per corpus file, how many cases it has and which of them are marked for one implementation only. Every runner checks the corpus against it, so a case cannot be dropped or hidden without a change to this file in the same commit.",
+  "properties": {
+    "files": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "cases": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "only": {
+            "description": "Ids in ascending order, which the schema cannot express and every loader checks.",
+            "items": {
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$",
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "cases",
+          "only"
+        ],
+        "type": "object"
+      },
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*\\.json$"
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "files"
+  ],
+  "title": "agent-comms conformance manifest",
+  "type": "object"
+}

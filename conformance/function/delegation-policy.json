@@ -1,0 +1,162 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "nonDelegable": [
+            "room:member"
+          ]
+        },
+        "room:member",
+        "alice-device-id",
+        5
+      ],
+      "expect": 0,
+      "from": "delegation-policy.unit.test.ts: a capability on the policy's default nonDelegable set is always minted with delegationsRemaining 0",
+      "function": "delegation-policy.resolveDelegationsRemaining",
+      "id": "default-non-delegable-is-minted-with-zero",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "nonDelegable": [
+            "room:member"
+          ]
+        },
+        "dm:send",
+        "alice-device-id",
+        5
+      ],
+      "expect": 5,
+      "from": "delegation-policy.unit.test.ts: a capability absent from the default nonDelegable set passes the requested value through unchanged",
+      "function": "delegation-policy.resolveDelegationsRemaining",
+      "id": "delegable-passes-requested-through",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "nonDelegable": [
+            "room:member"
+          ]
+        },
+        "dm:send",
+        "alice-device-id"
+      ],
+      "expectUndefined": true,
+      "from": "delegation-policy.unit.test.ts: an undefined requested value passes through unchanged for a delegable capability",
+      "function": "delegation-policy.resolveDelegationsRemaining",
+      "id": "undefined-requested-passes-through",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "nonDelegable": [
+            "room:member"
+          ],
+          "perAgentOverrides": {
+            "alice-device-id": [
+              "dm:send"
+            ]
+          }
+        },
+        "room:member",
+        "alice-device-id",
+        5
+      ],
+      "expect": 5,
+      "from": "delegation-policy.unit.test.ts: a per-agent override entirely replaces the default nonDelegable set for that bearer, never merges with it",
+      "function": "delegation-policy.resolveDelegationsRemaining",
+      "id": "override-replaces-default-set-room-member",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "nonDelegable": [
+            "room:member"
+          ],
+          "perAgentOverrides": {
+            "alice-device-id": [
+              "dm:send"
+            ]
+          }
+        },
+        "dm:send",
+        "alice-device-id",
+        5
+      ],
+      "expect": 0,
+      "from": "delegation-policy.unit.test.ts: a per-agent override entirely replaces the default nonDelegable set for that bearer, never merges with it",
+      "function": "delegation-policy.resolveDelegationsRemaining",
+      "id": "override-replaces-default-set-dm-send",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "nonDelegable": [
+            "room:member"
+          ],
+          "perAgentOverrides": {
+            "alice-device-id": [
+              "dm:send"
+            ]
+          }
+        },
+        "room:member",
+        "bob-device-id",
+        5
+      ],
+      "expect": 0,
+      "from": "delegation-policy.unit.test.ts: a per-agent override for one bearer never affects a different bearer's own resolution",
+      "function": "delegation-policy.resolveDelegationsRemaining",
+      "id": "override-leaves-other-bearer-room-member",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "nonDelegable": [
+            "room:member"
+          ],
+          "perAgentOverrides": {
+            "alice-device-id": [
+              "dm:send"
+            ]
+          }
+        },
+        "dm:send",
+        "bob-device-id",
+        5
+      ],
+      "expect": 5,
+      "from": "delegation-policy.unit.test.ts: a per-agent override for one bearer never affects a different bearer's own resolution",
+      "function": "delegation-policy.resolveDelegationsRemaining",
+      "id": "override-leaves-other-bearer-dm-send",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "nonDelegable": [
+            "room:member"
+          ],
+          "perAgentOverrides": {
+            "alice-device-id": []
+          }
+        },
+        "room:member",
+        "alice-device-id",
+        5
+      ],
+      "expect": 5,
+      "from": "delegation-policy.unit.test.ts: an empty per-agent override set makes every capability delegable for that bearer",
+      "function": "delegation-policy.resolveDelegationsRemaining",
+      "id": "empty-override-makes-everything-delegable",
+      "kind": "function"
+    }
+  ]
+}

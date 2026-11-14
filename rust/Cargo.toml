@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["tests/agent-comms-conformance"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99.1"
+license = "MIT"
+repository = "https://github.com/ExaDev/agent-comms"
+
+[workspace.dependencies]
+serde_json = "1"
+
+[workspace.lints.rust]
+# Binding crates that need wasm-bindgen's generated FFI relax this in their own manifest, not here.
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"

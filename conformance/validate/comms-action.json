@@ -1,0 +1,126 @@
+{
+  "cases": [
+    {
+      "expect": {
+        "ok": true,
+        "value": {
+          "action": "whoami"
+        }
+      },
+      "from": "recorded: src/core/types.ts (CommsActionSchema, whoami)",
+      "id": "comms-action-accepts-whoami",
+      "input": {
+        "action": "whoami"
+      },
+      "kind": "validate",
+      "schema": "comms-action"
+    },
+    {
+      "expect": {
+        "ok": true,
+        "value": {
+          "action": "lan_web_uis"
+        }
+      },
+      "from": "recorded: src/core/types.ts (CommsActionSchema, lan_web_uis)",
+      "id": "comms-action-accepts-lan-web-uis",
+      "input": {
+        "action": "lan_web_uis"
+      },
+      "kind": "validate",
+      "schema": "comms-action"
+    },
+    {
+      "expect": {
+        "ok": true,
+        "value": {
+          "action": "register",
+          "name": "n",
+          "tags": [],
+          "visibility": "visible"
+        }
+      },
+      "from": "recorded: src/core/types.ts (CommsActionSchema, register)",
+      "id": "comms-action-accepts-register",
+      "input": {
+        "action": "register",
+        "name": "n",
+        "tags": [],
+        "visibility": "visible"
+      },
+      "kind": "validate",
+      "schema": "comms-action"
+    },
+    {
+      "expect": {
+        "issues": [
+          {
+            "message": [
+              "Invalid input: expected string, received undefined"
+            ],
+            "path": [
+              "name"
+            ]
+          }
+        ],
+        "ok": false
+      },
+      "from": "recorded: src/core/types.ts (CommsActionSchema, register without a name)",
+      "id": "comms-action-refuses-register-without-a-name",
+      "input": {
+        "action": "register",
+        "tags": [],
+        "visibility": "visible"
+      },
+      "kind": "validate",
+      "schema": "comms-action"
+    },
+    {
+      "expect": {
+        "issues": [
+          {
+            "message": [
+              "Invalid discriminator value. Expected 'register' | 'update' | 'whoami' | 'web_url' | 'create_room' | 'list_rooms' | 'join_room' | 'leave_room' | 'send' | 'dm' | 'list_agents' | 'read_room' | 'invite' | 'kick' | 'decline_invite' | 'destroy_room' | 'mesh_connect' | 'mesh_accept' | 'mesh_reject' | 'mesh_pending' | 'room_accept' | 'room_reject' | 'room_pending' | 'capability_accept' | 'capability_reject' | 'capability_pending' | 'mesh_discover' | 'mesh_advertise' | 'mesh_unadvertise' | 'mesh_interfaces' | 'lan_web_uis' | 'mesh_listen' | 'mesh_unlisten' | 'mesh_listeners' | 'mesh_set_visibility' | 'mesh_get_visibility' | 'gateway_trust' | 'gateway_untrust' | 'gateway_list_trusted' | 'petname_set' | 'petname_clear' | 'petname_list' | 'machine_name' | 'principal_name' | 'dm_admit' | 'dm_use_grant' | 'dm_revoke' | 'gateway_generate_connection_code' | 'gateway_redeem_connection_code' | 'query_version' | 'mesh_graph' | 'mesh_trace'"
+            ],
+            "path": [
+              "action"
+            ]
+          }
+        ],
+        "ok": false
+      },
+      "from": "recorded: src/core/types.ts (CommsActionSchema, an unknown action)",
+      "id": "comms-action-refuses-an-unknown-action",
+      "input": {
+        "action": "no_such_action"
+      },
+      "kind": "validate",
+      "schema": "comms-action"
+    },
+    {
+      "expect": {
+        "issues": [
+          {
+            "message": [
+              "Invalid input"
+            ],
+            "path": [
+              "type"
+            ]
+          }
+        ],
+        "ok": false
+      },
+      "from": "recorded: src/core/types.ts (CommsActionSchema, create_room with an unknown type)",
+      "id": "comms-action-refuses-create-room-with-an-unknown-type",
+      "input": {
+        "action": "create_room",
+        "description": "",
+        "name": "r",
+        "type": "loud"
+      },
+      "kind": "validate",
+      "schema": "comms-action"
+    }
+  ]
+}

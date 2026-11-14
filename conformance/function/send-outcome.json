@@ -1,0 +1,189 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "result": "ok"
+        }
+      ],
+      "expect": {
+        "kind": "delivered"
+      },
+      "from": "send-outcome.unit.test.ts: classifyManageOutcome > classifies an ok outcome as delivered",
+      "function": "send-outcome.classifyManageOutcome",
+      "id": "classify-ok-delivered",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "code": "timeout",
+          "result": "error"
+        }
+      ],
+      "expect": {
+        "kind": "undelivered",
+        "reason": "timeout"
+      },
+      "from": "send-outcome.unit.test.ts: classifyManageOutcome > classifies a timeout as undelivered, the state a retry can still fix",
+      "function": "send-outcome.classifyManageOutcome",
+      "id": "classify-timeout-undelivered",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "code": "not_connected",
+          "result": "error"
+        }
+      ],
+      "expect": {
+        "kind": "undelivered",
+        "reason": "not_connected"
+      },
+      "from": "send-outcome.unit.test.ts: classifyManageOutcome > classifies not_connected as undelivered",
+      "function": "send-outcome.classifyManageOutcome",
+      "id": "classify-not-connected-undelivered",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "code": "unauthorized",
+          "result": "error"
+        }
+      ],
+      "expect": {
+        "code": "unauthorized",
+        "kind": "refused"
+      },
+      "from": "send-outcome.unit.test.ts: classifyManageOutcome > classifies unauthorized as a refusal a retry cannot fix",
+      "function": "send-outcome.classifyManageOutcome",
+      "id": "classify-unauthorized-refused",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "code": "denied",
+          "result": "error"
+        }
+      ],
+      "expect": {
+        "code": "denied",
+        "kind": "refused"
+      },
+      "from": "send-outcome.unit.test.ts: classifyManageOutcome > classifies denied as a refusal a retry cannot fix",
+      "function": "send-outcome.classifyManageOutcome",
+      "id": "classify-denied-refused",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "code": "malformed_params",
+          "result": "error"
+        }
+      ],
+      "expect": {
+        "code": "malformed_params",
+        "kind": "refused"
+      },
+      "from": "send-outcome.unit.test.ts: classifyManageOutcome > classifies malformed_params as a refusal a retry cannot fix",
+      "function": "send-outcome.classifyManageOutcome",
+      "id": "classify-malformed-params-refused",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "code": "not_participant",
+          "result": "error"
+        }
+      ],
+      "expect": {
+        "code": "not_participant",
+        "kind": "refused"
+      },
+      "from": "send-outcome.unit.test.ts: classifyManageOutcome > classifies not_participant as a refusal a retry cannot fix",
+      "function": "send-outcome.classifyManageOutcome",
+      "id": "classify-not-participant-refused",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "code": "denied",
+          "message": "not right now",
+          "result": "error"
+        }
+      ],
+      "expect": {
+        "code": "denied",
+        "kind": "refused",
+        "message": "not right now"
+      },
+      "from": "send-outcome.unit.test.ts: classifyManageOutcome > carries the refuser's own message when it sent one",
+      "function": "send-outcome.classifyManageOutcome",
+      "id": "classify-carries-refusers-message",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "code": "no_route",
+          "result": "error"
+        }
+      ],
+      "expect": {
+        "kind": "undelivered",
+        "reason": "not_connected"
+      },
+      "from": "send-outcome.unit.test.ts: classifyManageOutcome > classifies this side's own no_route as undelivered, not as a refusal",
+      "function": "send-outcome.classifyManageOutcome",
+      "id": "classify-no-route-undelivered",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "code": "some_future_code",
+          "result": "error"
+        }
+      ],
+      "expect": {
+        "code": "some_future_code",
+        "kind": "refused"
+      },
+      "from": "send-outcome.unit.test.ts: classifyManageOutcome > treats a code it does not recognise as a refusal rather than queueing it",
+      "function": "send-outcome.classifyManageOutcome",
+      "id": "classify-unrecognised-code-refused",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "code": "unauthorized"
+        }
+      ],
+      "expect": "unauthorized",
+      "from": "send-outcome.unit.test.ts: describeRefusal > renders a bare code on its own",
+      "function": "send-outcome.describeRefusal",
+      "id": "describe-refusal-bare-code",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "code": "denied",
+          "message": "busy"
+        }
+      ],
+      "expect": "denied: busy",
+      "from": "send-outcome.unit.test.ts: describeRefusal > appends the refuser's message when there is one",
+      "function": "send-outcome.describeRefusal",
+      "id": "describe-refusal-with-message",
+      "kind": "function"
+    }
+  ]
+}

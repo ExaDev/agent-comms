@@ -1,0 +1,14 @@
+{
+  "cases": [
+    {
+      "args": [
+        1
+      ],
+      "expect": 2,
+      "from": "",
+      "function": "module.helper",
+      "id": "a",
+      "kind": "function"
+    }
+  ]
+}

@@ -216,6 +216,10 @@ The fronted session can reply, not just receive. A message with a single origina
 
 Aliases are created only on inbound contact from that correspondent, never pre-populated from the wider mesh roster, and are ephemeral: they live only in the front's own memory, so a restart drops them and the next inbound message from that correspondent re-materialises the same alias. A reply landing on an alias the front no longer recognises (e.g. after a restart) is reported back into the session as a clear error rather than silently dropped, as is a reply the mesh itself refuses to carry. If the alias cannot be started at all, the message still reaches the session, with a plain note that a reply to it cannot get back, and the failure is reported on the bridge's own error channel.
 
+## Working on the Rust workspace and the conformance corpus
+
+`conformance/` holds language-neutral test cases that every implementation of the package runs, and `rust/` is the workspace the package is being ported into. A push that touches either, or the scripts and workflows that check them, runs `scripts/rust-checks.sh` from the pre-push hook, which needs [rustup](https://rustup.rs) (the toolchain `rust/rust-toolchain.toml` pins is installed on first use) and Python 3.9 or later. Every cargo command goes through `scripts/rust.sh`, never cargo directly. The corpus format, how a case is added and what each field means are in [`conformance/README.md`](conformance/README.md); a dependency is added to the Rust workspace by listing it, with the reason, in `rust/deny.toml`.
+
 ## Adding a new harness
 
 A bridge is two things:

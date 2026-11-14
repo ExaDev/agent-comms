@@ -1,0 +1,118 @@
+{
+  "cases": [
+    {
+      "args": [
+        null
+      ],
+      "expect": false,
+      "from": "boot.unit.test.ts: hasConnectedBefore > returns false when flag is not set",
+      "function": "boot-logic.hasConnectedBefore",
+      "id": "not-connected-before-when-flag-unset",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "true"
+      ],
+      "expect": true,
+      "from": "boot.unit.test.ts: hasConnectedBefore > returns true when flag is set to 'true'",
+      "function": "boot-logic.hasConnectedBefore",
+      "id": "connected-before-when-flag-true",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "false"
+      ],
+      "expect": false,
+      "from": "boot.unit.test.ts: hasConnectedBefore > returns false when flag is set to something other than 'true'",
+      "function": "boot-logic.hasConnectedBefore",
+      "id": "not-connected-before-when-flag-other",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "localhost:19877",
+          "protocol": "http:"
+        },
+        null
+      ],
+      "expect": true,
+      "from": "boot.unit.test.ts: shouldAutoConnect > connects at once for a first visit served by a bridge at localhost:19877 over http:",
+      "function": "boot-logic.shouldAutoConnect",
+      "id": "first-visit-served-by-bridge-connects-localhost",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "127.0.0.1:4000",
+          "protocol": "http:"
+        },
+        null
+      ],
+      "expect": true,
+      "from": "boot.unit.test.ts: shouldAutoConnect > connects at once for a first visit served by a bridge at 127.0.0.1:4000 over http:",
+      "function": "boot-logic.shouldAutoConnect",
+      "id": "first-visit-served-by-bridge-connects-127-0-0-1",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "192.168.1.10:4000",
+          "protocol": "http:"
+        },
+        null
+      ],
+      "expect": true,
+      "from": "boot.unit.test.ts: shouldAutoConnect > connects at once for a first visit served by a bridge at 192.168.1.10:4000 over http:",
+      "function": "boot-logic.shouldAutoConnect",
+      "id": "first-visit-served-by-bridge-connects-192-168-1-10",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "studio.local:4000",
+          "protocol": "http:"
+        },
+        null
+      ],
+      "expect": true,
+      "from": "boot.unit.test.ts: shouldAutoConnect > connects at once for a first visit served by a bridge at studio.local:4000 over http:",
+      "function": "boot-logic.shouldAutoConnect",
+      "id": "first-visit-served-by-bridge-connects-studio-local",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "exadev.github.io",
+          "protocol": "https:"
+        },
+        null
+      ],
+      "expect": false,
+      "from": "boot.unit.test.ts: shouldAutoConnect > waits for the user on a first visit to a standalone deployment",
+      "function": "boot-logic.shouldAutoConnect",
+      "id": "first-visit-to-standalone-waits-for-the-user",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "exadev.github.io",
+          "protocol": "https:"
+        },
+        "true"
+      ],
+      "expect": true,
+      "from": "boot.unit.test.ts: shouldAutoConnect > connects at once on a standalone deployment once the user has connected before",
+      "function": "boot-logic.shouldAutoConnect",
+      "id": "returning-user-on-standalone-connects-at-once",
+      "kind": "function"
+    }
+  ]
+}

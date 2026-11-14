@@ -1,0 +1,63 @@
+{
+  "cases": [
+    {
+      "expect": {
+        "ok": true
+      },
+      "from": "example.test.ts: group > test",
+      "id": "ok",
+      "input": {
+        "action": "whoami"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    },
+    {
+      "expect": {
+        "ok": true,
+        "value": {
+          "action": "whoami"
+        }
+      },
+      "from": "example.test.ts: group > test",
+      "id": "ok-value",
+      "input": {
+        "action": "whoami"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    },
+    {
+      "expect": {
+        "issues": [
+          {
+            "path": []
+          },
+          {
+            "message": [
+              "x",
+              {
+                "codeUnits": [
+                  121
+                ]
+              }
+            ],
+            "path": [
+              "a",
+              0,
+              "b"
+            ]
+          }
+        ],
+        "ok": false
+      },
+      "from": "example.test.ts: group > test",
+      "id": "fail",
+      "input": {
+        "action": "whoami"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    }
+  ]
+}

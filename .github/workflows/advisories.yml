@@ -1,0 +1,53 @@
+name: Advisories
+
+# The RustSec advisory database changes without any change to this repository, so a check against it can turn red on a pull request that touched nothing. It therefore lives here and not in the required checks: it runs on a schedule, and whenever the lock file or the cargo-deny configuration changes, and a failure is a work item (update or replace the crate) rather than a merge gate.
+
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  pull_request:
+    paths:
+      - rust/Cargo.lock
+      - rust/deny.toml
+      - .github/workflows/advisories.yml
+  push:
+    branches: [main]
+    paths:
+      - rust/Cargo.lock
+      - rust/deny.toml
+      - .github/workflows/advisories.yml
+  workflow_dispatch:
+
+concurrency:
+  group: advisories-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  advisories:
+    name: RustSec advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the pinned toolchain
+        working-directory: rust
+        run: rustup toolchain install
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: cargo-deny@0.20.2
+      - name: Check the lock file against the advisory database
+        run: sh scripts/rust.sh advisories
+
+  # Dependabot reads Cargo.lock and the toolchain file, and no tool installed by name in a workflow, so this fails when the cargo-deny pin is behind a release older than the cooldown the check names.
+  tool-pins:
+    name: Tool pins are current
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 -I scripts/test_check_tool_pins.py
+      - run: python3 -I scripts/check-tool-pins.py

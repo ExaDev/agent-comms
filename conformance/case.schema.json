@@ -1,0 +1,362 @@
+{
+  "$defs": {
+    "case": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/function"
+        },
+        {
+          "$ref": "#/$defs/validate"
+        }
+      ]
+    },
+    "codeUnitsObject": {
+      "additionalProperties": false,
+      "properties": {
+        "codeUnits": {
+          "items": {
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "codeUnits"
+      ],
+      "type": "object"
+    },
+    "fragment": {
+      "oneOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "codeUnits": {
+              "items": {
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "codeUnits"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "from": {
+      "pattern": "^([a-z0-9._-]+\\.test\\.tsx?: .+|recorded: .+)$",
+      "type": "string"
+    },
+    "function": {
+      "additionalProperties": false,
+      "dependentRequired": {
+        "only": [
+          "reason"
+        ],
+        "reason": [
+          "only"
+        ]
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "expect": true
+          },
+          "required": [
+            "expect"
+          ]
+        },
+        {
+          "properties": {
+            "expectSubset": true
+          },
+          "required": [
+            "expectSubset"
+          ]
+        },
+        {
+          "properties": {
+            "expectUndefined": true
+          },
+          "required": [
+            "expectUndefined"
+          ]
+        },
+        {
+          "properties": {
+            "throws": true
+          },
+          "required": [
+            "throws"
+          ]
+        }
+      ],
+      "properties": {
+        "args": {
+          "items": {
+            "$ref": "#/$defs/value"
+          },
+          "type": "array"
+        },
+        "expect": {
+          "$ref": "#/$defs/value"
+        },
+        "expectSubset": {
+          "$ref": "#/$defs/value"
+        },
+        "expectUndefined": {
+          "const": true
+        },
+        "from": {
+          "$ref": "#/$defs/from"
+        },
+        "function": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "function"
+        },
+        "only": {
+          "$ref": "#/$defs/only"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "throws": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "message": {
+              "items": {
+                "$ref": "#/$defs/fragment"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "kind",
+        "function",
+        "args"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "type": "string"
+    },
+    "only": {
+      "description": "The implementation that skips the case, never the host it runs on.",
+      "enum": [
+        "ts",
+        "rust"
+      ]
+    },
+    "reason": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "safeInteger": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    },
+    "validate": {
+      "additionalProperties": false,
+      "dependentRequired": {
+        "only": [
+          "reason"
+        ],
+        "reason": [
+          "only"
+        ]
+      },
+      "properties": {
+        "expect": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "ok": {
+                  "const": true
+                },
+                "value": {
+                  "$ref": "#/$defs/value"
+                }
+              },
+              "required": [
+                "ok"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "issues": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "message": {
+                        "items": {
+                          "$ref": "#/$defs/fragment"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "path": {
+                        "items": {
+                          "oneOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          ]
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "path"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "ok": {
+                  "const": false
+                }
+              },
+              "required": [
+                "ok",
+                "issues"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "from": {
+          "$ref": "#/$defs/from"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "input": {
+          "$ref": "#/$defs/value"
+        },
+        "kind": {
+          "const": "validate"
+        },
+        "only": {
+          "$ref": "#/$defs/only"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "schema": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "kind",
+        "schema",
+        "input",
+        "expect"
+      ],
+      "type": "object"
+    },
+    "value": {
+      "description": "Any JSON value whose numbers are integers no larger than 2^53-1 in magnitude, and whose objects holding a codeUnits key are exactly the code unit form of a string.",
+      "else": {
+        "else": {
+          "else": {
+            "if": {
+              "type": "number"
+            },
+            "then": {
+              "$ref": "#/$defs/safeInteger"
+            }
+          },
+          "if": {
+            "type": "array"
+          },
+          "then": {
+            "items": {
+              "$ref": "#/$defs/value"
+            },
+            "type": "array"
+          }
+        },
+        "if": {
+          "type": "object"
+        },
+        "then": {
+          "additionalProperties": {
+            "$ref": "#/$defs/value"
+          },
+          "type": "object"
+        }
+      },
+      "if": {
+        "properties": {
+          "codeUnits": true
+        },
+        "required": [
+          "codeUnits"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "$ref": "#/$defs/codeUnitsObject"
+      }
+    }
+  },
+  "$id": "https://github.com/ExaDev/agent-comms/tree/main/conformance/case.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A corpus file: a list of cases of one kind. The format is the whole of this schema plus the rules conformance/README.md lists beside it. A string anywhere in a value is a sequence of UTF-16 code units, written as a JSON string or as an object holding only codeUnits.",
+  "properties": {
+    "cases": {
+      "items": {
+        "$ref": "#/$defs/case"
+      },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "cases"
+  ],
+  "title": "agent-comms conformance corpus file",
+  "type": "object"
+}

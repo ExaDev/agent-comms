@@ -1,0 +1,61 @@
+# The allowlist the cargo-deny check enforces in CI. A crate that is not listed under [bans] allow fails the check,
+# so adding a dependency is a reviewed change to this file, with the reason it is needed. The workspace's own
+# crates are listed too, since cargo-deny applies the allowlist to every crate in the graph.
+#
+# The list is exactly the crates in the dependency graph: cargo-deny has no option to fail on an allowed crate that
+# nothing uses, so scripts/check-deny-allowlist.py compares the two in CI. A crate is added in the change that
+# first depends on it, and removed in the change that drops it.
+#
+# Library crates use std, serde and serde_json, and the git dependencies on wire-mesh and trilean the sources table
+# allows. The runtime and the wasm bindings are reserved for the crates that need them by the deny entries below,
+# so a library crate cannot take them even though a later change adds them to the allowlist for the binary.
+
+[graph]
+all-features = true
+
+[advisories]
+# A published advisory against any crate in the graph fails the check. There is no ignore list: an advisory is
+# fixed by updating or replacing the crate, or recorded here with its id and a reason.
+ignore = []
+
+[licenses]
+# Only permissive licences, so nothing in the graph restricts how the crates are redistributed. A licence that no
+# crate in the graph uses fails the check, so this list is the set in use.
+unused-allowed-license = "deny"
+allow = ["MIT"]
+
+[bans]
+multiple-versions = "deny"
+# A workspace crate depends on a sibling by path, which the wildcard check would otherwise reject.
+wildcards = "deny"
+allow-wildcard-paths = true
+
+# A crate listed here is refused unless one of its wrappers depends on it directly. The async runtime and the
+# HTTP stack belong to the native binary alone; the wasm-bindgen family belongs to the binding and the web crates.
+deny = [
+    { crate = "tokio", wrappers = ["agent-comms", "hyper", "tokio-rustls"], reason = "The async runtime is the native binary's; library crates are sans-IO and do no I/O." },
+    { crate = "hyper", wrappers = ["agent-comms"], reason = "The HTTP server and client are the native binary's." },
+    { crate = "wasm-bindgen", wrappers = ["agent-comms-wasm", "agent-comms-ui", "agent-comms-web", "js-sys", "web-sys", "wasm-bindgen-futures"], reason = "The JavaScript bindings belong to the binding and web crates." },
+    { crate = "js-sys", wrappers = ["agent-comms-wasm", "agent-comms-ui", "agent-comms-web", "web-sys", "wasm-bindgen-futures"], reason = "Part of the wasm-bindgen family reserved for the binding and web crates." },
+    { crate = "web-sys", wrappers = ["agent-comms-ui", "agent-comms-web"], reason = "Browser APIs belong to the rendering layer and the dashboard." },
+    { crate = "wasm-bindgen-futures", wrappers = ["agent-comms-wasm", "agent-comms-ui", "agent-comms-web"], reason = "Part of the wasm-bindgen family reserved for the binding and web crates." },
+]
+
+allow = [
+    { crate = "agent-comms-conformance", reason = "Loads the conformance corpus and checks it against its format." },
+    { crate = "serde_json", reason = "Reads the JSON the corpus and its manifest are written in." },
+    { crate = "serde_core", reason = "The serialisation traits serde_json is written against." },
+    { crate = "itoa", reason = "serde_json formats integers with it." },
+    { crate = "memchr", reason = "serde_json scans strings with it." },
+    { crate = "zmij", reason = "serde_json formats floating point numbers with it." },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# The sibling projects the library crates build on, pinned by revision in Cargo.toml, and nothing else.
+allow-git = [
+    "https://github.com/ExaDev/wire-mesh",
+    "https://github.com/ExaDev/trilean",
+]

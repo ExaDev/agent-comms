@@ -1,0 +1,282 @@
+{
+  "cases": [
+    {
+      "args": [
+        "?room=my-room"
+      ],
+      "expect": {
+        "kind": "room",
+        "roomId": "my-room"
+      },
+      "from": "url-sync.unit.test.ts: parseDeepLink > parses ?room= parameter",
+      "function": "url-sync.parseDeepLink",
+      "id": "parses-room-parameter",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?dm=agent-123"
+      ],
+      "expect": {
+        "agentId": "agent-123",
+        "kind": "dm"
+      },
+      "from": "url-sync.unit.test.ts: parseDeepLink > parses ?dm= parameter",
+      "function": "url-sync.parseDeepLink",
+      "id": "parses-dm-parameter",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?cwd=/path/to/project"
+      ],
+      "expect": {
+        "kind": "cwd",
+        "path": "/path/to/project"
+      },
+      "from": "url-sync.unit.test.ts: parseDeepLink > parses ?cwd= parameter",
+      "function": "url-sync.parseDeepLink",
+      "id": "parses-cwd-parameter",
+      "kind": "function"
+    },
+    {
+      "args": [
+        ""
+      ],
+      "expectUndefined": true,
+      "from": "url-sync.unit.test.ts: parseDeepLink > returns undefined for empty search string",
+      "function": "url-sync.parseDeepLink",
+      "id": "empty-search-is-not-a-deep-link",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?unknown=foo"
+      ],
+      "expectUndefined": true,
+      "from": "url-sync.unit.test.ts: parseDeepLink > returns undefined for unrecognised parameters",
+      "function": "url-sync.parseDeepLink",
+      "id": "unrecognised-parameter-is-not-a-deep-link",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?room=room-1&dm=agent-1"
+      ],
+      "expect": {
+        "kind": "room",
+        "roomId": "room-1"
+      },
+      "from": "url-sync.unit.test.ts: parseDeepLink > prioritises ?room= over ?dm=",
+      "function": "url-sync.parseDeepLink",
+      "id": "room-beats-dm",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?dm=agent-1&cwd=/some/path"
+      ],
+      "expect": {
+        "agentId": "agent-1",
+        "kind": "dm"
+      },
+      "from": "url-sync.unit.test.ts: parseDeepLink > prioritises ?dm= over ?cwd=",
+      "function": "url-sync.parseDeepLink",
+      "id": "dm-beats-cwd",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?cwd=%2Fusers%2Fjoe%2Fproject"
+      ],
+      "expect": {
+        "kind": "cwd",
+        "path": "/users/joe/project"
+      },
+      "from": "url-sync.unit.test.ts: parseDeepLink > handles URL-encoded values",
+      "function": "url-sync.parseDeepLink",
+      "id": "decodes-url-encoded-values",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?room=room-1",
+        [
+          {
+            "id": "room-1",
+            "name": "General"
+          },
+          {
+            "description": "Project room for /home/user/my-project",
+            "id": "project-room",
+            "name": "project-room"
+          }
+        ]
+      ],
+      "expect": {
+        "kind": "room",
+        "targetId": "room-1"
+      },
+      "from": "url-sync.unit.test.ts: resolveDeepLink > resolves a room deep link when room exists",
+      "function": "url-sync.resolveParsedDeepLink",
+      "id": "resolves-room-link-when-room-exists",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?room=nonexistent",
+        [
+          {
+            "id": "room-1",
+            "name": "General"
+          },
+          {
+            "description": "Project room for /home/user/my-project",
+            "id": "project-room",
+            "name": "project-room"
+          }
+        ]
+      ],
+      "expectUndefined": true,
+      "from": "url-sync.unit.test.ts: resolveDeepLink > returns undefined for room deep link when room does not exist",
+      "function": "url-sync.resolveParsedDeepLink",
+      "id": "room-link-to-missing-room-is-unresolved",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?dm=agent-123",
+        [
+          {
+            "id": "room-1",
+            "name": "General"
+          },
+          {
+            "description": "Project room for /home/user/my-project",
+            "id": "project-room",
+            "name": "project-room"
+          }
+        ]
+      ],
+      "expect": {
+        "kind": "dm",
+        "targetId": "agent-123"
+      },
+      "from": "url-sync.unit.test.ts: resolveDeepLink > resolves a dm deep link directly without checking rooms",
+      "function": "url-sync.resolveParsedDeepLink",
+      "id": "dm-link-resolves-without-checking-rooms",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?cwd=/home/user/my-project",
+        [
+          {
+            "id": "room-1",
+            "name": "General"
+          },
+          {
+            "description": "Project room for /home/user/my-project",
+            "id": "project-room",
+            "name": "project-room"
+          }
+        ]
+      ],
+      "expect": {
+        "kind": "room",
+        "targetId": "project-room"
+      },
+      "from": "url-sync.unit.test.ts: resolveDeepLink > resolves a cwd deep link to matching project room",
+      "function": "url-sync.resolveParsedDeepLink",
+      "id": "cwd-link-resolves-to-project-room",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?cwd=/no/matching/path",
+        [
+          {
+            "id": "room-1",
+            "name": "General"
+          },
+          {
+            "description": "Project room for /home/user/my-project",
+            "id": "project-room",
+            "name": "project-room"
+          }
+        ]
+      ],
+      "expectUndefined": true,
+      "from": "url-sync.unit.test.ts: resolveDeepLink > returns undefined for cwd deep link with no matching project room",
+      "function": "url-sync.resolveParsedDeepLink",
+      "id": "cwd-link-without-project-room-is-unresolved",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?room=room-1",
+        []
+      ],
+      "expectUndefined": true,
+      "from": "url-sync.unit.test.ts: resolveDeepLink > resolves against empty rooms list",
+      "function": "url-sync.resolveParsedDeepLink",
+      "id": "resolves-against-no-rooms",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "currentRoom": "my-room"
+        }
+      ],
+      "expect": [
+        "/?room=my-room"
+      ],
+      "from": "url-sync.unit.test.ts: syncUrl > sets ?room= when currentRoom is provided",
+      "function": "url-sync.syncedUrls",
+      "id": "sets-room-parameter",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "dmTarget": "agent-42"
+        }
+      ],
+      "expect": [
+        "/?dm=agent-42"
+      ],
+      "from": "url-sync.unit.test.ts: syncUrl > sets ?dm= when dmTarget is provided and no currentRoom",
+      "function": "url-sync.syncedUrls",
+      "id": "sets-dm-parameter",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "currentRoom": "room-1",
+          "dmTarget": "agent-42"
+        }
+      ],
+      "expect": [
+        "/?room=room-1"
+      ],
+      "from": "url-sync.unit.test.ts: syncUrl > prefers currentRoom over dmTarget",
+      "function": "url-sync.syncedUrls",
+      "id": "room-beats-dm-target",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {}
+      ],
+      "expect": [
+        "/"
+      ],
+      "from": "url-sync.unit.test.ts: syncUrl > clears params when neither is provided",
+      "function": "url-sync.syncedUrls",
+      "id": "clears-parameters-when-neither-is-given",
+      "kind": "function"
+    }
+  ]
+}
