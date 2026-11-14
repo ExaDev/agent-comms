@@ -116,7 +116,8 @@ export function openPairingSecret(
   const stampOf = (): string | undefined => {
     try {
       const stat = fs.statSync(file);
-      return `${String(stat.mtimeMs)}:${String(stat.size)}`;
+      // Every write replaces the file, so its inode changes with its content: two rotations within one clock tick and of one size are still told apart.
+      return `${String(stat.ino)}:${String(stat.mtimeMs)}:${String(stat.size)}`;
     } catch {
       return undefined;
     }
@@ -165,6 +166,36 @@ export function openPairingSecret(
     },
     generation: () => generation,
   };
+}
+
+/**
+ * Calls `onChange` as soon as the operating system reports a change to the directory holding the secret file, so that a rotation made by another process is acted on at once and not at the next poll. Returns the function that stops watching. A watch that cannot be started, or that fails later, is reported to `onError` and the caller's periodic check still ends what a rotation revokes: the platform does not promise every change is reported (a network file system may report none).
+ */
+export function watchPairingSecret(
+  options: Readonly<{
+    dir?: string | undefined;
+    onChange: () => void;
+    onError: (error: Error) => void;
+  }>,
+): () => void {
+  const file = pairingSecretFile(options.dir);
+  const name = path.basename(file);
+  try {
+    const watcher = fs.watch(
+      path.dirname(file),
+      { persistent: false },
+      (_event, changed) => {
+        if (changed === null || changed === name) options.onChange();
+      },
+    );
+    watcher.on("error", options.onError);
+    return () => {
+      watcher.close();
+    };
+  } catch (error) {
+    options.onError(error instanceof Error ? error : new Error(String(error)));
+    return () => undefined;
+  }
 }
 
 /** The offered subprotocols of an upgrade, as the `Sec-WebSocket-Protocol` header lists them. */

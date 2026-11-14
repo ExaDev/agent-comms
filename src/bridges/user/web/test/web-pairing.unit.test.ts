@@ -24,6 +24,7 @@ import {
   pairingSecretFile,
   presentedTicket,
   rotatePairingSecret,
+  watchPairingSecret,
   selectMeshSubprotocol,
 } from "../web-pairing.js";
 
@@ -31,6 +32,8 @@ const OWNER_ONLY_FILE = 0o600;
 const OWNER_ONLY_DIR = 0o700;
 const PERMISSION_MASK = 0o777;
 const SECRET_HEX_LENGTH = 64;
+const ROTATIONS = 3;
+const WATCH_SETTLE_MS = 300;
 const SHORT_SECRET_BYTES = 8;
 const SECRET = "a".repeat(SECRET_HEX_LENGTH);
 const OTHER_SECRET = "b".repeat(SECRET_HEX_LENGTH);
@@ -180,6 +183,66 @@ describe("the secret file's protection", () => {
     openPairingSecret({ dir }).current();
 
     expect(fs.statSync(dir).mode & PERMISSION_MASK).toBe(OWNER_ONLY_DIR);
+  });
+
+  it("tells apart rotations made one straight after the other", () => {
+    const dir = freshDir();
+    const store = openPairingSecret({ dir });
+    const seen = new Set([store.current()]);
+
+    for (let rotation = 0; rotation < ROTATIONS; rotation += 1) {
+      rotatePairingSecret(dir);
+      seen.add(store.current());
+    }
+
+    expect(seen.size).toBe(ROTATIONS + 1);
+    expect(store.generation()).toBe(ROTATIONS);
+  });
+
+  it("calls its watcher when the secret file is replaced, and not for another file in the directory", async () => {
+    const dir = freshDir();
+    openPairingSecret({ dir }).current();
+    const changes: number[] = [];
+    const stop = watchPairingSecret({
+      dir,
+      onChange: () => {
+        changes.push(changes.length);
+      },
+      onError: () => undefined,
+    });
+    try {
+      fs.writeFileSync(path.join(dir, "unrelated"), "x");
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, WATCH_SETTLE_MS);
+      });
+      const before = changes.length;
+      rotatePairingSecret(dir);
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, WATCH_SETTLE_MS);
+      });
+
+      expect(before).toBe(0);
+      expect(changes.length).toBeGreaterThan(0);
+    } finally {
+      stop();
+    }
+  });
+
+  it("reports a watch that cannot be started and returns a stop that does nothing", () => {
+    const errors: Error[] = [];
+
+    const stop = watchPairingSecret({
+      dir: path.join(freshDir(), "missing"),
+      onChange: () => undefined,
+      onError: (error) => {
+        errors.push(error);
+      },
+    });
+
+    expect(errors).toHaveLength(1);
+    expect(() => {
+      stop();
+    }).not.toThrow();
   });
 
   it("changes its generation when a different secret is read, and only then", () => {
