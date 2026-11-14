@@ -40,7 +40,7 @@ if printf '%s\n' "$changed" | sh scripts/rust-paths.sh; then
   fi
   if ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' >/dev/null 2>&1; then
     echo "This push changes Rust or the corpus the Rust checks read, and they need Python 3.9 or later (python3 was not found or is older)." >&2
-    echo "Install Python 3.9 or later (.tool-versions names the version CI uses, and mise or asdf install it); CONTRIBUTING.md lists what the hook needs." >&2
+    echo "Install Python 3.9 or later (.tool-versions names the version CI uses, and mise or asdf install it); the README's section on the Rust workspace lists what the hook needs." >&2
     exit 1
   fi
   exec sh "$checks"

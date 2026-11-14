@@ -3,8 +3,8 @@
 //! which files are corpus files, what a valid file is, and that the corpus is what `conformance/manifest.json`
 //! says it is. A file that does not match is a failure, never a skip.
 //!
-//! Executing the cases against the native crates is added with each crate; until then this proves that the Rust
-//! side reads the same files, selected the same way, as the TypeScript runner does.
+//! The loader executes no case: it proves that the Rust side reads the same files, selected the same way, as the
+//! TypeScript runner does, and counts every case it does not execute as skipped.
 
 mod selection;
 mod validate;
@@ -259,8 +259,8 @@ fn check_corpus(root: &Path) -> (Vec<LoadedFile>, Vec<String>) {
 
 /// The completeness check for this implementation, the same rule as the TypeScript runner's `completenessProblems`:
 /// what is executed plus what is skipped is the manifest's total, and every case skipped because it is marked for this
-/// implementation (`skip: rust`) is marked in the manifest. No native executor exists yet, so every other case is
-/// skipped for that one stated reason; execution moves cases from skipped to executed and cannot lose one.
+/// implementation (`skip: rust`) is marked in the manifest. Every other case is skipped for want of a native
+/// executor, a reason counted apart, so a case an executor takes over moves from skipped to executed and is never lost.
 fn count_problems(
     files: &[LoadedFile],
     manifest: &BTreeMap<String, (usize, Vec<String>)>,
@@ -332,7 +332,7 @@ fn main() -> ExitCode {
     }
     if failures.is_empty() {
         println!(
-            "checked {} files: {executed} executed, {skipped_marked} skipped because they carry skip: rust, {skipped_without_executor} skipped because no native executor exists yet",
+            "checked {} files: {executed} executed, {skipped_marked} skipped because they carry skip: rust, {skipped_without_executor} skipped for want of a native executor",
             files.len()
         );
         ExitCode::SUCCESS

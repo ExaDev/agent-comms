@@ -1,4 +1,4 @@
-//! Validation of corpus files and the manifest, by hand until the validator is generated from the schema. It
+//! Validation of corpus files and the manifest, by hand, beside the schema it must agree with. It
 //! accepts exactly what `conformance/case.schema.json` accepts and rejects every case kind it does not validate
 //! in full, rather than passing it unchecked: a loader that cannot judge a case must not say it is fine.
 //!
@@ -304,7 +304,7 @@ fn check_validate_case(value: &Value, at: &str) -> Check<()> {
 }
 
 /// Checks one case and returns its id and kind. Only the kinds this loader validates in full are accepted, even one
-/// a later schema defines, because a case this loader cannot judge must not read as accepted.
+/// the schema defines, because a case this loader cannot judge must not read as accepted.
 fn check_case(value: &Value, at: &str) -> Check<(String, String)> {
     let map = object(value, at)?;
     for key in COMMON_KEYS {

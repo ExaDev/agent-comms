@@ -4,7 +4,7 @@ import Ajv2020Module from "ajv/dist/2020.js";
 import type { CorpusFile, Manifest } from "./corpus-types.js";
 
 /**
- * Validates corpus files and the manifest against the schemas in `conformance/`, which is the whole definition of the format. The checks beside the schema are the rules JSON Schema cannot express and `conformance/README.md` lists: a case id is not repeated within a file, a manifest's `only` lists are in ascending order, and no JSON string holds an unpaired surrogate (content that needs one is written as `{ "codeUnits": [...] }`). Nothing else is validated by hand.
+ * Validates corpus files and the manifest against the schemas in `conformance/`, which is the whole definition of the format. The checks beside the schema are the rules JSON Schema cannot express and `conformance/README.md` lists: a case id is not repeated within a file, a manifest's `skip` lists are in ascending order, and no JSON string holds an unpaired surrogate (content that needs one is written as `{ "codeUnits": [...] }`). Nothing else is validated by hand.
  */
 
 export type Validation<T> =
