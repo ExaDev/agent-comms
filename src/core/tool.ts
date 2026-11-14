@@ -261,6 +261,9 @@ export interface CommsToolOptions {
   ) => Promise<string>;
 }
 
+/** The most stalled-log lines whoami and update print, so a peer cannot make the result as long as it likes. */
+const MAX_STALLED_LEDGER_LINES = 8;
+
 export class CommsTool {
   /** Reports this bridge's own web UI address for the web_url action. Assignable post-construction, mirroring MeshStore's own onDelivery/onCoordinatorRoleChanged hooks, because the underlying web server handle isn't known until after this bridge's own tryStartBridgeWebServer() call -- which every real bridge makes after building its CommsTool, not before. Undefined (the default) means this bridge never wires web UI reporting. */
   getWebUrlStatus?: () => WebUrlStatus;
@@ -476,11 +479,7 @@ export class CommsTool {
         `Account ledger: ${String(unreadableLedger)} unreadable entries; a grant or revocation recorded only in them is not applied here until they are repaired or replaced from another machine's replica`,
       );
     }
-    for (const stalled of this.getStalledLedgerLogs?.() ?? []) {
-      lines.push(
-        `Account ledger log ${stalled.log} is behind: this machine holds up to entry ${String(stalled.localHead)}, a peer announces ${String(stalled.announcedHead)}, and ${String(stalled.rounds)} rounds have passed without the missing entries arriving; a grant or a revocation in them is not applied here`,
-      );
-    }
+    lines.push(...this.stalledLedgerLines());
     const updateAvailable = this.formatUpdateAvailableLine();
     if (updateAvailable !== undefined) lines.push(updateAvailable);
     return {
@@ -494,6 +493,24 @@ export class CommsTool {
     return this.naming === undefined
       ? plainNamer
       : this.naming.namer(ctx.agentId);
+  }
+
+  /** The `Account ledger log <id> is behind` lines for whoami and update, one per writer log this side has stayed behind, at most MAX_STALLED_LEDGER_LINES of them and then one `Account ledger: <n> more logs are behind` line. The wording is part of the interface: the README states it. */
+  private stalledLedgerLines(): string[] {
+    const stalled = this.getStalledLedgerLogs?.() ?? [];
+    const lines = stalled
+      .slice(0, MAX_STALLED_LEDGER_LINES)
+      .map(
+        (log) =>
+          `Account ledger log ${log.log} is behind: this machine holds up to entry ${String(log.localHead)}, a peer announces ${String(log.announcedHead)}, and ${String(log.rounds)} rounds have passed without the missing entries arriving; a grant or a revocation in them is not applied here`,
+      );
+    if (stalled.length > MAX_STALLED_LEDGER_LINES) {
+      lines.push(
+        `Account ledger: ${String(stalled.length - MAX_STALLED_LEDGER_LINES)} more logs are behind`,
+      );
+    }
+
+    return lines;
   }
 
   private async whoami(ctx: Readonly<CommsContext>): Promise<CommsResult> {
@@ -517,6 +534,7 @@ export class CommsTool {
       `Tags: ${agent.tags.join(", ") || "(none)"}`,
       `Rooms: ${agent.subscribedRooms.join(", ") || "(none)"}`,
     ];
+    lines.push(...this.stalledLedgerLines());
     const updateAvailable = this.formatUpdateAvailableLine();
     if (updateAvailable !== undefined) lines.push(updateAvailable);
     return {
