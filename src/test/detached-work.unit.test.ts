@@ -8,7 +8,7 @@ import type {
   ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
 import type { AcceptedMeshSession } from "wire-mesh-core/domain/mesh-session";
-import { reportRejection } from "../core/detached-work.js";
+import { consumeEach, reportRejection } from "../core/detached-work.js";
 import { createTransportEvents } from "../core/transport-events.js";
 import type { TransportEventTargets } from "../core/transport-events.js";
 import { createRoomRouter } from "../core/room-router.js";
@@ -147,7 +147,7 @@ function fakeEvents(onError: (error: Error) => void): TransportEvents {
   };
 }
 
-function roomRequest(): {
+function roomRequest(verb = "room.send"): {
   request: IncomingManageRequest;
   responses: ManageOutcome[];
 } {
@@ -156,7 +156,7 @@ function roomRequest(): {
     responses,
     request: {
       requestId: 1,
-      command: { verb: "room:member", params: { verb: "room.send" } },
+      command: { verb: "room:member", params: { verb } },
       scope: { kind: "room" },
       respond: async (outcome: ManageOutcome) => {
         responses.push(outcome);
@@ -200,6 +200,33 @@ describe("the room router", () => {
     expect(errors.map((e) => e.message)).toEqual(["handler failed"]);
   });
 
+  it.each(["constructor", "toString", "hasOwnProperty", "__proto__"])(
+    "answers a verb named %s, a member of every object and no handler, as unsupported",
+    async (verb) => {
+      const errors: Error[] = [];
+      const router = createRoomRouter({
+        events: fakeEvents((e) => {
+          errors.push(e);
+        }),
+        handlers: {},
+      });
+      const sent = roomRequest(verb);
+      const session = {
+        incomingManageRequests: (async function* () {
+          yield sent.request;
+        })(),
+      } as unknown as AcceptedMeshSession;
+
+      router.drainSession(session, HANDLE);
+      await settle();
+
+      expect(sent.responses).toEqual([
+        { result: "error", code: "unsupported_verb" },
+      ]);
+      expect(errors).toEqual([]);
+    },
+  );
+
   it("reports a session whose request stream itself fails", async () => {
     const errors: Error[] = [];
     const router = createRoomRouter({
@@ -242,5 +269,102 @@ describe("the election session watch", () => {
     await settle();
 
     expect(errors.map((e) => e.message)).toEqual(["frames failed"]);
+  });
+});
+
+const FIRST_ITEM = 1;
+const FAILING_ITEM = 2;
+const LAST_ITEM = 3;
+const ITEMS = [FIRST_ITEM, FAILING_ITEM, LAST_ITEM];
+
+describe("a failure on one item of a consumed stream", () => {
+  it("is reported and the items after it are still handled", async () => {
+    const errors: Error[] = [];
+    const handled: number[] = [];
+
+    await consumeEach(
+      (async function* () {
+        yield* ITEMS;
+      })(),
+      (item) => {
+        if (item === FAILING_ITEM) throw new Error("item failed");
+        handled.push(item);
+      },
+      () => (error) => {
+        errors.push(error);
+      },
+    );
+
+    expect(handled).toEqual(ITEMS.filter((item) => item !== FAILING_ITEM));
+    expect(errors.map((e) => e.message)).toEqual(["item failed"]);
+  });
+
+  it("is reported when the handler rejects asynchronously, and the order of handling is the order of arrival", async () => {
+    const errors: Error[] = [];
+    const order: number[] = [];
+
+    await consumeEach(
+      (async function* () {
+        yield* [1, 2];
+      })(),
+      async (item) => {
+        await settle();
+        order.push(item);
+        if (item === 1) throw new Error("first failed");
+      },
+      () => (error) => {
+        errors.push(error);
+      },
+    );
+
+    expect(order).toEqual([1, 2]);
+    expect(errors.map((e) => e.message)).toEqual(["first failed"]);
+  });
+
+  it("ends, reported and without rejecting, when the stream itself fails", async () => {
+    const errors: Error[] = [];
+
+    await consumeEach(
+      (async function* () {
+        yield 1;
+        throw new Error("stream failed");
+      })(),
+      () => undefined,
+      () => (error) => {
+        errors.push(error);
+      },
+    );
+
+    expect(errors.map((e) => e.message)).toEqual(["stream failed"]);
+  });
+});
+
+describe("the election session watch past a failing claim", () => {
+  it("reports a claim whose handler throws and still hands over the claims after it", async () => {
+    const errors: Error[] = [];
+    const handed: string[] = [];
+    const sessions = new ElectionSessions({
+      onCoordinatorClaim: (_handle, frame) => {
+        handed.push(JSON.stringify(frame));
+        if (handed.length === 1) throw new Error("claim failed");
+      },
+      onElectionSessionEnrolled: () => undefined,
+      onError: (e) => {
+        errors.push(e);
+      },
+    });
+    const claims = [{ n: 1 }, { n: 2 }];
+    const session = {
+      coordinatorFrames: (async function* () {
+        yield* claims;
+      })(),
+    } as unknown as AcceptedMeshSession;
+    sessions.enrol(session, HANDLE);
+
+    sessions.watch(session, HANDLE);
+    await settle();
+
+    expect(handed).toHaveLength(claims.length);
+    expect(errors.map((e) => e.message)).toEqual(["claim failed"]);
   });
 });
