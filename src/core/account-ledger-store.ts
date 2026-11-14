@@ -7,7 +7,10 @@ import { createNodeFsStorage } from "wire-mesh-core/adapters/node-fs-storage";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import type { Clock } from "wire-mesh-core/ports/clock";
 import { generateWriterNonce } from "./account-ledger-crypto.js";
-import { AccountLedger } from "./account-ledger.js";
+import {
+  AccountLedger,
+  type LedgerEntryDamagedError,
+} from "./account-ledger.js";
 import type { PeerIdentity } from "./identity.js";
 import { createFileLedgerLock } from "./ledger-lock.js";
 import {
@@ -24,6 +27,8 @@ export interface OpenAccountLedgerOptions {
   /** The account's identity as loadOrCreateUserIdentity returned it. */
   userIdentity: Readonly<PeerIdentity>;
   clock: Clock;
+  /** Where an unreadable ledger entry is reported; see AccountLedgerDeps.onDamagedEntry. */
+  onDamagedEntry?: ((error: LedgerEntryDamagedError) => void) | undefined;
 }
 
 /** The directory an account's ledger is stored in on this machine. Named by the account's device-id, so a machine that imports a different account starts that account's ledger afresh instead of mixing two accounts' logs. */
@@ -56,6 +61,9 @@ export async function openAccountLedger(
     storage: createNodeFsStorage({ dir }),
     lock: createFileLedgerLock(`${dir}.lock`),
     clock: options.clock,
+    ...(options.onDamagedEntry !== undefined && {
+      onDamagedEntry: options.onDamagedEntry,
+    }),
   });
   const legacy = readLegacyIssuedGrants(options.userIdentityOptions);
   if (legacy.length > 0) {
