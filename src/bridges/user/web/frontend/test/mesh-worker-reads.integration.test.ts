@@ -3,6 +3,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import net from "node:net";
+import * as path from "node:path";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
 import type { ContractRouterClient } from "@orpc/contract";
@@ -16,6 +17,8 @@ import {
   rooms,
 } from "../mesh-worker.js";
 import type { TabContract } from "../tab-contract.js";
+import { openPairingSecret } from "../../web-pairing.js";
+import { scratchDirectory } from "../../../../../test/scratch-directory.helper.js";
 import {
   freeLocalPort,
   unreachableHubUrl,
@@ -25,10 +28,11 @@ type TabClient = ContractRouterClient<TabContract>;
 
 let handle: WebServerHandle | undefined;
 
-async function startServer(): Promise<number> {
+async function startServer(pairingDir?: string): Promise<number> {
   const coordinatorPort = await freeLocalPort();
   const hubUrl = await unreachableHubUrl();
   handle = await createWebServer({
+    ...(pairingDir !== undefined && { pairingDir }),
     port: 0,
     coordinatorPort,
     firstContactPort: await freeLocalPort(),
@@ -74,6 +78,42 @@ afterEach(async () => {
     await handle.controller.shutdown();
     handle = undefined;
   }
+});
+
+describe("the worker's connection under a pairing secret", () => {
+  const WRONG_SECRET = "0".repeat(DEVICE_ID_HEX_LENGTH);
+  const NO_CONNECTION_WAIT_MS = 800;
+
+  it("proves the bridge holds the secret, then reads through the ticket the exchange issued", async () => {
+    const pairingDir = path.join(
+      scratchDirectory("agent-comms-worker-pairing-"),
+      "state",
+    );
+    const port = await startServer(pairingDir);
+    connect(
+      `ws://127.0.0.1:${String(port)}/ws/mesh`,
+      openPairingSecret({ dir: pairingDir }).current(),
+    );
+
+    const graph = await connectTab().getMeshGraph({});
+
+    expect(Array.isArray(graph.nodes)).toBe(true);
+  });
+
+  it("opens no mesh socket to a bridge that does not hold the secret it was paired with", async () => {
+    const pairingDir = path.join(
+      scratchDirectory("agent-comms-worker-pairing-"),
+      "state",
+    );
+    const port = await startServer(pairingDir);
+
+    connect(`ws://127.0.0.1:${String(port)}/ws/mesh`, WRONG_SECRET);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, NO_CONNECTION_WAIT_MS);
+    });
+
+    expect(handle?.wss.clients.size).toBe(0);
+  });
 });
 
 describe("structured reads across the full tab -> worker -> server chain", () => {

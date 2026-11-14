@@ -3,7 +3,7 @@
  *
  * Usage: tsx identity-file-write-worker.ts <mode> <dir> <workerIndex> <rounds> <startAtEpochMs>
  *
- * Modes: nonce (print the ledger writer nonce this process settled on), clear (remove this worker's own legacy grants one at a time), name (save a display name per round), import (import the account already held, with a display name per round), machine-name (save the machine's display name per round), machine-renew (load the machine identity, renewing it when it is near expiry).
+ * Modes: nonce (print the ledger writer nonce this process settled on), pairing-secret (print the hosted-dashboard pairing secret this process settled on), clear (remove this worker's own legacy grants one at a time), name (save a display name per round), import (import the account already held, with a display name per round), machine-name (save the machine's display name per round), machine-renew (load the machine identity, renewing it when it is near expiry).
  */
 
 import {
@@ -19,6 +19,7 @@ import {
   saveUserDisplayName,
 } from "../core/user-identity.js";
 import { randomBytes } from "node:crypto";
+import { openPairingSecret } from "../bridges/user/web/web-pairing.js";
 
 const [, , mode, dir, indexRaw, roundsRaw, startAtRaw] = process.argv;
 if (
@@ -52,6 +53,9 @@ try {
           ),
         ).toString("hex"),
       );
+      break;
+    case "pairing-secret":
+      console.log(openPairingSecret({ dir }).current());
       break;
     case "clear":
       for (const grant of readLegacyIssuedGrants(options).filter((g) =>
