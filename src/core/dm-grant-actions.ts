@@ -64,7 +64,13 @@ export async function dmRevoke(
   action: CommsAction & { action: "dm_revoke" },
 ): Promise<CommsResult> {
   if (!store.revokeAgentDmAccess) return grantsUnavailable();
-  await store.revokeAgentDmAccess(action.target);
+  const { unreadable } = await store.revokeAgentDmAccess(action.target);
+  if (unreadable > 0) {
+    return {
+      content: `Revoked every DM grant for ${action.target} that the readable ledger entries record, but ${String(unreadable)} ledger entries cannot be read, so a grant recorded only in them is still valid. Repair or replace them from another machine's replica of the account, then revoke again.`,
+      isError: true,
+    };
+  }
   return {
     content: `Revoked ${action.target}'s DM grant.`,
     isError: false,

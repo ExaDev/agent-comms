@@ -31,6 +31,7 @@ function setup(
     ownsLog: () => options.ownsLog,
     handleDataFrame,
     announcements: async () => [],
+    unreadableEntries: () => [],
   };
   const account: AccountReplication = {
     ledger: () => ledger,

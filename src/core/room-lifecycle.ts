@@ -2,6 +2,7 @@
  * RoomLifecycle — room CRUD and the requester's own outbound half of the wire protocol: create/get/list, join/leave (local CRDT mutation for an already-known room, or a real wire-level room.join/room.leave round trip via joinRemoteRoom/leaveRemoteRoom when this store's own identity isn't yet admitted), invite/decline, membership-grant revocation, kick, and destroy. Split out of mesh-store.ts to reduce it under the repo's max-lines cap.
  */
 
+import type { LedgerGaps } from "./account-ledger.js";
 import {
   deviceIdFromHex,
   deviceIdToHex,
@@ -818,12 +819,13 @@ export class RoomLifecycle {
   }
 
   /**
-   * Revokes every dm:send grant for bearerId that the account's replicated ledger holds as outstanding, whichever machine of the account minted it: mints a revocation-entry for each token-id, records it in this store's own RevocationView immediately, announces it to every connected peer, and appends it to the ledger so every machine of the account sees it revoked and a later re-admission starts from nothing outstanding. The same revocation shape revokeMemberGrant gives room:member grants, applied to the user principal's own dm:send grants. Does nothing when the ledger holds no outstanding grant for bearerId. A ledger entry that cannot be read is reported and skipped rather than stopping the revocation (account-ledger.ts): every grant the readable entries record is still revoked, and one recorded only in an unreadable entry is not.
+   * Revokes every dm:send grant for bearerId that the account's replicated ledger holds as outstanding, whichever machine of the account minted it: mints a revocation-entry for each token-id, records it in this store's own RevocationView immediately, announces it to every connected peer, and appends it to the ledger so every machine of the account sees it revoked and a later re-admission starts from nothing outstanding. The same revocation shape revokeMemberGrant gives room:member grants, applied to the user principal's own dm:send grants. Does nothing when the ledger holds no outstanding grant for bearerId. A ledger entry that cannot be read does not stop the revocation (account-ledger.ts): every grant the readable entries record is still revoked, and one recorded only in an unreadable entry is not, which the result says (`unreadable` above zero means the revocation is incomplete).
    */
-  async revokeAgentDmAccess(bearerId: string): Promise<void> {
+  async revokeAgentDmAccess(bearerId: string): Promise<LedgerGaps> {
     const { userIdentity, accountLedger, clock, revocation } =
       this.deps.requireIdentity();
-    const outstanding = await accountLedger.outstandingGrants("dm", bearerId);
+    const { grants: outstanding, unreadable } =
+      await accountLedger.outstandingGrantsChecked("dm", bearerId);
     for (const { tokenId } of outstanding) {
       const entry = await mintRevocationEntry({
         identity: userIdentity,
@@ -834,5 +836,6 @@ export class RoomLifecycle {
       await this.deps.requireTransport().broadcastRevocation([entry]);
       await accountLedger.recordRevocation("dm", bearerId, tokenId, entry);
     }
+    return { unreadable };
   }
 }

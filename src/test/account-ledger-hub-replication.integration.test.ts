@@ -79,7 +79,7 @@ describe("account ledger replication through the relay hub", () => {
       async () => (await outstandingDm(ledgerA, bearer)).length === 0,
       "A's ledger to learn B's revocation, through the hub",
     );
-    expect(await ledgerA.revocations()).toHaveLength(1);
+    expect((await ledgerA.revocations()).entries).toHaveLength(1);
   });
 
   it("never offers the ledger to a device of another account that is on the same hub", async () => {

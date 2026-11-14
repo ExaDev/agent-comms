@@ -105,7 +105,9 @@ describe("dmUseGrant", () => {
 
 describe("dmRevoke", () => {
   it("revokes the named device's grant and says so", async () => {
-    const revokeAgentDmAccess = vi.fn(async () => Promise.resolve());
+    const revokeAgentDmAccess = vi.fn(async () =>
+      Promise.resolve({ unreadable: 0 }),
+    );
 
     const result = await dmRevoke(
       { revokeAgentDmAccess },
