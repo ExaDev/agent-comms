@@ -18,6 +18,7 @@ import type {
   CapabilityToken,
   MessageRef,
 } from "wire-mesh-core/generated/protocol";
+import { WriteLockTimeoutError } from "./pid-lock-file.js";
 import { parseRoomPath } from "./room-path.js";
 import {
   ROOM_MEMBER_CAPABILITY,
@@ -696,7 +697,14 @@ export class RoomProtocol {
     if (!verdict.ok) {
       return { result: "error", code: "mint_failed" };
     }
-    saveIssuedRoomGrant(slot, roomPath, handle.id, tokenId);
+    try {
+      await saveIssuedRoomGrant(slot, roomPath, handle.id, tokenId);
+    } catch (err) {
+      if (err instanceof WriteLockTimeoutError) {
+        return { result: "error", code: "storage_busy" };
+      }
+      throw err;
+    }
 
     const room = this.deps.rooms.get(roomPath);
     if (room !== undefined) {
@@ -750,7 +758,14 @@ export class RoomProtocol {
     if (!verdict.ok) {
       return { result: "error", code: "unauthorized" };
     }
-    saveRoomToken(slot, roomPath, token);
+    try {
+      await saveRoomToken(slot, roomPath, token);
+    } catch (err) {
+      if (err instanceof WriteLockTimeoutError) {
+        return { result: "error", code: "storage_busy" };
+      }
+      throw err;
+    }
 
     const parsed = parseRoomPath(roomPath);
     const inviterId = parsed.kind === "owner-named" ? parsed.owner : peerId;

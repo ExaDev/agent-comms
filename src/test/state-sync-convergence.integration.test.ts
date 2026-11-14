@@ -127,7 +127,7 @@ test("room membership changes converge and stale member lists are rejected", asy
     grantVerdict.ok,
     "expected the fixture grant to mint successfully",
   ).toBeTruthy();
-  if (grantVerdict.ok) saveRoomToken(bSlot, roomId, grantVerdict.token);
+  if (grantVerdict.ok) await saveRoomToken(bSlot, roomId, grantVerdict.token);
 
   await b.joinRoom(roomId, joiner.id);
   a.applyStateSync(snapshotOf(b));

@@ -42,7 +42,7 @@ try {
   loadIdentityForFront(slot);
   const count = Number.parseInt(countRaw, 10);
   for (let i = 0; i < count; i++) {
-    saveRoomToken(slot, `room-${indexRaw}-${String(i)}`, token);
+    await saveRoomToken(slot, `room-${indexRaw}-${String(i)}`, token);
   }
   process.exit(0);
 } catch (err) {

@@ -471,7 +471,7 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
     );
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
+    await saveRoomToken(slot, roomPath, token);
     await h.lifecycle.joinRoom(roomPath, h.ids.ownerId);
     expect(h.sendRoomRequest).not.toHaveBeenCalled();
   });

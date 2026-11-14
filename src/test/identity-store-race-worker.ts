@@ -36,7 +36,7 @@ const fakeToken: CapabilityToken = [
 
 try {
   loadOrCreateIdentity(slot);
-  saveRoomToken(slot, "race-room", fakeToken);
+  await saveRoomToken(slot, "race-room", fakeToken);
   process.exit(0);
 } catch (err) {
   console.error(err instanceof Error ? err.message : String(err));

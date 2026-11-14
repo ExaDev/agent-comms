@@ -664,7 +664,7 @@ describe("RoomProtocol — sendRoomMessageDirected", () => {
     const h = await makeHarness();
     const roomPath = ownerNamedRoomPath(h.ids.ownerId, "general");
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(
+    await saveRoomToken(
       { harness: "test", cwd: "room-protocol", dir: h.slotDir },
       roomPath,
       token,
@@ -686,7 +686,7 @@ describe("RoomProtocol — sendRoomMessageDirected", () => {
     const h = await makeHarness();
     const roomPath = ownerNamedRoomPath(h.ids.ownerId, "general");
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(
+    await saveRoomToken(
       { harness: "test", cwd: "room-protocol", dir: h.slotDir },
       roomPath,
       token,

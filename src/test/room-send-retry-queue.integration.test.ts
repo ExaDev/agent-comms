@@ -177,7 +177,7 @@ test("a flush drops (not re-queues) a send whose room this store no longer holds
   await store.sendRoomMessage(room.id, owner.id, "hello");
   expect(attempts.length).toBe(1);
 
-  deleteRoomToken(slot, room.id);
+  await deleteRoomToken(slot, room.id);
 
   store.events.onPeerConnected(
     { id: MEMBER_ID },

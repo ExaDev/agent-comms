@@ -114,9 +114,7 @@ async function holdSlotFromAnotherProcess(
     { stdio: "ignore" },
   );
   if (child.pid === undefined) throw new Error("no pid for the holder");
-  const lock = fs
-    .readdirSync(slot.dir ?? "")
-    .find((f) => f.endsWith(".lock") && !f.endsWith(".write.lock"));
+  const lock = fs.readdirSync(slot.dir ?? "").find((f) => f.endsWith(".lock"));
   if (lock === undefined) throw new Error("expected the slot lock");
   fs.writeFileSync(path.join(slot.dir ?? "", lock), `${String(child.pid)}\n`);
   return {
@@ -136,7 +134,7 @@ test("a bridge running under an ephemeral identity keeps its tokens out of the s
   slots.push(slot);
 
   loadOrCreateIdentity(slot);
-  saveRoomToken(slot, "held-by-owner", TOKEN);
+  await saveRoomToken(slot, "held-by-owner", TOKEN);
   const file = path.join(
     dir,
     fs.readdirSync(dir).find((f) => f.endsWith(".json")) ?? "",
@@ -148,9 +146,9 @@ test("a bridge running under an ephemeral identity keeps its tokens out of the s
     loadOrCreateIdentity(slot);
     expect(Object.keys(loadRoomTokens(slot))).toEqual([]);
 
-    saveRoomToken(slot, "mine", TOKEN);
-    saveGroupToken(slot, "my-group", TOKEN);
-    saveIssuedRoomGrant(slot, "mine", MEMBER_HEX, ISSUED_TOKEN_ID);
+    await saveRoomToken(slot, "mine", TOKEN);
+    await saveGroupToken(slot, "my-group", TOKEN);
+    await saveIssuedRoomGrant(slot, "mine", MEMBER_HEX, ISSUED_TOKEN_ID);
 
     // The ephemeral bridge reads back exactly what it saved, and only that.
     expect(Object.keys(loadRoomTokens(slot))).toEqual(["mine"]);

@@ -53,7 +53,7 @@ async function makeHarness() {
   const slotDir = scratchDirectory("room-messaging-durable-send-test-");
   const slot = { harness: "test", cwd: "room-messaging", dir: slotDir };
   loadOrCreateIdentity(slot);
-  saveRoomToken(slot, roomPath, verdict.token);
+  await saveRoomToken(slot, roomPath, verdict.token);
 
   const dataStorage = createMemoryStorage();
   const room: Room = {
