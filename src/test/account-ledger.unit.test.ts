@@ -188,7 +188,7 @@ describe("account ledger replication", () => {
 
     expect(await tokenIds(first, "device", "device-a")).toEqual([]);
     expect(learned).toEqual([revocation]);
-    expect(await first.revocations()).toEqual([revocation]);
+    expect((await first.revocations()).entries).toEqual([revocation]);
   });
 
   it("keeps both machines' grants when each appends while apart", async () => {
