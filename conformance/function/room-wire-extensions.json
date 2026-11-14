@@ -1,0 +1,309 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "description": "d",
+          "id": "o/r",
+          "name": "r",
+          "owner": "o",
+          "type": "private"
+        }
+      ],
+      "expect": {
+        "room-state": {
+          "description": "d",
+          "name": "r",
+          "type": "private"
+        }
+      },
+      "from": "recorded: src/core/room-wire-extensions.ts (roomStateExtension)",
+      "function": "room-wire-extensions.roomStateExtension",
+      "id": "room-state-of-a-room-carries-name-description-and-type",
+      "kind": "function"
+    },
+    {
+      "args": [
+        null
+      ],
+      "expect": {},
+      "from": "recorded: src/core/room-wire-extensions.ts (roomStateExtension)",
+      "function": "room-wire-extensions.roomStateExtension",
+      "id": "room-state-of-a-direct-message-path-is-empty",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "description": "d",
+          "name": "r",
+          "type": "public"
+        }
+      ],
+      "expect": {
+        "description": "d",
+        "name": "r",
+        "type": "public"
+      },
+      "from": "recorded: src/core/room-wire-extensions.ts (parseRoomStateExtension)",
+      "function": "room-wire-extensions.parseRoomStateExtension",
+      "id": "parse-room-state-accepts-the-shape-it-sends",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "description": "d",
+          "name": "r",
+          "type": "secret"
+        }
+      ],
+      "expect": {
+        "description": "d",
+        "name": "r",
+        "type": "secret"
+      },
+      "from": "recorded: src/core/room-wire-extensions.ts (parseRoomStateExtension)",
+      "function": "room-wire-extensions.parseRoomStateExtension",
+      "id": "parse-room-state-accepts-a-secret-room-type",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "description": "d",
+          "extra": 1,
+          "name": "r",
+          "type": "public"
+        }
+      ],
+      "expect": {
+        "description": "d",
+        "name": "r",
+        "type": "public"
+      },
+      "from": "recorded: src/core/room-wire-extensions.ts (parseRoomStateExtension)",
+      "function": "room-wire-extensions.parseRoomStateExtension",
+      "id": "parse-room-state-drops-keys-it-does-not-know",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "description": "😀",
+          "name": "café",
+          "type": "public"
+        }
+      ],
+      "expect": {
+        "description": "😀",
+        "name": "café",
+        "type": "public"
+      },
+      "from": "recorded: src/core/room-wire-extensions.ts (parseRoomStateExtension)",
+      "function": "room-wire-extensions.parseRoomStateExtension",
+      "id": "parse-room-state-keeps-non-ascii-text",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "room"
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseRoomStateExtension)",
+      "function": "room-wire-extensions.parseRoomStateExtension",
+      "id": "parse-room-state-refuses-a-string",
+      "kind": "function"
+    },
+    {
+      "args": [
+        null
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseRoomStateExtension)",
+      "function": "room-wire-extensions.parseRoomStateExtension",
+      "id": "parse-room-state-refuses-null",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "description": "d",
+            "name": "r",
+            "type": "public"
+          }
+        ]
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseRoomStateExtension)",
+      "function": "room-wire-extensions.parseRoomStateExtension",
+      "id": "parse-room-state-refuses-a-list",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "description": "d",
+          "name": "r",
+          "type": "loud"
+        }
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseRoomStateExtension)",
+      "function": "room-wire-extensions.parseRoomStateExtension",
+      "id": "parse-room-state-refuses-an-unknown-type",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "description": "d",
+          "name": 1,
+          "type": "public"
+        }
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseRoomStateExtension)",
+      "function": "room-wire-extensions.parseRoomStateExtension",
+      "id": "parse-room-state-refuses-a-numeric-name",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "description": 1,
+          "name": "r",
+          "type": "public"
+        }
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseRoomStateExtension)",
+      "function": "room-wire-extensions.parseRoomStateExtension",
+      "id": "parse-room-state-refuses-a-numeric-description",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "name": "r",
+          "type": "public"
+        }
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseRoomStateExtension)",
+      "function": "room-wire-extensions.parseRoomStateExtension",
+      "id": "parse-room-state-refuses-a-missing-description",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "cwd": "/work/app",
+          "name": "Alice"
+        }
+      ],
+      "expect": {
+        "inviter-agent": {
+          "cwd": "/work/app",
+          "name": "Alice"
+        }
+      },
+      "from": "recorded: src/core/room-wire-extensions.ts (inviterAgentExtension)",
+      "function": "room-wire-extensions.inviterAgentExtension",
+      "id": "inviter-extension-carries-name-and-cwd",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "cwd": "/work/app",
+          "name": "Alice"
+        }
+      ],
+      "expect": {
+        "cwd": "/work/app",
+        "name": "Alice"
+      },
+      "from": "recorded: src/core/room-wire-extensions.ts (parseInviterAgentExtension)",
+      "function": "room-wire-extensions.parseInviterAgentExtension",
+      "id": "parse-inviter-accepts-the-shape-it-sends",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "cwd": "/w",
+          "extra": 1,
+          "name": "Alice"
+        }
+      ],
+      "expect": {
+        "cwd": "/w",
+        "name": "Alice"
+      },
+      "from": "recorded: src/core/room-wire-extensions.ts (parseInviterAgentExtension)",
+      "function": "room-wire-extensions.parseInviterAgentExtension",
+      "id": "parse-inviter-drops-keys-it-does-not-know",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "Alice"
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseInviterAgentExtension)",
+      "function": "room-wire-extensions.parseInviterAgentExtension",
+      "id": "parse-inviter-refuses-a-string",
+      "kind": "function"
+    },
+    {
+      "args": [
+        null
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseInviterAgentExtension)",
+      "function": "room-wire-extensions.parseInviterAgentExtension",
+      "id": "parse-inviter-refuses-null",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "name": "Alice"
+        }
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseInviterAgentExtension)",
+      "function": "room-wire-extensions.parseInviterAgentExtension",
+      "id": "parse-inviter-refuses-a-missing-cwd",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "cwd": "/w",
+          "name": 1
+        }
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseInviterAgentExtension)",
+      "function": "room-wire-extensions.parseInviterAgentExtension",
+      "id": "parse-inviter-refuses-a-numeric-name",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "cwd": 1,
+          "name": "A"
+        }
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/room-wire-extensions.ts (parseInviterAgentExtension)",
+      "function": "room-wire-extensions.parseInviterAgentExtension",
+      "id": "parse-inviter-refuses-a-numeric-cwd",
+      "kind": "function"
+    }
+  ]
+}

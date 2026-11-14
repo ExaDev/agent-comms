@@ -7,7 +7,7 @@
       "expect": true,
       "from": "claude-command.unit.test.ts: isClaudeCodeComm > accepts claude",
       "function": "claude-command.isClaudeCodeComm",
-      "id": "accepts-0",
+      "id": "accepts-claude",
       "kind": "function"
     },
     {
@@ -17,7 +17,7 @@
       "expect": true,
       "from": "claude-command.unit.test.ts: isClaudeCodeComm > accepts /opt/homebrew/Caskroom/claude-code/2.1.311/claude",
       "function": "claude-command.isClaudeCodeComm",
-      "id": "accepts-1",
+      "id": "accepts-opt-homebrew-caskroom-claude-code-2-1-311-claude",
       "kind": "function"
     },
     {
@@ -27,7 +27,7 @@
       "expect": true,
       "from": "claude-command.unit.test.ts: isClaudeCodeComm > accepts /Users/example/.local/bin/claude",
       "function": "claude-command.isClaudeCodeComm",
-      "id": "accepts-2",
+      "id": "accepts-users-example-local-bin-claude",
       "kind": "function"
     },
     {
@@ -37,7 +37,7 @@
       "expect": true,
       "from": "claude-command.unit.test.ts: isClaudeCodeComm > accepts /Users/example/.local/share/claude/versions/2.1.322",
       "function": "claude-command.isClaudeCodeComm",
-      "id": "accepts-3",
+      "id": "accepts-users-example-local-share-claude-versions-2-1-322",
       "kind": "function"
     },
     {
@@ -47,7 +47,7 @@
       "expect": false,
       "from": "claude-command.unit.test.ts: isClaudeCodeComm > rejects node",
       "function": "claude-command.isClaudeCodeComm",
-      "id": "rejects-0",
+      "id": "rejects-node",
       "kind": "function"
     },
     {
@@ -57,7 +57,7 @@
       "expect": false,
       "from": "claude-command.unit.test.ts: isClaudeCodeComm > rejects -zsh",
       "function": "claude-command.isClaudeCodeComm",
-      "id": "rejects-1",
+      "id": "rejects-zsh",
       "kind": "function"
     },
     {
@@ -67,7 +67,7 @@
       "expect": false,
       "from": "claude-command.unit.test.ts: isClaudeCodeComm > rejects tmux",
       "function": "claude-command.isClaudeCodeComm",
-      "id": "rejects-2",
+      "id": "rejects-tmux",
       "kind": "function"
     },
     {
@@ -77,7 +77,7 @@
       "expect": false,
       "from": "claude-command.unit.test.ts: isClaudeCodeComm > rejects /usr/bin/claude-notification",
       "function": "claude-command.isClaudeCodeComm",
-      "id": "rejects-3",
+      "id": "rejects-usr-bin-claude-notification",
       "kind": "function"
     },
     {
@@ -87,7 +87,7 @@
       "expect": false,
       "from": "claude-command.unit.test.ts: isClaudeCodeComm > rejects /Users/example/.local/share/claude/versions/notes",
       "function": "claude-command.isClaudeCodeComm",
-      "id": "rejects-4",
+      "id": "rejects-users-example-local-share-claude-versions-notes",
       "kind": "function"
     },
     {
@@ -97,7 +97,7 @@
       "expect": false,
       "from": "claude-command.unit.test.ts: isClaudeCodeComm > rejects /Users/example/.local/share/claude/versions/2.1.322/helper",
       "function": "claude-command.isClaudeCodeComm",
-      "id": "rejects-5",
+      "id": "rejects-users-example-local-share-claude-versions-2-1-322-helper",
       "kind": "function"
     }
   ]

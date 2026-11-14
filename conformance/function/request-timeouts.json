@@ -105,6 +105,66 @@
       "function": "request-timeouts.constants",
       "id": "approval-window-above-network-deadline",
       "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "params": {
+            "verb": "room.join"
+          },
+          "verb": "room:member"
+        },
+        {
+          "$number": "Infinity"
+        }
+      ],
+      "expect": {
+        "$number": "Infinity"
+      },
+      "from": "recorded: src/core/request-timeouts.ts (a room.join deadline is the approval window plus the grace, whatever number that is)",
+      "function": "request-timeouts.manageRequestTimeoutMs",
+      "id": "room-join-with-an-infinite-approval-window-never-expires",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "params": {
+            "verb": "room.join"
+          },
+          "verb": "room:member"
+        },
+        {
+          "$number": "-Infinity"
+        }
+      ],
+      "expect": {
+        "$number": "-Infinity"
+      },
+      "from": "recorded: src/core/request-timeouts.ts (a room.join deadline is the approval window plus the grace, whatever number that is)",
+      "function": "request-timeouts.manageRequestTimeoutMs",
+      "id": "room-join-with-a-negative-infinite-approval-window",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "params": {
+            "verb": "room.join"
+          },
+          "verb": "room:member"
+        },
+        {
+          "$number": "NaN"
+        }
+      ],
+      "expect": {
+        "$number": "NaN"
+      },
+      "from": "recorded: src/core/request-timeouts.ts (a room.join deadline is the approval window plus the grace, whatever number that is)",
+      "function": "request-timeouts.manageRequestTimeoutMs",
+      "id": "room-join-with-a-nan-approval-window-is-nan",
+      "kind": "function"
     }
   ]
 }

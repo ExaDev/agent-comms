@@ -76,7 +76,7 @@
       "args": [
         [
           {
-            "cwd": "/Users/joe/Developer/my-app",
+            "cwd": "/Users/example/Developer/my-app",
             "id": "a1"
           }
         ],
@@ -89,14 +89,14 @@
             "children": [
               {
                 "agentId": "a1",
-                "cwd": "/Users/joe/Developer/my-app",
+                "cwd": "/Users/example/Developer/my-app",
                 "name": "agent-a1",
                 "status": "active",
                 "type": "agent"
               }
             ],
             "name": "my-app",
-            "path": "/Users/joe/Developer/my-app",
+            "path": "/Users/example/Developer/my-app",
             "type": "directory"
           }
         ]
@@ -110,11 +110,11 @@
       "args": [
         [
           {
-            "cwd": "/Users/joe/Developer/my-app",
+            "cwd": "/Users/example/Developer/my-app",
             "id": "a1"
           },
           {
-            "cwd": "/Users/joe/Developer/my-app",
+            "cwd": "/Users/example/Developer/my-app",
             "id": "a2"
           }
         ],
@@ -127,21 +127,21 @@
             "children": [
               {
                 "agentId": "a1",
-                "cwd": "/Users/joe/Developer/my-app",
+                "cwd": "/Users/example/Developer/my-app",
                 "name": "agent-a1",
                 "status": "active",
                 "type": "agent"
               },
               {
                 "agentId": "a2",
-                "cwd": "/Users/joe/Developer/my-app",
+                "cwd": "/Users/example/Developer/my-app",
                 "name": "agent-a2",
                 "status": "active",
                 "type": "agent"
               }
             ],
             "name": "my-app",
-            "path": "/Users/joe/Developer/my-app",
+            "path": "/Users/example/Developer/my-app",
             "type": "directory"
           }
         ]
@@ -155,11 +155,11 @@
       "args": [
         [
           {
-            "cwd": "/Users/joe/Developer",
+            "cwd": "/Users/example/Developer",
             "id": "a1"
           },
           {
-            "cwd": "/Users/joe/Developer/my-app",
+            "cwd": "/Users/example/Developer/my-app",
             "id": "a2"
           }
         ],
@@ -174,26 +174,26 @@
                 "children": [
                   {
                     "agentId": "a2",
-                    "cwd": "/Users/joe/Developer/my-app",
+                    "cwd": "/Users/example/Developer/my-app",
                     "name": "agent-a2",
                     "status": "active",
                     "type": "agent"
                   }
                 ],
                 "name": "my-app",
-                "path": "/Users/joe/Developer/my-app",
+                "path": "/Users/example/Developer/my-app",
                 "type": "directory"
               },
               {
                 "agentId": "a1",
-                "cwd": "/Users/joe/Developer",
+                "cwd": "/Users/example/Developer",
                 "name": "agent-a1",
                 "status": "active",
                 "type": "agent"
               }
             ],
             "name": "Developer",
-            "path": "/Users/joe/Developer",
+            "path": "/Users/example/Developer",
             "type": "directory"
           }
         ]
@@ -207,21 +207,21 @@
       "args": [
         [
           {
-            "cwd": "/Users/joe/Developer",
+            "cwd": "/Users/example/Developer",
             "id": "z-agent",
             "name": "z-agent"
           },
           {
-            "cwd": "/Users/joe/Developer",
+            "cwd": "/Users/example/Developer",
             "id": "a-agent",
             "name": "a-agent"
           },
           {
-            "cwd": "/Users/joe/Developer/z-project",
+            "cwd": "/Users/example/Developer/z-project",
             "id": "a3"
           },
           {
-            "cwd": "/Users/joe/Developer/a-project",
+            "cwd": "/Users/example/Developer/a-project",
             "id": "a4"
           }
         ],
@@ -236,47 +236,47 @@
                 "children": [
                   {
                     "agentId": "a4",
-                    "cwd": "/Users/joe/Developer/a-project",
+                    "cwd": "/Users/example/Developer/a-project",
                     "name": "agent-a4",
                     "status": "active",
                     "type": "agent"
                   }
                 ],
                 "name": "a-project",
-                "path": "/Users/joe/Developer/a-project",
+                "path": "/Users/example/Developer/a-project",
                 "type": "directory"
               },
               {
                 "children": [
                   {
                     "agentId": "a3",
-                    "cwd": "/Users/joe/Developer/z-project",
+                    "cwd": "/Users/example/Developer/z-project",
                     "name": "agent-a3",
                     "status": "active",
                     "type": "agent"
                   }
                 ],
                 "name": "z-project",
-                "path": "/Users/joe/Developer/z-project",
+                "path": "/Users/example/Developer/z-project",
                 "type": "directory"
               },
               {
                 "agentId": "a-agent",
-                "cwd": "/Users/joe/Developer",
+                "cwd": "/Users/example/Developer",
                 "name": "a-agent",
                 "status": "active",
                 "type": "agent"
               },
               {
                 "agentId": "z-agent",
-                "cwd": "/Users/joe/Developer",
+                "cwd": "/Users/example/Developer",
                 "name": "z-agent",
                 "status": "active",
                 "type": "agent"
               }
             ],
             "name": "Developer",
-            "path": "/Users/joe/Developer",
+            "path": "/Users/example/Developer",
             "type": "directory"
           }
         ]
@@ -493,11 +493,11 @@
       "args": [
         [
           {
-            "cwd": "/Users/joe/Developer/app1",
+            "cwd": "/Users/example/Developer/app1",
             "id": "a1"
           },
           {
-            "cwd": "/Users/joe/Developer/app2",
+            "cwd": "/Users/example/Developer/app2",
             "id": "a2"
           }
         ],
@@ -512,33 +512,33 @@
                 "children": [
                   {
                     "agentId": "a1",
-                    "cwd": "/Users/joe/Developer/app1",
+                    "cwd": "/Users/example/Developer/app1",
                     "name": "agent-a1",
                     "status": "active",
                     "type": "agent"
                   }
                 ],
                 "name": "app1",
-                "path": "/Users/joe/Developer/app1",
+                "path": "/Users/example/Developer/app1",
                 "type": "directory"
               },
               {
                 "children": [
                   {
                     "agentId": "a2",
-                    "cwd": "/Users/joe/Developer/app2",
+                    "cwd": "/Users/example/Developer/app2",
                     "name": "agent-a2",
                     "status": "active",
                     "type": "agent"
                   }
                 ],
                 "name": "app2",
-                "path": "/Users/joe/Developer/app2",
+                "path": "/Users/example/Developer/app2",
                 "type": "directory"
               }
             ],
             "name": "Developer",
-            "path": "/Users/joe/Developer",
+            "path": "/Users/example/Developer",
             "type": "directory"
           }
         ]

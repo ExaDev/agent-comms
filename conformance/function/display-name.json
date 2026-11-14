@@ -5,10 +5,10 @@
         {
           "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           "petname": "work laptop",
-          "selfName": "joe-mbp"
+          "selfName": "example-mbp"
         }
       ],
-      "expect": "work laptop \"joe-mbp\" 0123456789ab",
+      "expect": "work laptop \"example-mbp\" 0123456789ab",
       "from": "display-name.unit.test.ts: formatDisplayName > puts the petname first, then the self-asserted name quoted, then the short id",
       "function": "display-name.formatDisplayName",
       "id": "format-display-name-petname-first",
@@ -18,10 +18,10 @@
       "args": [
         {
           "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-          "selfName": "joe-mbp"
+          "selfName": "example-mbp"
         }
       ],
-      "expect": "\"joe-mbp\" 0123456789ab",
+      "expect": "\"example-mbp\" 0123456789ab",
       "from": "display-name.unit.test.ts: formatDisplayName > shows the self-asserted name and short id when the viewer has no petname",
       "function": "display-name.formatDisplayName",
       "id": "format-display-name-self-name-and-short-id",
@@ -43,11 +43,11 @@
       "args": [
         {
           "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-          "petname": "joe-mbp",
-          "selfName": "joe-mbp"
+          "petname": "example-mbp",
+          "selfName": "example-mbp"
         }
       ],
-      "expect": "joe-mbp 0123456789ab",
+      "expect": "example-mbp 0123456789ab",
       "from": "display-name.unit.test.ts: formatDisplayName > does not repeat a self-asserted name that only echoes the petname",
       "function": "display-name.formatDisplayName",
       "id": "format-display-name-echo-not-repeated",
@@ -108,10 +108,10 @@
         {
           "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           "petname": "work laptop",
-          "selfName": "joe-mbp"
+          "selfName": "example-mbp"
         }
       ],
-      "expect": "work laptop \"joe-mbp\"",
+      "expect": "work laptop \"example-mbp\"",
       "from": "display-name.unit.test.ts: formatNames > gives the names alone, for a surface that prints the full id beside them",
       "function": "display-name.formatNames",
       "id": "format-names-names-alone",
@@ -131,9 +131,9 @@
     },
     {
       "args": [
-        "  Joe's laptop "
+        "  Sam's laptop "
       ],
-      "expect": "Joe's laptop",
+      "expect": "Sam's laptop",
       "from": "display-name.unit.test.ts: parseDisplayName > accepts a name and trims the space around it",
       "function": "display-name.parseDisplayName",
       "id": "parse-display-name-trims",
@@ -197,6 +197,153 @@
       "from": "display-name.unit.test.ts: parseDisplayName > refuses an empty name, one over the length limit, and one carrying a control sequence",
       "function": "display-name.parseDisplayName",
       "id": "parse-display-name-refuses-c1-control",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      ],
+      "expect": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "from": "recorded: src/core/display-name.ts (a name counts UTF-16 code units, so an astral character is two)",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-accepts-astral-characters-up-to-64-code-units",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx😀"
+      ],
+      "expectUndefined": true,
+      "from": "recorded: src/core/display-name.ts (a name counts UTF-16 code units, so an astral character is two)",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-refuses-63-letters-and-an-astral-character",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxé"
+      ],
+      "expect": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxé",
+      "from": "recorded: src/core/display-name.ts (a name counts UTF-16 code units, so an astral character is two)",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-accepts-63-letters-and-a-bmp-character",
+      "kind": "function"
+    },
+    {
+      "args": [
+        " name "
+      ],
+      "expect": "name",
+      "from": "recorded: src/core/display-name.ts (a name is trimmed of the ECMAScript white space set)",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-trims-no-break-space",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "﻿name﻿"
+      ],
+      "expect": "name",
+      "from": "recorded: src/core/display-name.ts (a name is trimmed of the ECMAScript white space set)",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-trims-byte-order-mark",
+      "kind": "function"
+    },
+    {
+      "args": [
+        " name "
+      ],
+      "expect": "name",
+      "from": "recorded: src/core/display-name.ts (a name is trimmed of the ECMAScript white space set)",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-trims-line-separator",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "​name"
+      ],
+      "expect": "​name",
+      "from": "recorded: src/core/display-name.ts (a name is trimmed of the ECMAScript white space set)",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-keeps-zero-width-space",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "é"
+      ],
+      "expect": "é",
+      "from": "recorded: src/core/display-name.ts (a name keeps combining marks as the code units they are)",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-keeps-a-combining-mark",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "codeUnits": [
+            55357
+          ]
+        }
+      ],
+      "expect": {
+        "codeUnits": [
+          55357
+        ]
+      },
+      "from": "recorded: src/core/display-name.ts (a lone surrogate is a code unit like any other)",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-keeps-a-lone-surrogate",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "aaaaaaaaaaa😀bcd"
+      ],
+      "expect": {
+        "codeUnits": [
+          97,
+          97,
+          97,
+          97,
+          97,
+          97,
+          97,
+          97,
+          97,
+          97,
+          97,
+          55357
+        ]
+      },
+      "from": "recorded: src/core/display-name.ts (a short id is the first 12 code units, which can end inside an astral character)",
+      "function": "display-name.shortId",
+      "id": "short-id-can-end-inside-an-astral-character",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "éééééééééééééééééééé"
+      ],
+      "expect": "éééééééééééé",
+      "from": "recorded: src/core/display-name.ts (a short id is the first 12 code units)",
+      "function": "display-name.shortId",
+      "id": "short-id-of-a-non-ascii-id-takes-12-code-units",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "petname": "café 😀",
+          "selfName": "日本"
+        }
+      ],
+      "expect": "café 😀 \"日本\" 0123456789ab",
+      "from": "recorded: src/core/display-name.ts (a display name carries non-ASCII names unchanged)",
+      "function": "display-name.formatDisplayName",
+      "id": "format-display-name-with-non-ascii-names",
       "kind": "function"
     }
   ]
