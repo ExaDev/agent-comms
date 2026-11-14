@@ -182,7 +182,7 @@ function needsRenewal(stored: Readonly<StoredIssuerKey>): boolean {
   return Number.isNaN(expiresAt) || Date.now() > expiresAt - RENEWAL_MARGIN_MS;
 }
 
-/** Renews a stored identity nearing certificate expiry by re-certifying its existing key pair, so its device-id is unchanged (see identity.ts's certifyKeyPair for why a fresh key pair would be wrong). Every other field in the record is kept. Returns the identity unchanged when it is not yet near expiry. The record is read again under the file's write lock before it is rewritten, so a field another process wrote since `stored` was read is kept, and a renewal another process has already done is not repeated. */
+/** Renews a stored identity nearing certificate expiry by re-certifying its existing key pair, so its device-id is unchanged (see identity.ts's certifyKeyPair for why a fresh key pair would be wrong). Every other field in the record is kept. Returns the identity unchanged when it is not yet near expiry. The record is read again under the file's write lock before it is rewritten, so a field another process wrote since `stored` was read is kept, and a renewal another process has already done is not repeated. A file that has gone since `stored` was read fails the renewal and is not written back: the copy read before the lock was taken is never used in its place, since it may be exactly what an operator has just moved aside. */
 function renewIfNeeded(
   file: string,
   stored: Readonly<StoredIssuerKey>,
@@ -190,7 +190,12 @@ function renewIfNeeded(
 ): PeerIdentity {
   if (!needsRenewal(stored)) return identityOfRecord(file, stored);
   return withWriteLock(file, () => {
-    const current = readIssuerRecord(file, guard) ?? stored;
+    const current = readIssuerRecord(file, guard);
+    if (current === undefined) {
+      throw new Error(
+        `${file} was removed while its certificate was being renewed; nothing was written`,
+      );
+    }
     if (!needsRenewal(current)) return identityOfRecord(file, current);
     let renewed: PeerIdentity;
     try {

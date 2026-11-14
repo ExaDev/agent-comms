@@ -56,3 +56,24 @@ it("keeps a field written between the first read and the renewal, and reads agai
   expect(Date.parse(after.expiresAt)).toBeGreaterThan(Date.now());
   expect(lockHeldOnReread).toEqual([true]);
 });
+
+it("fails the renewal when the file has gone since it was first read, and does not write the earlier copy back", () => {
+  const dir = scratchDirectory("agent-comms-renewal-removed-");
+  loadOrCreateMachineIdentity({ dir });
+  const file = machineIdentityFile({ dir });
+  const record = JSON.parse(fs.readFileSync(file, "utf-8")) as object;
+  fs.writeFileSync(
+    file,
+    JSON.stringify({ ...record, expiresAt: new Date(0).toISOString() }),
+  );
+  const guard = (value: unknown): value is StoredIssuerKey => {
+    // An operator moves the file aside after this process has read it.
+    fs.rmSync(file, { force: true });
+    return isStoredIssuerKey(value);
+  };
+
+  expect(() => loadOrCreateIssuerIdentity(file, guard)).toThrow(
+    /was removed while its certificate was being renewed/,
+  );
+  expect(fs.existsSync(file)).toBe(false);
+});
