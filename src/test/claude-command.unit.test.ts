@@ -1,33 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import {
-  CLAUDE_COMM_SHELL_PATTERNS,
-  isClaudeCodeComm,
-} from "../bridges/claude-code/claudeCommand.js";
+import { CLAUDE_COMM_SHELL_PATTERNS } from "../bridges/claude-code/claudeCommand.js";
 
-describe("isClaudeCodeComm", () => {
-  it.each([
-    "claude",
-    "/opt/homebrew/Caskroom/claude-code/2.1.311/claude",
-    "/Users/example/.local/bin/claude",
-    "/Users/example/.local/share/claude/versions/2.1.322",
-  ])("accepts %s", (comm) => {
-    expect(isClaudeCodeComm(comm)).toBe(true);
-  });
-
-  it.each([
-    "node",
-    "-zsh",
-    "tmux",
-    "/usr/bin/claude-notification",
-    "/Users/example/.local/share/claude/versions/notes",
-    "/Users/example/.local/share/claude/versions/2.1.322/helper",
-  ])("rejects %s", (comm) => {
-    expect(isClaudeCodeComm(comm)).toBe(false);
-  });
-});
-
+// The cases for isClaudeCodeComm itself are in the conformance corpus (conformance/function/claude-command.json). This stays here because it reads a file of this repository.
 describe("hooks/drain.sh", () => {
   it("matches the process forms the bridge matches", () => {
     const script = readFileSync(
