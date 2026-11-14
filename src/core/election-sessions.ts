@@ -46,6 +46,7 @@ export class ElectionSessions {
         if (this.enrolled.has(session)) {
           this.events.onCoordinatorClaim(handle, frame);
         }
+        return "continue";
       },
       () => this.events.onError,
     );

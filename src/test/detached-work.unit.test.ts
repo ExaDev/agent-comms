@@ -8,7 +8,12 @@ import type {
   ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
 import type { AcceptedMeshSession } from "wire-mesh-core/domain/mesh-session";
-import { consumeEach, reportRejection } from "../core/detached-work.js";
+import {
+  consumeEach,
+  reportRejection,
+  type ConsumeStep,
+} from "../core/detached-work.js";
+import { drainHubRequests, type HubSessionDeps } from "../core/hub-session.js";
 import { createTransportEvents } from "../core/transport-events.js";
 import type { TransportEventTargets } from "../core/transport-events.js";
 import { createRoomRouter } from "../core/room-router.js";
@@ -17,6 +22,8 @@ import { ElectionSessions } from "../core/election-sessions.js";
 
 const DEVICE_ID_HEX_LENGTH = 64;
 const HANDLE: ConnectionHandle = { id: "a".repeat(DEVICE_ID_HEX_LENGTH) };
+const STOPPING_ITEM = 2;
+const SKIPPED_REQUEST = 3;
 const SETTLE_MS = 20;
 
 const unhandled: unknown[] = [];
@@ -289,6 +296,7 @@ describe("a failure on one item of a consumed stream", () => {
       (item) => {
         if (item === FAILING_ITEM) throw new Error("item failed");
         handled.push(item);
+        return "continue";
       },
       () => (error) => {
         errors.push(error);
@@ -307,10 +315,11 @@ describe("a failure on one item of a consumed stream", () => {
       (async function* () {
         yield* [1, 2];
       })(),
-      async (item) => {
+      async (item): Promise<ConsumeStep> => {
         await settle();
         order.push(item);
         if (item === 1) throw new Error("first failed");
+        return "continue";
       },
       () => (error) => {
         errors.push(error);
@@ -329,7 +338,7 @@ describe("a failure on one item of a consumed stream", () => {
         yield 1;
         throw new Error("stream failed");
       })(),
-      () => undefined,
+      () => "continue",
       () => (error) => {
         errors.push(error);
       },
@@ -366,5 +375,63 @@ describe("the election session watch past a failing claim", () => {
 
     expect(handed).toHaveLength(claims.length);
     expect(errors.map((e) => e.message)).toEqual(["claim failed"]);
+  });
+});
+
+describe("a consumed stream that a handler ends", () => {
+  it("stops reading at once when the handler answers stop, and handles nothing after it", async () => {
+    const handled: number[] = [];
+
+    await consumeEach(
+      (async function* () {
+        yield* [1, STOPPING_ITEM, STOPPING_ITEM + 1];
+      })(),
+      (item) => {
+        handled.push(item);
+        return item === STOPPING_ITEM ? "stop" : "continue";
+      },
+      () => undefined,
+    );
+
+    expect(handled).toEqual([1, STOPPING_ITEM]);
+  });
+});
+
+describe("the hub request loop", () => {
+  it("reads on after a request whose dispatch throws, reports it, and skips the rest once the transport shuts down", async () => {
+    const errors: Error[] = [];
+    const handled: number[] = [];
+    let shuttingDown = false;
+    const request = (requestId: number): IncomingManageRequest => ({
+      ...roomRequest().request,
+      requestId,
+      fromDevice: Uint8Array.from({ length: 32 }, () => 1),
+    });
+    const deps = {
+      isShuttingDown: () => shuttingDown,
+      isTrusted: () => false,
+      events: fakeEvents((error) => {
+        errors.push(error);
+      }),
+      handleRoomRequest: async (incoming: IncomingManageRequest) => {
+        handled.push(incoming.requestId);
+        if (incoming.requestId === 1) throw new Error("dispatch failed");
+        if (incoming.requestId === 2) shuttingDown = true;
+        return Promise.resolve();
+      },
+    } as unknown as HubSessionDeps;
+
+    await drainHubRequests({
+      requests: (async function* () {
+        yield request(1);
+        yield request(2);
+        yield request(SKIPPED_REQUEST);
+      })(),
+      deps,
+      onKnownPeer: () => undefined,
+    });
+
+    expect(handled).toEqual([1, 2]);
+    expect(errors.map((error) => error.message)).toEqual(["dispatch failed"]);
   });
 });

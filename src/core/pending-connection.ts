@@ -6,7 +6,11 @@ import type {
   AcceptedMeshSession,
   IncomingManageRequest,
 } from "wire-mesh-core/domain/mesh-session";
-import type { ListenerPolicy } from "./transport.js";
+import type {
+  ConnectionHandle,
+  ListenerPolicy,
+  TransportEvents,
+} from "./transport.js";
 
 /** How long a connect_request may sit awaiting a human decision before this side gives up and rejects it automatically. Generous on purpose -- this bounds a human approval window, not a network timeout: 5 minutes covers a person genuinely being away from the terminal for a few minutes, while still guaranteeing every unanswered request eventually resolves instead of accumulating in pendingConnections indefinitely. */
 const PENDING_CONNECTION_TIMEOUT_MINUTES = 5;
@@ -50,4 +54,47 @@ export function expirePendingConnection(
     })
     .catch(() => undefined);
   pending.resolve("reject");
+}
+
+/** What holdConnectRequest needs: where pending requests are kept, how long one may wait, and where the request is announced. */
+export interface HoldConnectRequestOptions {
+  pendingConnections: Map<string, PendingConnection>;
+  timeoutMs: number;
+  events: Pick<TransportEvents, "onConnectionRequest">;
+}
+
+/**
+ * Holds a connect_request open until a human decides, and settles with that decision. The request is announced through `onConnectionRequest` and answered later by acceptConnection or rejectConnection, or by expirePendingConnection if neither happens within the timeout. The timer is unref()'d so a stray pending connection, whose timer failed to be cleared through some path, can never by itself keep the process alive for up to the timeout after everything else is done.
+ */
+export async function holdConnectRequest(
+  options: Readonly<HoldConnectRequestOptions>,
+  held: Readonly<{
+    request: IncomingManageRequest;
+    message: { dataPort: number; name: string; fingerprint: string };
+    handle: Readonly<ConnectionHandle>;
+    session: AcceptedMeshSession;
+  }>,
+): Promise<ConnectionDecision> {
+  const { pendingConnections, timeoutMs, events } = options;
+  const { request, message, handle, session } = held;
+  return new Promise<ConnectionDecision>((resolve) => {
+    pendingConnections.set(handle.id, {
+      respond: request.respond,
+      dataPort: message.dataPort,
+      name: message.name,
+      fingerprint: message.fingerprint,
+      policy: handle.policy,
+      session,
+      resolve,
+      timeoutHandle: setTimeout(() => {
+        expirePendingConnection(pendingConnections, handle.id);
+      }, timeoutMs).unref(),
+    });
+    events.onConnectionRequest(handle, {
+      peerId: handle.id,
+      dataPort: message.dataPort,
+      name: message.name,
+      fingerprint: message.fingerprint,
+    });
+  });
 }

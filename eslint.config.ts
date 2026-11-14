@@ -23,6 +23,23 @@ const RAW_CORPUS_FIXTURES = [
 
 const tsconfigRootDir = dirname(fileURLToPath(import.meta.url));
 
+const restrictedSyntax = [
+  {
+    message: "Dynamic imports are forbidden — use static imports instead.",
+    selector: "ImportExpression",
+  },
+  {
+    message:
+      "Inline type imports via import() are forbidden — use a static import instead.",
+    selector: "TSImportType",
+  },
+  {
+    message:
+      "localeCompare orders by the host's locale and collation data. Use compareCodeUnits (ids, keys, timestamps) or compareDisplayNames (names a person reads) from core/ordering.ts.",
+    selector: "CallExpression[callee.property.name='localeCompare']",
+  },
+];
+
 export default defineConfig(
   {
     // .stryker-tmp holds Stryker's own instrumented sandbox copies of the source (each mutant gets a full copy, deliberately carrying a @ts-nocheck pragma Stryker injects itself) -- linting them produces thousands of irrelevant errors against generated, throwaway code, not anything committed. reports/ is Stryker's own output (HTML/JSON), same reasoning.
@@ -94,29 +111,28 @@ export default defineConfig(
         "error",
         { argsIgnorePattern: "^_" },
       ],
-      "no-restricted-syntax": [
-        "error",
-        {
-          message:
-            "Dynamic imports are forbidden — use static imports instead.",
-          selector: "ImportExpression",
-        },
-        {
-          message:
-            "Inline type imports via import() are forbidden — use a static import instead.",
-          selector: "TSImportType",
-        },
-        {
-          message:
-            "localeCompare orders by the host's locale and collation data. Use compareCodeUnits (ids, keys, timestamps) or compareDisplayNames (names a person reads) from core/ordering.ts.",
-          selector: "CallExpression[callee.property.name='localeCompare']",
-        },
-      ],
+      "no-restricted-syntax": ["error", ...restrictedSyntax],
       "prettier/prettier": "error",
       "@typescript-eslint/require-await": "warn",
     },
   },
   eslintConfigPrettier,
+  {
+    // A loop over a stream a peer feeds ends at the first item that throws, and every later item on that session is then ignored. consumeEach (core/detached-work.ts) reports a failing item and reads on, so it is the one place such a loop is written.
+    files: ["src/core/*.ts"],
+    ignores: ["src/core/detached-work.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...restrictedSyntax,
+        {
+          message:
+            "Read a stream a peer feeds with consumeEach from core/detached-work.ts, which reports a failing item and carries on, not with a for await loop that ends at the first throw.",
+          selector: "ForOfStatement[await=true]",
+        },
+      ],
+    },
+  },
   {
     // Code that ships must not import test material: a test directory, a helper, a runner or a setup module. The tarball leaves those out, so such an import would fail only once installed, and the packaging check names files, not imports.
     files: ["src/**/*.{ts,tsx}"],
