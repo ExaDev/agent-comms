@@ -9,7 +9,9 @@
     "src/**/*.helper.ts",
     "src/**/*.runner.ts",
     "src/**/*.setup.ts",
-    "src/bridges/user/web/e2e"
+    "src/bridges/user/web/e2e",
+    "src/bridges/user/web/frontend",
+    "src/bridges/user/web/vite.config.ts"
   ],
   "extends": "./tsconfig.json"
 }

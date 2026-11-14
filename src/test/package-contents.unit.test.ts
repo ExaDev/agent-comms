@@ -33,6 +33,8 @@ describe("the package contents check", () => {
     "dist/core/tool.js",
     "dist/core/tool.d.ts",
     "src/core/tool.ts",
+    "dist/bridges/user/web/dist/bundle.js",
+    "dist/bridges/user/web/dist/index.html",
   ];
 
   it("accepts a listing of runtime files only", () => {
@@ -47,6 +49,11 @@ describe("the package contents check", () => {
     "dist/test/test-transport.js",
     "src/bridges/user/web/test/bridge-web-server.helper.ts",
     "dist/test/delivery-receipt.helper.js",
+    "dist/bridges/user/web/frontend/main.js",
+    "dist/bridges/user/web/frontend/components/chat-area.d.ts.map",
+    "dist/bridges/user/web/vite.config.js",
+    "dist/bridges/user/web/vite.config.d.ts",
+    "src/bridges/user/web/vite.config.ts",
     "dist/test/scratch-directory.setup.js",
   ])("refuses %s", (path) => {
     const result = check([...runtime, path]);
