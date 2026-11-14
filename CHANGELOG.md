@@ -1,3 +1,10 @@
+## [9.0.5](https://github.com/ExaDev/agent-comms/compare/v9.0.4...v9.0.5) (2026-11-14)
+
+### Bug Fixes
+
+* **web:** end the event pump's wait on disconnect and keep handler failures out of retries ([c1b0ac4](https://github.com/ExaDev/agent-comms/commit/c1b0ac484cb2d021a3a32d97dcfd9ad61d4230f8))
+* **web:** wait between retries of the dashboard's event subscription ([bc4684f](https://github.com/ExaDev/agent-comms/commit/bc4684fc0421a51cebff34b30eb955711bc70ec4))
+
 ## [9.0.4](https://github.com/ExaDev/agent-comms/compare/v9.0.3...v9.0.4) (2026-11-14)
 
 ### Bug Fixes
