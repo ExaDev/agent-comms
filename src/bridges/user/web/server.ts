@@ -415,6 +415,8 @@ export async function createWebServer(options?: {
   }, pairingSweepMs);
   rotationSweep.unref();
   // The sweep is the backstop. A rotation is acted on the moment the secret file changes, so a revoked socket does not stay open for the length of a poll.
+  // Opening the secret creates its directory, which the watch needs to exist.
+  pairing.current();
   const stopWatching = (
     watchPairingFile ? watchPairingSecret : () => () => undefined
   )({
