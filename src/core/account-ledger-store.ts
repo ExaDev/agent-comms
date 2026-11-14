@@ -54,7 +54,7 @@ export async function openAccountLedger(
   );
   const ledger = new AccountLedger({
     accountPrivateKey: options.userIdentity.privateKey,
-    writerNonce: loadOrCreateLedgerWriterNonce(
+    writerNonce: await loadOrCreateLedgerWriterNonce(
       options.userIdentityOptions,
       generateWriterNonce,
     ),
@@ -68,7 +68,7 @@ export async function openAccountLedger(
   const legacy = readLegacyIssuedGrants(options.userIdentityOptions);
   if (legacy.length > 0) {
     await ledger.recordGrants(legacy);
-    clearLegacyIssuedGrants(options.userIdentityOptions, legacy);
+    await clearLegacyIssuedGrants(options.userIdentityOptions, legacy);
   }
   return ledger;
 }

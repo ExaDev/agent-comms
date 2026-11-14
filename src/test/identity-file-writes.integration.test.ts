@@ -185,10 +185,14 @@ test(
   },
 );
 
-test("the nonce a first caller stored is the one every later caller reads", () => {
+test("the nonce a first caller stored is the one every later caller reads", async () => {
   const dir = scratchDirectory("agent-comms-identity-file-nonce-after-");
   loadOrCreateUserIdentity({ dir });
-  const first = loadOrCreateLedgerWriterNonce({ dir }, () => Uint8Array.of(1));
-  const second = loadOrCreateLedgerWriterNonce({ dir }, () => Uint8Array.of(2));
+  const first = await loadOrCreateLedgerWriterNonce({ dir }, () =>
+    Uint8Array.of(1),
+  );
+  const second = await loadOrCreateLedgerWriterNonce({ dir }, () =>
+    Uint8Array.of(2),
+  );
   expect(Buffer.from(second)).toEqual(Buffer.from(first));
 });

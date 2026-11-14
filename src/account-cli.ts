@@ -97,7 +97,7 @@ export async function runAccountCommand(
       fs.readFileSync(file, "utf-8"),
       await passphrase(io, false),
     );
-    const { identity, replacedFile } = importAccountKey(
+    const { identity, replacedFile } = await importAccountKey(
       userIdentityOptions,
       contents,
     );

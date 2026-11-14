@@ -145,7 +145,7 @@ describe("account export and import", () => {
     const machineB = tempDir();
     const file = path.join(tempDir(), "account.bundle");
     loadOrCreateUserIdentity({ dir: machineA });
-    saveUserDisplayName({ dir: machineA }, "work account");
+    await saveUserDisplayName({ dir: machineA }, "work account");
 
     await runAccountCommand(["export", file], io(PASSPHRASE), {
       dir: machineA,
@@ -155,7 +155,7 @@ describe("account export and import", () => {
     });
 
     expect(loadUserDisplayName({ dir: machineB })).toBe("work account");
-    importAccountKey(
+    await importAccountKey(
       { dir: machineB },
       { privateKey: readAccountContents({ dir: machineB }).privateKey },
     );
@@ -181,7 +181,7 @@ describe("account export and import", () => {
     const machineB = tempDir();
     const file = path.join(tempDir(), "account.bundle");
     loadOrCreateUserIdentity({ dir: machineA });
-    const nonceA = loadOrCreateLedgerWriterNonce(
+    const nonceA = await loadOrCreateLedgerWriterNonce(
       { dir: machineA },
       generateWriterNonce,
     );
@@ -193,7 +193,7 @@ describe("account export and import", () => {
       dir: machineB,
     });
 
-    const nonceB = loadOrCreateLedgerWriterNonce(
+    const nonceB = await loadOrCreateLedgerWriterNonce(
       { dir: machineB },
       generateWriterNonce,
     );
@@ -284,16 +284,16 @@ describe("account export and import", () => {
     expect(principalIn(machineB)).toBe(principalIn(machineA));
   });
 
-  it("imports back and forth between two accounts, keeping each replaced one set aside", () => {
+  it("imports back and forth between two accounts, keeping each replaced one set aside", async () => {
     const machine = tempDir();
     const first = loadOrCreateUserIdentity({ dir: machine });
     const second = generateIdentity();
     const firstHex = deviceIdToHex(Uint8Array.from(first.deviceId));
     const secondHex = deviceIdToHex(Uint8Array.from(second.deviceId));
 
-    importAccountKey({ dir: machine }, { privateKey: second.privateKey });
-    importAccountKey({ dir: machine }, { privateKey: first.privateKey });
-    const result = importAccountKey(
+    await importAccountKey({ dir: machine }, { privateKey: second.privateKey });
+    await importAccountKey({ dir: machine }, { privateKey: first.privateKey });
+    const result = await importAccountKey(
       { dir: machine },
       { privateKey: second.privateKey },
     );
@@ -311,7 +311,7 @@ describe("account export and import", () => {
     );
   });
 
-  it("refuses to set an account aside over a file holding a different key", () => {
+  it("refuses to set an account aside over a file holding a different key", async () => {
     const machine = tempDir();
     const held = loadOrCreateUserIdentity({ dir: machine });
     const heldHex = deviceIdToHex(Uint8Array.from(held.deviceId));
@@ -322,21 +322,23 @@ describe("account export and import", () => {
     const damaged = `${JSON.stringify({ privateKey: generateIdentity().privateKey, certificate: "x", expiresAt: new Date().toISOString() })}\n`;
     fs.writeFileSync(setAsideFile, damaged);
 
-    expect(() =>
+    await expect(
       importAccountKey(
         { dir: machine },
         { privateKey: generateIdentity().privateKey },
       ),
-    ).toThrow(expect.objectContaining({ code: "ACCOUNT_SET_ASIDE_CONFLICT" }));
+    ).rejects.toThrow(
+      expect.objectContaining({ code: "ACCOUNT_SET_ASIDE_CONFLICT" }),
+    );
     expect(fs.readFileSync(setAsideFile, "utf-8")).toBe(damaged);
     expect(principalIn(machine)).toBe(heldHex);
   });
 
-  it("changes nothing when the machine already holds the imported account", () => {
+  it("changes nothing when the machine already holds the imported account", async () => {
     const machineA = tempDir();
     const identity = loadOrCreateUserIdentity({ dir: machineA });
 
-    const result = importAccountKey(
+    const result = await importAccountKey(
       { dir: machineA },
       { privateKey: identity.privateKey },
     );

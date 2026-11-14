@@ -109,7 +109,7 @@ test("a corrupt identity file is refused and left as it is, never replaced with 
   expect(fs.readFileSync(identityFile(dir), "utf-8")).toBe("{not json");
 });
 
-test("valid key material beside malformed grant bookkeeping is refused at load, the same verdict the ledger writer nonce read would reach", () => {
+test("valid key material beside malformed grant bookkeeping is refused at load, the same verdict the ledger writer nonce read would reach", async () => {
   const dir = tempDir();
   loadOrCreateUserIdentity({ dir });
   const file = identityFile(dir);
@@ -123,9 +123,9 @@ test("valid key material beside malformed grant bookkeeping is refused at load, 
   expect(() => loadOrCreateUserIdentity({ dir })).toThrow(
     /does not hold a usable identity record/,
   );
-  expect(() =>
+  await expect(
     loadOrCreateLedgerWriterNonce({ dir }, () => new Uint8Array([1])),
-  ).toThrow(/does not hold a usable identity record/);
+  ).rejects.toThrow(/does not hold a usable identity record/);
   expect(fs.readFileSync(file, "utf-8")).toBe(damaged);
 });
 
@@ -215,14 +215,14 @@ function writeLegacyLedger(dir: string): void {
   });
 }
 
-test("loadOrCreateLedgerWriterNonce generates a nonce once and returns the same one after that", () => {
+test("loadOrCreateLedgerWriterNonce generates a nonce once and returns the same one after that", async () => {
   const dir = tempDir();
   loadOrCreateUserIdentity({ dir });
   const generated = generateWriterNonce();
   const generate = vi.fn(() => generated);
 
-  const first = loadOrCreateLedgerWriterNonce({ dir }, generate);
-  const second = loadOrCreateLedgerWriterNonce({ dir }, generate);
+  const first = await loadOrCreateLedgerWriterNonce({ dir }, generate);
+  const second = await loadOrCreateLedgerWriterNonce({ dir }, generate);
 
   expect(first).toEqual(generated);
   expect(second).toEqual(first);
@@ -244,7 +244,7 @@ test("readLegacyIssuedGrants is empty for an identity this build created", () =>
   expect(readLegacyIssuedGrants({ dir })).toEqual([]);
 });
 
-test("clearLegacyIssuedGrants removes exactly the migrated grants and keeps the key material", () => {
+test("clearLegacyIssuedGrants removes exactly the migrated grants and keeps the key material", async () => {
   const dir = tempDir();
   const identity = loadOrCreateUserIdentity({ dir });
   writeLegacyLedger(dir);
@@ -252,7 +252,7 @@ test("clearLegacyIssuedGrants removes exactly the migrated grants and keeps the 
     (grant) => grant.subject !== "device-b",
   );
 
-  clearLegacyIssuedGrants({ dir }, migrated);
+  await clearLegacyIssuedGrants({ dir }, migrated);
 
   expect(readLegacyIssuedGrants({ dir })).toEqual([
     { kind: "device", subject: "device-b", tokenId: LEGACY_TOKENS.deviceB },
@@ -263,10 +263,13 @@ test("clearLegacyIssuedGrants removes exactly the migrated grants and keeps the 
   );
 });
 
-test("a renewed identity keeps its ledger writer nonce and any unmigrated grants", () => {
+test("a renewed identity keeps its ledger writer nonce and any unmigrated grants", async () => {
   const dir = tempDir();
   loadOrCreateUserIdentity({ dir });
-  const nonce = loadOrCreateLedgerWriterNonce({ dir }, generateWriterNonce);
+  const nonce = await loadOrCreateLedgerWriterNonce(
+    { dir },
+    generateWriterNonce,
+  );
   writeLegacyLedger(dir);
   writeStoredRecord(dir, {
     ...readStoredRecord(dir),
@@ -275,44 +278,47 @@ test("a renewed identity keeps its ledger writer nonce and any unmigrated grants
 
   loadOrCreateUserIdentity({ dir });
 
-  expect(loadOrCreateLedgerWriterNonce({ dir }, generateWriterNonce)).toEqual(
-    nonce,
-  );
+  expect(
+    await loadOrCreateLedgerWriterNonce({ dir }, generateWriterNonce),
+  ).toEqual(nonce);
   expect(readLegacyIssuedGrants({ dir })).toEqual(LEGACY_GRANTS);
 });
 
-test("a user display name is stored beside the key, replaced, cleared, and survives the key being reloaded", () => {
+test("a user display name is stored beside the key, replaced, cleared, and survives the key being reloaded", async () => {
   const dir = tempDir();
   const identity = loadOrCreateUserIdentity({ dir });
   expect(loadUserDisplayName({ dir })).toBeUndefined();
 
-  saveUserDisplayName({ dir }, "work account");
+  await saveUserDisplayName({ dir }, "work account");
   expect(loadUserDisplayName({ dir })).toBe("work account");
   expect(loadOrCreateUserIdentity({ dir }).privateKey).toBe(
     identity.privateKey,
   );
 
-  saveUserDisplayName({ dir }, "home account");
+  await saveUserDisplayName({ dir }, "home account");
   expect(loadUserDisplayName({ dir })).toBe("home account");
 
-  saveUserDisplayName({ dir }, undefined);
+  await saveUserDisplayName({ dir }, undefined);
   expect(loadUserDisplayName({ dir })).toBeUndefined();
 });
 
-test("saving a user display name keeps the ledger writer nonce", () => {
+test("saving a user display name keeps the ledger writer nonce", async () => {
   const dir = tempDir();
   loadOrCreateUserIdentity({ dir });
-  const nonce = loadOrCreateLedgerWriterNonce({ dir }, generateWriterNonce);
-
-  saveUserDisplayName({ dir }, "work account");
-
-  expect(loadOrCreateLedgerWriterNonce({ dir }, generateWriterNonce)).toEqual(
-    nonce,
+  const nonce = await loadOrCreateLedgerWriterNonce(
+    { dir },
+    generateWriterNonce,
   );
+
+  await saveUserDisplayName({ dir }, "work account");
+
+  expect(
+    await loadOrCreateLedgerWriterNonce({ dir }, generateWriterNonce),
+  ).toEqual(nonce);
 });
 
-test("a user display name cannot be saved before the account exists", () => {
-  expect(() => {
-    saveUserDisplayName({ dir: tempDir() }, "too early");
-  }).toThrow(/no user identity persisted yet/);
+test("a user display name cannot be saved before the account exists", async () => {
+  await expect(
+    saveUserDisplayName({ dir: tempDir() }, "too early"),
+  ).rejects.toThrow(/no user identity persisted yet/);
 });

@@ -7,7 +7,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveDataDir } from "./data-directory.js";
-import { withWriteLock } from "./pid-lock-file.js";
+import { withWriteLockAsync } from "./pid-lock-file.js";
 import type { AccountContents } from "./account-bundle.js";
 import { certifyKeyPair } from "./identity.js";
 import type { PeerIdentity } from "./identity.js";
@@ -106,17 +106,17 @@ function requireStoredUserIdentity(file: string): StoredUserIdentity {
 }
 
 /** This machine's writer nonce for the account ledger, generated and persisted on first use. Two processes racing to create it can each end up with a different one; that is harmless, since each writes its own writer log and the ledger is the union of every writer log the account key recognises. What must never happen is two machines sharing one, which is why it is not part of an exported account. */
-export function loadOrCreateLedgerWriterNonce(
+export async function loadOrCreateLedgerWriterNonce(
   options: Readonly<UserIdentityOptions> | undefined,
   generate: () => Uint8Array,
-): Uint8Array<ArrayBuffer> {
+): Promise<Uint8Array<ArrayBuffer>> {
   const file = userIdentityFile(options);
   const existing = requireStoredUserIdentity(file).ledgerWriter;
   if (existing !== undefined) {
     return Uint8Array.from(Buffer.from(existing, "base64"));
   }
   // Read again under the lock: another process may have stored one meanwhile, and two would each keep its own, forking the writer log.
-  return withWriteLock(file, () => {
+  return withWriteLockAsync(file, () => {
     const stored = requireStoredUserIdentity(file);
     if (stored.ledgerWriter !== undefined) {
       return Uint8Array.from(Buffer.from(stored.ledgerWriter, "base64"));
@@ -180,12 +180,12 @@ function withoutMigrated(
 }
 
 /** Removes exactly the given legacy grants from user-identity.json once they are in the ledger. The file is re-read first, so a grant written meanwhile by an older build still running on this machine stays for the next migration rather than being lost. */
-export function clearLegacyIssuedGrants(
+export async function clearLegacyIssuedGrants(
   options: Readonly<UserIdentityOptions> | undefined,
   migrated: readonly Readonly<LegacyIssuedGrant>[],
-): void {
+): Promise<void> {
   const file = userIdentityFile(options);
-  withWriteLock(file, () => {
+  await withWriteLockAsync(file, () => {
     const { issuedDeviceGrants, issuedDmGrants, ...rest } =
       requireStoredUserIdentity(file);
     const device = withoutMigrated(issuedDeviceGrants, "device", migrated);
@@ -206,12 +206,12 @@ export function loadUserDisplayName(
 }
 
 /** Sets (or, given undefined, clears) the name this account asserts for itself, keeping the key material and every other field. Throws if the account has not been created yet. */
-export function saveUserDisplayName(
+export async function saveUserDisplayName(
   options: Readonly<UserIdentityOptions> | undefined,
   displayName: string | undefined,
-): void {
+): Promise<void> {
   const file = userIdentityFile(options);
-  withWriteLock(file, () => {
+  await withWriteLockAsync(file, () => {
     const next: StoredUserIdentity = { ...requireStoredUserIdentity(file) };
     if (displayName === undefined) delete next.displayName;
     else next.displayName = displayName;
@@ -262,10 +262,10 @@ function setAside(
 /**
  * Makes this machine hold the account whose contents are given, the deliberate copy that lets one principal span machines. The key is re-certified here (the device-id, which is the account's identity, depends only on the key). The name the account asserts for itself comes with it; an import carrying none leaves the name of the account already held untouched. This machine's own ledger writer nonce is kept, since it belongs to the machine, not the account. A different account already held here is moved aside to replacedUserIdentityFile first, never overwritten (see setAside for a record already set aside there); importing the account already held changes nothing but that name. Returns the imported identity and, when one was replaced, where the old record now is.
  */
-export function importAccountKey(
+export async function importAccountKey(
   options: Readonly<UserIdentityOptions> | undefined,
   contents: Readonly<AccountContents>,
-): { identity: PeerIdentity; replacedFile?: string } {
+): Promise<{ identity: PeerIdentity; replacedFile?: string }> {
   const file = userIdentityFile(options);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const imported = certifyKeyPair(contents.privateKey);
@@ -275,7 +275,7 @@ export function importAccountKey(
       ? {}
       : { displayName: contents.displayName }),
   });
-  return withWriteLock(file, () => {
+  return withWriteLockAsync(file, () => {
     const existing = readStoredUserIdentity(file);
     if (existing === undefined) {
       writeStoredUserIdentity(file, named(issuerKeyRecord(imported)));

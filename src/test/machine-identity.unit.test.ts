@@ -98,25 +98,25 @@ test("renewing a machine identity replaces the file atomically, so a reader neve
   expect(fs.statSync(file).ino).not.toBe(inodeBefore);
 });
 
-test("a machine's self display name is kept beside its key, and clearing it leaves the key alone", () => {
+test("a machine's self display name is kept beside its key, and clearing it leaves the key alone", async () => {
   const dir = tempDir();
   const identity = loadOrCreateMachineIdentity({ dir });
 
-  saveMachineDisplayName({ dir }, "joe-mbp");
+  await saveMachineDisplayName({ dir }, "joe-mbp");
   expect(loadMachineDisplayName({ dir })).toBe("joe-mbp");
   expect(loadOrCreateMachineIdentity({ dir }).privateKey).toBe(
     identity.privateKey,
   );
 
-  saveMachineDisplayName({ dir }, undefined);
+  await saveMachineDisplayName({ dir }, undefined);
   expect(loadMachineDisplayName({ dir })).toBeUndefined();
   expect(loadOrCreateMachineIdentity({ dir }).deviceId).toEqual(
     identity.deviceId,
   );
 });
 
-test("naming a machine before its identity exists fails loudly", () => {
-  expect(() => {
-    saveMachineDisplayName({ dir: tempDir() }, "too early");
-  }).toThrow(/no machine identity/);
+test("naming a machine before its identity exists fails loudly", async () => {
+  await expect(
+    saveMachineDisplayName({ dir: tempDir() }, "too early"),
+  ).rejects.toThrow(/no machine identity/);
 });
