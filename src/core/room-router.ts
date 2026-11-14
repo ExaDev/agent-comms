@@ -129,9 +129,13 @@ export function createRoomRouter(options: RoomRouterOptions): RoomRouter {
     origin: Readonly<RoomRequestOrigin>,
   ): Promise<void> {
     const verb = extractParamsVerb(request.command.params);
+    // The verb is what a peer sent: look it up among the handlers' own names only, never the members every object has (`constructor`, `toString`), which would be called as a handler.
     const handler =
-      request.command.verb !== FRAME_VERB && verb !== undefined
-        ? options.handlers?.[verb]
+      request.command.verb !== FRAME_VERB &&
+      verb !== undefined &&
+      options.handlers !== undefined &&
+      Object.hasOwn(options.handlers, verb)
+        ? options.handlers[verb]
         : undefined;
     if (handler === undefined) {
       await request

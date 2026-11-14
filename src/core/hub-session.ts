@@ -2,7 +2,7 @@
  * HubSession -- the relay-hub connection mode (agent-comms#151), split from wire-mesh-transport.ts under the max-lines cap the same way connection-approval.ts and its siblings were. A hub connection (wss://mesh.exadev.io/) is a RELAY, not a coordinator: no connect_request/introduce approval applies. The session's own self-advert is forwarded by the hub to every other connected agent and the hub answers with a catch-up of everyone already there, so peers discover each other purely through gossip. Messages ride relay-connect pairings -- sendManageRequest's own targetDevice routing, which the session layer wraps as relay-data to exactly that device.
  */
 
-import { reportRejection } from "./detached-work.js";
+import { consumeEach, reportRejection } from "./detached-work.js";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
@@ -224,22 +224,21 @@ export class HubSession {
     }
   }
 
-  /** Consumes one hub session's inbound relayed manage-requests until it ends, dispatching each in arrival order to dispatchHubRequest -- see that function's own doc for the actual per-request trust decision. Split out purely so the decision itself is directly unit-testable against fake requests/deps (hub-session-dispatch.test.ts), the same reason hub-forwarding.ts's own routeRoomRequestViaHub is a standalone function rather than a private method. Passes this.url through as dispatchHubRequest's own hubAddress -- this side's own dialled address for the hub every request on this specific session arrived over (agent-comms#216), the answering-side equivalent of tracePath's own local.hubAddress above. */
+  /** Consumes one hub session's inbound relayed manage-requests until it ends, dispatching each in arrival order to dispatchHubRequest, and reporting a request whose dispatch fails without ending the loop, so one request cannot stop every later one on the session -- see that function's own doc for the actual per-request trust decision. Split out purely so the decision itself is directly unit-testable against fake requests/deps (hub-session-dispatch.test.ts), the same reason hub-forwarding.ts's own routeRoomRequestViaHub is a standalone function rather than a private method. Passes this.url through as dispatchHubRequest's own hubAddress -- this side's own dialled address for the hub every request on this specific session arrived over (agent-comms#216), the answering-side equivalent of tracePath's own local.hubAddress above. */
   private consume(session: AcceptedMeshSession): void {
-    reportRejection(
-      (async () => {
-        for await (const request of session.incomingManageRequests) {
-          if (this.deps.isShuttingDown()) break;
-          await dispatchHubRequest({
-            request,
-            deps: this.deps,
-            onKnownPeer: (hex) => {
-              this.hubPeersKnown.add(hex);
-            },
-            hubAddress: this.url,
-          });
-        }
-      })(),
+    void consumeEach(
+      session.incomingManageRequests,
+      async (request) => {
+        if (this.deps.isShuttingDown()) return;
+        await dispatchHubRequest({
+          request,
+          deps: this.deps,
+          onKnownPeer: (hex) => {
+            this.hubPeersKnown.add(hex);
+          },
+          hubAddress: this.url,
+        });
+      },
       () => this.deps.events.onError,
     );
   }
