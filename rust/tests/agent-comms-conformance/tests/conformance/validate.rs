@@ -436,6 +436,7 @@ pub fn validate_manifest(value: &Value) -> Check<BTreeMap<String, (usize, Vec<St
 /// cannot hold: the corpus is canonical JSON, which writes `97.0` as `97`.
 pub fn self_check(failures: &mut Vec<String>) {
     check_float_round_trip(failures);
+    check_key_order(failures);
     let value = |text: &str| {
         serde_json::from_str::<Value>(text).map(|value| check_value(&value, "self-check"))
     };
@@ -482,6 +483,131 @@ fn check_float_round_trip(failures: &mut Vec<String>) {
                 )),
             },
             Err(error) => failures.push(format!("self-check: {literal} did not parse: {error}")),
+        }
+    }
+}
+
+/// One level of nesting while the text is scanned: an array, or an object with the last key it held, as UTF-16 code
+/// units, and whether the next string in it is a key.
+enum Frame {
+    Array,
+    Object {
+        expect_key: bool,
+        last: Option<Vec<u16>>,
+    },
+}
+
+/// The code units of the string literal that starts at `start` (a double quote), and the index just past it. An
+/// escape other than `\u` stands for one character; a `\u` escape stands for the code unit it names, so a lone
+/// surrogate stays one. `None` for a literal this scan cannot decode, which the JSON parser refuses as well.
+fn read_string_literal(text: &str, start: usize) -> Option<(Vec<u16>, usize)> {
+    let mut units = Vec::new();
+    let mut index = start + 1;
+    loop {
+        let character = text.get(index..)?.chars().next()?;
+        match character {
+            '"' => return Some((units, index + 1)),
+            '\\' => {
+                let escape = text.get(index + 1..)?.chars().next()?;
+                if escape == 'u' {
+                    units.push(u16::from_str_radix(text.get(index + 2..index + 6)?, 16).ok()?);
+                    index += 6;
+                } else {
+                    units.push(match escape {
+                        'b' => 0x08,
+                        'f' => 0x0c,
+                        'n' => 0x0a,
+                        'r' => 0x0d,
+                        't' => 0x09,
+                        other => u16::try_from(u32::from(other)).ok()?,
+                    });
+                    index += 1 + escape.len_utf8();
+                }
+            }
+            other => {
+                let mut buffer = [0u16; 2];
+                units.extend_from_slice(other.encode_utf16(&mut buffer));
+                index += other.len_utf8();
+            }
+        }
+    }
+}
+
+/// The first problem with the order of the keys in a corpus file's own text, which no parsed value can show: within
+/// every object the keys are in UTF-16 code unit order, each after the one before and none repeated, so integer-like
+/// keys are ordered as the strings they are, and a key holding an unpaired surrogate is refused, since no loader reads
+/// it the same way. The TypeScript loader applies the same rule.
+pub fn key_order_problem(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let mut stack: Vec<Frame> = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' => {
+                let Some((units, end)) = read_string_literal(text, index) else {
+                    return Some("a string literal cannot be read".to_owned());
+                };
+                if let Some(Frame::Object { expect_key, last }) = stack.last_mut()
+                    && *expect_key
+                {
+                    if char::decode_utf16(units.iter().copied()).any(|unit| unit.is_err()) {
+                        return Some("a key holds an unpaired surrogate".to_owned());
+                    }
+                    if last.as_ref().is_some_and(|before| units <= *before) {
+                        return Some(format!(
+                            "key {:?} is not after the key before it: keys are in UTF-16 code unit order without repeats",
+                            String::from_utf16_lossy(&units)
+                        ));
+                    }
+                    *last = Some(units);
+                    *expect_key = false;
+                }
+                index = end;
+                continue;
+            }
+            b'{' => stack.push(Frame::Object {
+                expect_key: true,
+                last: None,
+            }),
+            b'[' => stack.push(Frame::Array),
+            b'}' | b']' => {
+                stack.pop();
+            }
+            b',' => {
+                if let Some(Frame::Object { expect_key, .. }) = stack.last_mut() {
+                    *expect_key = true;
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    None
+}
+
+fn check_key_order(failures: &mut Vec<String>) {
+    let accepted = [
+        r#"{"a":1,"b":{"10":1,"9":2},"c":[{"x":1,"y":2}]}"#,
+        r#"{"\ud83d\ude00":1,"\ue000":2}"#,
+        r#"{"a":"{\"z\":1,\"b\":2}","b":1}"#,
+    ];
+    let refused = [
+        r#"{"b":1,"a":2}"#,
+        r#"{"a":1,"a":2}"#,
+        r#"{"9":1,"10":2}"#,
+        r#"{"\ue000":1,"\ud83d\ude00":2}"#,
+        r#"{"\ud800":1}"#,
+    ];
+    for text in accepted {
+        if let Some(problem) = key_order_problem(text) {
+            failures.push(format!(
+                "self-check: {text} must be in order, got {problem}"
+            ));
+        }
+    }
+    for text in refused {
+        if key_order_problem(text).is_none() {
+            failures.push(format!("self-check: {text} must be refused"));
         }
     }
 }

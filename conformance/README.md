@@ -14,7 +14,7 @@ conformance/
   fixtures/                  data the runners test themselves with
 ```
 
-The files are UTF-8 (a loader refuses a file that is not, rather than reading replacement characters) and canonical JSON: keys sorted, two-space indent, one element per line. The examples below show the fields in reading order and the files do not.
+The files are UTF-8 (a loader refuses a file that is not, rather than reading replacement characters) and canonical JSON: two-space indent, one element per line, and the keys of every object in UTF-16 code unit order (below), which every loader checks against the file's own text. The examples below show the fields in reading order and the files do not.
 
 ### Which files are corpus files
 
@@ -79,6 +79,7 @@ A function that is asynchronous is awaited.
 
 Each loader enforces these beside the schema:
 
+- The keys of every object in a corpus file or the manifest are in UTF-16 code unit order, each after the one before and none repeated. Integer-like keys are ordered as the strings they are (`"10"` before `"9"`), not numerically as `JSON.parse` shows them, so the check reads the text and not the parsed value, and a key holding an unpaired surrogate is refused.
 - A case id is not used twice, within a file or across files.
 - A case's `kind` is the name of its directory.
 - A manifest's `skip` lists are in ascending order, without repeats.

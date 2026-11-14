@@ -20,6 +20,16 @@ fn corpus_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../conformance")
 }
 
+/// A corpus file or manifest: its keys must be in canonical order in the text, which no parsed value shows, and then
+/// it is read as any JSON is.
+fn read_corpus_json(path: &Path) -> Result<Value, String> {
+    let text = fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    if let Some(problem) = validate::key_order_problem(&text) {
+        return Err(format!("{}: {problem}", path.display()));
+    }
+    serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))
+}
+
 fn read_json(path: &Path) -> Result<Value, String> {
     let text = fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
     serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))
@@ -82,7 +92,7 @@ fn fixture_names(relative: &str, failures: &mut Vec<String>) -> Vec<String> {
 /// Whether a loader rejects the file. A file that cannot be parsed is rejected too: it is how this loader meets an
 /// unpaired surrogate escape.
 fn rejects<T>(path: &Path, validate: &impl Fn(&Value) -> Result<T, String>) -> bool {
-    read_json(path).map_or(true, |value| validate(&value).is_err())
+    read_corpus_json(path).map_or(true, |value| validate(&value).is_err())
 }
 
 /// A negative fixture must fail for the rule it exists for. Each file in `invalid` has a file of the same name in
@@ -106,7 +116,7 @@ fn check_pairs<T>(
             failures.push(format!("{invalid}/{name} validated, and must not"));
         }
         if let Err(error) =
-            read_json(&root.join(repaired).join(&name)).and_then(|value| validate(&value))
+            read_corpus_json(&root.join(repaired).join(&name)).and_then(|value| validate(&value))
         {
             failures.push(format!("{repaired}/{name} must validate: {error}"));
         }
@@ -121,7 +131,7 @@ fn check_accepted<T>(
 ) {
     let root = corpus_root().join("fixtures").join(relative);
     for name in fixture_names(relative, failures) {
-        if let Err(error) = read_json(&root.join(&name)).and_then(|value| validate(&value)) {
+        if let Err(error) = read_corpus_json(&root.join(&name)).and_then(|value| validate(&value)) {
             failures.push(format!("{relative}/{name} must validate: {error}"));
         }
     }
@@ -199,7 +209,7 @@ fn check_corpus(root: &Path) -> (Vec<LoadedFile>, Vec<String>) {
     let mut files = Vec::new();
     let mut ids = BTreeSet::new();
     for name in found.selected {
-        let facts = read_json(&root.join(&name)).and_then(|value| {
+        let facts = read_corpus_json(&root.join(&name)).and_then(|value| {
             validate::validate_file(&value).map_err(|error| format!("{name}: {error}"))
         });
         match facts {
@@ -225,7 +235,7 @@ fn check_corpus(root: &Path) -> (Vec<LoadedFile>, Vec<String>) {
             Err(error) => problems.push(error),
         }
     }
-    match read_json(&root.join("manifest.json"))
+    match read_corpus_json(&root.join("manifest.json"))
         .and_then(|value| validate::validate_manifest(&value))
     {
         Ok(manifest) => {

@@ -15,7 +15,7 @@ import type {
   ValidateCase,
 } from "./conformance/corpus-types.js";
 import { KINDS, SKIP_VALUES } from "./conformance/corpus-types.js";
-import { readJson } from "./conformance/read-json.js";
+import { readJson, readText } from "./conformance/read-json.js";
 import {
   decodeValue,
   textToCodeUnits,
@@ -23,8 +23,9 @@ import {
   textToString,
 } from "./conformance/text.js";
 import {
-  validateCorpusFile,
-  validateManifest,
+  keyOrderProblems,
+  validateCorpusText,
+  validateManifestText,
 } from "./conformance/validate.js";
 import {
   errorCode,
@@ -216,10 +217,10 @@ function fixtureNames(directory: string): readonly string[] {
 /** Whether a loader rejects the file: a file that cannot be parsed is rejected too. */
 function rejects(
   path: string,
-  validate: (value: unknown) => { readonly ok: boolean },
+  validate: (text: string) => { readonly ok: boolean },
 ): boolean {
   try {
-    return !validate(readJson(path)).ok;
+    return !validate(readText(path)).ok;
   } catch {
     return true;
   }
@@ -231,7 +232,7 @@ function rejects(
 function expectPairs(
   invalid: string,
   repaired: string,
-  validate: (value: unknown) => {
+  validate: (text: string) => {
     readonly ok: boolean;
     readonly problems?: readonly string[];
   },
@@ -245,7 +246,7 @@ function expectPairs(
   );
   expect(accepted, `${invalid} fixtures that validate`).toEqual([]);
   for (const name of names) {
-    const result = validate(readJson(join(FIXTURES, repaired, name)));
+    const result = validate(readText(join(FIXTURES, repaired, name)));
     expect(result.ok ? [] : result.problems, `${repaired}/${name}`).toEqual([]);
   }
 }
@@ -288,11 +289,15 @@ describe("corpus loading", () => {
   });
 
   it("rejects every invalid-case fixture, each for its one defect", () => {
-    expectPairs("invalid-cases", "repaired-cases", validateCorpusFile);
+    expectPairs("invalid-cases", "repaired-cases", validateCorpusText);
   });
 
   it("rejects every invalid manifest fixture, each for its one defect", () => {
-    expectPairs("manifests/invalid", "manifests/repaired", validateManifest);
+    expectPairs(
+      "manifests/invalid",
+      "manifests/repaired",
+      validateManifestText,
+    );
   });
 
   it("rejects every invalid corpus fixture, each for its one defect", () => {
@@ -312,17 +317,33 @@ describe("corpus loading", () => {
 
   it("accepts every valid fixture", () => {
     for (const name of fixtureNames("valid-cases")) {
-      const result = validateCorpusFile(
-        readJson(join(FIXTURES, "valid-cases", name)),
+      const result = validateCorpusText(
+        readText(join(FIXTURES, "valid-cases", name)),
       );
       expect(result.ok ? [] : result.problems, name).toEqual([]);
     }
     for (const name of fixtureNames("manifests/valid")) {
-      const result = validateManifest(
-        readJson(join(FIXTURES, "manifests", "valid", name)),
+      const result = validateManifestText(
+        readText(join(FIXTURES, "manifests", "valid", name)),
       );
       expect(result.ok ? [] : result.problems, name).toEqual([]);
     }
+  });
+
+  it("orders keys as UTF-16 code units, each after the one before, whatever JSON.parse does with them", () => {
+    expect(
+      keyOrderProblems('{"a":1,"b":{"10":1,"9":2},"c":[{"x":1,"y":2}]}'),
+    ).toEqual([]);
+    expect(keyOrderProblems('{"b":1,"a":2}')).toHaveLength(1);
+    expect(keyOrderProblems('{"a":1,"a":2}')).toHaveLength(1);
+    // Numeric order for integer-like keys is what JSON.parse shows and what the file must not use.
+    expect(keyOrderProblems('{"9":1,"10":2}')).toHaveLength(1);
+    // An astral character sorts by its surrogate, below a private use character, and the other way round by code point.
+    expect(keyOrderProblems('{"\ud83d\ude00":1,"\ue000":2}')).toEqual([]);
+    expect(keyOrderProblems('{"\ue000":1,"\ud83d\ude00":2}')).toHaveLength(1);
+    expect(keyOrderProblems('{"\ud800":1}')).toHaveLength(1);
+    // A string value holding braces, commas and quotes does not start or end an object.
+    expect(keyOrderProblems('{"a":"{\\"z\\":1,\\"b\\":2}","b":1}')).toEqual([]);
   });
 
   it("reads the four special numbers as the numbers they name, and nothing else", () => {
@@ -422,8 +443,8 @@ for (const { name, file } of corpus) {
 }
 
 describe("corpus completeness", () => {
-  const manifest = validateManifest(
-    readJson(join(CORPUS_ROOT, "manifest.json")),
+  const manifest = validateManifestText(
+    readText(join(CORPUS_ROOT, "manifest.json")),
   );
 
   it("ran every case the manifest holds that this implementation does not skip", () => {
