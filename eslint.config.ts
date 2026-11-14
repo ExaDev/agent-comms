@@ -106,6 +106,11 @@ export default defineConfig(
             "Inline type imports via import() are forbidden — use a static import instead.",
           selector: "TSImportType",
         },
+        {
+          message:
+            "localeCompare orders by the host's locale and collation data. Use compareCodeUnits (ids, keys, timestamps) or compareDisplayNames (names a person reads) from core/ordering.ts.",
+          selector: "CallExpression[callee.property.name='localeCompare']",
+        },
       ],
       "prettier/prettier": "error",
       "@typescript-eslint/require-await": "warn",

@@ -142,3 +142,48 @@ test("a store with no registry yet lists no agents", async () => {
   const store = tempStore();
   expect(await store.listAgents("whoever")).toEqual([]);
 });
+
+/** The one form the store writes: UTC, millisecond precision, fixed width, which makes UTF-16 order chronological. */
+const TIMESTAMP_FORM = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
+
+test("every timestamp the store writes has the one fixed UTC form its sorts rely on", async () => {
+  const store = tempStore();
+  const alice = await store.registerAgent({
+    name: "alice",
+    harness: "pi",
+    cwd: "/tmp/a",
+    pid: process.pid,
+    visibility: "visible",
+    tags: [],
+  });
+  const bob = await store.registerAgent({
+    name: "bob",
+    harness: "pi",
+    cwd: "/tmp/b",
+    pid: process.pid,
+    visibility: "visible",
+    tags: [],
+  });
+  const room = await store.createRoom({
+    name: "room",
+    type: "public",
+    owner: alice.id,
+    description: "x",
+  });
+  await store.sendRoomMessage(room.id, alice.id, "hello");
+  await store.sendDm(alice.id, bob.id, "hi");
+
+  const roomMessages = await store.readRoomMessages(room.id);
+  const events = await store.drainDelivery(bob.id);
+  const stamps = [
+    ...roomMessages.map((message) => message.timestamp),
+    ...events.flatMap((event) =>
+      event.type === "room_message" || event.type === "dm"
+        ? [event.message.timestamp]
+        : [],
+    ),
+  ];
+
+  expect(stamps.length).toBeGreaterThan(1);
+  for (const stamp of stamps) expect(stamp).toMatch(TIMESTAMP_FORM);
+});
