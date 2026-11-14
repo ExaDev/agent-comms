@@ -45,6 +45,8 @@ interface PendingCapabilityAsk {
   scope: Readonly<CapabilityScope>;
   requesterDevice: DeviceId;
   decide: (decision: Readonly<CapabilityGrantDecision>) => Promise<void>;
+  /** Drops this ask from the pending set when wire-mesh-core's own window for it has passed. */
+  expiry: ReturnType<typeof setTimeout>;
 }
 
 export class CapabilityAskAdmission {
@@ -63,21 +65,32 @@ export class CapabilityAskAdmission {
       bearerDevice: options.bearerDevice,
       timeoutMs: options.timeoutMs,
       onRequest: (event: Readonly<CapabilityGrantRequestEvent>) => {
-        this.handleCapabilityRequest(options.capability, event);
+        this.handleCapabilityRequest(
+          options.capability,
+          options.timeoutMs,
+          event,
+        );
       },
     });
   }
 
   private handleCapabilityRequest(
     capability: string,
+    timeoutMs: number,
     event: Readonly<CapabilityGrantRequestEvent>,
   ): void {
     const requestId = nanoid();
+    // wire-mesh-core answers the requester with a timeout once the window passes and ignores any later decision, but never tells this side, so an ask left in the pending set would stay listed and a later accept would report success for a request nobody is waiting on. Its own timer was started just before onRequest ran, so this one, for the same period, fires after it.
+    const expiry = setTimeout(() => {
+      this.pending.delete(requestId);
+    }, timeoutMs);
+    expiry.unref();
     this.pending.set(requestId, {
       capability,
       scope: event.scope,
       requesterDevice: event.requesterDevice,
       decide: event.decide,
+      expiry,
     });
 
     const deliveryEvent: DeliveryEvent = {
@@ -126,6 +139,7 @@ export class CapabilityAskAdmission {
   ): Promise<void> {
     const pending = this.requirePending(requestId);
     this.pending.delete(requestId);
+    clearTimeout(pending.expiry);
     await pending.decide({
       kind: "accept",
       capability: options.capability ?? pending.capability,
@@ -143,6 +157,7 @@ export class CapabilityAskAdmission {
   ): Promise<void> {
     const pending = this.requirePending(requestId);
     this.pending.delete(requestId);
+    clearTimeout(pending.expiry);
     await pending.decide({
       kind: "reject",
       ...(reason !== undefined ? { reason } : {}),
