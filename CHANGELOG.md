@@ -1,3 +1,19 @@
+## [9.1.0](https://github.com/ExaDev/agent-comms/compare/v9.0.15...v9.1.0) (2026-11-14)
+
+### Features
+
+* **core:** report an account ledger log that stays behind an announced head ([e858989](https://github.com/ExaDev/agent-comms/commit/e85898919a47c68ac4da0ad69bc55580e65d2e8b))
+
+### Bug Fixes
+
+* **core:** bound what the ledger gap tracker keeps and prints, and keep running when a round fails ([ec9912b](https://github.com/ExaDev/agent-comms/commit/ec9912b8004372b5a71b2d03a56d320f4163f2f6))
+* **core:** count every round this machine reached the account in, and keep what is reported once ([6fac021](https://github.com/ExaDev/agent-comms/commit/6fac021e0f634fb4e9d839fac4a48c6f0990a958))
+* **core:** keep counting a round when one device's membership or the hub listing cannot be read ([c429cfc](https://github.com/ExaDev/agent-comms/commit/c429cfc10b82ede96f90998cce6bbdb19aad6a39))
+
+### Build
+
+* **deps:** bump wire-mesh-core to 4.2.0 ([c2399e2](https://github.com/ExaDev/agent-comms/commit/c2399e22b291d33ca8e43aa187c637ab3ee0e740))
+
 ## [9.0.15](https://github.com/ExaDev/agent-comms/compare/v9.0.14...v9.0.15) (2026-11-14)
 
 ### Bug Fixes
