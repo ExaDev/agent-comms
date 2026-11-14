@@ -108,6 +108,8 @@ async function nextMeshEvent(
   return result.done === true ? undefined : result.value;
 }
 
+/** An event id of an instance no publisher of this run has. */
+const FOREIGN_EVENT_ID = "0000000000000000.1";
 /** A device-id is a hex-encoded SHA-256 hash: 32 bytes, 64 hex characters. */
 const DEVICE_ID_HEX_LENGTH = 64;
 const DRAIN_IDLE_MS = 300;
@@ -266,6 +268,19 @@ describe("oRPC router over /ws/mesh", () => {
     // Proves genuine offset-based resume, not "replay the whole buffer": the room created before disconnecting was already consumed by the original iterator, so it must not come through again here.
     expect(replayedRoomNames).not.toContain("before-disconnect-room");
     await resumed.return?.(undefined);
+  });
+
+  it("starts a subscription whose lastEventId belongs to another instance from a state_sync, not a replay", async () => {
+    const { client } = await setup();
+    await client.createRoom({ name: "events-before", type: "public" });
+
+    const iterator = toMeshIterator(
+      await client.subscribeEvents({ lastEventId: FOREIGN_EVENT_ID }),
+    );
+    const first = await nextMeshEvent(iterator);
+
+    expect(first?.kind).toBe("state_sync");
+    await iterator.return?.(undefined);
   });
 
   it("getRoomMessages returns a sent message's structured history, not an ActionResult", async () => {

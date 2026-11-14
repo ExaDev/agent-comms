@@ -131,16 +131,14 @@ export const meshRouter = {
     // lastEventId is set two ways: oRPC's own RetryLinkPlugin threads it automatically on a mid-stream reconnect (the protocol-level `lastEventId` above); a tab that reconnects from cold (a fresh subscribeEvents call, e.g. after being closed and reopened) has to pass it explicitly as input instead, since there's no in-flight call for the protocol layer to resume.
     const resumeFrom = lastEventId ?? input.lastEventId;
 
-    if (resumeFrom === undefined) {
-      yield {
-        kind: "state_sync" as const,
-        state: toBrowserState(context.controller.meshStore.serialise()),
-      };
-    }
-
+    // The publisher decides between replaying what the id's holder missed and starting from this snapshot: an id from before a restart, or older than the retained events, cannot be resumed from.
     yield* context.publisher.subscribe({
       ...(signal ? { signal } : {}),
       ...(resumeFrom !== undefined ? { lastEventId: resumeFrom } : {}),
+      snapshot: () => ({
+        kind: "state_sync" as const,
+        state: toBrowserState(context.controller.meshStore.serialise()),
+      }),
     });
   }),
 };

@@ -155,25 +155,36 @@ it("retries after a drop mid-stream, resumes from the last event id and starts t
   expect(resumedFrom).toEqual([undefined, undefined, "b"]);
 });
 
-it("does not resubscribe because the handler threw: it reports the failure and carries on with the next event", async () => {
+it("resynchronises from a snapshot after the handler threw: reports it, forgets the id and resubscribes after a wait", async () => {
   const reported: unknown[] = [];
   const applied: number[] = [];
+  const resumedFrom: (string | undefined)[] = [];
   const failure = new Error("handler failed");
-  const subscribe = vi.fn(async (): Promise<AsyncIterable<TestEvent>> =>
-    stream(
-      [
-        withEventMeta({ n: 1 }, { id: "a" }),
-        withEventMeta({ n: SECOND_ATTEMPT }, { id: "b" }),
-        withEventMeta({ n: THIRD_ATTEMPT }, { id: "c" }),
-      ],
-      false,
-    ),
+  let attempt = 0;
+  const subscribe = vi.fn(
+    async (
+      lastEventId: string | undefined,
+    ): Promise<AsyncIterable<TestEvent>> => {
+      resumedFrom.push(lastEventId);
+      attempt++;
+      if (attempt === 1) {
+        return stream(
+          [
+            withEventMeta({ n: 1 }, { id: "a" }),
+            withEventMeta({ n: SECOND_ATTEMPT }, { id: "b" }),
+            withEventMeta({ n: THIRD_ATTEMPT }, { id: "c" }),
+          ],
+          false,
+        );
+      }
+      return stream([withEventMeta({ n: SECOND_ATTEMPT }, { id: "x" })], false);
+    },
   );
 
-  await pumpEvents(
+  const pumped = pumpEvents(
     subscribe,
     (event) => {
-      if (event.n === SECOND_ATTEMPT) throw failure;
+      if (event.n === SECOND_ATTEMPT && attempt === 1) throw failure;
       applied.push(event.n);
     },
     (error) => {
@@ -181,13 +192,44 @@ it("does not resubscribe because the handler threw: it reports the failure and c
     },
     new AbortController().signal,
   );
-
+  await settle();
   expect(subscribe).toHaveBeenCalledTimes(1);
+  // The failed event's own id, and the id before it, are both dropped: the next subscription asks for a snapshot.
+  await vi.advanceTimersByTimeAsync(PUMP_RETRY_INITIAL_MS * PUMP_RETRY_FACTOR);
+  await pumped;
+
   expect(reported).toEqual([failure]);
-  expect(applied).toEqual([1, THIRD_ATTEMPT]);
+  expect(resumedFrom).toEqual([undefined, undefined]);
+  expect(applied).toEqual([1, SECOND_ATTEMPT]);
 });
 
-it("resumes from the last event the handler applied, not from one it failed on", async () => {
+it("backs off between resynchronisations when the handler keeps failing", async () => {
+  const subscribe = vi.fn(async (): Promise<AsyncIterable<TestEvent>> =>
+    stream([{ n: 1 }], false),
+  );
+  const controller = new AbortController();
+
+  const pumped = pumpEvents(
+    subscribe,
+    () => {
+      if (subscribe.mock.calls.length >= SPIN_LIMIT) controller.abort();
+      throw new Error("handler failed");
+    },
+    ignore,
+    controller.signal,
+  );
+  await settle();
+  expect(subscribe).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(PUMP_RETRY_INITIAL_MS);
+  expect(subscribe).toHaveBeenCalledTimes(SECOND_ATTEMPT);
+  await vi.advanceTimersByTimeAsync(PUMP_RETRY_INITIAL_MS * PUMP_RETRY_FACTOR);
+  expect(subscribe).toHaveBeenCalledTimes(THIRD_ATTEMPT);
+
+  controller.abort();
+  await pumped;
+});
+
+it("does not record the id of an event the handler failed on", async () => {
   const resumedFrom: (string | undefined)[] = [];
   let attempt = 0;
   const subscribe = vi.fn(
@@ -196,28 +238,23 @@ it("resumes from the last event the handler applied, not from one it failed on",
     ): Promise<AsyncIterable<TestEvent>> => {
       resumedFrom.push(lastEventId);
       attempt++;
-      if (attempt > 1) return stream([], false);
-      return stream(
-        [
-          withEventMeta({ n: 1 }, { id: "a" }),
-          withEventMeta({ n: SECOND_ATTEMPT }, { id: "b" }),
-        ],
-        true,
-      );
+      if (attempt === 1) {
+        return stream([withEventMeta({ n: 1 }, { id: "a" })], true);
+      }
+      return stream([], false);
     },
   );
 
   const pumped = pumpEvents(
     subscribe,
-    (event) => {
-      if (event.n === SECOND_ATTEMPT) throw new Error("handler failed");
-    },
+    () => undefined,
     ignore,
     new AbortController().signal,
   );
   await vi.advanceTimersByTimeAsync(PUMP_RETRY_INITIAL_MS);
   await pumped;
 
+  // An event applied and then a transport drop resumes from that event's id, in contrast to a handler failure above.
   expect(resumedFrom).toEqual([undefined, "a"]);
 });
 

@@ -463,14 +463,15 @@ const tabRouter = {
     input,
     signal,
   }) {
-    if (input.lastEventId === undefined) {
-      yield { kind: "state_sync" as const, state: buildSerialisedState() };
-    }
     yield* localPublisher.subscribe({
       ...(signal ? { signal } : {}),
       ...(input.lastEventId !== undefined
         ? { lastEventId: input.lastEventId }
         : {}),
+      snapshot: () => ({
+        kind: "state_sync" as const,
+        state: buildSerialisedState(),
+      }),
     });
   }),
 
