@@ -4,7 +4,11 @@
  * Admission is deny-by-default, like every other cross-machine decision here: a connection is registered with the hub only once it gossips an advert for a device isAdmitted accepts, and every gossiped advert naming a device it does not accept is dropped before the hub sees it. A connection that never gossips an admitted device can neither be named by a relay-connect nor relay anything, and learns nothing, since the hub's catch-up is sent only in answer to a registered connection's gossip.
  */
 
-import { reportRejection } from "./detached-work.js";
+import {
+  consumeEach,
+  reportRejection,
+  type ConsumeStep,
+} from "./detached-work.js";
 import { createServer, type Server } from "node:http";
 import * as os from "node:os";
 import { WebSocketServer } from "ws";
@@ -32,6 +36,15 @@ const RELAY_FRAME_MIB = 16;
 export const MAX_RELAY_FRAME_BYTES =
   RELAY_FRAME_MIB * KIB_PER_MIB * BYTES_PER_KIB;
 
+/** How long a client of the relay has to send its request headers and to complete a request: ample for any real client on a local network, and short because every such client is unauthenticated until it has gossiped an admitted device. */
+export const RELAY_REQUEST_TIMEOUT_MS = 10_000;
+
+/** How long a WebSocket client of the relay has, from connecting, to gossip an advert for an admitted device. A connection that has not is closed: it can neither be named by a relay-connect nor relay anything, so holding it open serves no one. */
+export const RELAY_ADMISSION_TIMEOUT_MS = 30_000;
+
+/** HTTP status for a request to the relay that is not a WebSocket upgrade: the relay speaks nothing else. */
+const HTTP_UPGRADE_REQUIRED = 426;
+
 /** The loopback address every relay also offers, so a peer on the same machine reaches it without leaving the host. */
 const LOOPBACK_HOST = "127.0.0.1";
 
@@ -42,6 +55,12 @@ export interface RelayServerOptions {
   isAdmitted: (deviceHex: string) => boolean;
   /** Reports a failure of the uplink, which is otherwise detached from any caller. */
   onError: (error: Error) => void;
+  /** Overrides RELAY_REQUEST_TIMEOUT_MS, the time a client has to send its headers and complete a request. A test sets it small. */
+  requestTimeoutMs?: number | undefined;
+  /** Overrides RELAY_ADMISSION_TIMEOUT_MS, the time a WebSocket client has to gossip an admitted device. A test sets it small. */
+  admissionTimeoutMs?: number | undefined;
+  /** Overrides how often Node checks connections against the request timeouts (its default is thirty seconds, which makes a timeout take effect up to that much late). A test sets it small. */
+  connectionsCheckingIntervalMs?: number | undefined;
 }
 
 export class RelayServer {
@@ -50,24 +69,56 @@ export class RelayServer {
   });
   /** The devices (hex) each connected client has registered, so an advert for one of them arriving from upstream never displaces the client's own registration. */
   private readonly clientDevices = new Map<Readonly<Connection>, Set<string>>();
-  private readonly http: Server = createServer();
-  private readonly wss = new WebSocketServer({
-    server: this.http,
-    maxPayload: MAX_RELAY_FRAME_BYTES,
-  });
+  private readonly http: Server;
+  private readonly wss: WebSocketServer;
   private port = 0;
   /** Settles once the previous uplink has been forgotten by the hub, which refuses a second while one is attached. */
   private uplinkDone: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: Readonly<RelayServerOptions>) {
+    const requestTimeoutMs =
+      options.requestTimeoutMs ?? RELAY_REQUEST_TIMEOUT_MS;
+    // A request that is not a WebSocket upgrade is answered at once and its connection closed, and a client that sends headers or a request too slowly is cut off by the timeouts: nothing unauthenticated holds a connection open for ever.
+    this.http = createServer(
+      {
+        requestTimeout: requestTimeoutMs,
+        headersTimeout: requestTimeoutMs,
+        ...(options.connectionsCheckingIntervalMs !== undefined && {
+          connectionsCheckingInterval: options.connectionsCheckingIntervalMs,
+        }),
+      },
+      (_request, response) => {
+        response.writeHead(HTTP_UPGRADE_REQUIRED, {
+          "Content-Type": "text/plain; charset=utf-8",
+          Connection: "close",
+          Upgrade: "websocket",
+        });
+        response.end("Upgrade required");
+      },
+    );
+    this.wss = new WebSocketServer({
+      server: this.http,
+      maxPayload: MAX_RELAY_FRAME_BYTES,
+    });
     // The WebSocket server re-emits an error of its listener; with no handler it would end the process.
     this.wss.on("error", (error) => {
       this.options.onError(error);
     });
     this.wss.on("connection", (socket) => {
       socket.binaryType = "arraybuffer";
+      // The error event a message over the size limit raises is this connection's alone: reported, never left to end the process.
+      socket.on("error", (error) => {
+        this.options.onError(error);
+      });
+      const admission = setTimeout(() => {
+        socket.terminate();
+      }, options.admissionTimeoutMs ?? RELAY_ADMISSION_TIMEOUT_MS);
       reportRejection(
-        this.serve(wrapWsSocket(socket)),
+        this.serve(wrapWsSocket(socket), () => {
+          clearTimeout(admission);
+        }).finally(() => {
+          clearTimeout(admission);
+        }),
         () => this.options.onError,
       );
     });
@@ -151,32 +202,40 @@ export class RelayServer {
     });
   }
 
-  /** Drives one connection: filters its gossip to admitted devices, registers it with the hub on its first admitted advert, and hands the hub every frame from then on. */
-  private async serve(connection: Readonly<Connection>): Promise<void> {
-    let registered = false;
+  /** Drives one connection: filters its gossip to admitted devices, registers it with the hub on its first admitted advert (calling `onRegistered`), and hands the hub every frame from then on. A frame that cannot be handled is reported and the next is still read, so one bad frame never ends a connection's service; the loop ends when the connection's own stream does. */
+  private async serve(
+    connection: Readonly<Connection>,
+    onRegistered: () => void,
+  ): Promise<void> {
+    const state = { registered: false };
     const devices = new Set<string>();
     this.clientDevices.set(connection, devices);
     try {
-      for await (const frame of connection.receive()) {
-        const admitted = this.admit(frame);
-        if (admitted?.type === "gossip") {
-          for (const advert of admitted.peers) {
-            devices.add(deviceIdToHex(advert.device));
+      await consumeEach(
+        connection.receive(),
+        async (frame): Promise<ConsumeStep> => {
+          const admitted = this.admit(frame);
+          if (admitted?.type === "gossip") {
+            for (const advert of admitted.peers) {
+              devices.add(deviceIdToHex(advert.device));
+            }
           }
-        }
-        if (admitted === undefined) continue;
-        if (!registered) {
-          if (admitted.type !== "gossip") continue;
-          this.hub.registerConnection(connection);
-          registered = true;
-        }
-        await this.hub.onFrame(connection, admitted);
-      }
-    } catch {
-      // A connection that fails mid-stream is simply gone; its registration is cleaned up below.
+          if (admitted === undefined) return "continue";
+          if (!state.registered) {
+            if (admitted.type !== "gossip") return "continue";
+            this.hub.registerConnection(connection);
+            state.registered = true;
+            onRegistered();
+          }
+          await this.hub.onFrame(connection, admitted);
+          return "continue";
+        },
+        () => this.options.onError,
+      );
     } finally {
       this.clientDevices.delete(connection);
-      if (registered) this.hub.onDisconnect(connection);
+      if (state.registered) this.hub.onDisconnect(connection);
+      await connection.close().catch(() => undefined);
     }
   }
 
