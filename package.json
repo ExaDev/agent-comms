@@ -87,7 +87,10 @@
   "files": [
     "dist",
     "src",
-    "!src/test",
+    "!src/**/test",
+    "!src/**/*.helper.ts",
+    "!src/**/*.runner.ts",
+    "!src/**/*.setup.ts",
     "!src/**/*.test.ts",
     "!src/**/*.test.tsx",
     "!src/bridges/user/web/e2e",
@@ -131,7 +134,7 @@
     "url": "git+https://github.com/ExaDev/agent-comms.git"
   },
   "scripts": {
-    "_build": "tsc && tsx scripts/copy-web-assets.ts && printf '#!/usr/bin/env node\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js",
+    "_build": "rm -rf dist && tsc -p tsconfig.build.json && tsx scripts/copy-web-assets.ts && printf '#!/usr/bin/env node\n' | cat - dist/cli.js > dist/cli.tmp && mv dist/cli.tmp dist/cli.js",
     "_build:frontend": "vite build --config src/bridges/user/web/vite.config.ts",
     "_lint": "eslint .",
     "_test": "vitest run",
@@ -148,6 +151,7 @@
     "test:all": "pnpm test && pnpm test:delivery && pnpm test:smoke",
     "test:delivery": "tsx src/test/delivery-receipt.runner.ts",
     "test:e2e": "turbo run _test:e2e",
+    "test:package": "pnpm build && tsx scripts/package-contents.ts && tsx scripts/test-packed.ts",
     "test:smoke": "pnpm build && tsx --test src/test/mesh-smoke.runner.ts",
     "typecheck": "turbo run _typecheck"
   },
