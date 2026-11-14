@@ -1,3 +1,9 @@
+## [9.0.15](https://github.com/ExaDev/agent-comms/compare/v9.0.14...v9.0.15) (2026-11-14)
+
+### Bug Fixes
+
+* **scripts:** give the packed install the repository's release-age exclusions ([23e0a7e](https://github.com/ExaDev/agent-comms/commit/23e0a7e2b33cce13ab5609a74698376c7471a19e))
+
 ## [9.0.14](https://github.com/ExaDev/agent-comms/compare/v9.0.13...v9.0.14) (2026-11-14)
 
 ### Build
