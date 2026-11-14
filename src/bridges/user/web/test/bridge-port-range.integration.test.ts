@@ -344,9 +344,13 @@ describe("the dashboard's probe", () => {
     });
     await holdForeignHttpServer(base + 1);
 
-    expect(await isBridgeAt(base, SILENT_PROBE_TIMEOUT_MS)).toBe(false);
+    expect(await isBridgeAt(base, { timeoutMs: SILENT_PROBE_TIMEOUT_MS })).toBe(
+      false,
+    );
     expect(accepted).toHaveLength(1);
-    expect(await isBridgeAt(base + 1, SILENT_PROBE_TIMEOUT_MS)).toBe(false);
+    expect(
+      await isBridgeAt(base + 1, { timeoutMs: SILENT_PROBE_TIMEOUT_MS }),
+    ).toBe(false);
   });
 
   it("walks past a silent listener and a foreign server to the bridge behind them", async () => {

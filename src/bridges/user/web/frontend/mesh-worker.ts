@@ -6,6 +6,7 @@
  * Built as a separate IIFE bundle (mesh-worker.js) so the SharedWorker runs in its own global scope independent of the main app bundle.
  */
 
+import { meshSocketProtocols } from "../pairing-protocol.js";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import { RetryLinkPlugin } from "@orpc/client/plugins";
@@ -80,7 +81,7 @@ interface SerialisedState {
 // ---------------------------------------------------------------------------
 
 type WorkerInbound =
-  | { type: "init"; url: string }
+  | { type: "init"; url: string; pairing?: string }
   | { type: "action"; id: string; action: Record<string, unknown> }
   | { type: "getState" };
 
@@ -212,10 +213,14 @@ const RECONNECT_BASE_DELAY_MS = 1000;
 /** Upper bound on the reconnect backoff delay. */
 const RECONNECT_MAX_DELAY_MS = 30_000;
 
-export function connect(url: string): void {
+export function connect(url: string, pairingSecret?: string): void {
   const link = new RPCLink({
     connect: async () => {
-      const socket = new WebSocket(url);
+      // A dashboard served by a bridge offers no protocols; the hosted one offers the mesh protocol and the secret it was paired with.
+      const socket =
+        pairingSecret === undefined
+          ? new WebSocket(url)
+          : new WebSocket(url, meshSocketProtocols(pairingSecret));
       currentSocket = socket;
       socket.addEventListener("open", () => {
         broadcastToPorts({ type: "connected" });
@@ -323,7 +328,7 @@ function broadcastToPorts(msg: WorkerOutbound): void {
 function handlePortMessage(msg: WorkerInbound): void {
   switch (msg.type) {
     case "init":
-      connect(msg.url);
+      connect(msg.url, msg.pairing);
       break;
     case "action": {
       const client = orpcClient;
