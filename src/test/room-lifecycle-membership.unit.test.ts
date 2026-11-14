@@ -224,7 +224,7 @@ async function seedIssuedGrant(
   });
   if (!verdict.ok)
     throw new Error("expected the fixture token to mint successfully");
-  saveIssuedRoomGrant(slot, roomPath, memberId, tokenId);
+  await saveIssuedRoomGrant(slot, roomPath, memberId, tokenId);
 }
 
 // Two mutants Stryker still raises here are left undocumented-but-untested, both genuinely unreachable with real crypto: inviteToRoom's own `this.deps.rooms.set(roomId, room)` call is a same-object-reference no-op (the identical pattern documented at the top of room-lifecycle.test.ts's joinRoom block), and its `if (!verdict.ok)` MINT_FAILED branch cannot fail against a validly-generated identity for the same reason mintOwnerRootGrant's own failure branch can't (documented at the top of room-lifecycle.test.ts's createRoom block).
@@ -606,7 +606,7 @@ describe("RoomLifecycle — leaveRoom / leaveRemoteRoom", () => {
     h.deps.rooms.set(roomPath, room({ id: roomPath, owner: h.ids.memberId }));
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
+    await saveRoomToken(slot, roomPath, token);
     h.sendRoomRequest.mockResolvedValue({
       result: "ok",
     } satisfies ManageOutcome);
@@ -747,7 +747,7 @@ describe("RoomLifecycle — leaveRoom / leaveRemoteRoom", () => {
     h.deps.rooms.set(roomPath, room({ id: roomPath, owner: h.ids.memberId }));
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
+    await saveRoomToken(slot, roomPath, token);
     h.sendRoomRequest.mockResolvedValue({
       result: "error",
       code: "not_a_member",
@@ -767,7 +767,7 @@ describe("RoomLifecycle — leaveRoom / leaveRemoteRoom", () => {
     h.deps.messages.set(roomPath, []);
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
+    await saveRoomToken(slot, roomPath, token);
     h.sendRoomRequest.mockResolvedValue({
       result: "ok",
     } satisfies ManageOutcome);

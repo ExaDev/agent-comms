@@ -31,7 +31,7 @@ function roomPath(h: Harness): string {
 
 /** Persists a room:member token for roomPath, which flushPendingRoomRequests requires before it will retry anything queued against that path. */
 async function persistToken(h: Harness, path: string): Promise<void> {
-  saveRoomToken(
+  await saveRoomToken(
     { harness: "test", cwd: "room-protocol", dir: h.slotDir },
     path,
     await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, path),

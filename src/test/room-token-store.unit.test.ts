@@ -63,38 +63,38 @@ const ROOM_ID_HEX_PAIR_COUNT = 32;
 const ROOM_A = "aa".repeat(ROOM_ID_HEX_PAIR_COUNT) + "/general";
 const ROOM_B = "bb".repeat(ROOM_ID_HEX_PAIR_COUNT) + "/other-room";
 
-test("loadRoomTokens returns an empty map before anything is saved", () => {
+test("loadRoomTokens returns an empty map before anything is saved", async () => {
   const { slot } = tempSlot("pi");
   loadOrCreateIdentity(slot);
   expect(loadRoomTokens(slot)).toEqual({});
   releaseIdentityLock(slot);
 });
 
-test("saveRoomToken persists a token retrievable by loadRoomTokens", () => {
+test("saveRoomToken persists a token retrievable by loadRoomTokens", async () => {
   const { slot } = tempSlot("claude-code");
   loadOrCreateIdentity(slot);
-  saveRoomToken(slot, ROOM_A, TOKEN_A);
+  await saveRoomToken(slot, ROOM_A, TOKEN_A);
 
   const tokens = loadRoomTokens(slot);
   expect(tokens[ROOM_A]).toEqual(TOKEN_A);
   releaseIdentityLock(slot);
 });
 
-test("saveRoomToken round-trips a token whose payload is null", () => {
+test("saveRoomToken round-trips a token whose payload is null", async () => {
   const { slot } = tempSlot("codex");
   loadOrCreateIdentity(slot);
-  saveRoomToken(slot, ROOM_B, TOKEN_B);
+  await saveRoomToken(slot, ROOM_B, TOKEN_B);
 
   const tokens = loadRoomTokens(slot);
   expect(tokens[ROOM_B]).toEqual(TOKEN_B);
   releaseIdentityLock(slot);
 });
 
-test("saveRoomToken for a second room does not disturb the first", () => {
+test("saveRoomToken for a second room does not disturb the first", async () => {
   const { slot } = tempSlot("mcp");
   loadOrCreateIdentity(slot);
-  saveRoomToken(slot, ROOM_A, TOKEN_A);
-  saveRoomToken(slot, ROOM_B, TOKEN_B);
+  await saveRoomToken(slot, ROOM_A, TOKEN_A);
+  await saveRoomToken(slot, ROOM_B, TOKEN_B);
 
   const tokens = loadRoomTokens(slot);
   expect(tokens[ROOM_A]).toEqual(TOKEN_A);
@@ -102,11 +102,11 @@ test("saveRoomToken for a second room does not disturb the first", () => {
   releaseIdentityLock(slot);
 });
 
-test("saveRoomToken overwrites an existing token for the same room", () => {
+test("saveRoomToken overwrites an existing token for the same room", async () => {
   const { slot } = tempSlot("opencode");
   loadOrCreateIdentity(slot);
-  saveRoomToken(slot, ROOM_A, TOKEN_A);
-  saveRoomToken(slot, ROOM_A, TOKEN_B);
+  await saveRoomToken(slot, ROOM_A, TOKEN_A);
+  await saveRoomToken(slot, ROOM_A, TOKEN_B);
 
   const tokens = loadRoomTokens(slot);
   expect(tokens[ROOM_A]).toEqual(TOKEN_B);
@@ -114,13 +114,13 @@ test("saveRoomToken overwrites an existing token for the same room", () => {
   releaseIdentityLock(slot);
 });
 
-test("deleteRoomToken removes only the named room's token", () => {
+test("deleteRoomToken removes only the named room's token", async () => {
   const { slot } = tempSlot("user");
   loadOrCreateIdentity(slot);
-  saveRoomToken(slot, ROOM_A, TOKEN_A);
-  saveRoomToken(slot, ROOM_B, TOKEN_B);
+  await saveRoomToken(slot, ROOM_A, TOKEN_A);
+  await saveRoomToken(slot, ROOM_B, TOKEN_B);
 
-  deleteRoomToken(slot, ROOM_A);
+  await deleteRoomToken(slot, ROOM_A);
 
   const tokens = loadRoomTokens(slot);
   expect(ROOM_A in tokens).toBe(false);
@@ -128,10 +128,10 @@ test("deleteRoomToken removes only the named room's token", () => {
   releaseIdentityLock(slot);
 });
 
-test("room tokens survive reloading the identity file across a fresh load", () => {
+test("room tokens survive reloading the identity file across a fresh load", async () => {
   const { slot } = tempSlot("pi");
   loadOrCreateIdentity(slot);
-  saveRoomToken(slot, ROOM_A, TOKEN_A);
+  await saveRoomToken(slot, ROOM_A, TOKEN_A);
   releaseIdentityLock(slot);
 
   // A fresh process re-loading the same slot.
@@ -141,10 +141,10 @@ test("room tokens survive reloading the identity file across a fresh load", () =
   releaseIdentityLock(slot);
 });
 
-test("saving a room token does not disturb the persisted key material", () => {
+test("saving a room token does not disturb the persisted key material", async () => {
   const { slot } = tempSlot("claude-code");
   const identity = loadOrCreateIdentity(slot);
-  saveRoomToken(slot, ROOM_A, TOKEN_A);
+  await saveRoomToken(slot, ROOM_A, TOKEN_A);
 
   const reloaded = loadOrCreateIdentity(slot);
   expect(reloaded.privateKey).toBe(identity.privateKey);
