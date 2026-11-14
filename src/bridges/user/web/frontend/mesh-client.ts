@@ -10,7 +10,7 @@
  * The public subscribe()/get()/disconnect()/sendAction()/connect() surface is unchanged from before the oRPC migration -- internally, agents/rooms are now driven by consuming the worker's own tab-contract.ts subscribeEvents() stream over a real oRPC message-port client, rather than parsing raw postMessage frames. The one signal the new stream doesn't yet carry as its own discrete event -- connected/disconnected, which describes the worker's own upstream socket state to the real server, not this class's own message-port channel to the worker -- is read from the legacy protocol's own "connected"/"disconnected" broadcasts, still fully live on the same port (mesh-worker.ts's own PR4 kept both protocols coexisting deliberately for exactly this kind of narrow reuse, rather than re-deriving an equivalent signal via a second, redundant mechanism).
  */
 
-import { createORPCClient, getEventMeta } from "@orpc/client";
+import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import type { RouterUtils } from "@orpc/tanstack-query";
@@ -27,6 +27,7 @@ import type {
 import type { TabContract } from "./tab-contract.js";
 import type { DisplayNamePartsWire, MeshEvent } from "../contract.js";
 import { probeForBridge } from "../bridge-port-range.js";
+import { pumpEvents } from "./event-pump.js";
 import { dispatchAction } from "./dispatch-action.js";
 import { isServedByBridge } from "./served-by-bridge.js";
 
@@ -226,30 +227,22 @@ export class MeshClient {
   }
 
   /**
-   * Consumes the worker's own subscribeEvents() stream for as long as this generation is current, mirroring mesh-worker.ts's own pumpEvents: resuming by lastEventId after any transport-level drop is this loop's own job, not something either RetryLinkPlugin or the underlying transport does transparently on its own (confirmed empirically in an earlier stage of this migration).
+   * Consumes the worker's own subscribeEvents() stream for as long as this generation is current (see event-pump.ts, which the worker's own pump shares): resuming by lastEventId after any transport-level drop is this loop's own job, not something either RetryLinkPlugin or the underlying transport does transparently on its own (confirmed empirically in an earlier stage of this migration).
    */
   private async pumpEvents(
     client: Readonly<TabClient>,
     generation: number,
   ): Promise<void> {
-    let lastEventId: string | undefined;
-
-    while (generation === this.eventPumpGeneration) {
-      try {
-        const events = await client.subscribeEvents(
+    await pumpEvents(
+      async (lastEventId) =>
+        client.subscribeEvents(
           lastEventId === undefined ? {} : { lastEventId },
-        );
-        for await (const event of events) {
-          if (generation !== this.eventPumpGeneration) return;
-          const meta = getEventMeta(event);
-          if (meta?.id !== undefined) lastEventId = meta.id;
-          this.applyMeshEvent(event);
-        }
-        return;
-      } catch {
-        // Transport dropped mid-stream. Loop back and resume from lastEventId once subscribeEvents() can succeed again.
-      }
-    }
+        ),
+      (event) => {
+        this.applyMeshEvent(event);
+      },
+      () => generation === this.eventPumpGeneration,
+    );
   }
 
   private applyMeshEvent(event: Readonly<MeshEvent>): void {
