@@ -3,14 +3,15 @@
  *
  * Claims travel as wire-mesh session frames (MeshTransport.broadcastCoordinatorClaim/sendCoordinatorClaim), and only over sessions to peers on this machine, because both duties the role assigns are facts about one machine: a PID probe can only see local processes and the cc-peer front can only reach local Claude Code sessions.
  *
- * When a claim is made: a store claims only when it knows of no incumbent and is the first on the machine as far as it can tell. A store that bound the well-known port with no first-contact presence configured can meet other stores only through that port, so it claims at once; one that may be reachable through first contact (it bound the port, or could neither join nor bind it) first waits one claim wait for an incumbent's announcement, so a store arriving at an existing mesh never takes the role at an equal term before the holder's claim reaches it. Both ends of every machine-local session announce the incumbent they know as the session is enrolled. When the incumbent departs, the lowest device-id among the peers this side has a machine-local session to claims at once at a raised term, and every other survivor claims too if, one claim wait later, the claim it accepts still names a holder it has no session to, which covers a lowest-id peer that is itself gone or was never reachable. A claim that is accepted always names a holder that is here, so the wait after an accepted claim never starts: the claim waits are the one after a departure and the one at start-up.
+ * When a claim is made: a store claims only when it knows of no incumbent and is the first on the machine as far as it can tell. A store that bound the well-known port with no first-contact presence configured can meet other stores only through that port, so it claims at once; one that may be reachable through first contact (it bound the port, or could neither join nor bind it) first waits one claim wait for an incumbent's announcement, so a store arriving at an existing mesh never takes the role at an equal term before the holder's claim reaches it. Both ends of every machine-local session announce the incumbent they know as the session is enrolled. When the incumbent departs, the lowest device-id among the peers this side has a machine-local session to claims at once at a raised term, and every other survivor claims too if, one claim wait later, the claim it accepts still names a holder it has no session to, which covers a lowest-id peer that is itself gone or was never reachable. A claim that is accepted names a holder that is here when it is accepted, so the wait after an accepted claim never starts: the claim waits are the one after a departure and the one at start-up.
  *
- * Whose claims count: a claim is evaluated only when its holder is this side, the peer that sent it (the session's authenticated device-id, never a field of the frame), or a peer this side has a machine-local session to. A claim gossiped onward by a peer other than its holder is therefore still accepted wherever the holder is reachable, which is every peer of a fully connected machine. Any other claim, naming a holder that is not here, waits until that holder's session is enrolled and is dropped after one claim wait, so a claim for an absent device neither changes the incumbent nor starts a takeover. What waits is bounded by sender: each machine-local peer has at most PENDING_CLAIMS_PER_SENDER waiting claims, at most one per holder, kept in the election's own order (higher term first, an equal term by lowest holder id), so a peer that floods claims displaces only its own and never another peer's. A sender can still claim itself, or name a peer this side has a session to, at any term, so this narrows what a trusted machine-local peer can do, which is to name an absent holder; it does not stop that peer taking the role or forcing it onto a present peer, which signed claims would.
+ * Whose claims count: claims are accepted from the peers this machine already trusts with a machine-local session, and this module does not authenticate them further. A claim is evaluated only when its holder is this side, the peer that sent it (the session's authenticated device-id, never a field of the frame), or a peer this side has a machine-local session to. A claim gossiped onward by a peer other than its holder is therefore still accepted wherever the holder is reachable, which is every peer of a fully connected machine. Any other claim waits until its holder's session is enrolled and is dropped after one claim wait, or when its sender's last machine-local session closes. Waiting claims are bounded per sender: each machine-local peer has at most PENDING_CLAIMS_PER_SENDER of them, at most one per holder, kept in the election's own order (higher term first, an equal term by lowest holder id), and a claim whose term no later claim could supersede is not kept.
  */
 
 import {
   CoordinatorElection,
   compareDeviceIds,
+  isSupersedableTerm,
   type CoordinatorClaim,
 } from "wire-mesh-core/domain/coordinator-election";
 import {
@@ -45,13 +46,12 @@ export interface CoordinatorRoleDeps {
   onError: (error: unknown) => void;
 }
 
-/** Orders waiting claims as the election ranks claims: a higher term first, and at an equal term the lower holder id, which is a device-id in lower-case hex of one length. */
+/** Orders waiting claims as the election ranks claims: a higher term first, and at an equal term the lower holder id, compared as the election compares it. */
 function rankedFirst(left: PendingClaim, right: PendingClaim): number {
   if (left.frame.term !== right.frame.term) {
     return right.frame.term - left.frame.term;
   }
-  if (left.holder === right.holder) return 0;
-  return left.holder < right.holder ? -1 : 1;
+  return compareDeviceIds(left.frame.coordinator, right.frame.coordinator);
 }
 
 function sameClaim(
@@ -128,13 +128,23 @@ export class CoordinatorRole {
   /** Tells a peer whose machine-local session was just enrolled which claim this side accepts, so a joiner learns the incumbent instead of claiming over it. A no-op while this side knows of none. */
   async announceTo(handle: Readonly<ConnectionHandle>): Promise<void> {
     this.answered.delete(handle.id);
-    const frame = this.electionInstance?.announceCurrent();
-    if (frame !== undefined) {
-      await this.deps.requireTransport().sendCoordinatorClaim(handle, frame);
+    // Taken before the first await, so a claim released here is neither dropped by its timer nor taken twice while the announcement is being sent.
+    const released = this.takePendingFor(handle.id);
+    try {
+      const frame = this.electionInstance?.announceCurrent();
+      if (frame !== undefined) {
+        await this.deps.requireTransport().sendCoordinatorClaim(handle, frame);
+      }
+    } catch (error) {
+      this.deps.onError(error);
     }
-    // The session just enrolled may be the holder claims were set aside for.
-    for (const waiting of this.takePendingFor(handle.id)) {
-      await this.handleClaim(waiting.handle, waiting.frame);
+    // The session just enrolled may be the holder claims were set aside for. One claim failing to evaluate never costs the others theirs.
+    for (const waiting of released) {
+      try {
+        await this.handleClaim(waiting.handle, waiting.frame);
+      } catch (error) {
+        this.deps.onError(error);
+      }
     }
   }
 
@@ -176,6 +186,10 @@ export class CoordinatorRole {
     peerId: string,
     onDelayedTakeover: () => Promise<void>,
   ): Promise<void> {
+    // A claim waiting for a holder ends with the session that sent it, unless the device still has another machine-local session.
+    if (!this.deps.requireTransport().electionPeerIds().has(peerId)) {
+      this.dropPendingFrom(peerId);
+    }
     if (this.stopped || this.current()?.holder !== peerId) return;
     if (this.isLowestSurvivor(peerId)) {
       await this.claim();
@@ -210,6 +224,8 @@ export class CoordinatorRole {
     handle: Readonly<ConnectionHandle>,
     frame: Readonly<CoordinatorFrame>,
   ): void {
+    // A claim whose term no later claim could supersede is dropped by the election unevaluated, wherever its holder is, so it never takes a place here.
+    if (!isSupersedableTerm(frame.term)) return;
     const holder = deviceIdToHex(frame.coordinator);
     const mine = this.pending.get(handle.id) ?? [];
     const same = mine.find((entry) => entry.holder === holder);
@@ -245,17 +261,25 @@ export class CoordinatorRole {
     else this.pending.set(sender, rest);
   }
 
-  /** Takes every waiting claim that names `holder`, whoever sent it, best first. */
+  /** Takes every waiting claim that names `holder`, best first, except those whose sender no longer has a machine-local session here. */
   private takePendingFor(holder: string): PendingClaim[] {
+    const senders = this.deps.requireTransport().electionPeerIds();
     const taken: PendingClaim[] = [];
     for (const [sender, entries] of [...this.pending]) {
       for (const entry of entries) {
         if (entry.holder !== holder) continue;
         this.forget(sender, entry);
-        taken.push(entry);
+        if (senders.has(sender)) taken.push(entry);
       }
     }
     return taken.sort(rankedFirst);
+  }
+
+  /** Drops every claim a departed sender had waiting. */
+  private dropPendingFrom(sender: string): void {
+    for (const entry of [...(this.pending.get(sender) ?? [])]) {
+      this.forget(sender, entry);
+    }
   }
 
   private dropAllPending(): void {

@@ -24,7 +24,11 @@ import {
   buildCommand,
 } from "../core/wire-mesh-transport.js";
 import { toIdentityPort } from "../core/wire-mesh-identity.js";
-import { TeardownStack, freeLocalPort } from "./hub-helpers.js";
+import {
+  TeardownStack,
+  freeLocalPort,
+  waitForCondition,
+} from "./hub-helpers.js";
 import { wireTestTransport } from "./test-transport.js";
 
 /** Above the term 0 a lone store claims at, so accepting this claim would supersede the store's own. */
@@ -356,16 +360,18 @@ test("a claim over a data dial at a loopback address is accepted", async () => {
   }
 });
 
-/** How long a claim whose holder is not here is held, in these tests; long enough for a real session to enrol inside it, short enough to outlast it. */
+/** How long a claim whose holder is not here is held in the test that shows it is dropped: short enough to outlast, long enough for the sender's claim to be read first. */
 const SHORT_CLAIM_WAIT_MS = 400;
-/** How many times the short wait a test lets pass to show a claim is dropped, or sets as the wait to show one is held. */
+/** How many times the short wait that test lets pass before the holder enrols. */
 const WAIT_FACTOR = 3;
-const WELL_PAST_THE_WAIT_MS = SHORT_CLAIM_WAIT_MS * WAIT_FACTOR;
+const PAST_THE_SHORT_WAIT_MS = SHORT_CLAIM_WAIT_MS * WAIT_FACTOR;
+/** A wait no test outlasts, so a claim held under it is dropped only by the holder enrolling; the claim timers never keep a process alive. */
+const HELD_FOR_THE_TEST_MS = 600_000;
 
 test("a claim naming a holder that is not here is held, then accepted when that holder's real session enrols", async () => {
   const teardown = new TeardownStack();
   try {
-    const store = await startLoneHolder(teardown, WELL_PAST_THE_WAIT_MS);
+    const store = await startLoneHolder(teardown, HELD_FOR_THE_TEST_MS);
     const sender = rawPeer();
     const holder = rawPeer();
     const senderSession = await dialAsRawPeer(
@@ -385,8 +391,10 @@ test("a claim naming a holder that is not here is held, then accepted when that 
       teardown,
     );
     await introduce(holderSession, holder);
-    await roundTrip(holderSession);
 
+    await waitForCondition(
+      () => store.coordinatorClaim?.holder === holder.deviceHex,
+    );
     expect(store.coordinatorClaim).toEqual({
       term: ROGUE_TERM,
       holder: holder.deviceHex,
@@ -412,7 +420,7 @@ test("a claim naming a holder that does not enrol within the wait is dropped, so
     await senderSession.sendCoordinatorClaim(rogueClaim(holder.deviceHex));
     await roundTrip(senderSession);
     await new Promise<void>((resolve) => {
-      setTimeout(resolve, WELL_PAST_THE_WAIT_MS);
+      setTimeout(resolve, PAST_THE_SHORT_WAIT_MS);
     });
 
     const holderSession = await dialAsRawPeer(
