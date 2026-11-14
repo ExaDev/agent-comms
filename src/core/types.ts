@@ -7,6 +7,7 @@
  */
 
 import { z } from "zod";
+import { isIsoTimestamp } from "./iso-timestamp.js";
 
 // ---------------------------------------------------------------------------
 // Schema-attached type guard helper
@@ -312,11 +313,16 @@ export interface NetworkInterface {
 // ConnectionCode
 // ---------------------------------------------------------------------------
 
-/** A single-use, short-lived artifact bootstrapping GatewayTrust between two devices that have never established a mesh connection (agent-comms#188): `code`/`expiresAt` answer freshness/liveness and are always checked; `signature` is an optional detached PGP signature (armored) over `${code}:${expiresAt}:${deviceId}`, checked only when present, never required -- a device with no PGP identity still generates and redeems a bare code. */
+/** An ISO 8601 timestamp (iso-timestamp.ts): text that names no instant is refused where it enters, so it can never be compared against the clock as if it were one. */
+const IsoTimestampSchema = z
+  .string()
+  .refine(isIsoTimestamp, "must be an ISO 8601 timestamp");
+
+/** A single-use, short-lived artifact bootstrapping GatewayTrust between two devices that have never established a mesh connection (agent-comms#188): `code`/`expiresAt` answer freshness/liveness and are always checked, and `expiresAt` must be an ISO 8601 timestamp; `signature` is an optional detached PGP signature (armored) over `${code}:${expiresAt}:${deviceId}`, checked only when present, never required -- a device with no PGP identity still generates and redeems a bare code. */
 export const ConnectionCodeSchema = defineSchema(
   z.object({
     code: z.string(),
-    expiresAt: z.string(),
+    expiresAt: IsoTimestampSchema,
     deviceId: z.string(),
     signature: z.string().optional(),
   }),
@@ -529,7 +535,7 @@ export const CommsActionSchema = defineSchema(
     z.object({
       action: z.literal("gateway_redeem_connection_code"),
       code: z.string(),
-      expiresAt: z.string(),
+      expiresAt: IsoTimestampSchema,
       device: z.string(),
       signature: z.string().optional(),
       publicKey: z.string().optional(),
