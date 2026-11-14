@@ -12,6 +12,7 @@ import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import {
   freeLocalPort,
   TeardownStack,
+  testBridgePortBase,
   unreachableHubUrl,
 } from "./hub-helpers.js";
 import { scratchDirectory } from "./scratch-directory.helper.js";
@@ -70,6 +71,7 @@ it.each(ENTRIES)(
           firstContactPort: await freeLocalPort(),
           hubUrl: await unreachableHubUrl(),
           slotDir,
+          webPortBase: testBridgePortBase(),
         }),
       ],
       {

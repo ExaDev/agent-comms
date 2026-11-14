@@ -3,7 +3,11 @@
  */
 import { afterEach, expect, it } from "vitest";
 import { MeshStore } from "../../../../core/mesh-store.js";
-import { freeLocalPort, TeardownStack } from "../../../../test/hub-helpers.js";
+import {
+  freeLocalPort,
+  TeardownStack,
+  testBridgePortBase,
+} from "../../../../test/hub-helpers.js";
 import { wireTestTransport } from "../../../../test/test-transport.js";
 import { tryStartBridgeWebServer } from "../server.js";
 
@@ -27,7 +31,9 @@ it("serves the web UI from the bridge's own store, without adding a device or an
     tags: [],
   });
 
-  const handle = await tryStartBridgeWebServer(store, "test");
+  const handle = await tryStartBridgeWebServer(store, "test", {
+    bridgePortBase: testBridgePortBase(),
+  });
   if (handle === undefined) throw new Error("expected the web server to start");
   cleanups.push(async () => {
     await new Promise<void>((resolve) => {

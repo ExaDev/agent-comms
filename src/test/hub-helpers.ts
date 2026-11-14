@@ -2,6 +2,7 @@
 
 import { createServer, type Server } from "node:http";
 import net from "node:net";
+import { BRIDGE_PORT_COUNT } from "../bridges/user/web/bridge-port-range.js";
 import { WebSocketServer, type WebSocket as WsSocket } from "ws";
 import { cdeDecodeOptions, cdeEncodeOptions, decode, encode } from "cbor2";
 import { frameSchema } from "wire-mesh-core/generated/protocol";
@@ -241,6 +242,25 @@ export async function observeHub(url: string): Promise<HubObserver> {
       received.filter((advert) => deviceIdToHex(advert.device) === deviceHex),
     close: async () => connection.close(),
   };
+}
+
+/** The first port of the test slots, above the bridge port range and below every operating system's ephemeral range, so a test's bridge ports collide with neither a bridge running on the machine nor a port the operating system hands out. */
+const TEST_BRIDGE_PORT_FLOOR = 21_000;
+
+/** Ports between two slots' bases: wider than the bridge port range, so neighbouring slots never overlap. */
+const TEST_BRIDGE_SLOT_STRIDE = BRIDGE_PORT_COUNT * 2;
+
+/**
+ * The base of a bridge port range reserved for the calling test worker, for a test that starts bridges and must not bind the range a bridge on the machine holds.
+ *
+ * Each vitest worker of a run has its own pool id, and the base is that id times a stride wider than the range, so two workers of one run cannot share a base, and no worker's range is the production one. It is a reservation by construction, not a check that the ports are free: a test that asserts exact ports relies on nothing else on the machine using this worker's slot, which holds unless a second vitest run is going at the same time.
+ */
+export function testBridgePortBase(): number {
+  const poolId = Number(process.env.VITEST_POOL_ID);
+  if (!Number.isInteger(poolId) || poolId < 1) {
+    throw new Error("testBridgePortBase needs to run inside a vitest worker");
+  }
+  return TEST_BRIDGE_PORT_FLOOR + (poolId - 1) * TEST_BRIDGE_SLOT_STRIDE;
 }
 
 /** A localhost TCP port nothing is listening on right now, for a test that must not collide with whatever else runs on the machine: a fixed port can already belong to another process, and a store that connects to one that accepts but never answers as a coordinator waits for it indefinitely. */

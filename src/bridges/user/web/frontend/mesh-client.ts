@@ -26,6 +26,7 @@ import type {
 } from "./types.js";
 import type { TabContract } from "./tab-contract.js";
 import type { DisplayNamePartsWire, MeshEvent } from "../contract.js";
+import { probeForBridge } from "../bridge-port-range.js";
 import { dispatchAction } from "./dispatch-action.js";
 import { isServedByBridge } from "./served-by-bridge.js";
 
@@ -88,11 +89,6 @@ function buildReadsClient(requireClient: () => TabClient) {
 
 type ReadsClient = ReturnType<typeof buildReadsClient>;
 
-/** The web server's default port when standalone (coordinator default 19876 + 1), the base port `probeLocalMesh` starts walking up from. */
-const DEFAULT_WEB_SERVER_PORT = 19877;
-/** How many ports above `DEFAULT_WEB_SERVER_PORT` to probe before giving up, matching the server's own port-discovery walk-up range. */
-const MESH_PROBE_MAX_ATTEMPTS = 10;
-
 // ---------------------------------------------------------------------------
 // MeshClient
 // ---------------------------------------------------------------------------
@@ -108,6 +104,7 @@ export class MeshClient {
   private readonly listeners = new Set<MeshStateListener>();
   private readonly deliveryListeners = new Set<MeshDeliveryListener>();
   private eventPumpGeneration = 0;
+  private readonly bridgePortBase: number | undefined;
 
   /** Delegates each structured read to `this.client` fresh on every call, throwing "Not connected" the same way a real network failure would if called before connect() -- a stable object createTanstackQueryUtils below can be built from once, since the real tab client doesn't exist until connect() is called but these utils need a stable reference for the lifetime of the app. */
   private readonly readsClient: ReadsClient = buildReadsClient(() =>
@@ -119,7 +116,9 @@ export class MeshClient {
     this.readsClient,
   );
 
-  constructor() {
+  /** `options.bridgePortBase` is the first port of the bridge port range the probe tries; it defaults to the range a bridge binds from, and tests pass the range of a bridge they started. */
+  constructor(options?: Readonly<{ bridgePortBase?: number | undefined }>) {
+    this.bridgePortBase = options?.bridgePortBase;
     if (typeof window !== "undefined") {
       // A browser MessagePort never fires its own "close" event, so nothing tells the worker a tab is gone unless the tab says so itself. pagehide (never beforeunload, which kills the bfcache and is unreliable on mobile) is the last reliable point at which this can still run.
       window.addEventListener("pagehide", () => {
@@ -162,14 +161,14 @@ export class MeshClient {
     this.client = client;
     void this.pumpEvents(client, ++this.eventPumpGeneration);
 
-    // Discover the web server: walk up from 19877 matching the server's port discovery. If served by a bridge's own server (loopback, or plain http over the LAN), use that origin directly. Otherwise probe localhost.
+    // Discover the web server: look through the bridge port range, the one a bridge binds from. If served by a bridge's own server (loopback, or plain http over the LAN), use that origin directly. Otherwise probe localhost.
     if (isServedByBridge(location)) {
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
       const url = `${proto}//${location.host}/ws/mesh`;
       this.postLegacyInit(url);
     } else {
-      // Standalone PWA (e.g. GitHub Pages) — probe localhost ports. The web server binds at coordinatorPort + 1, walking up if taken. Coordinator defaults to 19876, so web server starts at 19877.
-      this.probeLocalMesh(DEFAULT_WEB_SERVER_PORT, MESH_PROBE_MAX_ATTEMPTS);
+      // Standalone PWA (e.g. GitHub Pages): probe the localhost bridge port range.
+      this.probeLocalMesh();
     }
   }
 
@@ -322,28 +321,15 @@ export class MeshClient {
   }
 
   /**
-   * Probe localhost ports sequentially for the web server's /ws/mesh endpoint. Matches the server's port discovery: starts at 19877, walks up. Sends an init message to the worker on first successful WS upgrade.
+   * Probe the bridge port range on localhost, in the order a bridge binds it, and send an init message to the worker with the first bridge's mesh socket address. Sends nothing when no bridge answers.
    */
-  private probeLocalMesh(basePort: number, maxAttempts: number): void {
-    let attempts = 0;
-
-    const tryPort = (port: number): void => {
-      if (attempts >= maxAttempts) return;
-      attempts++;
-
-      const url = `ws://127.0.0.1:${String(port)}/ws/mesh`;
-      // Quick HTTP fetch to check if anything is listening and speaks our protocol. A WebSocket upgrade would be cleaner but fetch is simpler and avoids a visible WS error in the console.
-      fetch(`http://127.0.0.1:${String(port)}/`, { mode: "no-cors" })
-        .then(() => {
-          // Something responded — try connecting via the worker
-          this.postLegacyInit(url);
-        })
-        .catch(() => {
-          tryPort(port + 1);
-        });
-    };
-
-    tryPort(basePort);
+  private probeLocalMesh(): void {
+    void probeForBridge(
+      (url) => {
+        this.postLegacyInit(url);
+      },
+      { base: this.bridgePortBase },
+    );
   }
 
   private notify(): void {

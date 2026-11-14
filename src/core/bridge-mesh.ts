@@ -58,6 +58,8 @@ export interface BridgeRunOptions {
   mesh?: BridgeMeshOptions | undefined;
   /** The identity slot. Defaults to this process's working directory under the bridge's own harness. */
   slot?: IdentitySlot | undefined;
+  /** The first port of the bridge port range the bridge's web server binds from; see bridge-port-range.ts. Defaults to the range the hosted dashboard probes, so only a test that must not bind it sets this. */
+  webPortBase?: number | undefined;
 }
 
 /** The synchronous half of bridge construction: everything loadOrCreateIdentity's own synchronous key material makes possible. Use this directly only when the calling entry point cannot await inline (see this file's own header comment); every other caller should use createBridgeMesh below. */

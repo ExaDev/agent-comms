@@ -26,6 +26,7 @@ export const test = base.extend<Fixtures>({
     // First contact defaults to one machine-wide UDP port, which would let the dashboards of parallel workers discover each other and list each other's agents.
     const firstContactPort = await freeLocalPort();
     const handle = await createWebServer({
+      port: 0,
       coordinatorPort,
       firstContactPort,
       hubUrl,
