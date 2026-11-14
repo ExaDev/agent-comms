@@ -47,7 +47,7 @@ try {
     case "nonce":
       console.log(
         Buffer.from(
-          loadOrCreateLedgerWriterNonce(options, () =>
+          await loadOrCreateLedgerWriterNonce(options, () =>
             Uint8Array.from(randomBytes(NONCE_BYTES)),
           ),
         ).toString("hex"),
@@ -57,18 +57,18 @@ try {
       for (const grant of readLegacyIssuedGrants(options).filter((g) =>
         g.subject.startsWith(`worker-${indexRaw}-`),
       )) {
-        clearLegacyIssuedGrants(options, [grant]);
+        await clearLegacyIssuedGrants(options, [grant]);
       }
       break;
     case "name":
       for (let round = 0; round < rounds; round++) {
-        saveUserDisplayName(options, `name-${indexRaw}-${String(round)}`);
+        await saveUserDisplayName(options, `name-${indexRaw}-${String(round)}`);
       }
       break;
     case "import": {
       const contents = readAccountContents(options);
       for (let round = 0; round < rounds; round++) {
-        importAccountKey(options, {
+        await importAccountKey(options, {
           ...contents,
           displayName: `import-${indexRaw}-${String(round)}`,
         });
@@ -77,7 +77,10 @@ try {
     }
     case "machine-name":
       for (let round = 0; round < rounds; round++) {
-        saveMachineDisplayName(options, `machine-${indexRaw}-${String(round)}`);
+        await saveMachineDisplayName(
+          options,
+          `machine-${indexRaw}-${String(round)}`,
+        );
       }
       break;
     case "machine-renew":

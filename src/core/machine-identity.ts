@@ -6,7 +6,7 @@
 
 import * as path from "node:path";
 import { resolveDataDir } from "./data-directory.js";
-import { withWriteLock } from "./pid-lock-file.js";
+import { withWriteLockAsync } from "./pid-lock-file.js";
 import type { PeerIdentity } from "./identity.js";
 import {
   isStoredIssuerKey,
@@ -60,12 +60,12 @@ export function loadMachineDisplayName(
 }
 
 /** Sets (or, given undefined, clears) the name this machine asserts for itself, keeping the key material and every other field. Throws if the machine identity has not been created yet. */
-export function saveMachineDisplayName(
+export async function saveMachineDisplayName(
   options: Readonly<MachineIdentityOptions> | undefined,
   displayName: string | undefined,
-): void {
+): Promise<void> {
   const file = machineIdentityFile(options);
-  withWriteLock(file, () => {
+  await withWriteLockAsync(file, () => {
     const stored = readIssuerRecord(file, isStoredMachineIdentity);
     if (stored === undefined) {
       throw new Error(

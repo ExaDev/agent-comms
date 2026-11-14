@@ -234,7 +234,7 @@ export class AccountJoin {
     }
     const contents = openAccountKeyFromInvite(sealed, candidate);
     const current = this.deps.requireIdentity();
-    const { identity, replacedFile } = importAccountKey(
+    const { identity, replacedFile } = await importAccountKey(
       current.userIdentityOptions,
       contents,
     );

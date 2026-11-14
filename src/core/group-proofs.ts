@@ -166,13 +166,16 @@ export class GroupProofs {
 
   /** Sets (or, given undefined, clears) this machine's self display name and re-mints its claim now rather than on the next refresh. Throws if the store has no identity yet. */
   async saveMachineName(name: string | undefined): Promise<void> {
-    saveMachineDisplayName(this.getIdentity().machineIdentityOptions, name);
+    await saveMachineDisplayName(
+      this.getIdentity().machineIdentityOptions,
+      name,
+    );
     return this.machineName.refresh();
   }
 
   /** Sets (or, given undefined, clears) this account's self display name and re-mints its claim now rather than on the next refresh. Throws if the store has no identity yet. */
   async saveUserName(name: string | undefined): Promise<void> {
-    saveUserDisplayName(this.getIdentity().userIdentityOptions, name);
+    await saveUserDisplayName(this.getIdentity().userIdentityOptions, name);
     return this.principalName.refresh();
   }
 
