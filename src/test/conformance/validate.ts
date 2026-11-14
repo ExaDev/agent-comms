@@ -138,8 +138,11 @@ function endOfString(text: string, start: number): number {
   return index + 1;
 }
 
+/** The deepest nesting of objects and arrays a corpus file may have, which every loader enforces at this value (README: "Rules the schema cannot express"): it is below the recursion limit of the JSON parsers the loaders read through, so a file past it is refused the same way by all of them. */
+export const MAX_DEPTH = 64;
+
 /**
- * The problems with the order of the keys in a corpus file's own text, which no parsed value can show: `JSON.parse` puts integer-like keys first in numeric order, whatever order the file wrote them in. Within every object the keys are in UTF-16 code unit order, which is how JavaScript compares strings, each key after the one before and none repeated, so integer-like keys are ordered as the strings they are; a key holding an unpaired surrogate is refused, since no loader reads it the same way.
+ * The problems with the order of the keys in a corpus file's own text, which no parsed value can show: `JSON.parse` puts integer-like keys first in numeric order, whatever order the file wrote them in. Within every object the keys are in UTF-16 code unit order, which is how JavaScript compares strings, each key after the one before and none repeated, so integer-like keys are ordered as the strings they are; a key holding an unpaired surrogate is refused, since no loader reads it the same way; and nesting deeper than MAX_DEPTH is refused.
  */
 export function keyOrderProblems(text: string): readonly string[] {
   const problems: string[] = [];
@@ -167,10 +170,17 @@ export function keyOrderProblems(text: string): readonly string[] {
       index = end;
       continue;
     }
-    if (char === "{") {
-      stack.push({ kind: "object", expectKey: true, last: undefined });
-    } else if (char === "[") {
-      stack.push({ kind: "array" });
+    if (char === "{" || char === "[") {
+      stack.push(
+        char === "{"
+          ? { kind: "object", expectKey: true, last: undefined }
+          : { kind: "array" },
+      );
+      if (stack.length === MAX_DEPTH + 1) {
+        problems.push(
+          `nesting is deeper than the maximum of ${String(MAX_DEPTH)}`,
+        );
+      }
     } else if (char === "}" || char === "]") {
       stack.pop();
     } else if (char === "," && top?.kind === "object") {

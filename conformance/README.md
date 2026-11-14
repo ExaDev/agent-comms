@@ -80,6 +80,7 @@ A function that is asynchronous is awaited.
 Each loader enforces these beside the schema:
 
 - The keys of every object in a corpus file or the manifest are in UTF-16 code unit order, each after the one before and none repeated. Integer-like keys are ordered as the strings they are (`"10"` before `"9"`), not numerically as `JSON.parse` shows them, so the check reads the text and not the parsed value, and a key holding an unpaired surrogate is refused.
+- Objects and arrays nest at most 64 deep, counting the file's own top-level object as the first level, which is below the recursion limit of the JSON parsers the loaders read through, so a file past it is refused alike by every loader.
 - A case id is not used twice, within a file or across files.
 - A case's `kind` is the name of its directory.
 - A manifest's `skip` lists are in ascending order, without repeats.
@@ -89,7 +90,7 @@ Every rule above has a negative fixture, and every negative fixture has a repair
 
 ## Tests kept in TypeScript
 
-A test in an area the corpus covers that stays a TypeScript test is listed here with the reason it cannot be a case. The areas are the modules the corpus has cases for, and a test file named after one of them, or named in this table, is held to the table in both directions with exact titles: a test with no row fails, and a row whose test does not exist fails. A title is the names of the enclosing blocks and the test's own, joined by ` > `.
+A test in an area the corpus covers that stays a TypeScript test is listed here with the reason it cannot be a case. The areas are the modules the corpus has cases for. A test file is held to the table when it is named after one of those modules, when this table names it, or when the package modules it imports by value are covered modules alone (leaving aside the data definitions in `types`, the error class in `store`, the readers of the package's own versions and test support), so a unit test of a covered module is held to it whatever the file is called; a test that also imports other modules tests those, and is held to the table only when a row names its file. The title of every test in a held file must be a string literal or an `.each` template, since the guard reads titles from the syntax, and a title built at run time fails the guard. In both directions a title is compared exactly: a test with no row fails, and a row whose test does not exist fails. A title is the names of the enclosing blocks and the test's own, joined by ` > `.
 
 | File | Test | Reason |
 | --- | --- | --- |
@@ -101,12 +102,17 @@ A test in an area the corpus covers that stays a TypeScript test is listed here 
 | `src/bridges/user/web/test/web-access.unit.test.ts` | `generateAccessToken > generates distinct tokens` | `random` |
 | `src/bridges/user/web/test/web-access.unit.test.ts` | `generateAccessToken > generates a token that matches itself` | `random` |
 | `src/bridges/user/web/test/web-access.unit.test.ts` | `authorise > accepts this machine's own hostname as the Host` | `process` |
+| `src/core/test/build-action.unit.test.ts` | `buildAction refuses parameters that fail validation > names an unknown action and where it is, instead of turning the call into whoami` | `identity` |
+| `src/core/test/build-action.unit.test.ts` | `buildAction refuses parameters that fail validation > names a parameter of the wrong type` | `identity` |
+| `src/test/mcp-tool-action-enum.unit.test.ts` | `the MCP tool's action enum > lists exactly the actions CommsTool handles` | `schema` |
 | `src/test/peer-link-error.integration.test.ts` | `WireMeshTransport dial failures > a refused dial is reported as a PeerLinkError carrying ECONNREFUSED` | `socket` |
 
 The reasons:
 
 - `file`: the test reads a file of this repository, which a language-neutral case cannot name.
 - `process`: the test depends on the running process, its own package and dependency versions, its standard error or this machine's hostname.
+- `identity`: the test asserts the class of a thrown error and the fields it carries, which a case's `throws` cannot say.
+- `schema`: the test reads the program's own schema definitions, not the result of calling a function.
 - `random`: the result differs on every call.
 - `socket`: the test needs a real network socket.
 

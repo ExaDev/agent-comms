@@ -25,6 +25,16 @@ export RUSTUP_TOOLCHAIN
 PATH="$(dirname "$(rustup which cargo)"):$PATH"
 export PATH
 
+# A check gives the same result on any host, so it takes nothing from the host's performance setup: no compiler wrapper (a cache such as sccache, set in the environment or in a cargo config, which is overridden here by empty values) and no build directory shared with other workspaces or other compiler versions, which can hold artefacts this compiler cannot read. Build output goes under rust/target, which is not tracked.
+RUSTC_WRAPPER=
+RUSTC_WORKSPACE_WRAPPER=
+CARGO_BUILD_RUSTC_WRAPPER=
+CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER=
+CARGO_TARGET_DIR=$PWD/target
+CARGO_BUILD_BUILD_DIR=$PWD/target
+export RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER CARGO_BUILD_RUSTC_WRAPPER CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER CARGO_TARGET_DIR CARGO_BUILD_BUILD_DIR
+unset CARGO_BUILD_TARGET_DIR
+
 check=${1:-}
 [ "$#" -eq 0 ] || shift
 case "$check" in

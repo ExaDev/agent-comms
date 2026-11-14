@@ -18,6 +18,7 @@ const RAW_CORPUS_FIXTURES = [
   "integer-like-keys-in-numeric-order.json",
   "astral-key-before-private-use-key-by-code-point.json",
   "key-with-lone-surrogate-escape.json",
+  "nesting-one-past-the-maximum-depth.json",
 ];
 
 const tsconfigRootDir = dirname(fileURLToPath(import.meta.url));
