@@ -640,34 +640,48 @@ export class FileStore implements CommsStore {
     await this.writeJsonFile(path.join(dir, `${id}.json`), event);
   }
 
+  /**
+   * Returns the events queued for agentId, oldest message first, and removes each from the queue as it is returned. A file that cannot be read or parsed is left in place and reported on stderr with its name, and every other file is still drained, so one bad file never costs the events around it; a file that cannot be removed is reported the same way and its event is not returned, so it is delivered once, on a later drain, not twice.
+   */
   async drainDelivery(agentId: string): Promise<DeliveryEvent[]> {
     const dir = this.deliveryDir(agentId);
+    let files: string[];
     try {
-      const files = await fs.readdir(dir);
-      const events: DeliveryEvent[] = [];
-      for (const file of files) {
-        if (!file.endsWith(".json")) continue;
-        const event = DeliveryEventSchema.parse(
-          await this.readJsonFile(path.join(dir, file)),
-        );
-        events.push(event);
-        await fs.unlink(path.join(dir, file));
-      }
-      events.sort((a, b) => {
-        const ta =
-          a.type === "room_message" || a.type === "dm"
-            ? a.message.timestamp
-            : "";
-        const tb =
-          b.type === "room_message" || b.type === "dm"
-            ? b.message.timestamp
-            : "";
-        return ta.localeCompare(tb);
-      });
-      return events;
+      files = await fs.readdir(dir);
     } catch {
       return [];
     }
+    const events: DeliveryEvent[] = [];
+    for (const file of files) {
+      if (!file.endsWith(".json")) continue;
+      const filePath = path.join(dir, file);
+      let event: DeliveryEvent;
+      try {
+        event = DeliveryEventSchema.parse(await this.readJsonFile(filePath));
+      } catch {
+        process.stderr.write(
+          `agent-comms: ${filePath} is not a readable delivery event; it was left in place\n`,
+        );
+        continue;
+      }
+      try {
+        await fs.unlink(filePath);
+      } catch {
+        process.stderr.write(
+          `agent-comms: ${filePath} could not be removed; its event was not returned\n`,
+        );
+        continue;
+      }
+      events.push(event);
+    }
+    events.sort((a, b) => {
+      const ta =
+        a.type === "room_message" || a.type === "dm" ? a.message.timestamp : "";
+      const tb =
+        b.type === "room_message" || b.type === "dm" ? b.message.timestamp : "";
+      return ta.localeCompare(tb);
+    });
+    return events;
   }
 
   private async deliverToMembers(
