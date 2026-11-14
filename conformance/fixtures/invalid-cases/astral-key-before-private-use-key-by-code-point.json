@@ -1,0 +1,1 @@
+{"cases":[{"args":[1],"expect":{"\ue000":1,"\ud83d\ude00":2},"from":"example.test.ts: g > t","function":"module.helper","id":"a","kind":"function"}]}

@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { selectCorpusFiles } from "./corpus-files.js";
 import type { CorpusFile, Manifest } from "./corpus-types.js";
-import { readJson } from "./read-json.js";
-import { validateCorpusFile, validateManifest } from "./validate.js";
+import { readText } from "./read-json.js";
+import { validateCorpusText, validateManifestText } from "./validate.js";
 
 /**
  * Loads and checks a whole corpus root by every rule `conformance/README.md` states: the files selected, each file valid, ids unique across files, and the corpus equal to its manifest. The real corpus and every fixture corpus under `conformance/fixtures/corpora` go through this one function, so a rule has one definition.
@@ -86,7 +86,7 @@ export function checkCorpus(root: string): CheckedCorpus {
   const files: LoadedFile[] = [];
   const ids = new Set<string>();
   for (const name of selection.selected) {
-    const result = validateCorpusFile(readJson(join(root, name)));
+    const result = validateCorpusText(readText(join(root, name)));
     if (!result.ok) {
       problems.push(...result.problems.map((problem) => `${name}: ${problem}`));
       continue;
@@ -105,9 +105,9 @@ export function checkCorpus(root: string): CheckedCorpus {
     }
     files.push({ name, file: result.value });
   }
-  let manifest: ReturnType<typeof validateManifest>;
+  let manifest: ReturnType<typeof validateManifestText>;
   try {
-    manifest = validateManifest(readJson(join(root, "manifest.json")));
+    manifest = validateManifestText(readText(join(root, "manifest.json")));
   } catch (error) {
     manifest = {
       ok: false,

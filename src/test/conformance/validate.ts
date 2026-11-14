@@ -123,3 +123,79 @@ export function validateManifest(value: unknown): Validation<Manifest> {
 
   return problems.length === 0 ? { ok: true, value } : { ok: false, problems };
 }
+
+type Frame =
+  | { readonly kind: "array" }
+  | { kind: "object"; expectKey: boolean; last: string | undefined };
+
+/** The index just past the string literal that starts at `start`, which is a double quote. */
+function endOfString(text: string, start: number): number {
+  let index = start + 1;
+  while (index < text.length && text[index] !== '"') {
+    index += text[index] === "\\" ? 2 : 1;
+  }
+
+  return index + 1;
+}
+
+/**
+ * The problems with the order of the keys in a corpus file's own text, which no parsed value can show: `JSON.parse` puts integer-like keys first in numeric order, whatever order the file wrote them in. Within every object the keys are in UTF-16 code unit order, which is how JavaScript compares strings, each key after the one before and none repeated, so integer-like keys are ordered as the strings they are; a key holding an unpaired surrogate is refused, since no loader reads it the same way.
+ */
+export function keyOrderProblems(text: string): readonly string[] {
+  const problems: string[] = [];
+  const stack: Frame[] = [];
+  let index = 0;
+  while (index < text.length) {
+    const char = text[index];
+    const top = stack[stack.length - 1];
+    if (char === '"') {
+      const end = endOfString(text, index);
+      if (top?.kind === "object" && top.expectKey) {
+        const key = String(JSON.parse(text.slice(index, end)));
+        if (!key.isWellFormed()) {
+          problems.push(
+            `a key holds an unpaired surrogate: ${JSON.stringify(text.slice(index, end))}`,
+          );
+        } else if (top.last !== undefined && key <= top.last) {
+          problems.push(
+            `key ${JSON.stringify(key)} comes after ${JSON.stringify(top.last)}, and keys are in UTF-16 code unit order without repeats`,
+          );
+        }
+        top.last = key;
+        top.expectKey = false;
+      }
+      index = end;
+      continue;
+    }
+    if (char === "{") {
+      stack.push({ kind: "object", expectKey: true, last: undefined });
+    } else if (char === "[") {
+      stack.push({ kind: "array" });
+    } else if (char === "}" || char === "]") {
+      stack.pop();
+    } else if (char === "," && top?.kind === "object") {
+      top.expectKey = true;
+    }
+    index += 1;
+  }
+
+  return problems;
+}
+
+/** A corpus file's text: its key order, then the file itself as validateCorpusFile reads it. A text that is not JSON throws, as it does for every loader. */
+export function validateCorpusText(text: string): Validation<CorpusFile> {
+  const order = keyOrderProblems(text);
+
+  return order.length > 0
+    ? { ok: false, problems: order }
+    : validateCorpusFile(JSON.parse(text));
+}
+
+/** The manifest's text, checked as validateCorpusText checks a corpus file's. */
+export function validateManifestText(text: string): Validation<Manifest> {
+  const order = keyOrderProblems(text);
+
+  return order.length > 0
+    ? { ok: false, problems: order }
+    : validateManifest(JSON.parse(text));
+}

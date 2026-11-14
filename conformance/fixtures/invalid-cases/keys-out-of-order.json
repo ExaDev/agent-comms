@@ -1,0 +1,1 @@
+{"cases":[{"expect":2,"args":[1],"from":"example.test.ts: g > t","function":"module.helper","id":"a","kind":"function"}]}
