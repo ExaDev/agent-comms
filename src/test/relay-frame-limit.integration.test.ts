@@ -11,6 +11,8 @@ import { waitFor } from "./test-transport.js";
 const LOOPBACK = "127.0.0.1";
 /** WebSocket close code for a message that is too big. */
 const WS_MESSAGE_TOO_BIG = 1009;
+/** WebSocket close code for a protocol error. */
+const WS_PROTOCOL_ERROR = 1002;
 const PAD_BYTE = 97;
 const CLOSE_WAIT_MS = 10_000;
 const BYTES_PER_MIB = 1_048_576;
@@ -89,7 +91,10 @@ it("closes a connection that sends a message one byte over the limit with the to
   expect(bystander.readyState).toBe(WS.OPEN);
   const later = await connect(url);
   expect(later.readyState).toBe(WS.OPEN);
-  expect(errors).toEqual([]);
+  // The connection's own error event is reported, once, and is not left to end the process.
+  expect(errors.map((error) => error.message)).toEqual([
+    "Max payload size exceeded",
+  ]);
 });
 
 it("does not refuse a message of exactly the limit for its size", async () => {
@@ -99,8 +104,8 @@ it("does not refuse a message of exactly the limit for its size", async () => {
 
   const code = await closeCodeAfterSending(socket, MAX_RELAY_FRAME_BYTES);
 
-  // The bytes are not a frame, so the connection is closed for that, a protocol error, and never for their size.
-  expect(code).not.toBe(WS_MESSAGE_TOO_BIG);
+  // The bytes are not a frame, so the connection is closed for that, as a protocol error, and never for their size.
+  expect(code).toBe(WS_PROTOCOL_ERROR);
 });
 
 it("states the limit as sixteen mebibytes", () => {
