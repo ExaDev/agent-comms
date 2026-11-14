@@ -4,7 +4,6 @@
   },
   "description": "Cross-harness LLM agent communication mesh — rooms, DMs, and presence",
   "homepage": "https://github.com/ExaDev/agent-comms#readme",
-  "hooks": "./hooks/hooks.json",
   "license": "MIT",
   "mcpServers": {
     "agent-comms": {
