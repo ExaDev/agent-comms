@@ -1,3 +1,9 @@
+## [9.0.2](https://github.com/ExaDev/agent-comms/compare/v9.0.1...v9.0.2) (2026-11-14)
+
+### Tests
+
+* hold the plugin manifest to the one component it means to declare ([030e546](https://github.com/ExaDev/agent-comms/commit/030e5463d3aa1effa63228a64d73fc61503a3c75))
+
 ## [9.0.1](https://github.com/ExaDev/agent-comms/compare/v9.0.0...v9.0.1) (2026-11-14)
 
 ### Bug Fixes
