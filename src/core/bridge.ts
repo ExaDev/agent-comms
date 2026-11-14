@@ -64,6 +64,7 @@ export const MCP_TOOL_PARAMS = z.object({
     "mesh_advertise",
     "mesh_unadvertise",
     "mesh_interfaces",
+    "lan_web_uis",
     "mesh_listen",
     "mesh_unlisten",
     "mesh_listeners",
@@ -389,6 +390,8 @@ export function buildAction(params: Record<string, unknown>): CommsAction {
       return { action: "mesh_unadvertise", id: p.id };
     case "mesh_interfaces":
       return { action: "mesh_interfaces" };
+    case "lan_web_uis":
+      return { action: "lan_web_uis" };
     case "mesh_listen":
       if (p.host === undefined)
         throw new BuildActionError("mesh_listen", "host");
