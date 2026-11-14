@@ -1,3 +1,16 @@
+## [9.0.1](https://github.com/ExaDev/agent-comms/compare/v9.0.0...v9.0.1) (2026-11-14)
+
+### Bug Fixes
+
+* **build:** load the plugin hooks once and quote the plugin root ([5995925](https://github.com/ExaDev/agent-comms/commit/59959252143fc28957a23f5077974b67f3f9153e)), references [#470](https://github.com/ExaDev/agent-comms/issues/470)
+* **build:** start the project MCP server from the checkout with no absolute path ([c3fbcca](https://github.com/ExaDev/agent-comms/commit/c3fbcca1ca271c5085daaab5421c9344ecf3e8f7)), closes [#534](https://github.com/ExaDev/agent-comms/issues/534)
+* **build:** wrap the plugin hooks in the top-level hooks key Claude Code requires ([70c2940](https://github.com/ExaDev/agent-comms/commit/70c2940c9b102865719a323148d2972e20568689)), closes [#470](https://github.com/ExaDev/agent-comms/issues/470)
+* **tool:** list lan_web_uis in the MCP tool's action enum ([e6af058](https://github.com/ExaDev/agent-comms/commit/e6af058a8a460215e159f3dd3e1976393d2ed8e6)), closes [#533](https://github.com/ExaDev/agent-comms/issues/533)
+
+### Refactoring
+
+* **bridge:** use a neutral home directory in the project tree example and tests ([d4cfbee](https://github.com/ExaDev/agent-comms/commit/d4cfbee69c21e75aafd62eaaaf1635b2c42d14a7))
+
 ## [9.0.0](https://github.com/ExaDev/agent-comms/compare/v8.15.26...v9.0.0) (2026-11-14)
 
 ### ⚠ BREAKING CHANGES
