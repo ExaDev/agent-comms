@@ -203,7 +203,12 @@ export class RoomProtocol {
     const replyTo = RoomProtocol.replyToFromRefs(params.refs);
     const streamingBehavior = RoomProtocol.streamingBehaviorFromParams(params);
     const id = bytesToHex(params["message-id"]);
-    const timestamp = new Date(params["sent-at"]).toISOString();
+    const sentAt = new Date(params["sent-at"]);
+    // A number outside the range of dates is an invalid date, and formatting one throws.
+    if (Number.isNaN(sentAt.getTime())) {
+      return { result: "error", code: "malformed_params" };
+    }
+    const timestamp = sentAt.toISOString();
     const peerId = this.deps.getPeerId();
 
     const parsedPath = parseRoomPath(roomPath);
