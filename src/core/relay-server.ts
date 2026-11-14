@@ -4,6 +4,7 @@
  * Admission is deny-by-default, like every other cross-machine decision here: a connection is registered with the hub only once it gossips an advert for a device isAdmitted accepts, and every gossiped advert naming a device it does not accept is dropped before the hub sees it. A connection that never gossips an admitted device can neither be named by a relay-connect nor relay anything, and learns nothing, since the hub's catch-up is sent only in answer to a registered connection's gossip.
  */
 
+import { reportRejection } from "./detached-work.js";
 import { createServer, type Server } from "node:http";
 import * as os from "node:os";
 import { WebSocketServer } from "ws";
@@ -48,7 +49,10 @@ export class RelayServer {
   constructor(private readonly options: Readonly<RelayServerOptions>) {
     this.wss.on("connection", (socket) => {
       socket.binaryType = "arraybuffer";
-      void this.serve(wrapWsSocket(socket));
+      reportRejection(
+        this.serve(wrapWsSocket(socket)),
+        () => this.options.onError,
+      );
     });
   }
 
