@@ -21,7 +21,8 @@ export interface FrontendAssets {
   meshWorkerJs: string;
   swJs: string;
   manifestJson: string;
-  icons: Readonly<Record<string, Buffer>>;
+  /** The PWA icons by file name. A map, not an object: the name comes from the request path, and an object would also answer a name that is a member of every object (`constructor`, `toString`). */
+  icons: ReadonlyMap<string, Buffer>;
 }
 
 /** The frontend build output is absent from the directory it should be in. */
@@ -56,9 +57,12 @@ export function loadFrontendAssets(assetDir: string): FrontendAssets {
   const indexHtml = readIfPresent(path.join(assetDir, "index.html"));
   if (indexHtml === undefined) throw new FrontendNotBuiltError(assetDir);
 
-  const icons: Record<string, Buffer> = {};
+  const icons = new Map<string, Buffer>();
   for (const filename of ICON_FILENAMES) {
-    icons[filename] = fs.readFileSync(path.join(assetDir, "icons", filename));
+    icons.set(
+      filename,
+      fs.readFileSync(path.join(assetDir, "icons", filename)),
+    );
   }
 
   return {

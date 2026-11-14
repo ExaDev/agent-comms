@@ -11,6 +11,7 @@ import type {
   IncomingManageRequest,
   ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
+import { reportRejection } from "./detached-work.js";
 import { isMeshMessage } from "./wire-protocol.js";
 import type { MeshMessage } from "./wire-protocol.js";
 import type { ConnectionHandle, TransportEvents } from "./transport.js";
@@ -128,9 +129,13 @@ export function createRoomRouter(options: RoomRouterOptions): RoomRouter {
     origin: Readonly<RoomRequestOrigin>,
   ): Promise<void> {
     const verb = extractParamsVerb(request.command.params);
+    // The verb is what a peer sent: look it up among the handlers' own names only, never the members every object has (`constructor`, `toString`), which would be called as a handler.
     const handler =
-      request.command.verb !== FRAME_VERB && verb !== undefined
-        ? options.handlers?.[verb]
+      request.command.verb !== FRAME_VERB &&
+      verb !== undefined &&
+      options.handlers !== undefined &&
+      Object.hasOwn(options.handlers, verb)
+        ? options.handlers[verb]
         : undefined;
     if (handler === undefined) {
       await request
@@ -138,7 +143,16 @@ export function createRoomRouter(options: RoomRouterOptions): RoomRouter {
         .catch(() => undefined);
       return;
     }
-    const outcome = await handler(request, handle, origin);
+    // A handler that throws on what a peer sent answers that request with an error and is reported; it must not end the loop that reads this session's requests, or the process.
+    let outcome: ManageOutcome;
+    try {
+      outcome = await handler(request, handle, origin);
+    } catch (err) {
+      options.events.onError?.(
+        err instanceof Error ? err : new Error(String(err)),
+      );
+      outcome = { result: "error", code: "internal_error" };
+    }
     await request.respond(outcome).catch(() => undefined);
   }
 
@@ -149,8 +163,18 @@ export function createRoomRouter(options: RoomRouterOptions): RoomRouter {
   ): Promise<void> {
     if (request.command.verb === FRAME_VERB) {
       const message = extractMessage(request.command);
-      if (message !== undefined) {
-        routeLegacyMessage(handle, message, options.events);
+      try {
+        if (message !== undefined) {
+          routeLegacyMessage(handle, message, options.events);
+        }
+      } catch (err) {
+        options.events.onError?.(
+          err instanceof Error ? err : new Error(String(err)),
+        );
+        await request
+          .respond({ result: "error", code: "internal_error" })
+          .catch(() => undefined);
+        return;
       }
       await request.respond({ result: "ok" }).catch(() => undefined);
       return;
@@ -170,11 +194,14 @@ export function createRoomRouter(options: RoomRouterOptions): RoomRouter {
     handleLocalRequest,
     handleRelayedRequest,
     drainSession(session, handle) {
-      void (async () => {
-        for await (const request of session.incomingManageRequests) {
-          await handleLocalRequest(request, handle);
-        }
-      })();
+      reportRejection(
+        (async () => {
+          for await (const request of session.incomingManageRequests) {
+            await handleLocalRequest(request, handle);
+          }
+        })(),
+        () => options.events.onError,
+      );
     },
   };
 }

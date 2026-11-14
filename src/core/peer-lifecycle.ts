@@ -4,6 +4,7 @@
  * Two roles are kept apart here (agent-comms#341). The well-known port listener is only the compatibility first-contact address and introduction path, and is still passed on by graceful handover and recovered by the bind race. The coordinator duties (the stale-agent probe, single-authority departure announcements, the default cc-peer front) follow the elected CoordinatorRole instead, whose holder need not be the peer that bound the port.
  */
 
+import { reportRejection } from "./detached-work.js";
 import { normaliseWireState } from "./wire-protocol.js";
 import { parseIsoTimestampMs } from "./iso-timestamp.js";
 import type {
@@ -158,7 +159,7 @@ export class PeerLifecycle {
       this.deps.peerInfo.set(peer.id, peer);
       // The list always includes this store's own entry — dialling yourself is a wasted connection attempt (and, on some platforms, an immediate self-inflicted ECONNRESET) that never needs to happen.
       if (peer.id === peerId) continue;
-      void this.deps.requireTransport().connectToPeer(peer, peerId);
+      this.detach(this.deps.requireTransport().connectToPeer(peer, peerId));
     }
   }
 
@@ -166,7 +167,7 @@ export class PeerLifecycle {
     this.deps.peerInfo.set(peer.id, peer);
     const peerId = this.deps.getPeerId();
     if (peer.id === peerId) return;
-    void this.deps.requireTransport().connectToPeer(peer, peerId);
+    this.detach(this.deps.requireTransport().connectToPeer(peer, peerId));
   }
 
   async handleIntroduction(
@@ -242,13 +243,18 @@ export class PeerLifecycle {
     if (self !== undefined) this.deps.peerInfo.set(peerId, self);
     for (const peer of peerList) {
       this.deps.peerInfo.set(peer.id, peer);
-      void this.deps.requireTransport().connectToPeer(peer, peerId);
+      this.detach(this.deps.requireTransport().connectToPeer(peer, peerId));
     }
     await this.claimWhileAlone();
   }
 
+  /** Work started for a peer and not awaited: a failure is reported through onError (or stderr), never left as an unhandled rejection. */
+  private detach(work: Readonly<Promise<unknown>>): void {
+    reportRejection(work, () => this.deps.onError);
+  }
+
   handlePeerDisconnected(handle: Readonly<ConnectionHandle>): void {
-    void this.handlePeerDeparture(handle.id);
+    this.detach(this.handlePeerDeparture(handle.id));
   }
 
   /** The awaitable form of handlePeerDisconnected, which TransportEvents forces to be synchronous. A departing peer leaves the peer list. When it held the elected coordinator role, the role is recovered first (the lowest surviving device-id claims at a raised term), so the new holder is already in place by the time the departed peer's agent record is retired; when it held the well-known port this side dialled, the vacated port is contested too. */

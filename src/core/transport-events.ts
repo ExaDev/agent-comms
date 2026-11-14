@@ -23,18 +23,22 @@ export interface TransportEventTargets {
 export function createTransportEvents(
   store: Readonly<TransportEventTargets>,
 ): TransportEvents {
+  // Every handler below runs on what a peer sent, so a failure in one is reported through the store and never left as an unhandled rejection.
+  const detach = (work: Readonly<Promise<unknown>>): void => {
+    work.catch(store.reportError);
+  };
   return {
     onMessage: (handle, msg) => {
-      void store.peerLifecycle.handleDataMessage(handle, msg);
+      detach(store.peerLifecycle.handleDataMessage(handle, msg));
     },
     onPeerConnected: (handle, info) => {
-      void store.peerLifecycle.handlePeerConnected(handle, info);
+      detach(store.peerLifecycle.handlePeerConnected(handle, info));
     },
     onPeerDisconnected: (handle) => {
       store.peerLifecycle.handlePeerDisconnected(handle);
     },
     onIntroduction: (handle, msg) => {
-      void store.peerLifecycle.handleIntroduction(handle, msg);
+      detach(store.peerLifecycle.handleIntroduction(handle, msg));
     },
     onPeerList: (peers) => {
       store.peerLifecycle.handlePeerList(peers);
@@ -53,7 +57,7 @@ export function createTransportEvents(
     },
     onError: store.reportError,
     onRevocationAnnounce: (entry) => {
-      void store.deliveryEngine.handleRevocationAnnounce(entry);
+      detach(store.deliveryEngine.handleRevocationAnnounce(entry));
     },
     onCoordinatorClaim: (handle, frame) => {
       void store.coordinatorRole
@@ -67,7 +71,7 @@ export function createTransportEvents(
       store.deliveryEngine.handlePresenceAdvert(handle.id, status);
     },
     onDeviceReachable: (deviceHex) => {
-      void store.roomProtocol.flushPendingRoomRequests(deviceHex);
+      detach(store.roomProtocol.flushPendingRoomRequests(deviceHex));
     },
   };
 }

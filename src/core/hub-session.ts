@@ -2,6 +2,7 @@
  * HubSession -- the relay-hub connection mode (agent-comms#151), split from wire-mesh-transport.ts under the max-lines cap the same way connection-approval.ts and its siblings were. A hub connection (wss://mesh.exadev.io/) is a RELAY, not a coordinator: no connect_request/introduce approval applies. The session's own self-advert is forwarded by the hub to every other connected agent and the hub answers with a catch-up of everyone already there, so peers discover each other purely through gossip. Messages ride relay-connect pairings -- sendManageRequest's own targetDevice routing, which the session layer wraps as relay-data to exactly that device.
  */
 
+import { consumeEach, reportRejection } from "./detached-work.js";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
@@ -223,11 +224,12 @@ export class HubSession {
     }
   }
 
-  /** Consumes one hub session's inbound relayed manage-requests until it ends, dispatching each in arrival order to dispatchHubRequest -- see that function's own doc for the actual per-request trust decision. Split out purely so the decision itself is directly unit-testable against fake requests/deps (hub-session-dispatch.test.ts), the same reason hub-forwarding.ts's own routeRoomRequestViaHub is a standalone function rather than a private method. Passes this.url through as dispatchHubRequest's own hubAddress -- this side's own dialled address for the hub every request on this specific session arrived over (agent-comms#216), the answering-side equivalent of tracePath's own local.hubAddress above. */
+  /** Consumes one hub session's inbound relayed manage-requests until it ends, dispatching each in arrival order to dispatchHubRequest, and reporting a request whose dispatch fails without ending the loop, so one request cannot stop every later one on the session -- see that function's own doc for the actual per-request trust decision. Split out purely so the decision itself is directly unit-testable against fake requests/deps (hub-session-dispatch.test.ts), the same reason hub-forwarding.ts's own routeRoomRequestViaHub is a standalone function rather than a private method. Passes this.url through as dispatchHubRequest's own hubAddress -- this side's own dialled address for the hub every request on this specific session arrived over (agent-comms#216), the answering-side equivalent of tracePath's own local.hubAddress above. */
   private consume(session: AcceptedMeshSession): void {
-    void (async () => {
-      for await (const request of session.incomingManageRequests) {
-        if (this.deps.isShuttingDown()) break;
+    void consumeEach(
+      session.incomingManageRequests,
+      async (request) => {
+        if (this.deps.isShuttingDown()) return;
         await dispatchHubRequest({
           request,
           deps: this.deps,
@@ -236,28 +238,32 @@ export class HubSession {
           },
           hubAddress: this.url,
         });
-      }
-    })();
+      },
+      () => this.deps.events.onError,
+    );
   }
 
   /** Consumes one hub session's inbound core/data frames until it ends, handing each one that came through a relay pairing to onRelayedDataFrame in arrival order. A failure in the handler is reported and the loop carries on, since one bad frame must not stop every later one. */
   private consumeDataFrames(session: AcceptedMeshSession): void {
-    void (async () => {
-      for await (const incoming of session.incomingDataFrames) {
-        if (this.deps.isShuttingDown()) break;
-        if (incoming.fromDevice === undefined) continue;
-        await this.deps
-          .onRelayedDataFrame(
-            deviceIdToHex(incoming.fromDevice),
-            incoming.frame,
-          )
-          .catch((error: unknown) => {
-            this.deps.events.onError?.(
-              error instanceof Error ? error : new Error(String(error)),
-            );
-          });
-      }
-    })();
+    reportRejection(
+      (async () => {
+        for await (const incoming of session.incomingDataFrames) {
+          if (this.deps.isShuttingDown()) break;
+          if (incoming.fromDevice === undefined) continue;
+          await this.deps
+            .onRelayedDataFrame(
+              deviceIdToHex(incoming.fromDevice),
+              incoming.frame,
+            )
+            .catch((error: unknown) => {
+              this.deps.events.onError?.(
+                error instanceof Error ? error : new Error(String(error)),
+              );
+            });
+        }
+      })(),
+      () => this.deps.events.onError,
+    );
   }
 
   /** Sends one core/data frame to a specific hub-reachable device through a relay pairing, sealed end to end with that device. Rejects when no hub session is live. */

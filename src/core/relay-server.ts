@@ -4,6 +4,7 @@
  * Admission is deny-by-default, like every other cross-machine decision here: a connection is registered with the hub only once it gossips an advert for a device isAdmitted accepts, and every gossiped advert naming a device it does not accept is dropped before the hub sees it. A connection that never gossips an admitted device can neither be named by a relay-connect nor relay anything, and learns nothing, since the hub's catch-up is sent only in answer to a registered connection's gossip.
  */
 
+import { reportRejection } from "./detached-work.js";
 import { createServer, type Server } from "node:http";
 import * as os from "node:os";
 import { WebSocketServer } from "ws";
@@ -20,6 +21,16 @@ import { createUplink, type UplinkFeed } from "./relay-uplink.js";
 
 /** The wildcard IPv4 address: listening on it serves every interface, loopback and the local network alike. */
 export const ALL_INTERFACES_HOST = "0.0.0.0";
+
+const BYTES_PER_KIB = 1024;
+const KIB_PER_MIB = 1024;
+const RELAY_FRAME_MIB = 16;
+
+/**
+ * The most bytes one WebSocket message may carry to the relay: 16 MiB. It is above the largest frame a legitimate client sends (a full reply of account ledger entries, about 12.6 MiB), equal to the receive cap of the Rust stream transport, and below the 32 MiB the hosted hub accepts, so no frame a conforming peer sends is refused and the relay holds no more of one connection's message than the hub would. The WebSocket server enforces it on the length a frame declares, before its payload is read: a message over it closes that connection with 1009 and nothing else.
+ */
+export const MAX_RELAY_FRAME_BYTES =
+  RELAY_FRAME_MIB * KIB_PER_MIB * BYTES_PER_KIB;
 
 /** The loopback address every relay also offers, so a peer on the same machine reaches it without leaving the host. */
 const LOOPBACK_HOST = "127.0.0.1";
@@ -40,15 +51,25 @@ export class RelayServer {
   /** The devices (hex) each connected client has registered, so an advert for one of them arriving from upstream never displaces the client's own registration. */
   private readonly clientDevices = new Map<Readonly<Connection>, Set<string>>();
   private readonly http: Server = createServer();
-  private readonly wss = new WebSocketServer({ server: this.http });
+  private readonly wss = new WebSocketServer({
+    server: this.http,
+    maxPayload: MAX_RELAY_FRAME_BYTES,
+  });
   private port = 0;
   /** Settles once the previous uplink has been forgotten by the hub, which refuses a second while one is attached. */
   private uplinkDone: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: Readonly<RelayServerOptions>) {
+    // The WebSocket server re-emits an error of its listener; with no handler it would end the process.
+    this.wss.on("error", (error) => {
+      this.options.onError(error);
+    });
     this.wss.on("connection", (socket) => {
       socket.binaryType = "arraybuffer";
-      void this.serve(wrapWsSocket(socket));
+      reportRejection(
+        this.serve(wrapWsSocket(socket)),
+        () => this.options.onError,
+      );
     });
   }
 

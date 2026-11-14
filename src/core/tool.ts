@@ -36,6 +36,7 @@ import type { CommsStore } from "./comms-store.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type { DiscoveryManager } from "./discovery.js";
 import { CommsError } from "./store.js";
+import { requireMessageWithinLimit } from "./message-limits.js";
 import type { LedgerGaps } from "./account-ledger.js";
 import { getOwnPackageVersion } from "./package-version.js";
 import { describeDeliveryFor } from "./send-outcome.js";
@@ -584,6 +585,7 @@ export class CommsTool {
     ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "send" },
   ): Promise<CommsResult> {
+    requireMessageWithinLimit(action.content);
     const roomId = action.target;
     const { message, deliveries } = await this.store.sendRoomMessage(
       roomId,
@@ -620,6 +622,7 @@ export class CommsTool {
     ctx: Readonly<CommsContext>,
     action: CommsAction & { action: "dm" },
   ): Promise<CommsResult> {
+    requireMessageWithinLimit(action.content);
     const targetId = action.target;
     const { message, delivery } = await this.store.sendDm(
       ctx.agentId,

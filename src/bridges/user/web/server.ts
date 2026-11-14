@@ -18,6 +18,7 @@ import type { MeshStore } from "../../../core/mesh-store.js";
 import { CommsError } from "../../../core/store.js";
 import type { MeshStatePatch } from "../../../core/wire-protocol.js";
 import type { WebUrlStatus } from "../../../core/tool.js";
+import { MAX_MESSAGE_BYTES } from "../../../core/message-limits.js";
 import {
   createRoomAction,
   declineInviteAction,
@@ -60,6 +61,13 @@ import {
 import { bridgePortRange } from "./bridge-port-range.js";
 import { startWebBeacon } from "./web-beacon.js";
 import {
+  REQUEST_TIMEOUT_MS,
+  meshErrorMessage,
+  invalidJsonBody,
+  readBoundedBody,
+  serveRoute,
+} from "./request-handling.js";
+import {
   createFrontendAssetLoader,
   FrontendNotBuiltError,
   type FrontendAssets,
@@ -84,6 +92,10 @@ const frontendAssets = createFrontendAssetLoader(
 /**
  * The frontend build output, or undefined after answering 503 because the build is absent. The server module is imported by every bridge, so a checkout without the build must still start; only the routes that serve the frontend are unavailable.
  */
+/** The body of the 503 for a frontend that was never built. */
+const FRONTEND_NOT_BUILT_BODY =
+  "The web frontend is not built. A git checkout does not include the build output; install the npm package, or run `pnpm build:frontend` in a checkout with its development dependencies installed.";
+
 function frontendOrUnavailable(
   res: http.ServerResponse,
 ): FrontendAssets | undefined {
@@ -94,7 +106,8 @@ function frontendOrUnavailable(
     res.writeHead(HTTP_SERVICE_UNAVAILABLE, {
       "Content-Type": "text/plain; charset=utf-8",
     });
-    res.end(error.message);
+    // Fixed text: the error's own message names the install path of this machine, which is not for a client.
+    res.end(FRONTEND_NOT_BUILT_BODY);
     return undefined;
   }
 }
@@ -282,10 +295,27 @@ export async function createWebServer(options?: {
     localClientAddresses,
   };
 
-  const server = http.createServer((req, res) => {
-    if (!admitRequest(accessPolicy, req, res)) return;
-    handleRequest(req, res, controller, webConsoleDist);
-  });
+  const server = http.createServer(
+    { requestTimeout: REQUEST_TIMEOUT_MS, headersTimeout: REQUEST_TIMEOUT_MS },
+    (req, res) => {
+      // Every response, the fixed routes and the operator's web-console files alike, forbids a browser to guess a type other than the one declared.
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      try {
+        if (!admitRequest(accessPolicy, req, res)) return;
+        handleRequest(req, res, controller, webConsoleDist);
+      } catch (err) {
+        // A request the synchronous routing cannot handle is answered, not thrown: an exception out of this listener would end the process.
+        process.stderr.write(
+          `agent-comms web UI: ${err instanceof Error ? err.message : String(err)}\n`,
+        );
+        if (!res.headersSent) {
+          jsonError(res, "Internal server error", HTTP_INTERNAL_SERVER_ERROR);
+        } else {
+          res.end();
+        }
+      }
+    },
+  );
 
   let boundPort: number;
   try {
@@ -308,10 +338,15 @@ export async function createWebServer(options?: {
     publisher.publish({ kind: "delivery", event });
   });
 
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({
+    noServer: true,
+    maxPayload: MAX_MESSAGE_BYTES,
+  });
   const rpcHandler = new RPCHandler(meshRouter);
 
   server.on("upgrade", (req, socket, head) => {
+    // A socket error before or after the upgrade (a peer that resets, say) is that connection's alone.
+    socket.on("error", reportSocketError);
     const decision = authorise(accessPolicy, requestOf(req));
     if (decision.kind !== "allow") {
       const status =
@@ -333,6 +368,8 @@ export async function createWebServer(options?: {
   });
 
   wss.on("connection", (ws) => {
+    // A socket error (a message over the size limit closes the socket with code 1009 and raises one) is handled here: an error event with no listener would end the process.
+    ws.on("error", reportSocketError);
     // RPCHandler.upgrade() wants a DOM-shaped WebSocket (addEventListener's overload set), which "ws"'s own type declarations don't structurally satisfy (its addEventListener options param is narrower than DOM's) -- .message()/.close() accept the looser { send } shape "ws" does satisfy, and are the documented manual equivalent to .upgrade().
     const context = { controller, publisher };
     ws.on("message", (data, isBinary) => {
@@ -341,10 +378,10 @@ export async function createWebServer(options?: {
       const bytes = raw instanceof ArrayBuffer ? Buffer.from(raw) : raw;
       // Buffer's .buffer is typed ArrayBufferLike (Buffer can wrap a SharedArrayBuffer); RPCHandler.message() wants the narrower Uint8Array<ArrayBuffer> -- a fresh Uint8Array.from() copy is always backed by a plain ArrayBuffer, satisfying that exactly.
       const payload = isBinary ? Uint8Array.from(bytes) : bytes.toString();
-      void rpcHandler.message(ws, payload, { context });
+      rpcHandler.message(ws, payload, { context }).catch(reportSocketError);
     });
     ws.on("close", () => {
-      void rpcHandler.close(ws);
+      rpcHandler.close(ws).catch(reportSocketError);
     });
   });
 
@@ -360,6 +397,13 @@ export async function createWebServer(options?: {
   }
 
   return { server, controller, wss, publisher, host, accessToken };
+}
+
+/** Reports a failure of one WebSocket connection to stderr: it only ever affects that connection. */
+function reportSocketError(err: unknown): void {
+  process.stderr.write(
+    `agent-comms web UI: socket error: ${err instanceof Error ? err.message : String(err)}\n`,
+  );
 }
 
 function requestOf(req: http.IncomingMessage): {
@@ -454,12 +498,16 @@ export async function runWeb(userName: string, port?: number): Promise<void> {
     process.exit(0);
   };
 
-  process.on("SIGINT", () => {
-    void cleanup();
-  });
-  process.on("SIGTERM", () => {
-    void cleanup();
-  });
+  const shutDown = (): void => {
+    cleanup().catch((err: unknown) => {
+      process.stderr.write(
+        `agent-comms web UI: shutdown failed: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+      process.exit(1);
+    });
+  };
+  process.on("SIGINT", shutDown);
+  process.on("SIGTERM", shutDown);
 }
 
 // ---------------------------------------------------------------------------
@@ -472,7 +520,14 @@ function handleRequest(
   controller: ChatController,
   webConsoleDist: string | undefined,
 ): void {
-  const url = new URL(req.url ?? "/", `http://localhost`);
+  let url: URL;
+  try {
+    url = new URL(req.url ?? "/", `http://localhost`);
+  } catch {
+    // A request target that names no URL (an empty authority, say) is a bad request, not a fault.
+    jsonError(res, "Bad request", HTTP_BAD_REQUEST);
+    return;
+  }
 
   // wire-mesh's web-console — an alternate, generic reference-client UI, served only when AGENT_COMMS_WEB_CONSOLE_DIST resolves to a real build.
   if (
@@ -550,8 +605,8 @@ function handleRequest(
     const filename = url.pathname.slice("/icons/".length);
     const assets = frontendOrUnavailable(res);
     if (assets === undefined) return;
-    const icon = assets.icons[filename];
-    if (icon) {
+    const icon = assets.icons.get(filename);
+    if (icon !== undefined) {
       res.writeHead(HTTP_OK, {
         "Content-Type": "image/svg+xml",
         "Cache-Control": "public, max-age=604800",
@@ -563,18 +618,16 @@ function handleRequest(
 
   // API routes
   if (url.pathname === "/api/agents" && req.method === "GET") {
-    void (async () => {
-      const agents = await controller.getAgents();
-      json(res, agents);
-    })();
+    serveRoute(req, res, async () => {
+      json(res, await controller.getAgents());
+    });
     return;
   }
 
   if (url.pathname === "/api/rooms" && req.method === "GET") {
-    void (async () => {
-      const rooms = await controller.getRooms();
-      json(res, rooms);
-    })();
+    serveRoute(req, res, async () => {
+      json(res, await controller.getRooms());
+    });
     return;
   }
 
@@ -583,7 +636,7 @@ function handleRequest(
     url.pathname.endsWith("/messages") &&
     req.method === "GET"
   ) {
-    void (async () => {
+    serveRoute(req, res, async () => {
       const roomId = url.pathname.split("/")[3];
       if (roomId === undefined || roomId === "") {
         jsonError(res, "Room ID required", HTTP_BAD_REQUEST);
@@ -595,7 +648,7 @@ function handleRequest(
         since,
       });
       json(res, messages);
-    })();
+    });
     return;
   }
 
@@ -613,7 +666,7 @@ function handleRequest(
   }
 
   if (url.pathname === "/api/mesh/trace" && req.method === "GET") {
-    void (async () => {
+    serveRoute(req, res, async () => {
       const target = url.searchParams.get("target");
       if (target === null || target === "") {
         jsonError(res, "target query parameter required", HTTP_BAD_REQUEST);
@@ -635,23 +688,31 @@ function handleRequest(
           meshErrorStatus(err, HTTP_BAD_REQUEST),
         );
       }
-    })();
+    });
     return;
   }
 
   if (url.pathname === "/api/action" && req.method === "POST") {
-    void (async () => {
-      const body = await readBody(req);
-      const parsed: unknown = JSON.parse(body);
-      if (typeof parsed !== "object" || parsed === null) {
-        jsonError(res, "Invalid JSON", HTTP_BAD_REQUEST);
-        return;
+    serveRoute(req, res, async () => {
+      const body = await readBoundedBody(req);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        throw invalidJsonBody();
+      }
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
+        throw invalidJsonBody();
       }
       const params = Object.fromEntries(Object.entries(parsed));
 
       const result = await executeAction(controller, params);
       json(res, result);
-    })();
+    });
     return;
   }
 
@@ -792,9 +853,6 @@ function jsonError(
 }
 
 /** Extracts a reportable message from whatever meshGraph()/meshTrace() threw -- a CommsError has a real message, anything else is reported generically rather than leaking an unexpected error shape to the client. */
-function meshErrorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "Unknown error";
-}
 
 /** A transport that doesn't support mesh_graph/mesh_trace (CommsError code NOT_SUPPORTED, e.g. this bridge is running on FileStore rather than a real mesh) is a client-visible "this endpoint isn't available here" rather than a server fault. Any other error falls back to `otherwise` -- HTTP_BAD_REQUEST for mesh_trace, since its only other realistic failure is a malformed client-supplied target; HTTP_INTERNAL_SERVER_ERROR for mesh_graph, which takes no client input at all. */
 function meshErrorStatus(err: unknown, otherwise: number): number {
@@ -802,17 +860,4 @@ function meshErrorStatus(err: unknown, otherwise: number): number {
     return HTTP_NOT_IMPLEMENTED;
   }
   return otherwise;
-}
-
-async function readBody(req: http.IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => {
-      chunks.push(chunk);
-    });
-    req.on("end", () => {
-      resolve(Buffer.concat(chunks).toString());
-    });
-    req.on("error", reject);
-  });
 }
