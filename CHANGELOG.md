@@ -1,3 +1,13 @@
+## [9.0.9](https://github.com/ExaDev/agent-comms/compare/v9.0.8...v9.0.9) (2026-11-14)
+
+### Bug Fixes
+
+* **core:** order names, device ids and timestamps without a locale ([fb94005](https://github.com/ExaDev/agent-comms/commit/fb94005a67039c40d78d7082420344128b92a2b3))
+
+### Build
+
+* **lint:** ban localeCompare in favour of the shared comparators ([f07f8c8](https://github.com/ExaDev/agent-comms/commit/f07f8c8f2d97021270a7429770d1fb335cbdfca4))
+
 ## [9.0.8](https://github.com/ExaDev/agent-comms/compare/v9.0.7...v9.0.8) (2026-11-14)
 
 ### Build
