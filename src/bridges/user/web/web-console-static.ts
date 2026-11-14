@@ -14,21 +14,22 @@ export const WEB_CONSOLE_MOUNT = "/web-console";
 const HTTP_OK = 200;
 const HTTP_NOT_FOUND = 404;
 
-const CONTENT_TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".mjs": "application/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".map": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".txt": "text/plain; charset=utf-8",
-  ".wasm": "application/wasm",
-};
+/** Content type by extension. A map: the extension comes from the requested name, and an object would also answer a name that is a member of every object. */
+const CONTENT_TYPES: ReadonlyMap<string, string> = new Map([
+  [".html", "text/html; charset=utf-8"],
+  [".js", "application/javascript; charset=utf-8"],
+  [".mjs", "application/javascript; charset=utf-8"],
+  [".css", "text/css; charset=utf-8"],
+  [".json", "application/json; charset=utf-8"],
+  [".map", "application/json; charset=utf-8"],
+  [".svg", "image/svg+xml"],
+  [".png", "image/png"],
+  [".ico", "image/x-icon"],
+  [".woff", "font/woff"],
+  [".woff2", "font/woff2"],
+  [".txt", "text/plain; charset=utf-8"],
+  [".wasm", "application/wasm"],
+]);
 
 const DEFAULT_CONTENT_TYPE = "application/octet-stream";
 
@@ -90,7 +91,7 @@ export function serveWebConsole(
   }
 
   const contentType =
-    CONTENT_TYPES[path.extname(servable)] ?? DEFAULT_CONTENT_TYPE;
+    CONTENT_TYPES.get(path.extname(servable)) ?? DEFAULT_CONTENT_TYPE;
   res.writeHead(HTTP_OK, { "Content-Type": contentType });
   res.end(fs.readFileSync(servable));
   return true;

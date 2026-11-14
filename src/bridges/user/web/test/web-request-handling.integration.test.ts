@@ -19,7 +19,9 @@ import {
   freeLocalPort,
   unreachableHubUrl,
 } from "../../../../test/hub-helpers.js";
-import { MAX_REQUEST_BODY_BYTES } from "../request-handling.js";
+import { MAX_MESSAGE_BYTES } from "../../../../core/message-limits.js";
+import { REQUEST_TIMEOUT_MS, meshErrorMessage } from "../request-handling.js";
+import { CommsError } from "../../../../core/store.js";
 import { createWebServer, type WebServerHandle } from "../server.js";
 
 const HTTP_OK = 200;
@@ -148,6 +150,8 @@ describe("a malformed request body", () => {
     ["JSON null", "null"],
     ["a JSON number", "5"],
     ["a JSON string", '"text"'],
+    ["an empty JSON array", "[]"],
+    ["a JSON array holding an action", '[{"action":"list_rooms"}]'],
   ])("%s is answered 400 and the bridge keeps serving", async (_name, body) => {
     const answer = await request("POST", "/api/action", {
       body,
@@ -204,6 +208,28 @@ describe("a route whose work fails", () => {
     expect(JSON.parse(answer.body)).toEqual({ error: "Internal server error" });
   });
 
+  it("GET /api/mesh/trace answers a failure that is not a CommsError with fixed text, never its message", async () => {
+    vi.spyOn(handle.controller.meshStore, "meshTrace").mockRejectedValue(
+      new Error("detail with /a/private/path"),
+    );
+
+    const answer = await request("GET", "/api/mesh/trace?target=somewhere");
+
+    expect(JSON.parse(answer.body)).toEqual({ error: "Internal server error" });
+    expect(answer.body).not.toContain("/a/private/path");
+  });
+
+  it("GET /api/mesh/trace tells the client what a CommsError refused", async () => {
+    vi.spyOn(handle.controller.meshStore, "meshTrace").mockRejectedValue(
+      new CommsError("no such target", "NOT_FOUND"),
+    );
+
+    const answer = await request("GET", "/api/mesh/trace?target=somewhere");
+
+    expect(answer.status).toBe(HTTP_BAD_REQUEST);
+    expect(JSON.parse(answer.body)).toEqual({ error: "no such target" });
+  });
+
   it("GET /api/mesh/trace without a target is a 400", async () => {
     const answer = await request("GET", "/api/mesh/trace");
     expect(answer.status).toBe(HTTP_BAD_REQUEST);
@@ -239,7 +265,7 @@ describe("the maximum request size", () => {
     const answer = await new Promise<string>((resolve, reject) => {
       const socket = net.connect(port, "127.0.0.1", () => {
         socket.write(
-          `POST /api/action HTTP/1.1\r\nHost: 127.0.0.1:${String(port)}\r\nContent-Type: application/json\r\nContent-Length: ${String(MAX_REQUEST_BODY_BYTES + 1)}\r\n\r\n{`,
+          `POST /api/action HTTP/1.1\r\nHost: 127.0.0.1:${String(port)}\r\nContent-Type: application/json\r\nContent-Length: ${String(MAX_MESSAGE_BYTES + 1)}\r\n\r\n{`,
         );
       });
       let data = "";
@@ -263,7 +289,7 @@ describe("the maximum request size", () => {
         socket.write(
           `POST /api/action HTTP/1.1\r\nHost: 127.0.0.1:${String(port)}\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n`,
         );
-        const chunk = "a".repeat(MAX_REQUEST_BODY_BYTES / 2 + 1);
+        const chunk = "a".repeat(MAX_MESSAGE_BYTES / 2 + 1);
         const frame = `${chunk.length.toString(HEX_RADIX)}\r\n${chunk}\r\n`;
         socket.write(frame);
         socket.write(frame);
@@ -288,9 +314,9 @@ describe("the maximum request size", () => {
     );
     const body = JSON.stringify({
       action: "list_agents",
-      pad: "a".repeat(MAX_REQUEST_BODY_BYTES - overhead),
+      pad: "a".repeat(MAX_MESSAGE_BYTES - overhead),
     });
-    expect(Buffer.byteLength(body)).toBe(MAX_REQUEST_BODY_BYTES);
+    expect(Buffer.byteLength(body)).toBe(MAX_MESSAGE_BYTES);
 
     const answer = await request("POST", "/api/action", {
       body,
@@ -304,7 +330,7 @@ describe("the maximum request size", () => {
     const closeCode = await new Promise<number>((resolve, reject) => {
       const ws = new WS(`ws://127.0.0.1:${String(port)}/ws/mesh`);
       ws.on("open", () => {
-        ws.send(Buffer.alloc(MAX_REQUEST_BODY_BYTES + 1, PAD_BYTE));
+        ws.send(Buffer.alloc(MAX_MESSAGE_BYTES + 1, PAD_BYTE));
       });
       ws.on("close", (code) => {
         resolve(code);
@@ -335,5 +361,42 @@ describe("the maximum request size", () => {
 
     expect(["open", "closed"]).toContain(outcome);
     await stillServing();
+  });
+});
+
+describe("what a client is told of a failure", () => {
+  it("is the message of a CommsError and fixed text for anything else", () => {
+    expect(meshErrorMessage(new CommsError("refused", "X"))).toBe("refused");
+    expect(meshErrorMessage(new Error("quotes /a/path"))).toBe(
+      "Internal server error",
+    );
+    expect(meshErrorMessage("a string")).toBe("Internal server error");
+  });
+});
+
+describe("response and connection hardening", () => {
+  it.each(["/api/agents", "/", "/no-such-route"])(
+    "%s forbids content sniffing",
+    async (path) => {
+      const headers = await new Promise<http.IncomingHttpHeaders>(
+        (resolve, reject) => {
+          http
+            .get({ hostname: "127.0.0.1", port, path }, (res) => {
+              res.resume();
+              res.on("end", () => {
+                resolve(res.headers);
+              });
+            })
+            .on("error", reject);
+        },
+      );
+
+      expect(headers["x-content-type-options"]).toBe("nosniff");
+    },
+  );
+
+  it("gives a client one named time to send a whole request", () => {
+    expect(handle.server.requestTimeout).toBe(REQUEST_TIMEOUT_MS);
+    expect(handle.server.headersTimeout).toBe(REQUEST_TIMEOUT_MS);
   });
 });
