@@ -49,6 +49,12 @@ class PlatformGatedCrate(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("allows never-used", result.stdout)
 
+    def test_an_entry_without_a_reason_fails_the_allowlist_check(self) -> None:
+        result = allowlist_check("deny-no-reason.toml")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("allows cfg-if without a reason", result.stdout)
+        self.assertNotIn("platform-gated-member without", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

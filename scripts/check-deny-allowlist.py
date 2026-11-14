@@ -37,6 +37,19 @@ def allowed_names(config: Path) -> set[str]:
     return names
 
 
+def entries_without_reason(config: Path) -> set[str]:
+    """The names under `[bans] allow` whose entry does not give a non-empty `reason`, which every entry must, so adding a dependency is a reviewed change with the reason it is needed."""
+    text = config.read_text()
+    bans = re.search(r"^\[bans\]\s*$(.*?)(?=^\[|\Z)", text, re.MULTILINE | re.DOTALL)
+    block = re.search(r"^allow\s*=\s*\[(.*?)^\]", bans.group(1) if bans else "", re.MULTILINE | re.DOTALL)
+    missing: set[str] = set()
+    for line in block.group(1).splitlines() if block else []:
+        entry = re.match(r"\s*(?:\{\s*crate\s*=\s*)?\"([^\"]+)\"", line)
+        if entry and not re.search(r"reason\s*=\s*\"[^\"]+\"", line):
+            missing.add(entry.group(1))
+    return missing
+
+
 def diagnostics(manifest: Path, config: Path) -> list[dict[str, object]]:
     """The bans diagnostics cargo-deny prints, as JSON lines on stderr, whatever its exit status."""
     result = subprocess.run(
@@ -79,6 +92,9 @@ def main(arguments: list[str]) -> int:
     status = 0
     for name in sorted(allowed_names(config) - in_graph):
         print(f"{config.name} allows {name}, which cargo-deny does not find in the dependency graph")
+        status = 1
+    for name in sorted(entries_without_reason(config)):
+        print(f"{config.name} allows {name} without a reason")
         status = 1
     for name in sorted(crates_with_code(found, "not-allowed")):
         print(f"{name} is in the dependency graph and is not allowed by {config.name}")

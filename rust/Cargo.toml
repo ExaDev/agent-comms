@@ -10,11 +10,14 @@ license = "MIT"
 repository = "https://github.com/ExaDev/agent-comms"
 
 [workspace.dependencies]
-serde_json = "1"
+# Default features are off in every dependency, so a crate takes only the features it names.
+serde_json = { version = "1", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
 # Binding crates that need wasm-bindgen's generated FFI relax this in their own manifest, not here.
 unsafe_code = "deny"
 
 [workspace.lints.clippy]
+# Every default clippy lint is an error, in the editor and in CI alike, not only where a command passes -D warnings.
+all = { level = "deny", priority = -1 }
 dbg_macro = "deny"
