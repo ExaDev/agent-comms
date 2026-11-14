@@ -94,6 +94,13 @@ describe("ci.yml required-checks", () => {
     expect([...needsOf(workflow.jobs, AGGREGATE)].sort()).toEqual(expected);
   });
 
+  it("needs only jobs that always run, since a skipped needed job reads as passing", () => {
+    const conditioned = needsOf(workflow.jobs, AGGREGATE).filter(
+      (id) => workflow.jobs[id]?.if !== undefined,
+    );
+    expect(conditioned).toEqual([]);
+  });
+
   it("leaves out a job only when its condition is exactly a form that never runs on a pull request", () => {
     const needed = needsOf(workflow.jobs, AGGREGATE);
     const outside = Object.keys(workflow.jobs).filter(
