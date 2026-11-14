@@ -3479,13 +3479,16 @@
           "action": "no_such_action"
         }
       ],
-      "expect": {
-        "action": "whoami"
-      },
       "from": "recorded: src/core/bridge.ts (buildAction, an unknown action)",
       "function": "bridge.buildAction",
-      "id": "unknown-action-falls-back-to-whoami",
-      "kind": "function"
+      "id": "unknown-action-is-refused",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Invalid parameters",
+          "action"
+        ]
+      }
     },
     {
       "args": [
@@ -3495,13 +3498,16 @@
           "port": "7"
         }
       ],
-      "expect": {
-        "action": "whoami"
-      },
       "from": "recorded: src/core/bridge.ts (buildAction, a parameter of the wrong type)",
       "function": "bridge.buildAction",
-      "id": "wrong-type-falls-back-to-whoami",
-      "kind": "function"
+      "id": "wrong-type-parameter-is-refused",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Invalid parameters",
+          "port"
+        ]
+      }
     }
   ]
 }

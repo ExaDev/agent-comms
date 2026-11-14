@@ -36,6 +36,7 @@ export type { IdentitySlot } from "./identity-store.js";
 export type { CommsContext, CommsResult } from "./tool.js";
 export {
   buildAction,
+  InvalidToolParamsError,
   formatDeliveryEvent,
   extractStreamingBehavior,
   isActionableEvent,
