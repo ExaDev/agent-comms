@@ -35,6 +35,7 @@ import { runTui } from "./bridges/user/tui.js";
 import { runCli } from "./bridges/user/cli.js";
 import { readHiddenLine, runAccountCommand } from "./account-cli.js";
 import { openMachineAccountStore } from "./account-join-cli.js";
+import { UnusableIdentityRecordError } from "./core/issuer-identity-file.js";
 
 // ---------------------------------------------------------------------------
 // Zod schemas for config files
@@ -289,10 +290,13 @@ function runBridge(
     );
     process.exit(1);
   }
-  Promise.resolve(bridge.run(options)).catch((err: unknown) => {
-    console.error(err);
-    process.exit(1);
-  });
+  Promise.resolve(bridge.run(options)).catch(exitWithError);
+}
+
+/** Prints why a command could not start and exits non-zero. An unusable identity file's message already says what to do about it, so it is printed without the stack trace that would bury it. */
+function exitWithError(err: unknown): never {
+  console.error(err instanceof UnusableIdentityRecordError ? err.message : err);
+  process.exit(1);
 }
 
 function parseNameArg(args: readonly string[]): {
@@ -314,18 +318,12 @@ function parseNameArg(args: readonly string[]): {
 
 function runChat(args: readonly string[]): void {
   const { name } = parseNameArg(args);
-  runTui(name).catch((err: unknown) => {
-    console.error(err);
-    process.exit(1);
-  });
+  runTui(name).catch(exitWithError);
 }
 
 function runUserCli(cliCommand: string, args: readonly string[]): void {
   const { name, rest } = parseNameArg(args);
-  runCli(cliCommand, rest, name).catch((err: unknown) => {
-    console.error(err);
-    process.exit(1);
-  });
+  runCli(cliCommand, rest, name).catch(exitWithError);
 }
 
 // ---------------------------------------------------------------------------

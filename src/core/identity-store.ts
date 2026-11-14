@@ -3,7 +3,7 @@
  *
  * Mesh state stays in memory and on the wire; the only thing on disk is this local credential (plus, now, the tokens minted against it), the same trust model as an SSH key. A lock file holding a PID keeps two live bridges in one slot from sharing an identity, which would put duplicate peer IDs on the mesh; the second bridge runs with an ephemeral identity (the behaviour before persistence) instead. Bridges without a graceful shutdown hook can skip releasing the lock: a stale lock is detected by probing the recorded PID, the same way the coordinator probes for stale agents.
  *
- * Persisting the key material rather than a bare agent ID is what makes restarts work: delivery routing fires when agentId === peerId, and peerId is deviceIdToHex(identity.deviceId), so an ID without its key can never match the running peer. Renewal near certificate expiry currently generates an entirely fresh key pair rather than re-certifying the existing one, which silently rotates the device-id (and so invalidates any persisted room tokens bound to it) -- a real, separately tracked gap (#68), not addressed here.
+ * Persisting the key material rather than a bare agent ID is what makes restarts work: delivery routing fires when agentId === peerId, and peerId is deviceIdToHex(identity.deviceId), so an ID without its key can never match the running peer. Renewal near certificate expiry re-certifies the existing key pair, so the device-id survives it. A slot file that exists but cannot be used is never replaced: loading it throws UnusableIdentityRecordError (issuer-identity-file.ts), because a new key would silently change the peer id and discard every token the file holds. Only a missing file starts a new identity.
  */
 
 import * as fs from "node:fs";
@@ -13,15 +13,10 @@ import {
   type DataDirectoryLocation,
 } from "./data-directory.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
-import {
-  generateIdentity,
-  certifyKeyPair,
-  getCertificateFingerprint,
-  deriveDeviceId,
-  CERTIFICATE_VALIDITY_MS,
-} from "./identity.js";
+import { generateIdentity } from "./identity.js";
 import type { PeerIdentity } from "./identity.js";
 import { writeFileAtomic } from "./atomic-file.js";
+import { loadOrCreateIssuerIdentity } from "./issuer-identity-file.js";
 import {
   isPidAlive,
   readLockPid,
@@ -36,11 +31,6 @@ export interface IdentitySlot extends DataDirectoryLocation {
   /** Directory override for tests. */
   dir?: string;
 }
-
-/** Renewal margin is one twelfth of the certificate's total validity period. */
-const RENEWAL_MARGIN_FRACTION = 12;
-/** Renew during the final twelfth of the certificate's validity. */
-const RENEWAL_MARGIN_MS = CERTIFICATE_VALIDITY_MS / RENEWAL_MARGIN_FRACTION;
 
 /** A persisted identity/token/trust/ledger file holds real key material or capability tokens, so it is written owner-only. */
 const OWNER_ONLY_RW_PERMISSIONS = 0o600;
@@ -197,21 +187,10 @@ export function oplogDirFor(slot: Readonly<IdentitySlot>): string {
   return path.join(dir, base);
 }
 
-function persistIdentity(identityFile: string, identity: PeerIdentity): void {
-  const stored: StoredIdentity = {
-    privateKey: identity.privateKey,
-    certificate: identity.certificate,
-    expiresAt: new Date(Date.now() + CERTIFICATE_VALIDITY_MS).toISOString(),
-  };
-  writeFileAtomic(
-    identityFile,
-    `${JSON.stringify(stored, null, 2)}\n`,
-    OWNER_ONLY_RW_PERMISSIONS,
-  );
-}
-
 /**
  * Load the persisted identity for the slot, creating it on first use, and take the slot lock. Returns an ephemeral identity when the slot is already held by another live process.
+ *
+ * Throws UnusableIdentityRecordError when the slot's file exists but cannot be used (damaged, unreadable, or holding a key that cannot be certified again). The file is left untouched, the slot lock is released and no identity is returned: a caller must not join the mesh under a key the user did not choose, so the bridge stops with the error's message, which says what to do.
  */
 export function loadOrCreateIdentity(
   slot: Readonly<IdentitySlot>,
@@ -227,55 +206,12 @@ export function loadOrCreateIdentity(
     return generateIdentity();
   }
 
-  return loadStoredIdentity(identityFile) ?? createIdentity(identityFile);
-}
-
-/**
- * Load and validate the stored key material. A well-formed record nearing certificate expiry is renewed by re-certifying its existing key pair (preserving device-id) rather than replaced -- see `certifyKeyPair`'s own doc comment for why generating a fresh key pair here would be wrong. Returns undefined only when there is no usable existing key pair to renew at all (missing, unparseable, or corrupt), which is the caller's signal to generate an entirely new identity instead.
- */
-function loadStoredIdentity(identityFile: string): PeerIdentity | undefined {
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(identityFile, "utf-8"));
-  } catch {
-    return undefined;
-  }
-  if (!isStoredIdentity(parsed)) return undefined;
-
-  const expiresAt = Date.parse(parsed.expiresAt);
-  const needsRenewal =
-    Number.isNaN(expiresAt) || Date.now() > expiresAt - RENEWAL_MARGIN_MS;
-
-  try {
-    if (needsRenewal) {
-      const renewed = certifyKeyPair(parsed.privateKey);
-      // A plain persistIdentity() call here would silently drop this slot's roomTokens/issuedGrants (it always writes a bare {privateKey, certificate, expiresAt} record) -- write through writeStoredIdentity instead so a renewal preserves everything else already on record, the same way saveRoomToken/saveIssuedRoomGrant already do for their own fields.
-      writeStoredIdentity(identityFile, {
-        ...parsed,
-        privateKey: renewed.privateKey,
-        certificate: renewed.certificate,
-        expiresAt: new Date(Date.now() + CERTIFICATE_VALIDITY_MS).toISOString(),
-      });
-      return renewed;
-    }
-    return {
-      privateKey: parsed.privateKey,
-      certificate: parsed.certificate,
-      fingerprint: getCertificateFingerprint(parsed.certificate),
-      deviceId: deriveDeviceId(parsed.privateKey),
-    };
+    return loadOrCreateIssuerIdentity(identityFile, isStoredIdentity);
   } catch (err) {
-    console.error(
-      `agent-comms: stored identity at ${identityFile} is unreadable (${err instanceof Error ? err.message : String(err)}); generating a fresh identity`,
-    );
-    return undefined;
+    releaseLockFile(lockFile);
+    throw err;
   }
-}
-
-function createIdentity(identityFile: string): PeerIdentity {
-  const identity = generateIdentity();
-  persistIdentity(identityFile, identity);
-  return identity;
 }
 
 /**
@@ -291,14 +227,14 @@ export function probeSlotOwner(
 }
 
 /**
- * Loads (creating on first use) the persisted identity for a slot without taking its exclusivity lock. The cc-peer front (agent-comms#157) uses this to assume a not-yet-live session's own future identity, so the device-id -- and with it every agent id, room membership, and pending delivery already addressed to it -- carries over unchanged the moment that session's own bridge starts and claims the slot for real. Callers must have already confirmed via probeSlotOwner that no live bridge currently holds the slot; re-probing atomically against a concurrent acquisition isn't possible across the two separate files (identity vs lock) this store keeps, so it's the front's own periodic re-probe, not this function, that detects and reacts to a real bridge taking over afterwards.
+ * Loads (creating on first use) the persisted identity for a slot without taking its exclusivity lock. Throws UnusableIdentityRecordError exactly as loadOrCreateIdentity does, and the front reports it for that session without fronting it. The cc-peer front (agent-comms#157) uses this to assume a not-yet-live session's own future identity, so the device-id -- and with it every agent id, room membership, and pending delivery already addressed to it -- carries over unchanged the moment that session's own bridge starts and claims the slot for real. Callers must have already confirmed via probeSlotOwner that no live bridge currently holds the slot; re-probing atomically against a concurrent acquisition isn't possible across the two separate files (identity vs lock) this store keeps, so it's the front's own periodic re-probe, not this function, that detects and reacts to a real bridge taking over afterwards.
  */
 export function loadIdentityForFront(
   slot: Readonly<IdentitySlot>,
 ): PeerIdentity {
   const { dir, identityFile } = slotPaths(slot);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  return loadStoredIdentity(identityFile) ?? createIdentity(identityFile);
+  return loadOrCreateIssuerIdentity(identityFile, isStoredIdentity);
 }
 
 /**
