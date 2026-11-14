@@ -1,7 +1,7 @@
 /**
  * ConnectionCode generation and redemption (agent-comms#188): bootstraps GatewayTrust between two devices that have never established a mesh connection, since GatewayTrust's own deny-by-default, pin-the-key model otherwise requires a device-id to already be known and pasted in by hand (gateway_trust). One artifact, one generation flow, one redemption flow -- never two mechanisms bolted together.
  *
- * `code`/`expiresAt` are the always-checked half: freshness/liveness proof that whoever redeems this was on the other end of this exact exchange, recently. `signature` is the optional half: a detached PGP signature (armored) over `${code}:${expiresAt}:${deviceId}`, checked only when present. Redemption never requires a signature -- a device with no PGP identity still generates and redeems a bare code -- but when one is present, verifying it needs the signer's own public key, supplied by the caller either as a pasted armored block or (see pgp-keyserver.ts) fetched from a keyserver by fingerprint. Either way, a caller who also supplies the fingerprint they already independently trust gets it pinned: the verified key's own computed fingerprint must equal it, or redemption fails.
+ * `code`/`expiresAt` are the always-checked half: freshness/liveness proof that whoever redeems this was on the other end of this exact exchange, recently. `expiresAt` must be an ISO 8601 timestamp; a code whose expiry does not parse is refused as invalid. `signature` is the optional half: a detached PGP signature (armored) over `${code}:${expiresAt}:${deviceId}`, checked only when present. Redemption never requires a signature -- a device with no PGP identity still generates and redeems a bare code -- but when one is present, verifying it needs the signer's own public key, supplied by the caller either as a pasted armored block or (see pgp-keyserver.ts) fetched from a keyserver by fingerprint. Either way, a caller who also supplies the fingerprint they already independently trust gets it pinned: the verified key's own computed fingerprint must equal it, or redemption fails.
  *
  * PGP key material is never generated, stored, or managed by this module or by agent-comms generally -- signing and verification both take key material supplied per call by the caller, exactly as invoking `gpg --sign`/`gpg --verify` directly would. Building a persisted PGP-identity subsystem (key generation, passphrase storage, revocation) is a materially larger, security-sensitive scope the settled design (agent-comms#188) never asked for; a caller who wants a code signed brings whatever real-world PGP identity they already have (git-commit signing key, personal key on a keyserver, etc.) rather than trusting agent-comms to mint and hold a new one on their behalf.
  *
@@ -15,6 +15,7 @@ import {
   saveConnectionCodeLedger,
 } from "./identity-store.js";
 import type { IdentitySlot, StoredConnectionCode } from "./identity-store.js";
+import { parseIsoTimestampMs } from "./iso-timestamp.js";
 import type { ConnectionCode } from "./types.js";
 
 /** Nonce length: longer than nanoid's own 21-character default, since this identifier doubles as the single-use token a redemption check keys off, not merely a display id. */
@@ -35,6 +36,7 @@ export const DEFAULT_CONNECTION_CODE_TTL_MS =
 export type ConnectionCodeInvalidReason =
   | "expired"
   | "already_redeemed"
+  | "invalid_expiry"
   | "signature_required"
   | "signature_invalid"
   | "fingerprint_mismatch";
@@ -155,6 +157,12 @@ export interface RedeemConnectionCodeResult {
   fingerprint?: string;
 }
 
+/** Whether an expiry given as text has passed at `now`. An expiry that does not parse counts as passed: it can never be compared against the clock, so nothing may rely on it staying valid. */
+function hasExpired(expiresAt: string, now: number): boolean {
+  const expiresAtMs = parseIsoTimestampMs(expiresAt);
+  return expiresAtMs === undefined || expiresAtMs <= now;
+}
+
 /**
  * Generates and redeems ConnectionCode artifacts, enforcing the always-checked freshness/liveness half (expiry, single-use) and the optional PGP-signature half (checked only when a code carries one). Optionally persisted per bridge slot via identity-store.ts's connection-code ledger (see this file's own header comment for what survives a restart and why); constructed with no slot, stays in-memory only, mirroring GatewayTrust's own no-slot fallback.
  */
@@ -179,10 +187,10 @@ export class ConnectionCodeLedger {
   /** Drops every issued or redeemed entry whose own expiresAt has already passed, so neither map accumulates forever across a long-running process or a slot that survives many restarts. */
   private prune(now: number): void {
     for (const [nonce, record] of this.issued) {
-      if (Date.parse(record.expiresAt) <= now) this.issued.delete(nonce);
+      if (hasExpired(record.expiresAt, now)) this.issued.delete(nonce);
     }
     for (const [nonce, expiresAt] of this.redeemed) {
-      if (Date.parse(expiresAt) <= now) this.redeemed.delete(nonce);
+      if (hasExpired(expiresAt, now)) this.redeemed.delete(nonce);
     }
   }
 
@@ -240,7 +248,13 @@ export class ConnectionCodeLedger {
     const now = options.now ?? Date.now();
     this.prune(now);
 
-    if (Date.parse(candidate.expiresAt) <= now) {
+    if (parseIsoTimestampMs(candidate.expiresAt) === undefined) {
+      throw new ConnectionCodeError(
+        "invalid_expiry",
+        "Connection code expiry is not an ISO 8601 timestamp",
+      );
+    }
+    if (hasExpired(candidate.expiresAt, now)) {
       throw new ConnectionCodeError(
         "expired",
         `Connection code expired at ${candidate.expiresAt}`,

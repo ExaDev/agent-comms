@@ -16,6 +16,7 @@ import {
 } from "./data-directory.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import { generateIdentity } from "./identity.js";
+import { isIsoTimestamp } from "./iso-timestamp.js";
 import type { PeerIdentity } from "./identity.js";
 import { writeFileAtomic } from "./atomic-file.js";
 import {
@@ -673,6 +674,8 @@ function isStoredConnectionCode(value: unknown): value is StoredConnectionCode {
   if (!("expiresAt" in value) || !("deviceId" in value)) return false;
   if (typeof value.expiresAt !== "string" || typeof value.deviceId !== "string")
     return false;
+  // A record whose expiry names no instant could never be pruned or honoured, so it is not loaded.
+  if (!isIsoTimestamp(value.expiresAt)) return false;
   if ("signature" in value && typeof value.signature !== "string") return false;
   return true;
 }
@@ -711,7 +714,9 @@ export function loadConnectionCodeLedger(
   }
   const redeemed: Record<string, string> = {};
   for (const [nonce, expiresAt] of Object.entries(redeemedRaw)) {
-    if (typeof expiresAt === "string") redeemed[nonce] = expiresAt;
+    if (typeof expiresAt === "string" && isIsoTimestamp(expiresAt)) {
+      redeemed[nonce] = expiresAt;
+    }
   }
   return { issued, redeemed };
 }
