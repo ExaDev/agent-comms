@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { oc, eventIterator } from "@orpc/contract";
+import { MAX_EVENT_ID_LENGTH } from "./event-id.js";
 import {
   AgentIdentitySchema,
   RoomSchema,
@@ -100,7 +101,7 @@ const SerialisedStateSchema = z.object({
 });
 
 /**
- * The one stream every tab subscribes to. Unifies state_sync (a full snapshot, sent once on connect or resume-without-lastEventId), state_update (an incremental patch), and the old chat socket's delivery frames -- today three separate wire concepts -- into a single ordered event stream a tab can resume by lastEventId.
+ * The one stream every tab subscribes to. Unifies state_sync (a full snapshot, sent on connect and whenever the lastEventId a subscriber resumes with cannot be resumed from: another publisher's, aged out, or malformed), state_update (an incremental patch), and the old chat socket's delivery frames -- today three separate wire concepts -- into a single ordered event stream a tab can resume by lastEventId.
  */
 const MeshEventSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("state_sync"), state: SerialisedStateSchema }),
@@ -166,7 +167,9 @@ export const meshContract = {
     .output(ActionResultSchema),
 
   subscribeEvents: oc
-    .input(z.object({ lastEventId: z.string().optional() }))
+    .input(
+      z.object({ lastEventId: z.string().max(MAX_EVENT_ID_LENGTH).optional() }),
+    )
     .output(eventIterator(MeshEventSchema)),
 
   // -------------------------------------------------------------------------

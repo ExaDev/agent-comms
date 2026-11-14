@@ -3,7 +3,8 @@
  */
 import { getEventMeta } from "@orpc/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { MeshEvent } from "../contract.js";
+import { meshContract, type MeshEvent } from "../contract.js";
+import { INSTANCE_BYTES, MAX_EVENT_ID_LENGTH } from "../event-id.js";
 import { MeshEventPublisher } from "../event-publisher.js";
 
 /** Retention short enough to age events out by moving the faked clock. */
@@ -63,6 +64,20 @@ async function take(
   }
   await subscription.return(undefined);
   return { labels, ids };
+}
+
+/** The first event a new subscription yields, with a live event published right after subscribing: a subscriber that was wrongly treated as caught up gets that live event first, so the assertion fails instead of the test waiting for a snapshot that never comes. */
+async function firstEvent(
+  publisher: MeshEventPublisher,
+  lastEventId: string,
+): Promise<string> {
+  const subscription = publisher.subscribe({ lastEventId, snapshot });
+  const first = subscription.next();
+  publisher.publish(patch("live-probe"));
+  const next = await first;
+  await subscription.return(undefined);
+  if (next.done === true) throw new Error("the subscription ended");
+  return label(next.value);
 }
 
 /** Publishes `e1` to `eN` and returns the id each was given, as a live subscriber saw them. */
@@ -162,9 +177,7 @@ it("starts from a snapshot when the id is from another instance, as after a rest
   const restarted = new MeshEventPublisher();
   await publishNumbered(restarted, 2);
 
-  const { labels } = await take(restarted, 1, idAt(staleIds, 0));
-
-  expect(labels).toEqual(["snapshot"]);
+  expect(await firstEvent(restarted, idAt(staleIds, 0))).toBe("snapshot");
 });
 
 it("starts from a snapshot when the id is older than the oldest retained event", async () => {
@@ -173,9 +186,7 @@ it("starts from a snapshot when the id is older than the oldest retained event",
   vi.advanceTimersByTime(RETENTION_MS + 1);
   await publishNumbered(publisher, TWO, THREE + 1);
 
-  const { labels } = await take(publisher, 1, idAt(ids, 0));
-
-  expect(labels).toEqual(["snapshot"]);
+  expect(await firstEvent(publisher, idAt(ids, 0))).toBe("snapshot");
 });
 
 it("replays every retained event for the id just before the oldest one, since nothing is missing", async () => {
@@ -194,7 +205,7 @@ it("starts from a snapshot when nothing is retained and the id is not the latest
   const ids = await publishNumbered(publisher, TWO);
   vi.advanceTimersByTime(RETENTION_MS + 1);
 
-  expect((await take(publisher, 1, idAt(ids, 0))).labels).toEqual(["snapshot"]);
+  expect(await firstEvent(publisher, idAt(ids, 0))).toBe("snapshot");
 });
 
 it("treats the latest id as caught up when nothing is retained", async () => {
@@ -221,9 +232,7 @@ it.each([
   const ids = await publishNumbered(publisher, TWO);
   const [instance] = idAt(ids, 0).split(".");
 
-  expect((await take(publisher, 1, makeId(instance ?? ""))).labels).toEqual([
-    "snapshot",
-  ]);
+  expect(await firstEvent(publisher, makeId(instance ?? ""))).toBe("snapshot");
 });
 
 it("starts from a snapshot when the id's sequence is ahead of anything published", async () => {
@@ -231,7 +240,65 @@ it("starts from a snapshot when the id's sequence is ahead of anything published
   const ids = await publishNumbered(publisher, 1);
   const [instance] = idAt(ids, 0).split(".");
 
-  expect((await take(publisher, 1, `${instance ?? ""}.99`)).labels).toEqual([
-    "snapshot",
+  expect(await firstEvent(publisher, `${instance ?? ""}.99`)).toBe("snapshot");
+});
+
+it("refuses an id longer than any publisher issues before parsing it, even when its parts are valid", async () => {
+  const publisher = new MeshEventPublisher();
+  const ids = await publishNumbered(publisher, TWO);
+  const [instance] = idAt(ids, 0).split(".");
+  // Same instance and a sequence that would resume, padded past the longest id with leading zeros.
+  const padded = `${instance ?? ""}.${"0".repeat(MAX_EVENT_ID_LENGTH)}1`;
+
+  expect(padded.length).toBeGreaterThan(MAX_EVENT_ID_LENGTH);
+  expect(await firstEvent(publisher, padded)).toBe("snapshot");
+});
+
+it("accepts an id of the longest length a publisher can issue", () => {
+  expect(MAX_EVENT_ID_LENGTH).toBe(
+    INSTANCE_BYTES * 2 + 1 + String(Number.MAX_SAFE_INTEGER).length,
+  );
+});
+
+it("bounds what a client may send back as an id in the contract", async () => {
+  const schema = meshContract.subscribeEvents["~orpc"].inputSchemas?.[0];
+  if (!schema) throw new Error("subscribeEvents has no input schema");
+
+  const atLimit = await schema["~standard"].validate({
+    lastEventId: "x".repeat(MAX_EVENT_ID_LENGTH),
+  });
+  const pastLimit = await schema["~standard"].validate({
+    lastEventId: "x".repeat(MAX_EVENT_ID_LENGTH + 1),
+  });
+
+  expect(atLimit.issues).toBeUndefined();
+  expect(pastLimit.issues).toBeDefined();
+});
+
+it("keeps at most the configured count of events, judging an id that fell off the end as it judges an aged-out one", async () => {
+  const publisher = new MeshEventPublisher({ maxBufferedEvents: THREE });
+  const ids = await publishNumbered(publisher, THREE);
+
+  // At the cap nothing is evicted: every event after the first replays.
+  expect((await take(publisher, TWO, idAt(ids, 0))).labels).toEqual([
+    "e2",
+    "e3",
   ]);
+
+  // One past it the oldest is gone, but the id just before the oldest retained one is missing nothing.
+  await publishNumbered(publisher, 1, THREE + 1);
+  expect((await take(publisher, THREE, idAt(ids, 0))).labels).toEqual([
+    "e2",
+    "e3",
+    "e4",
+  ]);
+
+  // Two past it the first id is older than anything retained: it starts from a snapshot.
+  await publishNumbered(publisher, 1, THREE + TWO);
+  expect((await take(publisher, THREE, idAt(ids, 1))).labels).toEqual([
+    "e3",
+    "e4",
+    "e5",
+  ]);
+  expect(await firstEvent(publisher, idAt(ids, 0))).toBe("snapshot");
 });
