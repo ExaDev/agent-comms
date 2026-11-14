@@ -196,6 +196,30 @@ jobs:
       - name: Test that check against a platform-gated crate
         run: python3 -I scripts/test_check_deny_allowlist.py
 
+  # The single stable target for the main ruleset: it aggregates every job that runs on a pull request, so the required check never needs updating when a job is added, renamed or split. It runs even when a needed job fails or is cancelled, because a skipped aggregate would read as passing. A needed job that finishes as skipped counts as passing. Jobs that run only on a push or a dispatch are not needed, and src/test/ci-required-checks.unit.test.ts holds that to the exact conditions it recognises.
+  required-checks:
+    name: Required Checks
+    if: always()
+    needs: [lint, typecheck, test, e2e, rust, cargo-deny]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Every required job succeeded or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            case "$result" in
+              success | skipped) ;;
+              *)
+                echo "A required job finished as: $result"
+                exit 1
+                ;;
+            esac
+          done
+
   pages:
     name: GitHub Pages
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
