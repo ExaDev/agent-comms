@@ -541,7 +541,7 @@ ConnectionCode {
 }
 ```
 
-`code`/`expiresAt` are the always-checked half: proof that whoever redeems this was on the other end of this exact exchange, recently. `expiresAt` must be an ISO 8601 timestamp, and a code whose expiry does not parse is refused. `signature` is optional and answers a different question: this claim was made by whoever holds a specific long-lived PGP key. A device with no PGP identity still generates and redeems a bare code, but a bare code is a bearer hint, not authentication: redeeming it trusts whatever device-id its text names, whoever wrote it, so it is no way to establish trust in a stranger. A redeemer who supplies a public key or a fingerprint is asking for the issuer to be authenticated, so a code without a signature is then refused.
+`code`/`expiresAt` are the always-checked half: proof that whoever redeems this was on the other end of this exact exchange, recently. `expiresAt` must be an ISO 8601 timestamp, and a code whose expiry does not parse is refused. `signature` is optional and answers a different question: this claim was made by whoever holds a specific long-lived PGP key. A device with no PGP identity still generates a bare code, but a bare code is a bearer hint, not authentication: redeeming it trusts whatever device-id its text names, whoever wrote it, so it is no way to establish trust in a stranger. The `gateway_redeem_connection_code` tool is called by an agent, which can be steered by text another agent wrote, so it redeems only a signed code, and only when the caller supplies a `publicKey` or a `fingerprint` naming the signer; it refuses any other code, and a code without a signature is refused whether or not a key or fingerprint is supplied. A person redeems any code, signed or not, with `agent-comms gateway redeem`, which needs a terminal, asks for the code at a prompt that does not echo, prints the device it vouches for and whether it is signed, and trusts the device only after you type `yes`; `--public-key <file>` and `--fingerprint <hex>` check a signed code there too.
 
 ```
 # Generate a code vouching for this device, unsigned
@@ -550,13 +550,9 @@ agent_comms({ action: "gateway_generate_connection_code" })
 # ...or signed with a PGP private key you already have (agent-comms never generates or stores PGP key material itself -- you supply it per call, the same way you would to `gpg --sign` directly)
 agent_comms({ action: "gateway_generate_connection_code", privateKey: "-----BEGIN PGP PRIVATE KEY BLOCK-----..." })
 
-# Relay the printed code to the counterpart out of band, then redeem it on their side -- a successful redemption trusts the device it vouches for, exactly as if gateway_trust had been called directly
-agent_comms({
-  action: "gateway_redeem_connection_code",
-  code: "...", expiresAt: "2026-01-01T00:15:00.000Z", device: "1a2b3c...",
-})
+# Relay the printed code to the counterpart out of band. The tool below redeems only a signed code that a key or fingerprint pins, so an unsigned code is redeemed by a person, in a terminal, with `agent-comms gateway redeem`
 
-# Redeeming a signed code needs the signer's public key to verify against -- paste it directly, or supply a fingerprint you already trust and let the redeemer fetch it from keys.openpgp.org
+# Redeeming a signed code through the tool needs the signer's public key to verify against -- paste it directly, or supply a fingerprint you already trust and let the redeemer fetch it from keys.openpgp.org
 agent_comms({
   action: "gateway_redeem_connection_code",
   code: "...", expiresAt: "...", device: "1a2b3c...", signature: "...",
@@ -564,7 +560,7 @@ agent_comms({
 })
 ```
 
-Supplying `publicKey` or `fingerprint` also requires `signature`: an unsigned code, or a signed one whose signature has been removed, is refused rather than redeemed without the check. The fingerprint is never a trust anchor supplied by the keyserver: it's the thing the redeemer already independently trusts (from a business card, a prior verification, wherever), and the redeemer's own check is that the key actually fetched or pasted verifies to that exact fingerprint, not merely that _some_ key was found. Redemption never calls back to whoever generated the code: the whole point is bootstrapping trust before any connection between the two devices exists.
+Supplying `publicKey` or `fingerprint` requires `signature`, and the tool requires one of them: an unsigned code, or a signed one whose signature has been removed, is refused rather than redeemed without the check. The fingerprint is never a trust anchor supplied by the keyserver: it's the thing the redeemer already independently trusts (from a business card, a prior verification, wherever), and the redeemer's own check is that the key actually fetched or pasted verifies to that exact fingerprint, not merely that _some_ key was found. Redemption never calls back to whoever generated the code: the whole point is bootstrapping trust before any connection between the two devices exists.
 
 ### One account on several machines
 

@@ -35,6 +35,8 @@ import { runTui } from "./bridges/user/tui.js";
 import { runCli } from "./bridges/user/cli.js";
 import { readHiddenLine, runAccountCommand } from "./account-cli.js";
 import { openMachineAccountStore } from "./account-join-cli.js";
+import { runGatewayCommand } from "./gateway-cli.js";
+import * as readline from "node:readline/promises";
 import { UnusableIdentityRecordError } from "./core/issuer-identity-file.js";
 
 // ---------------------------------------------------------------------------
@@ -264,9 +266,28 @@ export function main(options: Readonly<CliOptions>): void {
       );
       break;
     }
+    case "gateway": {
+      runGatewayCommand(resolvedArgs.slice(SUBCOMMAND_ARGS_START_INDEX), {
+        stdinIsTerminal: options.stdinIsTerminal ?? false,
+        readSecret: readHiddenLine,
+        ask: askOnTerminal,
+        log: (line) => {
+          console.log(line);
+        },
+      }).then(
+        () => {
+          process.exit(0);
+        },
+        (err: unknown) => {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exit(1);
+        },
+      );
+      break;
+    }
     default:
       console.log(
-        "Usage: agent-comms [setup|status|remove|bridge <id>|chat|send|dm|rooms|agents|read|account <export|import|invite|join>]",
+        "Usage: agent-comms [setup|status|remove|bridge <id>|chat|send|dm|rooms|agents|read|account <export|import|invite|join>|gateway redeem]",
       );
       console.log(
         "With no subcommand: setup when stdin is a terminal, the MCP server when it is not.",
@@ -278,6 +299,19 @@ export function main(options: Readonly<CliOptions>): void {
 // ---------------------------------------------------------------------------
 // Bridge runner
 // ---------------------------------------------------------------------------
+
+/** Asks one question on the terminal and returns the answer as typed. */
+async function askOnTerminal(question: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stderr,
+  });
+  try {
+    return await rl.question(question);
+  } finally {
+    rl.close();
+  }
+}
 
 function runBridge(
   id: string,

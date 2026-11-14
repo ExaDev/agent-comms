@@ -1,5 +1,5 @@
 /**
- * The connection-code tool actions under a caller's pin: an unsigned code is refused when the caller supplied a fingerprint or key, an expiry that is not a timestamp is refused, and nothing is trusted by either refusal.
+ * The connection-code tool action under a caller's pin: an unsigned code is refused whether or not the caller supplied a fingerprint or key, and nothing is trusted by the refusal.
  */
 import { describe, expect, test } from "vitest";
 import { MeshStore } from "../core/mesh-store.js";
@@ -10,7 +10,7 @@ const TEST_PORT = 0;
 const FINGERPRINT = "aabbccddeeff00112233445566778899aabbccdd";
 
 describe("gateway_redeem_connection_code with a pin", () => {
-  test("refuses an unsigned code and trusts nothing", async () => {
+  test("refuses an unsigned code, pinned or not, and trusts nothing", async () => {
     const issuer = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(issuer);
     await issuer.init();
@@ -47,26 +47,15 @@ describe("gateway_redeem_connection_code with a pin", () => {
       expect(refused.content).toContain("not signed");
       expect(redeemer.listTrustedGateways()).toEqual([]);
 
-      const badExpiry = await tool.handle(context, {
-        action: "gateway_redeem_connection_code",
-        code: code.code,
-        expiresAt: "soon",
-        device: code.deviceId,
-      });
-
-      expect(badExpiry.isError).toBe(true);
-      expect(badExpiry.content).toContain("ISO 8601");
-      expect(redeemer.listTrustedGateways()).toEqual([]);
-
-      const accepted = await tool.handle(context, {
+      const unpinned = await tool.handle(context, {
         action: "gateway_redeem_connection_code",
         code: code.code,
         expiresAt: code.expiresAt,
         device: code.deviceId,
       });
 
-      expect(accepted.isError, accepted.content).toBe(false);
-      expect(redeemer.listTrustedGateways()).toEqual([issuer.peerId]);
+      expect(unpinned.isError).toBe(true);
+      expect(redeemer.listTrustedGateways()).toEqual([]);
     } finally {
       await issuer.shutdown();
       await redeemer.shutdown();
