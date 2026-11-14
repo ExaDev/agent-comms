@@ -7,6 +7,7 @@
  *   3. Return the result string to the LLM
  */
 
+import type { StalledLedgerLog } from "./ledger-gaps.js";
 import { renderAgentList } from "./agent-list-format.js";
 import type { AgentDetailsExchange } from "./agent-details.js";
 import { plainNamer, type Namer, type Naming } from "./naming.js";
@@ -252,11 +253,16 @@ export interface CommsToolOptions {
   readonly getNewerVersionIfAny?: () => string | undefined;
   /** How many stored account ledger entries cannot be read, for whoami; omitted when the store has no account ledger. */
   readonly getUnreadableLedgerEntries?: () => number;
+  /** The account ledger's writer logs this side has stayed behind for several rounds, for whoami; omitted when the transport has no account ledger. */
+  readonly getStalledLedgerLogs?: () => readonly StalledLedgerLog[];
   /** Fetches a signer's armored PGP public key by fingerprint, used by gateway_redeem_connection_code when the caller supplies a fingerprint but not the key text itself. Defaults to the real keys.openpgp.org lookup (pgp-keyserver.ts); a test that would otherwise trigger real network I/O injects a fake resolver instead, the same reasoning bridge-mesh.ts's own fetchLatestVersion override already establishes for getNewerVersionIfAny above. */
   readonly fetchPgpPublicKeyByFingerprintImpl?: (
     fingerprint: string,
   ) => Promise<string>;
 }
+
+/** The most stalled-log lines whoami and update print, so a peer cannot make the result as long as it likes. */
+const MAX_STALLED_LEDGER_LINES = 8;
 
 export class CommsTool {
   /** Reports this bridge's own web UI address for the web_url action. Assignable post-construction, mirroring MeshStore's own onDelivery/onCoordinatorRoleChanged hooks, because the underlying web server handle isn't known until after this bridge's own tryStartBridgeWebServer() call -- which every real bridge makes after building its CommsTool, not before. Undefined (the default) means this bridge never wires web UI reporting. */
@@ -266,6 +272,8 @@ export class CommsTool {
   private readonly naming: Naming | undefined;
   private readonly getNewerVersionIfAny: (() => string | undefined) | undefined;
   private readonly getUnreadableLedgerEntries: (() => number) | undefined;
+  private readonly getStalledLedgerLogs:
+    (() => readonly StalledLedgerLog[]) | undefined;
   private readonly fetchPgpPublicKeyByFingerprintImpl: (
     fingerprint: string,
   ) => Promise<string>;
@@ -279,12 +287,14 @@ export class CommsTool {
       naming,
       getNewerVersionIfAny,
       getUnreadableLedgerEntries,
+      getStalledLedgerLogs,
       fetchPgpPublicKeyByFingerprintImpl = fetchPgpPublicKeyByFingerprint,
     } = options ?? {};
     this.discovery = discovery;
     this.naming = naming;
     this.getNewerVersionIfAny = getNewerVersionIfAny;
     this.getUnreadableLedgerEntries = getUnreadableLedgerEntries;
+    this.getStalledLedgerLogs = getStalledLedgerLogs;
     this.fetchPgpPublicKeyByFingerprintImpl =
       fetchPgpPublicKeyByFingerprintImpl;
   }
@@ -469,6 +479,7 @@ export class CommsTool {
         `Account ledger: ${String(unreadableLedger)} unreadable entries; a grant or revocation recorded only in them is not applied here until they are repaired or replaced from another machine's replica`,
       );
     }
+    lines.push(...this.stalledLedgerLines());
     const updateAvailable = this.formatUpdateAvailableLine();
     if (updateAvailable !== undefined) lines.push(updateAvailable);
     return {
@@ -482,6 +493,24 @@ export class CommsTool {
     return this.naming === undefined
       ? plainNamer
       : this.naming.namer(ctx.agentId);
+  }
+
+  /** The `Account ledger log <id> is behind` lines for whoami and update, one per writer log this side has stayed behind, at most MAX_STALLED_LEDGER_LINES of them and then one `Account ledger: <n> more logs are behind` line. The wording is part of the interface: the README states it. */
+  private stalledLedgerLines(): string[] {
+    const stalled = this.getStalledLedgerLogs?.() ?? [];
+    const lines = stalled
+      .slice(0, MAX_STALLED_LEDGER_LINES)
+      .map(
+        (log) =>
+          `Account ledger log ${log.log} is behind: this machine holds up to entry ${String(log.localHead)}, a peer announces ${String(log.announcedHead)}, and ${String(log.rounds)} rounds have passed without the missing entries arriving; a grant or a revocation in them is not applied here`,
+      );
+    if (stalled.length > MAX_STALLED_LEDGER_LINES) {
+      lines.push(
+        `Account ledger: ${String(stalled.length - MAX_STALLED_LEDGER_LINES)} more logs are behind`,
+      );
+    }
+
+    return lines;
   }
 
   private async whoami(ctx: Readonly<CommsContext>): Promise<CommsResult> {
@@ -505,6 +534,7 @@ export class CommsTool {
       `Tags: ${agent.tags.join(", ") || "(none)"}`,
       `Rooms: ${agent.subscribedRooms.join(", ") || "(none)"}`,
     ];
+    lines.push(...this.stalledLedgerLines());
     const updateAvailable = this.formatUpdateAvailableLine();
     if (updateAvailable !== undefined) lines.push(updateAvailable);
     return {

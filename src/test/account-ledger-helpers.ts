@@ -64,6 +64,8 @@ export interface Machine {
   store: MeshStore;
   transport: WireMeshTransport;
   revocation: RevocationView;
+  /** The agent the machine registered. */
+  agentId: string;
   /** Where anything another device offers this one outside its own account ledger is stored. */
   dataStorage: KeyValueStorage;
 }
@@ -93,7 +95,7 @@ export async function startMachine(
   });
   await store.init();
   cleanups.push(async () => store.shutdown());
-  await store.registerAgent({
+  const agent = await store.registerAgent({
     name,
     harness: "test",
     cwd: `/test/${name}`,
@@ -101,7 +103,7 @@ export async function startMachine(
     visibility: "visible",
     tags: [],
   });
-  return { store, transport, revocation, dataStorage };
+  return { store, transport, revocation, dataStorage, agentId: agent.id };
 }
 
 /** Another handle on a machine's ledger store, the way a second bridge on that machine would open it. */

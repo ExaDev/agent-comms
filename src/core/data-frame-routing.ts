@@ -7,7 +7,7 @@ import {
   handleDataHave,
   handleDataRequest,
 } from "wire-mesh-core/domain/data-sync";
-import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
+import { bytesToHex, deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { isDataFrame } from "wire-mesh-core/domain/hub-mailbox";
 import type { DataDomainFrame } from "wire-mesh-core/domain/mesh-session";
 import type {
@@ -19,6 +19,7 @@ import type { Connection } from "wire-mesh-core/ports/transport";
 import type { KeyValueStorage } from "wire-mesh-core/ports/storage";
 import type { AccountLedgerReplica } from "./account-ledger.js";
 import { readMembershipProof } from "./gossip-directory.js";
+import { LedgerGapTracker, type StalledLedgerLog } from "./ledger-gaps.js";
 import type { WireMeshTransportOptions } from "./wire-mesh-transport-options.js";
 
 /** The most entries one data-entries reply carries, for every log this side answers for, the account ledger's included: a longer log catches up over several rounds, so the bound only caps one frame's size. */
@@ -86,6 +87,7 @@ export async function routeDataFrame(
     dataStorage: KeyValueStorage | undefined;
     account: Readonly<AccountReplication> | undefined;
     peerSessions: ReadonlyMap<string, unknown>;
+    gaps?: Pick<LedgerGapTracker, "noteHave"> | undefined;
     onError: ((error: Error) => void) | undefined;
   }>,
   connection: Readonly<Connection>,
@@ -105,6 +107,9 @@ export async function routeDataFrame(
       ledger.ownsLog(frame.peer)
     ) {
       if (!(await deps.account.isAccountPeer(deviceIdHex))) return;
+      if (frame.type === "data-have") {
+        deps.gaps?.noteHave(deviceIdHex, frame.peer, frame["head-seq"]);
+      }
       const reply = await ledger.handleDataFrame(frame);
       if (reply !== null) await connection.send(reply);
       return;
@@ -133,6 +138,7 @@ export async function routeRelayedDataFrame(
   deps: Readonly<{
     account: Readonly<AccountReplication> | undefined;
     hub: Readonly<HubDataChannel> | undefined;
+    gaps?: Pick<LedgerGapTracker, "noteHave"> | undefined;
     onError: ((error: Error) => void) | undefined;
   }>,
   fromDeviceHex: string,
@@ -144,6 +150,9 @@ export async function routeRelayedDataFrame(
     const ledger = account.ledger();
     if (ledger?.ownsLog(frame.peer) !== true) return;
     if (!(await account.isAccountPeer(fromDeviceHex))) return;
+    if (frame.type === "data-have") {
+      deps.gaps?.noteHave(fromDeviceHex, frame.peer, frame["head-seq"]);
+    }
     const reply = await ledger.handleDataFrame(frame);
     if (reply !== null) await hub.send(fromDeviceHex, reply);
   } catch (error: unknown) {
@@ -151,7 +160,7 @@ export async function routeRelayedDataFrame(
   }
 }
 
-/** Offers every account writer log this machine holds to every device that holds the same account and that this side can reach (agent-comms#344): over a live, trusted data connection, or, for a device it meets only through the relay hub, over a relay pairing. Such a device that is behind asks for what it is missing, which is the data-domain fan-out that carries each machine's grants and revocations to every other. A device reachable both ways is offered the logs once, directly. Called on the gossip cadence, so a machine that was away when an entry was written still catches up the next time it is reachable. A send that fails is reported and the rest carry on; the next round retries it. */
+/** Offers every account writer log this machine holds to every device that holds the same account and that this side can reach (agent-comms#344): over a live, trusted data connection, or, for a device it meets only through the relay hub, over a relay pairing. Such a device that is behind asks for what it is missing, which is the data-domain fan-out that carries each machine's grants and revocations to every other. A device reachable both ways is offered the logs once, directly. Called on the gossip cadence, so a machine that was away when an entry was written still catches up the next time it is reachable. A send that fails is reported and the rest carry on; the next round retries it. Resolves true when every offer was sent, and false when one failed, which is reported through onError as it happens: a round that did not go out is not evidence that a peer withholds anything. */
 export async function announceAccountLedger(
   deps: Readonly<{
     connectionsByPeer: ReadonlyMap<string, Readonly<Connection>>;
@@ -160,12 +169,14 @@ export async function announceAccountLedger(
     peerSessions: ReadonlyMap<string, unknown>;
     onError: ((error: Error) => void) | undefined;
   }>,
-): Promise<void> {
+): Promise<boolean> {
   const ledger = deps.account.ledger();
-  if (ledger === undefined) return;
+  if (ledger === undefined) return true;
   const frames = await ledger.announcements();
-  if (frames.length === 0) return;
+  if (frames.length === 0) return true;
+  let complete = true;
   const reportError = (error: unknown): void => {
+    complete = false;
     deps.onError?.(error instanceof Error ? error : new Error(String(error)));
   };
   const direct = new Set<string>();
@@ -183,7 +194,7 @@ export async function announceAccountLedger(
     }
   }
   const { hub } = deps;
-  if (hub === undefined) return;
+  if (hub === undefined) return complete;
   for (const deviceHex of hub.peers()) {
     if (direct.has(deviceHex)) continue;
     if (!(await deps.account.isAccountPeer(deviceHex))) continue;
@@ -201,6 +212,8 @@ export async function announceAccountLedger(
     );
   }
   await Promise.all(offers);
+
+  return complete;
 }
 
 export interface DataFrameRouterDeps {
@@ -226,6 +239,9 @@ export class DataFrameRouter {
 
   private announceInterval: ReturnType<typeof setInterval> | undefined;
 
+  /** What each peer says the account's writer logs reach, and the rounds this side has stayed behind it. Undefined for a transport with no account ledger. */
+  private readonly gaps: LedgerGapTracker | undefined;
+
   /** Whether an announcement round is still running, so a round slowed by an unreachable hub peer is not stacked on by the next tick. */
   private announcing = false;
 
@@ -233,9 +249,24 @@ export class DataFrameRouter {
     this.dataStorage = deps.dataStorage;
     const { account } = deps;
     if (account === undefined) return;
+    const gaps = new LedgerGapTracker({
+      request: async (source, frame) => this.requestFrom(source, frame),
+      isLive: (source) =>
+        deps.peerSessions.has(source) ||
+        (deps.hub?.peers().includes(source) ?? false),
+      onError: (error) => {
+        deps.onError?.(error);
+      },
+    });
+    this.gaps = gaps;
     this.announceInterval = setInterval(() => {
       if (this.announcing) return;
       this.announcing = true;
+      const report = (error: unknown): void => {
+        deps.onError?.(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      };
       announceAccountLedger({
         connectionsByPeer: this.connectionsByPeer,
         account,
@@ -244,15 +275,53 @@ export class DataFrameRouter {
         onError: deps.onError,
       })
         .catch((error: unknown) => {
-          deps.onError?.(
-            error instanceof Error ? error : new Error(String(error)),
-          );
+          report(error);
+
+          return false;
         })
+        .then(async (complete) => this.checkGaps(account, gaps, !complete))
+        .catch(report)
         .finally(() => {
           this.announcing = false;
         });
     }, deps.announceIntervalMs);
     this.announceInterval.unref();
+  }
+
+  /** One round of gap detection against this side's own heads, read fresh from the ledger. It runs whether or not the round's announcements went out, and a round whose announcements failed is not counted as a round the log stayed behind. When the heads cannot be read there is nothing to compare, and that is reported as what it is. */
+  private async checkGaps(
+    account: Readonly<AccountReplication>,
+    gaps: LedgerGapTracker,
+    announceFailed: boolean,
+  ): Promise<void> {
+    const ledger = account.ledger();
+    if (ledger === undefined) return;
+    const localHeads = new Map<string, number>();
+    for (const frame of await ledger.announcements()) {
+      localHeads.set(bytesToHex(frame.peer), frame["head-seq"]);
+    }
+    await gaps.round(localHeads, { announceFailed });
+  }
+
+  /** Sends a data-request to one source, over its direct session when it has one and through the relay hub otherwise. */
+  private async requestFrom(
+    source: string,
+    frame: Readonly<DataRequestFrame>,
+  ): Promise<void> {
+    const connection = this.connectionsByPeer.get(source);
+    if (connection !== undefined && this.deps.peerSessions.has(source)) {
+      await connection.send(frame);
+      return;
+    }
+    if (this.deps.hub === undefined) {
+      throw new Error(`no route to ${source} to ask it for ledger entries`);
+    }
+    await this.deps.hub.send(source, frame);
+  }
+
+  /** The account ledger's logs this side has stayed behind for several rounds, for whoami. Empty when there is no account ledger. */
+  stalledLogs(): StalledLedgerLog[] {
+    return this.gaps?.stalled() ?? [];
   }
 
   /** See routeDataFrame. */
@@ -263,6 +332,7 @@ export class DataFrameRouter {
         dataStorage: this.dataStorage,
         account: this.deps.account,
         peerSessions: this.deps.peerSessions,
+        gaps: this.gaps,
         onError: this.deps.onError,
       },
       connection,
@@ -279,6 +349,7 @@ export class DataFrameRouter {
       {
         account: this.deps.account,
         hub: this.deps.hub,
+        gaps: this.gaps,
         onError: this.deps.onError,
       },
       fromDeviceHex,
