@@ -95,6 +95,7 @@
     "!src/**/*.test.tsx",
     "!src/bridges/user/web/e2e",
     "!src/bridges/user/web/frontend",
+    "!src/bridges/user/web/vite.config.ts",
     ".claude-plugin/",
     "commands/",
     "hooks/"
