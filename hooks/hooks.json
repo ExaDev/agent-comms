@@ -1,39 +1,41 @@
 {
-  "PostToolUse": [
-    {
-      "hooks": [
-        {
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
-          "timeout": 5,
-          "type": "command"
-        }
-      ],
-      "matcher": "*"
-    }
-  ],
-  "Stop": [
-    {
-      "hooks": [
-        {
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
-          "timeout": 5,
-          "type": "command"
-        }
-      ],
-      "matcher": "*"
-    }
-  ],
-  "UserPromptSubmit": [
-    {
-      "hooks": [
-        {
-          "asyncRewake": true,
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
-          "timeout": 5,
-          "type": "command"
-        }
-      ],
-      "matcher": "*"
-    }
-  ]
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "asyncRewake": true,
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
+  }
 }
