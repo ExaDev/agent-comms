@@ -49,8 +49,23 @@ describe("hooks/hooks.json", () => {
   });
 });
 
+/** The manifest keys that name plugin components, each of which Claude Code also finds at a default location (hooks/hooks.json, commands/, agents/, skills/, .mcp.json and the rest) and so either replaces, adds to or merges with it (https://code.claude.com/docs/en/plugins-reference, "How each key combines with its default location"). */
+const COMPONENT_KEYS = [
+  "skills",
+  "commands",
+  "agents",
+  "hooks",
+  "mcpServers",
+  "lspServers",
+  "outputStyles",
+  "workflows",
+  "experimental",
+  "themes",
+  "monitors",
+  "channels",
+] as const;
+
 const pluginManifest = z.object({
-  hooks: z.unknown().optional(),
   mcpServers: z.record(
     z.string(),
     z.object({ command: z.string(), args: z.array(z.string()) }),
@@ -79,11 +94,12 @@ describe("the plugin's files", () => {
     expect(entry.startsWith("100755 ")).toBe(true);
   });
 
-  it("does not declare hooks/hooks.json in the manifest, which Claude Code already loads from that default path", async () => {
-    const manifest = pluginManifest.parse(
-      await readJson(".claude-plugin/plugin.json"),
-    );
-    expect(manifest.hooks).toBeUndefined();
+  it("declares no component the plugin's own default locations already hold, apart from the one MCP server it means to override", async () => {
+    const manifest = z
+      .record(z.string(), z.unknown())
+      .parse(await readJson(".claude-plugin/plugin.json"));
+    const declared = COMPONENT_KEYS.filter((key) => key in manifest);
+    expect(declared).toEqual(["mcpServers"]);
   });
 
   it("runs the published package as the plugin's MCP server, whatever the checkout's own .mcp.json says", async () => {
