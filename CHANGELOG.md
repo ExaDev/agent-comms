@@ -1,3 +1,16 @@
+## [9.0.0](https://github.com/ExaDev/agent-comms/compare/v8.15.26...v9.0.0) (2026-11-14)
+
+### ⚠ BREAKING CHANGES
+
+* the library entry point no longer exports generateVapidKeys, VapidKeys,
+  PushManager, PushSubscription or PushPayload, the web server no longer serves
+  GET /api/push/vapid-key, and the web contract no longer has the pushSubscribe and pushUnsubscribe
+  procedures.
+
+### Refactoring
+
+* remove the web push path ([06805a2](https://github.com/ExaDev/agent-comms/commit/06805a2aa7bcc7f31632115f914b5c04e12ac328))
+
 ## [8.15.26](https://github.com/ExaDev/agent-comms/compare/v8.15.25...v8.15.26) (2026-11-14)
 
 ### Build
