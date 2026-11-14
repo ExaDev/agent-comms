@@ -836,12 +836,14 @@
         {
           "bindHost": "127.0.0.1",
           "localClientAddresses": [],
+          "pairingSecret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "port": 41234
         },
         {
           "headers": {
             "host": "127.0.0.1:41234",
-            "origin": "https://exadev.github.io"
+            "origin": "https://exadev.github.io",
+            "x-agent-comms-pairing": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
           "method": "GET",
           "remoteAddress": "127.0.0.1",
@@ -853,7 +855,7 @@
       },
       "from": "web-access.unit.test.ts: authorise > allows the hosted dashboard's Origin from a loopback client only",
       "function": "web-access.authorise",
-      "id": "hosted-dashboard-origin-allowed-from-loopback",
+      "id": "hosted-dashboard-origin-allowed-from-loopback-with-secret",
       "kind": "function"
     },
     {
@@ -1593,6 +1595,280 @@
       "from": "web-access.unit.test.ts: accessUrls > lists the bound address under a specific bind",
       "function": "web-access.accessUrls",
       "id": "lists-the-bound-address-under-specific-bind",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "pairingSecret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only with the pairing secret)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-without-secret",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "pairingSecret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "x-agent-comms-pairing": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only with the pairing secret)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-with-wrong-secret",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "x-agent-comms-pairing": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only with the pairing secret)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-when-no-secret-is-issued",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "pairingSecret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "sec-websocket-protocol": "agent-comms, agent-comms-pairing.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only with the pairing secret)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-allowed-with-secret-in-subprotocol",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "pairingSecret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "sec-websocket-protocol": "agent-comms, agent-comms-pairing.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only with the pairing secret)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-with-wrong-secret-in-subprotocol",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "pairingSecret": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "x-agent-comms-pairing": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only with the pairing secret)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-after-rotation",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "pairingSecret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "cookie": "agent_comms_web_token_41234=tok-secret",
+            "host": "192.168.1.10:41234",
+            "origin": "https://exadev.github.io",
+            "x-agent-comms-pairing": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only with the pairing secret)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-from-remote-with-secret",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "pairingSecret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only with the pairing secret)",
+      "function": "web-access.authorise",
+      "id": "no-origin-needs-no-pairing-secret-from-loopback",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "pairingSecret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "http://127.0.0.1:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only with the pairing secret)",
+      "function": "web-access.authorise",
+      "id": "own-origin-needs-no-pairing-secret-from-loopback",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "pairingSecret": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://example.org",
+            "x-agent-comms-pairing": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only with the pairing secret)",
+      "function": "web-access.authorise",
+      "id": "other-origin-refused-with-pairing-secret",
       "kind": "function"
     }
   ]

@@ -49,6 +49,8 @@ import {
   ACCESS_QUERY_PARAM,
   accessUrls,
   authorise,
+  HOSTED_DASHBOARD_ORIGIN,
+  isOwnClient,
   generateAccessToken,
   localWebUrl,
   ownInterfaceAddresses,
@@ -60,6 +62,14 @@ import {
 import { bridgePortRange } from "./bridge-port-range.js";
 import { startWebBeacon } from "./web-beacon.js";
 import {
+  PAIRING_PAGE_HEADERS,
+  PAIRING_PAGE_PATH,
+  openPairingSecret,
+  pairingPageHtml,
+  selectMeshSubprotocol,
+  type PairingSecretStore,
+} from "./web-pairing.js";
+import {
   createFrontendAssetLoader,
   FrontendNotBuiltError,
   type FrontendAssets,
@@ -68,6 +78,7 @@ import {
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 const HTTP_NOT_IMPLEMENTED = 501;
@@ -238,6 +249,8 @@ export async function createWebServer(options?: {
   localClientAddresses?: (() => ReadonlySet<string>) | undefined;
   /** The UDP port the LAN beacon advertises on when the bind is beyond loopback. Defaults to the first-contact port; tests pass an OS-assigned free port. */
   beaconPort?: number | undefined;
+  /** The directory the pairing secret is kept in. Defaults to the bridge's data directory; tests pass one of their own. */
+  pairingDir?: string | undefined;
   existingController?: ChatController | undefined;
   coordinatorPort?: number | undefined;
   /** Overrides the first-contact UDP port a fresh controller's store runs presence on (ChatController's own firstContactPort); ignored when existingController is supplied. */
@@ -251,6 +264,7 @@ export async function createWebServer(options?: {
     host: requestedHost,
     localClientAddresses = ownInterfaceAddresses,
     beaconPort,
+    pairingDir,
     existingController,
     coordinatorPort,
     firstContactPort,
@@ -275,16 +289,32 @@ export async function createWebServer(options?: {
     : undefined;
 
   // The port is only known once the server listens (port 0 asks the OS), so the policy's port is filled in once the server is bound, before any request can arrive.
+  const pairing = openPairingSecret({
+    dir: pairingDir,
+    onReplaced: (file) => {
+      process.stderr.write(
+        `agent-comms: ${file} was missing or unusable and has been replaced, so browsers paired with the hosted dashboard must pair again\n`,
+      );
+    },
+  });
   const accessPolicy: AccessPolicy = {
     token: accessToken,
     bindHost: host,
     port: port ?? 0,
     localClientAddresses,
+    // Read per request, so `agent-comms pairing rotate` revokes every pairing without a restart.
+    get pairingSecret() {
+      return pairing.current();
+    },
   };
 
   const server = http.createServer((req, res) => {
     if (!admitRequest(accessPolicy, req, res)) return;
-    handleRequest(req, res, controller, webConsoleDist);
+    handleRequest(req, res, controller, {
+      pairing,
+      isOwnClient: isOwnClient(accessPolicy, req.socket.remoteAddress),
+      webConsoleDist,
+    });
   });
 
   let boundPort: number;
@@ -308,7 +338,11 @@ export async function createWebServer(options?: {
     publisher.publish({ kind: "delivery", event });
   });
 
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({
+    noServer: true,
+    // The dashboard offers the mesh subprotocol beside its pairing secret; selecting only the fixed name keeps the secret from being echoed.
+    handleProtocols: selectMeshSubprotocol,
+  });
   const rpcHandler = new RPCHandler(meshRouter);
 
   server.on("upgrade", (req, socket, head) => {
@@ -350,6 +384,9 @@ export async function createWebServer(options?: {
 
   // stderr, not stdout: a stdio MCP bridge owns stdout for JSON-RPC, so any other line there is protocol noise to a strictly framed client.
   console.error(`Agent Comms web UI: ${localWebUrl(host, boundPort)}`);
+  console.error(
+    `To pair the hosted dashboard with this bridge, open ${localWebUrl(host, boundPort)}${PAIRING_PAGE_PATH} in the browser you use`,
+  );
   if (accessToken !== undefined) {
     announceLanAccess(
       server,
@@ -466,20 +503,55 @@ export async function runWeb(userName: string, port?: number): Promise<void> {
 // HTTP handler
 // ---------------------------------------------------------------------------
 
+/** What a request handler knows about the request beyond its parts: the pairing secret store, and whether the client is on this machine. */
+interface RequestContext {
+  pairing: PairingSecretStore;
+  isOwnClient: boolean;
+  webConsoleDist: string | undefined;
+}
+
+/** The `Sec-Fetch-Site` values of a request a person started from the address bar or a bookmark (`none`), or that this server's own page made. A link or a script on another site sends `cross-site` or `same-site`. */
+const PERSON_INITIATED_FETCH_SITES = new Set(["none", "same-origin"]);
+
+/** Serves the pairing page to a person at this machine: a client on this machine, no Origin of another site and no cross-site fetch metadata. Anything else is a 403, answered without the secret. */
+function servePairingPage(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  context: Readonly<RequestContext>,
+): void {
+  const site = req.headers["sec-fetch-site"];
+  const fromAnotherSite =
+    typeof site === "string" && !PERSON_INITIATED_FETCH_SITES.has(site);
+  // A page of the hosted dashboard, paired or not, is never the person this page is for.
+  const fromHostedDashboard = req.headers.origin === HOSTED_DASHBOARD_ORIGIN;
+  if (!context.isOwnClient || fromAnotherSite || fromHostedDashboard) {
+    res.writeHead(HTTP_FORBIDDEN, { "Content-Type": "text/plain" });
+    res.end("Forbidden");
+    return;
+  }
+  res.writeHead(HTTP_OK, PAIRING_PAGE_HEADERS);
+  res.end(pairingPageHtml(context.pairing.current()));
+}
+
 function handleRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   controller: ChatController,
-  webConsoleDist: string | undefined,
+  context: Readonly<RequestContext>,
 ): void {
   const url = new URL(req.url ?? "/", `http://localhost`);
 
   // wire-mesh's web-console — an alternate, generic reference-client UI, served only when AGENT_COMMS_WEB_CONSOLE_DIST resolves to a real build.
   if (
-    webConsoleDist !== undefined &&
+    context.webConsoleDist !== undefined &&
     req.method === "GET" &&
-    serveWebConsole(webConsoleDist, url.pathname, res)
+    serveWebConsole(context.webConsoleDist, url.pathname, res)
   ) {
+    return;
+  }
+
+  if (url.pathname === PAIRING_PAGE_PATH && req.method === "GET") {
+    servePairingPage(req, res, context);
     return;
   }
 

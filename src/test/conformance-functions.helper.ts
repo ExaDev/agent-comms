@@ -314,6 +314,7 @@ function accessPolicy(value: unknown): Parameters<typeof authorise>[0] {
     bindHost: str(parts.bindHost),
     port: num(parts.port),
     localClientAddresses: () => localClientAddresses,
+    pairingSecret: optStr(parts, "pairingSecret"),
   };
 }
 
