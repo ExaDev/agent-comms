@@ -31,6 +31,7 @@ const ACCESS_TOKEN_BYTES = 32;
 /** The port a Host header with no explicit port names (HTTP). */
 const HTTP_DEFAULT_PORT = 80;
 
+const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_FOUND = 302;
@@ -362,7 +363,10 @@ export function authorise(
     return { kind: "allow" };
   }
   if (request.method === "GET") {
-    const url = new URL(request.url, "http://placeholder");
+    const url = parseRequestUrl(request.url);
+    if (url === undefined) {
+      return { kind: "deny", status: HTTP_BAD_REQUEST, message: "Bad request" };
+    }
     const offered = url.searchParams.get(ACCESS_QUERY_PARAM);
     if (offered !== null && tokensMatch(offered, token)) {
       url.searchParams.delete(ACCESS_QUERY_PARAM);
@@ -375,6 +379,15 @@ export function authorise(
     }
   }
   return { kind: "deny", status: HTTP_UNAUTHORIZED, message: "Unauthorized" };
+}
+
+/** The URL a request line names, or undefined when it names none: a request target that cannot be parsed is refused, never thrown out of the request listener, which would end the process. */
+function parseRequestUrl(target: string): URL | undefined {
+  try {
+    return new URL(target, "http://placeholder");
+  } catch {
+    return undefined;
+  }
 }
 
 /** The URLs an operator can open on the LAN, each carrying the token for the one-time exchange. A wildcard bind lists every external, non-link-local address of this machine that the bind family can reach (IPv6 bracketed, and only under `::`, since `0.0.0.0` accepts IPv4 alone); a specific bind lists that address. The list is empty when a wildcard bind finds no such address. */
