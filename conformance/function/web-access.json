@@ -1617,7 +1617,7 @@
         "message": "Bad request",
         "status": 400
       },
-      "from": "web-access-request-target.unit.test.ts: authorise for a request target that names no URL > refuses a target that names no URL from a remote client without throwing",
+      "from": "recorded: src/bridges/user/web/web-access.ts (authorise, a request target that names no URL: refuses a target that names no URL from a remote client without throwing)",
       "function": "web-access.authorise",
       "id": "refuses-target-naming-no-url-double-slash",
       "kind": "function"
@@ -1644,7 +1644,7 @@
         "message": "Bad request",
         "status": 400
       },
-      "from": "web-access-request-target.unit.test.ts: authorise for a request target that names no URL > refuses a target that names no URL from a remote client without throwing",
+      "from": "recorded: src/bridges/user/web/web-access.ts (authorise, a request target that names no URL: refuses a target that names no URL from a remote client without throwing)",
       "function": "web-access.authorise",
       "id": "refuses-target-naming-no-url-triple-slash",
       "kind": "function"
@@ -1671,7 +1671,7 @@
         "message": "Bad request",
         "status": 400
       },
-      "from": "web-access-request-target.unit.test.ts: authorise for a request target that names no URL > refuses a target that names no URL from a remote client without throwing",
+      "from": "recorded: src/bridges/user/web/web-access.ts (authorise, a request target that names no URL: refuses a target that names no URL from a remote client without throwing)",
       "function": "web-access.authorise",
       "id": "refuses-target-naming-no-url-double-slash-with-query",
       "kind": "function"
@@ -1698,7 +1698,7 @@
       "expect": {
         "kind": "allow"
       },
-      "from": "web-access-request-target.unit.test.ts: authorise for a request target that names no URL > still admits a client on this machine, which never reaches the URL",
+      "from": "recorded: src/bridges/user/web/web-access.ts (authorise, a request target that names no URL: still admits a client on this machine, which never reaches the URL)",
       "function": "web-access.authorise",
       "id": "admits-local-client-for-target-naming-no-url",
       "kind": "function"
