@@ -8,7 +8,7 @@
 
 import type { AcceptedMeshSession } from "wire-mesh-core/domain/mesh-session";
 import type { CoordinatorFrame } from "wire-mesh-core/generated/protocol";
-import { reportRejection } from "./detached-work.js";
+import { consumeEach } from "./detached-work.js";
 import type { ConnectionHandle, TransportEvents } from "./transport.js";
 
 /** Where a session's outbound claims stand: whether a send is unresolved, and the newest claim that arrived meanwhile. */
@@ -40,14 +40,13 @@ export class ElectionSessions {
     session: AcceptedMeshSession,
     handle: Readonly<ConnectionHandle>,
   ): void {
-    reportRejection(
-      (async () => {
-        for await (const frame of session.coordinatorFrames) {
-          if (this.enrolled.has(session)) {
-            this.events.onCoordinatorClaim(handle, frame);
-          }
+    void consumeEach(
+      session.coordinatorFrames,
+      (frame) => {
+        if (this.enrolled.has(session)) {
+          this.events.onCoordinatorClaim(handle, frame);
         }
-      })(),
+      },
       () => this.events.onError,
     );
   }

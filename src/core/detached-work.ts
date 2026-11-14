@@ -19,3 +19,34 @@ export function reportRejection(
     process.stderr.write(`agent-comms: ${failure.message}\n`);
   });
 }
+
+function report(
+  error: unknown,
+  getOnError: () => ((error: Error) => void) | undefined,
+): void {
+  reportRejection(
+    Promise.reject(error instanceof Error ? error : new Error(String(error))),
+    getOnError,
+  );
+}
+
+/**
+ * Reads `items` until the stream ends, handing each to `handle` in arrival order, one at a time. A failure of `handle` is reported through `getOnError` (see reportRejection) and the loop carries on: one item a peer sent that cannot be handled must not stop every later one on the same session. A failure of the stream itself ends the loop and is reported the same way. Never rejects.
+ */
+export async function consumeEach<T>(
+  items: Readonly<AsyncIterable<T>>,
+  handle: (item: T) => Promise<void> | void,
+  getOnError: () => ((error: Error) => void) | undefined,
+): Promise<void> {
+  try {
+    for await (const item of items) {
+      try {
+        await handle(item);
+      } catch (error) {
+        report(error, getOnError);
+      }
+    }
+  } catch (error) {
+    report(error, getOnError);
+  }
+}
