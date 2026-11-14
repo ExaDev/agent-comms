@@ -26,6 +26,7 @@ import {
 import type { GatewayTrust } from "./gateway-trust.js";
 import type { MeshStoreIdentity } from "./mesh-store-shared.js";
 import { parseDisplayName } from "./display-name.js";
+import { parseIsoTimestampMs } from "./iso-timestamp.js";
 import { isDeviceIdHex } from "./room-path.js";
 import { CommsError, requireDisplayName } from "./store.js";
 import type { MeshTransport } from "./transport.js";
@@ -187,7 +188,8 @@ export class AccountJoin {
   private pruneExpired(): void {
     const now = this.deps.requireIdentity().clock.now();
     for (const [nonce, invite] of this.invites) {
-      if (Date.parse(invite.secret.expiresAt) > now) continue;
+      const expiresAtMs = parseIsoTimestampMs(invite.secret.expiresAt);
+      if (expiresAtMs !== undefined && expiresAtMs > now) continue;
       this.invites.delete(nonce);
       invite.settle("expired");
     }
