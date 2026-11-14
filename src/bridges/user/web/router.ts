@@ -5,7 +5,6 @@
  */
 
 import { implement } from "@orpc/server";
-import type { PushManager } from "../../../core/push-manager.js";
 import type { ChatController } from "../controller.js";
 import {
   createRoomAction,
@@ -18,8 +17,6 @@ import {
   leaveRoomAction,
   listAgentsAction,
   listRoomsAction,
-  pushSubscribeAction,
-  pushUnsubscribeAction,
   readRoomAction,
   renameAgentAction,
   sendAction,
@@ -37,7 +34,6 @@ import {
 export interface MeshRouterContext {
   controller: ChatController;
   publisher: MeshEventPublisher;
-  pushManager: PushManager | undefined;
 }
 
 /** Drops deliveryQueues -- mesh-internal replay state for offline agents, not something a browser tab needs to see -- from a MeshStore snapshot before it goes out as a state_sync event. */
@@ -108,14 +104,6 @@ export const meshRouter = {
 
   renameAgent: impl.renameAgent.handler(async ({ context, input }) =>
     renameAgentAction(context.controller, input),
-  ),
-
-  pushSubscribe: impl.pushSubscribe.handler(({ context, input }) =>
-    pushSubscribeAction(context.controller, context.pushManager, input),
-  ),
-
-  pushUnsubscribe: impl.pushUnsubscribe.handler(({ context, input }) =>
-    pushUnsubscribeAction(context.controller, context.pushManager, input),
   ),
 
   getRoomMessages: impl.getRoomMessages.handler(async ({ context, input }) =>

@@ -4,8 +4,6 @@
  * Each function preserves executeAction's exact prior validation behaviour (empty string treated the same as missing) even though the oRPC contract's own Zod schemas already enforce presence and type -- the contract validates shape, these functions still validate the same business rules the REST path has always enforced.
  */
 
-import type { PushManager } from "../../../core/push-manager.js";
-import type { PushSubscription } from "../../../core/web-push.js";
 import type { ChatController } from "../controller.js";
 import type { ActionResult } from "./contract.js";
 
@@ -129,45 +127,4 @@ export async function renameAgentAction(
     return { content: "Missing agent or name", isError: true };
   }
   return controller.renameAgent(input.agent, input.name);
-}
-
-function isPushSubscription(value: unknown): value is PushSubscription {
-  if (typeof value !== "object" || value === null) return false;
-  if (!("endpoint" in value) || typeof value.endpoint !== "string")
-    return false;
-  if (!("keys" in value)) return false;
-  const keys = value.keys;
-  if (typeof keys !== "object" || keys === null) return false;
-  if (!("p256dh" in keys) || typeof keys.p256dh !== "string") return false;
-  if (!("auth" in keys) || typeof keys.auth !== "string") return false;
-  return true;
-}
-
-export function pushSubscribeAction(
-  controller: ChatController,
-  pushManager: PushManager | undefined,
-  input: Readonly<{ subscription: unknown; agentId?: string | undefined }>,
-): ActionResult {
-  if (!pushManager) {
-    return { content: "Push notifications unavailable", isError: true };
-  }
-  if (!isPushSubscription(input.subscription)) {
-    return { content: "Invalid push subscription", isError: true };
-  }
-  const agentId = input.agentId ?? controller.agentId;
-  pushManager.addSubscription(agentId, input.subscription);
-  return { content: "Push subscription registered", isError: false };
-}
-
-export function pushUnsubscribeAction(
-  controller: ChatController,
-  pushManager: PushManager | undefined,
-  input: Readonly<{ agentId?: string | undefined }>,
-): ActionResult {
-  if (!pushManager) {
-    return { content: "Push notifications unavailable", isError: true };
-  }
-  const agentId = input.agentId ?? controller.agentId;
-  pushManager.removeSubscription(agentId);
-  return { content: "Push subscription removed", isError: false };
 }

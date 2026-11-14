@@ -448,16 +448,6 @@ const tabRouter = {
   renameAgent: tabImpl.renameAgent.handler(async ({ input }) =>
     upstream({ action: "rename_agent", agent: input.agent, name: input.name }),
   ),
-  pushSubscribe: tabImpl.pushSubscribe.handler(async ({ input }) =>
-    upstream({
-      action: "push_subscribe",
-      subscription: input.subscription,
-      agentId: input.agentId,
-    }),
-  ),
-  pushUnsubscribe: tabImpl.pushUnsubscribe.handler(async ({ input }) =>
-    upstream({ action: "push_unsubscribe", agentId: input.agentId }),
-  ),
 
   getRoomMessages: tabImpl.getRoomMessages.handler(async ({ input }) =>
     requireOrpcClient().getRoomMessages(input),

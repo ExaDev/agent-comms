@@ -78,6 +78,6 @@ it("answers 503 naming the missing build on every frontend route, and keeps serv
     expect(await response.text(), route).toContain("/not/built");
   }
 
-  const vapid = await fetch(`${origin}/api/push/vapid-key`);
-  expect(vapid.status).toBe(HTTP_OK);
+  const agents = await fetch(`${origin}/api/agents`);
+  expect(agents.status).toBe(HTTP_OK);
 });
