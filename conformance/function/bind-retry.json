@@ -56,7 +56,8 @@
       ],
       "expect": {
         "attempts": 1,
-        "error": "listen EACCES: permission denied"
+        "error": "listen EACCES: permission denied",
+        "rethrownRejection": true
       },
       "from": "bind-retry.unit.test.ts: retryOnAddrInUse > rethrows immediately for a rejection that isn't EADDRINUSE, without retrying",
       "function": "bind-retry.retryOnAddrInUse",
@@ -75,7 +76,8 @@
       ],
       "expect": {
         "attempts": 4,
-        "error": "listen EADDRINUSE: address already in use 127.0.0.1:1"
+        "error": "listen EADDRINUSE: address already in use 127.0.0.1:1",
+        "rethrownRejection": true
       },
       "from": "bind-retry.unit.test.ts: retryOnAddrInUse > rethrows the last EADDRINUSE error once the retry budget is exhausted",
       "function": "bind-retry.retryOnAddrInUse",

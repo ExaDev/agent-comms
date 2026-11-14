@@ -201,15 +201,22 @@ async function runBindRetry(
   delayMs: number,
 ): Promise<unknown> {
   const steps = list(script).map(rec);
+  const rejections = new Map<number, Error>();
   let attempts = 0;
-  const attempt = async (): Promise<string> => {
-    const step = steps[Math.min(attempts, steps.length - 1)];
+  const attempt = (): Promise<string> => {
+    const index = Math.min(attempts, steps.length - 1);
+    const step = steps[index];
     attempts += 1;
     if (step === undefined) throw new TypeError("an empty script");
-    const rejects = step.rejects;
-    if (rejects !== undefined) return Promise.reject(new Error(str(rejects)));
+    const rejects = step["rejects"];
+    if (rejects !== undefined) {
+      const error = rejections.get(index) ?? new Error(str(rejects));
+      rejections.set(index, error);
 
-    return Promise.resolve(str(step.resolves));
+      return Promise.reject(error);
+    }
+
+    return Promise.resolve(str(step["resolves"]));
   };
   try {
     return {
@@ -219,6 +226,7 @@ async function runBindRetry(
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : String(error),
+      rethrownRejection: [...rejections.values()].some((sent) => sent === error),
       attempts,
     };
   }

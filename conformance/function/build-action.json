@@ -2056,7 +2056,7 @@
         }
       ],
       "expect": {
-        "action": "whoami"
+        "action": "lan_web_uis"
       },
       "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
       "function": "bridge.buildAction",
@@ -2070,7 +2070,7 @@
         }
       ],
       "expect": {
-        "action": "whoami"
+        "action": "lan_web_uis"
       },
       "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
       "function": "bridge.buildAction",

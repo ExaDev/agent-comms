@@ -4,12 +4,13 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   checkCorpus,
-  collect,
-  completenessProblems,
+  runCompletenessProblems,
+  type Registration,
 } from "./conformance/corpus.js";
 import { selectCorpusFiles } from "./conformance/corpus-files.js";
 import type {
   FunctionCase,
+  Manifest,
   Text,
   ValidateCase,
 } from "./conformance/corpus-types.js";
@@ -394,23 +395,23 @@ if (checked.problems.length > 0) {
 }
 const corpus = checked.files;
 
-// What this run registers, computed while the tests are collected, so the completeness check below holds whatever the run does with them afterwards: a name filter, a bail, a retry or a shuffled order changes which registered tests run, never which are registered.
-const { registered, skipped } = collect(corpus);
-const registeredIds = new Set(registered);
+// Each case is recorded where it is registered, and again where its body starts, so the completeness check at the end reads what this run did and not what the corpus says: a loop that skips, filters or mis-keys cases, or a framework option that skips them, shows as a failure there. A run that selects tests by name or stops early fails it too, so the whole file is run.
+const registrations: Registration[] = [];
+const ran = new Set<string>();
 
 for (const { name, file } of corpus) {
   describe(`conformance ${name}`, () => {
     for (const testCase of file.cases) {
-      it.skipIf(!registeredIds.has(testCase.id))(
-        `${testCase.id} (${testCase.from})`,
-        async () => {
-          if (testCase.kind === "function") {
-            await runFunctionCase(testCase);
-          } else {
-            runValidateCase(testCase);
-          }
-        },
-      );
+      registrations.push({ file: name, id: testCase.id, skip: testCase.skip });
+      const register = testCase.skip === "ts" ? it.skip : it;
+      register(`${testCase.id} (${testCase.from})`, async () => {
+        ran.add(testCase.id);
+        if (testCase.kind === "function") {
+          await runFunctionCase(testCase);
+        } else {
+          runValidateCase(testCase);
+        }
+      });
     }
   });
 }
@@ -420,18 +421,75 @@ describe("corpus completeness", () => {
     readJson(join(CORPUS_ROOT, "manifest.json")),
   );
 
-  it("registers and skips cases so that they add up to the manifest, per implementation", () => {
+  it("ran every case the manifest holds that this implementation does not skip", () => {
     if (!manifest.ok) {
       throw new Error(manifest.problems.join("\n"));
     }
-    const entries = Object.values(manifest.value.files);
     expect(
-      completenessProblems(
-        entries.reduce((sum, entry) => sum + entry.cases, 0),
-        new Set(entries.flatMap((entry) => entry.skip)),
-        registered,
-        skipped,
-      ),
+      runCompletenessProblems(manifest.value, registrations, ran),
     ).toEqual([]);
+  });
+
+  describe("fails for a run that did not do what the manifest says", () => {
+    const held: Manifest = {
+      files: {
+        "function/a.json": { cases: 2, skip: ["b"] },
+        "function/c.json": { cases: 1, skip: [] },
+      },
+    };
+    const full: Registration[] = [
+      { file: "function/a.json", id: "a", skip: undefined },
+      { file: "function/a.json", id: "b", skip: "ts" },
+      { file: "function/c.json", id: "c", skip: undefined },
+    ];
+
+    it("passes when every case is registered and each one not skipped ran", () => {
+      expect(
+        runCompletenessProblems(held, full, new Set(["a", "c"])),
+      ).toEqual([]);
+    });
+
+    it("fails when the framework skipped every case", () => {
+      expect(runCompletenessProblems(held, full, new Set())).toEqual([
+        "a was registered and did not run",
+        "c was registered and did not run",
+      ]);
+    });
+
+    it("fails when a case was never registered", () => {
+      expect(
+        runCompletenessProblems(held, full.slice(1), new Set(["c"])),
+      ).toContain("function/a.json: 1 cases registered, the manifest has 2");
+    });
+
+    it("fails when a case is registered under another file", () => {
+      const moved = full.map((entry) =>
+        entry.id === "c" ? { ...entry, file: "function/a.json" } : entry,
+      );
+      expect(
+        runCompletenessProblems(held, moved, new Set(["a", "c"])),
+      ).toEqual([
+        "function/a.json: 3 cases registered, the manifest has 2",
+        "function/c.json: 0 cases registered, the manifest has 1",
+      ]);
+    });
+
+    it("fails when a case is skipped here and the manifest does not list it", () => {
+      const unlisted = full.map((entry) =>
+        entry.id === "a" ? { ...entry, skip: "ts" as const } : entry,
+      );
+      expect(runCompletenessProblems(held, unlisted, new Set(["c"]))).toEqual([
+        "a is skipped here and not listed in the manifest",
+      ]);
+    });
+
+    it("does not need a case that skips the other implementation to be skipped here", () => {
+      const other = full.map((entry) =>
+        entry.id === "a" ? { ...entry, skip: "rust" as const } : entry,
+      );
+      expect(runCompletenessProblems(held, other, new Set(["a", "c"]))).toEqual(
+        [],
+      );
+    });
   });
 });
