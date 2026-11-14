@@ -18,6 +18,7 @@ import type { MeshStore } from "../../../core/mesh-store.js";
 import { CommsError } from "../../../core/store.js";
 import type { MeshStatePatch } from "../../../core/wire-protocol.js";
 import type { WebUrlStatus } from "../../../core/tool.js";
+import { MAX_MESSAGE_BYTES } from "../../../core/message-limits.js";
 import {
   createRoomAction,
   declineInviteAction,
@@ -60,7 +61,8 @@ import {
 import { bridgePortRange } from "./bridge-port-range.js";
 import { startWebBeacon } from "./web-beacon.js";
 import {
-  MAX_REQUEST_BODY_BYTES,
+  REQUEST_TIMEOUT_MS,
+  meshErrorMessage,
   invalidJsonBody,
   readBoundedBody,
   serveRoute,
@@ -90,6 +92,10 @@ const frontendAssets = createFrontendAssetLoader(
 /**
  * The frontend build output, or undefined after answering 503 because the build is absent. The server module is imported by every bridge, so a checkout without the build must still start; only the routes that serve the frontend are unavailable.
  */
+/** The body of the 503 for a frontend that was never built. */
+const FRONTEND_NOT_BUILT_BODY =
+  "The web frontend is not built. A git checkout does not include the build output; install the npm package, or run `pnpm build:frontend` in a checkout with its development dependencies installed.";
+
 function frontendOrUnavailable(
   res: http.ServerResponse,
 ): FrontendAssets | undefined {
@@ -100,7 +106,8 @@ function frontendOrUnavailable(
     res.writeHead(HTTP_SERVICE_UNAVAILABLE, {
       "Content-Type": "text/plain; charset=utf-8",
     });
-    res.end(error.message);
+    // Fixed text: the error's own message names the install path of this machine, which is not for a client.
+    res.end(FRONTEND_NOT_BUILT_BODY);
     return undefined;
   }
 }
@@ -288,22 +295,27 @@ export async function createWebServer(options?: {
     localClientAddresses,
   };
 
-  const server = http.createServer((req, res) => {
-    try {
-      if (!admitRequest(accessPolicy, req, res)) return;
-      handleRequest(req, res, controller, webConsoleDist);
-    } catch (err) {
-      // A request the synchronous routing cannot handle is answered, not thrown: an exception out of this listener would end the process.
-      process.stderr.write(
-        `agent-comms web UI: ${err instanceof Error ? err.message : String(err)}\n`,
-      );
-      if (!res.headersSent) {
-        jsonError(res, "Internal server error", HTTP_INTERNAL_SERVER_ERROR);
-      } else {
-        res.end();
+  const server = http.createServer(
+    { requestTimeout: REQUEST_TIMEOUT_MS, headersTimeout: REQUEST_TIMEOUT_MS },
+    (req, res) => {
+      // Every response, the fixed routes and the operator's web-console files alike, forbids a browser to guess a type other than the one declared.
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      try {
+        if (!admitRequest(accessPolicy, req, res)) return;
+        handleRequest(req, res, controller, webConsoleDist);
+      } catch (err) {
+        // A request the synchronous routing cannot handle is answered, not thrown: an exception out of this listener would end the process.
+        process.stderr.write(
+          `agent-comms web UI: ${err instanceof Error ? err.message : String(err)}\n`,
+        );
+        if (!res.headersSent) {
+          jsonError(res, "Internal server error", HTTP_INTERNAL_SERVER_ERROR);
+        } else {
+          res.end();
+        }
       }
-    }
-  });
+    },
+  );
 
   let boundPort: number;
   try {
@@ -328,7 +340,7 @@ export async function createWebServer(options?: {
 
   const wss = new WebSocketServer({
     noServer: true,
-    maxPayload: MAX_REQUEST_BODY_BYTES,
+    maxPayload: MAX_MESSAGE_BYTES,
   });
   const rpcHandler = new RPCHandler(meshRouter);
 
@@ -593,8 +605,8 @@ function handleRequest(
     const filename = url.pathname.slice("/icons/".length);
     const assets = frontendOrUnavailable(res);
     if (assets === undefined) return;
-    const icon = assets.icons[filename];
-    if (icon) {
+    const icon = assets.icons.get(filename);
+    if (icon !== undefined) {
       res.writeHead(HTTP_OK, {
         "Content-Type": "image/svg+xml",
         "Cache-Control": "public, max-age=604800",
@@ -689,7 +701,11 @@ function handleRequest(
       } catch {
         throw invalidJsonBody();
       }
-      if (typeof parsed !== "object" || parsed === null) {
+      if (
+        typeof parsed !== "object" ||
+        parsed === null ||
+        Array.isArray(parsed)
+      ) {
         throw invalidJsonBody();
       }
       const params = Object.fromEntries(Object.entries(parsed));
@@ -837,9 +853,6 @@ function jsonError(
 }
 
 /** Extracts a reportable message from whatever meshGraph()/meshTrace() threw -- a CommsError has a real message, anything else is reported generically rather than leaking an unexpected error shape to the client. */
-function meshErrorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "Unknown error";
-}
 
 /** A transport that doesn't support mesh_graph/mesh_trace (CommsError code NOT_SUPPORTED, e.g. this bridge is running on FileStore rather than a real mesh) is a client-visible "this endpoint isn't available here" rather than a server fault. Any other error falls back to `otherwise` -- HTTP_BAD_REQUEST for mesh_trace, since its only other realistic failure is a malformed client-supplied target; HTTP_INTERNAL_SERVER_ERROR for mesh_graph, which takes no client input at all. */
 function meshErrorStatus(err: unknown, otherwise: number): number {

@@ -56,10 +56,8 @@ describe("loadFrontendAssets", () => {
     expect(assets.meshWorkerJs).toBe("worker();");
     expect(assets.swJs).toBe("sw();");
     expect(assets.manifestJson).toBe('{"name":"x"}');
-    expect(Object.keys(assets.icons).sort()).toEqual(
-      [...ICON_FILENAMES].sort(),
-    );
-    expect(assets.icons["icon-96x96.svg"]?.toString()).toBe(
+    expect([...assets.icons.keys()].sort()).toEqual([...ICON_FILENAMES].sort());
+    expect(assets.icons.get("icon-96x96.svg")?.toString()).toBe(
       "<svg icon-96x96.svg/>",
     );
   });

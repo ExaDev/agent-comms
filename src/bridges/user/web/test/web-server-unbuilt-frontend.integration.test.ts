@@ -67,7 +67,7 @@ async function startServer(): Promise<string> {
   return `http://${handle.host}:${String(getWebPort(handle))}`;
 }
 
-it("answers 503 naming the missing build on every frontend route, and keeps serving the API", async () => {
+it("answers 503 saying the build is missing, without the install path, on every frontend route, and keeps serving the API", async () => {
   const origin = await startServer();
 
   for (const route of [
@@ -81,7 +81,9 @@ it("answers 503 naming the missing build on every frontend route, and keeps serv
   ]) {
     const response = await fetch(`${origin}${route}`);
     expect(response.status, route).toBe(HTTP_SERVICE_UNAVAILABLE);
-    expect(await response.text(), route).toContain("/not/built");
+    const body = await response.text();
+    expect(body, route).toContain("The web frontend is not built");
+    expect(body, route).not.toContain("/not/built");
   }
 
   const agents = await fetch(`${origin}/api/agents`);
