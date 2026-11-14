@@ -3,7 +3,7 @@
  *
  * Provides offline caching:
  * - Install: pre-caches the app shell (HTML, JS, manifest, icons).
- * - Fetch:  network-first for API calls, cache-first for static assets.
+ * - Fetch:  network-first for page navigations and API calls, cache-first for static assets.
  * - Activate: removes old caches when the SW version changes.
  *
  * This file is built as a separate bundle (not part of the main app bundle)
@@ -31,7 +31,7 @@ interface CacheStorage {
 
 interface Cache {
   addAll: (requests: readonly string[]) => Promise<void>;
-  match: (request: Request) => Promise<Response | undefined>;
+  match: (request: Request | string) => Promise<Response | undefined>;
   put: (request: Request, response: Response) => Promise<void>;
 }
 
@@ -42,6 +42,7 @@ interface PrecacheEntry {
 }
 
 interface ServiceWorkerGlobalScope {
+  location: { href: string };
   caches: CacheStorage;
   __WB_MANIFEST: PrecacheEntry[];
   addEventListener: ((
@@ -58,7 +59,7 @@ declare const self: ServiceWorkerGlobalScope;
 // Cache versioning — bump to invalidate old caches on deploy
 // ---------------------------------------------------------------------------
 
-const CACHE_NAME = "agent-comms-v1";
+const CACHE_NAME = "agent-comms-v2";
 
 /** The app shell to precache, derived from vite-plugin-pwa's own build-time scan of dist/ -- this is what closes the previous gap where mesh-worker.js, built as a separate non-hashed bundle outside Vite's own module graph, was never in the hand-maintained list. */
 const APP_SHELL = self.__WB_MANIFEST.map((entry) => entry.url);
@@ -95,7 +96,7 @@ self.addEventListener("activate", (event: ExtendableEvent) => {
 });
 
 // ---------------------------------------------------------------------------
-// Fetch — network-first for API, cache-first for everything else
+// Fetch: network-first for page navigations and API calls, cache-first for everything else
 // ---------------------------------------------------------------------------
 
 /** Lower bound (inclusive) of the HTTP success status range worth caching. */
@@ -116,8 +117,39 @@ function isCacheableGetResponse(
   );
 }
 
+/** The cached copy of the app's page, which a navigation falls back to when the network is unreachable. */
+const OFFLINE_PAGE = new URL("index.html", self.location.href).href;
+
 self.addEventListener("fetch", (event: FetchEvent) => {
   const url = new URL(event.request.url);
+
+  // Page navigations: network-first, so the page always comes from the host while it is reachable. A cached page must never answer in the host's place: it would mask a redirect (the site moving to another origin) and keep serving a dashboard the host no longer serves. The cache is only the offline fallback.
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (isCacheableGetResponse(event.request, response)) {
+            const cloned = response.clone();
+            void self.caches
+              .open(CACHE_NAME)
+              .then(async (cache) => cache.put(event.request, cloned));
+          }
+          return response;
+        })
+        .catch(async () =>
+          self.caches
+            .open(CACHE_NAME)
+            .then(
+              async (cache) =>
+                (await cache.match(event.request)) ?? cache.match(OFFLINE_PAGE),
+            )
+            .then(
+              (cached) => cached ?? new Response("Offline", { status: 503 }),
+            ),
+        ),
+    );
+    return;
+  }
 
   // API calls: network-first so stale data doesn't linger
   if (url.pathname.startsWith("/api/")) {
