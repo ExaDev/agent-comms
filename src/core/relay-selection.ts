@@ -7,6 +7,7 @@
  */
 
 import { BlockList, isIPv4, isIPv6 } from "node:net";
+import { compareCodeUnits } from "./ordering.js";
 
 /** A relay offer this store has heard, with what it knows about the device making it. */
 export interface RelayOffer {
@@ -104,7 +105,7 @@ export function selectRelay(
 ): SelectedRelay {
   const eligible = input.offers
     .filter((offer) => offer.deviceHex !== input.ownDeviceHex)
-    .toSorted((a, b) => a.deviceHex.localeCompare(b.deviceHex));
+    .toSorted((a, b) => compareCodeUnits(a.deviceHex, b.deviceHex));
   for (const tier of OFFER_TIERS) {
     for (const offer of eligible) {
       const admitted =

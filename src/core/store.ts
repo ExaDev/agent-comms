@@ -23,6 +23,7 @@ import {
   RoomMessageSchema,
   RoomSchema,
 } from "./types.js";
+import { compareCodeUnits } from "./ordering.js";
 import type {
   AgentIdentity,
   DeliveryEvent,
@@ -584,7 +585,7 @@ export class FileStore implements CommsStore {
           messages.push(msg);
         }
       }
-      messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      messages.sort((a, b) => compareCodeUnits(a.timestamp, b.timestamp));
       return messages;
     } catch {
       return [];
@@ -662,7 +663,7 @@ export class FileStore implements CommsStore {
           b.type === "room_message" || b.type === "dm"
             ? b.message.timestamp
             : "";
-        return ta.localeCompare(tb);
+        return compareCodeUnits(ta, tb);
       });
       return events;
     } catch {

@@ -38,6 +38,7 @@ const COVERED_MODULES: Readonly<Record<string, string>> = {
   input: "src/bridges/user/web/frontend/input.ts",
   "machine-list-groups": "src/core/machine-list-groups.ts",
   messages: "src/bridges/user/web/frontend/messages.ts",
+  ordering: "src/core/ordering.ts",
   "project-tree": "src/bridges/user/web/frontend/project-tree.ts",
   "relay-selection": "src/core/relay-selection.ts",
   "request-timeouts": "src/core/request-timeouts.ts",

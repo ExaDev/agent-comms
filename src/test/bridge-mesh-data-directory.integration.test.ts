@@ -34,6 +34,7 @@ import {
   TeardownStack,
   unreachableHubUrl,
 } from "./hub-helpers.js";
+import { compareCodeUnits } from "../core/ordering.js";
 import { waitFor } from "./test-transport.js";
 import { scratchDirectory } from "./scratch-directory.helper.js";
 
@@ -126,7 +127,7 @@ function snapshot(dir: string): [string, string][] {
         fs.readFileSync(file).toString("base64"),
       ];
     })
-    .sort(([a], [b]) => a.localeCompare(b));
+    .sort(([a], [b]) => compareCodeUnits(a, b));
 }
 
 it.each(factories)(
