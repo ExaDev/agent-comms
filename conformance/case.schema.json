@@ -237,6 +237,10 @@
                   "items": {
                     "additionalProperties": false,
                     "properties": {
+                      "code": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "message": {
                         "items": {
                           "$ref": "#/$defs/fragment"

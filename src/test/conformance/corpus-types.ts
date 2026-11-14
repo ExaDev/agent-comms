@@ -42,6 +42,7 @@ export interface FunctionCase extends CaseBase {
 
 export interface ValidateIssue {
   readonly path: readonly (string | number)[];
+  readonly code?: string;
   readonly message?: readonly Text[];
 }
 

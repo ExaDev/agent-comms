@@ -285,7 +285,10 @@ fn check_validate_case(value: &Value, at: &str) -> Check<()> {
                 return Err(format!("{at}: \"issues\" must not be empty"));
             }
             for issue in issues {
-                let issue_map = exact_keys(issue, at, &["path"], &["message"])?;
+                let issue_map = exact_keys(issue, at, &["path"], &["code", "message"])?;
+                if issue_map.contains_key("code") {
+                    non_empty_string_field(issue_map, "code", at)?;
+                }
                 for step in array(&issue_map["path"], at, "\"path\"")? {
                     if !(step.is_string() || as_integer(step).is_some()) {
                         return Err(format!(

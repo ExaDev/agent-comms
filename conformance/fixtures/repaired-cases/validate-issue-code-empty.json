@@ -1,0 +1,22 @@
+{
+  "cases": [
+    {
+      "expect": {
+        "issues": [
+          {
+            "code": "invalid_type",
+            "path": []
+          }
+        ],
+        "ok": false
+      },
+      "from": "example.test.ts: group > test",
+      "id": "v",
+      "input": {
+        "action": "whoami"
+      },
+      "kind": "validate",
+      "schema": "tool-params"
+    }
+  ]
+}

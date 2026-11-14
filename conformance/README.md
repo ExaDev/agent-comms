@@ -73,7 +73,7 @@ A function that is asynchronous is awaited.
 { "id": "...", "from": "...", "kind": "validate", "schema": "tool-params", "input": { "action": "whoami" }, "expect": { "ok": true } }
 ```
 
-`schema` names a validator in the implementation's call table. `expect` is `{ "ok": true }`, with an optional `value`, the value the validator returns, or `{ "ok": false, "issues": [ { "path": [...], "message": [...] } ] }`: every issue the validator reports, in order. `path` is the keys and indexes from the root to the value at fault, and `message`, optional, is a list of fragments as in `throws`.
+`schema` names a validator in the implementation's call table. `expect` is `{ "ok": true }`, with an optional `value`, the value the validator returns, or `{ "ok": false, "issues": [ { "path": [...], "message": [...] } ] }`: every issue the validator reports, in order. `path` is the keys and indexes from the root to the value at fault, `code`, optional, is the validator's own name for the kind of problem, and `message`, optional, a list of fragments as in `throws`. A validator's wording belongs to its library, so a case asserts paths and codes, and a message only where a caller shows it to a user.
 
 ### Rules the schema cannot express
 

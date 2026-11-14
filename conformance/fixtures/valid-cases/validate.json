@@ -34,6 +34,7 @@
             "path": []
           },
           {
+            "code": "invalid_type",
             "message": [
               "x",
               {
