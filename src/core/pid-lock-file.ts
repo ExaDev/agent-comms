@@ -1,23 +1,68 @@
 /**
  * A lock file holding the PID of the process that claimed it: the exclusivity guard for a bridge's identity slot (identity-store.ts) and for appends to the machine's account ledger (ledger-lock.ts). A lock whose recorded process has died is stale and may be taken over, so a holder that crashed never wedges the lock.
  *
- * Every claim writes the PID plus a random nonce, so two claims never leave identical content even when a PID is reused. Removing a stale lock is the one step that could delete a newer, live claim by mistake (the stale file can be released and re-claimed between reading it and removing it), so it happens only under a second, takeover lock file, and only when the lock still holds exactly the content that was read and judged stale. A live holder releasing its own lock never needs the takeover lock: only its own claim can be at that name while it holds it.
+ * Every claim writes the PID, a random nonce, the host name and the process's start marker, one per line. The nonce keeps two claims from ever leaving identical content even when a PID is reused. The host and the start marker are what a later claimant checks before judging the holder dead: a lock is taken over only when its holder can be shown dead, so a holder on another host (the directory is shared) and a holder whose PID still names the process that recorded it are left alone, and a PID that now names a process that started at another time is a holder that died. A lock written without them (an older build) is judged by its PID on this host alone. Two hosts that report the same host name are not told apart. Removing a stale lock is the one step that could delete a newer, live claim by mistake (the stale file can be released and re-claimed between reading it and removing it), so it happens only under a second, takeover lock file, and only when the lock still holds exactly the content that was read and judged stale. A live holder releasing its own lock never needs the takeover lock: only its own claim can be at that name while it holds it.
  */
 
 import { randomBytes } from "node:crypto";
 import * as fs from "node:fs";
+import * as os from "node:os";
+import { processStartMarker } from "./process-start.js";
 import { CommsError } from "./store.js";
 
 /** Random bytes in each claim's content, enough that two claims never collide. */
 const CLAIM_NONCE_BYTES = 16;
 
+/** Whether a process with this pid exists on this host. A process this one is not allowed to signal exists, so it counts as alive. */
 export function isPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    return isErrorCode(err, "EPERM");
   }
+}
+
+/** The host name every claim records, read once. */
+const OWN_HOST = os.hostname();
+let ownStartMarker: { value: string | undefined } | undefined;
+
+function ownMarker(): string | undefined {
+  ownStartMarker ??= { value: processStartMarker(process.pid) };
+  return ownStartMarker.value;
+}
+
+interface LockHolder {
+  pid: number | undefined;
+  host: string | undefined;
+  start: string | undefined;
+}
+
+function holderOf(content: string): LockHolder {
+  const [, , host, start] = content.split("\n");
+  return {
+    pid: pidOf(content),
+    host: host === undefined || host === "" ? undefined : host,
+    start: start === undefined || start === "" ? undefined : start,
+  };
+}
+
+/** Whether the holder a lock records cannot be shown dead: it runs on another host, or it runs here and its pid names a live process that started when the claim recorded (or the claim recorded no start). A lock with no readable pid has no holder. */
+function holderMayBeAlive(holder: Readonly<LockHolder>): boolean {
+  if (holder.pid === undefined) return false;
+  if (holder.host !== undefined && holder.host !== OWN_HOST) return true;
+  if (!isPidAlive(holder.pid)) return false;
+  if (holder.start === undefined) return true;
+  const current = processStartMarker(holder.pid);
+  return current === undefined || current === holder.start;
+}
+
+/** The pid recorded by the lock at lockFile when its holder cannot be shown dead (see holderMayBeAlive), including this process; undefined when there is no lock or its holder is shown dead. */
+export function liveLockHolder(lockFile: string): number | undefined {
+  const content = readLockContent(lockFile);
+  if (content === undefined) return undefined;
+  const holder = holderOf(content);
+  return holderMayBeAlive(holder) ? holder.pid : undefined;
 }
 
 function readLockContent(lockFile: string): string | undefined {
@@ -34,8 +79,7 @@ function pidOf(content: string): number | undefined {
   return Number.isInteger(pid) ? pid : undefined;
 }
 
-/** Read the PID holding the lock, or undefined when absent or unreadable. */
-export function readLockPid(lockFile: string): number | undefined {
+function readLockPid(lockFile: string): number | undefined {
   const content = readLockContent(lockFile);
   return content === undefined ? undefined : pidOf(content);
 }
@@ -52,7 +96,7 @@ function claimExclusive(file: string): boolean {
   const tmpFile = `${file}.${String(process.pid)}.tmp`;
   fs.writeFileSync(
     tmpFile,
-    `${String(process.pid)}\n${randomBytes(CLAIM_NONCE_BYTES).toString("hex")}\n`,
+    `${[String(process.pid), randomBytes(CLAIM_NONCE_BYTES).toString("hex"), OWN_HOST, ownMarker() ?? ""].join("\n")}\n`,
     "utf-8",
   );
   try {
@@ -66,10 +110,13 @@ function claimExclusive(file: string): boolean {
   }
 }
 
-/** Whether content names a process that can no longer be holding the lock: one that has died, this process itself (which claims a lock only after releasing it, so a lock naming it is left over from before), or no readable PID at all. */
+/** Whether content names a holder that can be shown to no longer be holding the lock: one that has died (see holderMayBeAlive), this process itself on this host (which claims a lock only after releasing it, so a lock naming it is left over from before), or no readable PID at all. */
 function isStale(content: string): boolean {
-  const pid = pidOf(content);
-  return pid === undefined || pid === process.pid || !isPidAlive(pid);
+  const holder = holderOf(content);
+  const isThisProcess =
+    holder.pid === process.pid &&
+    (holder.host === undefined || holder.host === OWN_HOST);
+  return isThisProcess || !holderMayBeAlive(holder);
 }
 
 /** Removes `file` if it still holds exactly `content`, the content a caller read and judged stale. Any newer claim has different content (each carries its own nonce), so it is left alone. */
@@ -189,9 +236,15 @@ export async function withWriteLockAsync<T>(
   }
 }
 
-/** Removes lockFile if this process holds it; a lock another PID has since taken over is left alone. The release half of tryAcquireLock. */
+/** Removes lockFile if this process holds it; a lock another process has since taken over, on this host or another, is left alone. The release half of tryAcquireLock. */
 export function releaseLockFile(lockFile: string): void {
-  if (readLockPid(lockFile) === process.pid) {
+  const content = readLockContent(lockFile);
+  if (content === undefined) return;
+  const holder = holderOf(content);
+  if (
+    holder.pid === process.pid &&
+    (holder.host === undefined || holder.host === OWN_HOST)
+  ) {
     fs.rmSync(lockFile, { force: true });
   }
 }

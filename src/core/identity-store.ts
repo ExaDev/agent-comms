@@ -25,8 +25,7 @@ import {
   type StoredIssuerKey,
 } from "./issuer-identity-file.js";
 import {
-  isPidAlive,
-  readLockPid,
+  liveLockHolder,
   releaseLockFile,
   tryAcquireLock,
   withWriteLockAsync,
@@ -239,10 +238,7 @@ export function loadOrCreateIdentity(
 export function probeSlotOwner(
   slot: Readonly<IdentitySlot>,
 ): number | undefined {
-  const { lockFile } = slotPaths(slot);
-  const heldBy = readLockPid(lockFile);
-  if (heldBy === undefined) return undefined;
-  return isPidAlive(heldBy) ? heldBy : undefined;
+  return liveLockHolder(slotPaths(slot).lockFile);
 }
 
 /**
@@ -302,9 +298,9 @@ async function waitForConcurrentCreate(
   for (;;) {
     if (fs.existsSync(identityFile)) return;
 
-    const heldBy = readLockPid(lockFile);
+    const heldBy = liveLockHolder(lockFile);
     const heldByDifferentLiveProcess =
-      heldBy !== undefined && heldBy !== process.pid && isPidAlive(heldBy);
+      heldBy !== undefined && heldBy !== process.pid;
     if (!heldByDifferentLiveProcess || Date.now() >= deadline) return;
 
     await new Promise<void>((resolve) => {
