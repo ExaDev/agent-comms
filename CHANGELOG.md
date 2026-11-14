@@ -1,3 +1,43 @@
+## [9.0.12](https://github.com/ExaDev/agent-comms/compare/v9.0.11...v9.0.12) (2026-11-14)
+
+### Bug Fixes
+
+* **core:** accept only the key-derivation parameters this build writes in an account bundle ([079c339](https://github.com/ExaDev/agent-comms/commit/079c339ca88e0a0dc1400daa46e2654c1db1feb5))
+* **core:** drop a capability request from the pending set when its window has passed ([c8e6c01](https://github.com/ExaDev/agent-comms/commit/c8e6c012c71771b759059a4be3d8ea64c9d8f154))
+* **core:** fail a certificate renewal when the file has gone ([bb3a5a6](https://github.com/ExaDev/agent-comms/commit/bb3a5a6143ab8f779ddc05e924bb8abde219959c))
+* **core:** keep reading a delivery queue past a file that cannot be parsed ([a16ae3d](https://github.com/ExaDev/agent-comms/commit/a16ae3d276e863a699e9d79c0dda7799c329c8ef))
+* **core:** keep the file text out of the error for an unusable identity file ([4f57e64](https://github.com/ExaDev/agent-comms/commit/4f57e64a0ed5bf1398d4bff47d4f4b364b661ddc))
+* **core:** load trusted identifiers in lower case so any case finds them ([1fbfff4](https://github.com/ExaDev/agent-comms/commit/1fbfff4dc7c8edd28b979f110403c81da5e1d001))
+* **core:** name the write lock uniquely, wait on timers and fail with a typed error ([83a2913](https://github.com/ExaDev/agent-comms/commit/83a2913d2f2ad0a19055f551eda940be9742eac4))
+* **core:** refuse a connection code whose expiry does not parse ([737ef2f](https://github.com/ExaDev/agent-comms/commit/737ef2fc1dfc5e4486023eac8377fcfb87b8e3dc))
+* **core:** refuse a room.send timestamp outside the range of dates ([ae47501](https://github.com/ExaDev/agent-comms/commit/ae47501c5d6ed520e2cc88dd75dfe088884a077b))
+* **core:** refuse a slot identity file that cannot be used instead of replacing it ([ea04894](https://github.com/ExaDev/agent-comms/commit/ea04894bdf61df51a524ec34876db85d15b90ef5))
+* **core:** report a delivery file that stays in place once ([ea07a46](https://github.com/ExaDev/agent-comms/commit/ea07a46b55d610c4f215fa6a3e942e942333e859))
+* **core:** report a skipped ledger entry as possibly holding a revocation ([dbb5561](https://github.com/ExaDev/agent-comms/commit/dbb55614abcde1500824c7f4573c7fc63450339b))
+* **core:** report an undecodable ledger entry with fixed text ([5340f2b](https://github.com/ExaDev/agent-comms/commit/5340f2b4ac8a2215552d18b5a560d1d3c92bb0ef))
+* **core:** report an unusable identity file once per store ([01d9420](https://github.com/ExaDev/agent-comms/commit/01d942025e8d468f8308843a84c354976fa88820))
+* **core:** require a signature when the redeemer supplies a key or fingerprint ([9bc6185](https://github.com/ExaDev/agent-comms/commit/9bc61857166016516049619ea3af3ecd29d321f1))
+* **core:** require full-length authentication tags and ivs in sealed account envelopes ([f33f73d](https://github.com/ExaDev/agent-comms/commit/f33f73d503c437d9402e22f9b701d4a086bac042))
+* **core:** serialise read-modify-write of the account and machine identity files ([5610005](https://github.com/ExaDev/agent-comms/commit/5610005b21b78b8a2a2c24e08af9ef85fa349060))
+* **core:** serialise writes to a slot file and keep an ephemeral bridge's tokens in memory ([d6d983b](https://github.com/ExaDev/agent-comms/commit/d6d983bf876435ecf3141fd2122f307237b2b656))
+* **core:** skip and report an unreadable entry instead of failing the whole ledger ([0c1f837](https://github.com/ExaDev/agent-comms/commit/0c1f83746adfd1d5877e93896dcb80d65ce6451d))
+* **core:** take a lock over only when its holder is shown dead ([e08601d](https://github.com/ExaDev/agent-comms/commit/e08601dd3080b26a78cf98215900c8aba1109540))
+* **core:** treat a start time that does not parse as the latest, and as old when purging ([58ed1db](https://github.com/ExaDev/agent-comms/commit/58ed1db3e245d9c43a7336b759fa3da6a130858d))
+* **core:** validate the key-derivation parameters of an account bundle before use ([7a9045c](https://github.com/ExaDev/agent-comms/commit/7a9045c10ee9f5bcb6afe8bb8a9498aeef3f8dc2))
+* **core:** wait for an identity file's write lock on timers wherever the caller is async ([c1a9182](https://github.com/ExaDev/agent-comms/commit/c1a91821c67678e9483df504c81c4f89950c1b9b))
+
+### Documentation
+
+* **tool:** remove spaced double hyphens from comments the earlier changes touched ([faeed90](https://github.com/ExaDev/agent-comms/commit/faeed90a4cc9b639ece8aa8410bc8142d019c032))
+* **tool:** state that an unsigned code is a bearer hint, not authentication ([417e8f3](https://github.com/ExaDev/agent-comms/commit/417e8f3ab2a10fc8866e2617cf3a574a44418834))
+
+### Tests
+
+* **core:** pin that asynchronous identity writes wait for a held lock on timers ([cb910f4](https://github.com/ExaDev/agent-comms/commit/cb910f4c2802cf92c34993d469e79afefae7b21a))
+* **core:** pin that untrusting an issuer ends admission of a cached verdict ([525e55c](https://github.com/ExaDev/agent-comms/commit/525e55c232dc58cd1b6e16d7645cf0f0f7d7e4a7))
+* **core:** pin the fixed report of an undecodable entry received from a peer ([83e9f2a](https://github.com/ExaDev/agent-comms/commit/83e9f2a6e6059e26996b374dffa9788566a4de2c))
+* **core:** pin the write lock of every rewrite of an account or machine identity file ([9ca4514](https://github.com/ExaDev/agent-comms/commit/9ca451475b6b4d9682e7c085be654853684fb39d))
+
 ## [9.0.11](https://github.com/ExaDev/agent-comms/compare/v9.0.10...v9.0.11) (2026-11-14)
 
 ### Bug Fixes
