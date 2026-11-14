@@ -21,6 +21,8 @@ const DEVICE_ID_BYTES = 32;
 const SENDER_BYTES = Uint8Array.from({ length: DEVICE_ID_BYTES }, (_, i) => i);
 const SENDER_HEX = Buffer.from(SENDER_BYTES).toString("hex");
 const HEAD = 7;
+/** A writer log this side holds, which the stalled log of these tests is not. */
+const OTHER_LOG = Uint8Array.from(Buffer.from("0909", "hex"));
 
 function have(): DataHaveFrame {
   return { type: "data-have", peer: LOG, "head-seq": HEAD };
@@ -31,6 +33,7 @@ function account(options: Readonly<{ owns: boolean; peer: boolean }>) {
     ownsLog: () => options.owns,
     handleDataFrame: async () => null,
     announcements: async () => [],
+    unreadableEntries: () => [],
   };
   const value: AccountReplication = {
     ledger: () => ledger,
@@ -151,6 +154,7 @@ describe("the router's replication rounds", () => {
       // This side holds nothing of the log, so every announcement is empty.
       handleDataFrame: async () => null,
       announcements: async () => [],
+      unreadableEntries: () => [],
     };
     const router = new DataFrameRouter({
       dataStorage: undefined,
@@ -188,6 +192,7 @@ describe("the router's replication rounds", () => {
       ownsLog: () => true,
       handleDataFrame: async () => null,
       announcements: async () => [have()],
+      unreadableEntries: () => [],
     };
     const router = new DataFrameRouter({
       dataStorage: undefined,
@@ -213,6 +218,106 @@ describe("the router's replication rounds", () => {
 
       expect(errors).toEqual([]);
       expect(router.stalledLogs()).toEqual([]);
+    } finally {
+      router.stop();
+    }
+  });
+
+  it("does not count a round whose offers failed as a stall, and counts again once they go through", async () => {
+    let failing = true;
+    const errors: Error[] = [];
+    const connection = {
+      peerDeviceId: SENDER_BYTES,
+      send: async () => {
+        if (failing) throw new Error("the connection dropped");
+      },
+    } as unknown as Connection;
+    const ledger: AccountLedgerReplica = {
+      ownsLog: () => true,
+      handleDataFrame: async () => null,
+      // This side holds another log, so every round offers it and the offer fails while `failing`.
+      announcements: async () => [
+        { type: "data-have", peer: OTHER_LOG, "head-seq": 1 },
+      ],
+      unreadableEntries: () => [],
+    };
+    const router = new DataFrameRouter({
+      dataStorage: undefined,
+      account: { ledger: () => ledger, isAccountPeer: async () => true },
+      peerSessions: new Map([[SENDER_HEX, true]]),
+      onError: (error) => {
+        errors.push(error);
+      },
+      hub: undefined,
+      announceIntervalMs: ROUND_MS,
+    });
+    try {
+      await router.route(connection, have());
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, ROUND_MS * ROUNDS_TO_WAIT);
+      });
+      expect(errors.some((e) => e.message === "the connection dropped")).toBe(
+        true,
+      );
+      expect(errors.some((e) => e.message.includes("stayed behind"))).toBe(
+        false,
+      );
+      expect(router.stalledLogs()).toEqual([]);
+
+      failing = false;
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, ROUND_MS * ROUNDS_TO_WAIT);
+      });
+      expect(errors.some((e) => e.message.includes("stayed behind"))).toBe(
+        true,
+      );
+      expect(router.stalledLogs()).toHaveLength(1);
+    } finally {
+      router.stop();
+    }
+  });
+
+  it("reports a round whose own heads cannot be read, as that, and keeps checking in the next round", async () => {
+    let unreadable = true;
+    const errors: Error[] = [];
+    const connection = {
+      peerDeviceId: SENDER_BYTES,
+      send: async () => undefined,
+    } as unknown as Connection;
+    const ledger: AccountLedgerReplica = {
+      ownsLog: () => true,
+      handleDataFrame: async () => null,
+      announcements: async () => {
+        if (unreadable) throw new Error("the ledger store is unreadable");
+        return [];
+      },
+      unreadableEntries: () => [],
+    };
+    const router = new DataFrameRouter({
+      dataStorage: undefined,
+      account: { ledger: () => ledger, isAccountPeer: async () => true },
+      peerSessions: new Map([[SENDER_HEX, true]]),
+      onError: (error) => {
+        errors.push(error);
+      },
+      hub: undefined,
+      announceIntervalMs: ROUND_MS,
+    });
+    try {
+      await router.route(connection, have());
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, ROUND_MS * ROUNDS_TO_WAIT);
+      });
+      expect(
+        errors.some((e) => e.message === "the ledger store is unreadable"),
+      ).toBe(true);
+      expect(router.stalledLogs()).toEqual([]);
+
+      unreadable = false;
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, ROUND_MS * ROUNDS_TO_WAIT);
+      });
+      expect(router.stalledLogs()).toHaveLength(1);
     } finally {
       router.stop();
     }

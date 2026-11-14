@@ -5,7 +5,13 @@
 import { describe, expect, it } from "vitest";
 import { bytesToHex } from "wire-mesh-core/domain/device-id";
 import type { DataRequestFrame } from "wire-mesh-core/generated/protocol";
-import { LEDGER_STALL_ROUNDS, LedgerGapTracker } from "../core/ledger-gaps.js";
+import {
+  LEDGER_REPORT_REPEAT_ROUNDS,
+  LEDGER_STALL_ROUNDS,
+  LedgerGapTracker,
+  MAX_ANNOUNCED_HEAD_DISTANCE,
+  MAX_TRACKED_LEDGER_LOGS,
+} from "../core/ledger-gaps.js";
 
 /** Two writer log ids, as the wire carries them: 32 bytes in real use, short here. */
 const LOG = Uint8Array.from(Buffer.from("01020304", "hex"));
@@ -16,6 +22,10 @@ const LARGER_HEAD = 8;
 const STALLED_EXTRA_ROUNDS = 4;
 const STALLED_GAP_START = 2;
 const REPEATS = 3;
+const INTERVALS_OF_GROWTH = 4;
+const HEX_RADIX = 16;
+const LOG_ID_HEX_DIGITS = 8;
+const LOGS_OVER_THE_LIMIT = 20;
 
 function tracker(live: ReadonlySet<string> = new Set(["relay", "direct"])) {
   const requests: { source: string; frame: DataRequestFrame }[] = [];
@@ -73,18 +83,40 @@ describe("a log behind an announced head", () => {
     ]);
   });
 
-  it("is reported again only when the gap grows", async () => {
+  it("is reported again only when the gap grows, and not before the repeat interval has passed", async () => {
     const { gaps, errors } = tracker();
     gaps.noteHave("relay", LOG, ANNOUNCED_HEAD);
     await rounds(gaps, LEDGER_STALL_ROUNDS);
-
-    gaps.noteHave("relay", LOG, ANNOUNCED_HEAD);
-    await rounds(gaps, 2);
     expect(errors).toHaveLength(1);
 
-    gaps.noteHave("relay", LOG, LARGER_HEAD);
-    await rounds(gaps, 1);
-    expect(errors).toHaveLength(2);
+    // The same gap, however long: not again.
+    await rounds(gaps, LEDGER_REPORT_REPEAT_ROUNDS * 2);
+    expect(errors).toHaveLength(1);
+
+    // A larger gap inside the interval of the last report: held back until the interval has passed.
+    const fresh = tracker();
+    fresh.gaps.noteHave("relay", LOG, ANNOUNCED_HEAD);
+    await rounds(fresh.gaps, LEDGER_STALL_ROUNDS);
+    fresh.gaps.noteHave("relay", LOG, LARGER_HEAD);
+    await rounds(fresh.gaps, 1);
+    expect(fresh.errors).toHaveLength(1);
+    await rounds(fresh.gaps, LEDGER_REPORT_REPEAT_ROUNDS);
+    expect(fresh.errors).toHaveLength(2);
+  });
+
+  it("is reported at most once per repeat interval by a peer that raises its head every round", async () => {
+    const { gaps, errors } = tracker();
+    const total = LEDGER_REPORT_REPEAT_ROUNDS * INTERVALS_OF_GROWTH;
+    for (let round = 0; round < total; round += 1) {
+      gaps.noteHave("relay", LOG, ANNOUNCED_HEAD + round);
+      await gaps.round(new Map());
+    }
+
+    expect(errors.length).toBeLessThanOrEqual(
+      Math.ceil((total - LEDGER_STALL_ROUNDS) / LEDGER_REPORT_REPEAT_ROUNDS) +
+        1,
+    );
+    expect(errors.length).toBeGreaterThan(1);
   });
 
   it("is asked for from every source that announced a higher head, from the local head, and not from one at or below it", async () => {
@@ -214,5 +246,92 @@ describe("a request that fails", () => {
 
     expect(sent).toEqual(["direct"]);
     expect(errors.map((e) => e.message)).toContain("no route");
+  });
+});
+
+describe("what the tracker keeps and prints is bounded", () => {
+  it("tracks at most a fixed number of logs, says once that it ignores the rest, and tracks again once room is made", async () => {
+    const { gaps, errors } = tracker();
+    const id = (index: number): Uint8Array =>
+      Uint8Array.from(
+        Buffer.from(
+          index.toString(HEX_RADIX).padStart(LOG_ID_HEX_DIGITS, "0"),
+          "hex",
+        ),
+      );
+    for (
+      let index = 0;
+      index < MAX_TRACKED_LEDGER_LOGS + LOGS_OVER_THE_LIMIT;
+      index += 1
+    ) {
+      gaps.noteHave("relay", id(index), ANNOUNCED_HEAD);
+    }
+
+    await rounds(gaps, LEDGER_STALL_ROUNDS);
+
+    expect(gaps.stalled()).toHaveLength(MAX_TRACKED_LEDGER_LOGS);
+    const ignored = errors.filter((error) => error.message.includes("ignor"));
+    expect(ignored).toHaveLength(1);
+    // Everything beyond the limit is dropped, not requested.
+    expect(
+      errors.filter((error) => error.message.includes("stayed behind")),
+    ).toHaveLength(MAX_TRACKED_LEDGER_LOGS);
+  });
+
+  it("does not record a head further ahead than a log can be, reports it once, and does not let it make a gap", async () => {
+    const { gaps, errors, requests } = tracker();
+    gaps.noteHave("relay", LOG, MAX_ANNOUNCED_HEAD_DISTANCE + 1);
+
+    await rounds(gaps, LEDGER_STALL_ROUNDS + STALLED_EXTRA_ROUNDS);
+
+    expect(gaps.stalled()).toEqual([]);
+    expect(requests).toEqual([]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toContain("out of range");
+    expect(errors[0]?.message).toContain(LOG_HEX);
+  });
+
+  it("accepts a head exactly at the largest distance", async () => {
+    const { gaps, errors } = tracker();
+    gaps.noteHave("relay", LOG, MAX_ANNOUNCED_HEAD_DISTANCE);
+
+    await rounds(gaps, LEDGER_STALL_ROUNDS);
+
+    expect(gaps.stalled()).toHaveLength(1);
+    expect(errors.filter((e) => e.message.includes("out of range"))).toEqual(
+      [],
+    );
+  });
+});
+
+describe("a round whose announcements failed", () => {
+  it("does not count towards a stall, and does not reset the count either", async () => {
+    const { gaps, errors } = tracker();
+    gaps.noteHave("relay", LOG, ANNOUNCED_HEAD);
+    await gaps.round(new Map());
+    await gaps.round(new Map());
+
+    for (let round = 0; round < LEDGER_STALL_ROUNDS * 2; round += 1) {
+      await gaps.round(new Map(), { announceFailed: true });
+    }
+    expect(errors).toEqual([]);
+    expect(gaps.stalled()).toEqual([]);
+
+    await gaps.round(new Map());
+    expect(errors).toHaveLength(1);
+    expect(gaps.stalled()).toHaveLength(1);
+  });
+
+  it("still notices that a log has caught up", async () => {
+    const { gaps } = tracker();
+    gaps.noteHave("relay", LOG, ANNOUNCED_HEAD);
+    await rounds(gaps, LEDGER_STALL_ROUNDS);
+    expect(gaps.stalled()).toHaveLength(1);
+
+    await gaps.round(new Map([[LOG_HEX, ANNOUNCED_HEAD]]), {
+      announceFailed: true,
+    });
+
+    expect(gaps.stalled()).toEqual([]);
   });
 });
