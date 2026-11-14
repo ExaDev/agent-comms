@@ -61,6 +61,7 @@ import {
   type AccessPolicy,
 } from "./web-access.js";
 import { bridgePortRange } from "./bridge-port-range.js";
+import { HOSTED_DASHBOARD_ORIGIN } from "./hosted-dashboard.js";
 import { startWebBeacon } from "./web-beacon.js";
 import {
   REQUEST_TIMEOUT_MS,
