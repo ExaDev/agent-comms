@@ -12,7 +12,6 @@ import * as http from "node:http";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { RPCHandler } from "@orpc/server/websocket";
-import { PushManager } from "../../../core/push-manager.js";
 import { ChatController } from "../controller.js";
 import type { MeshStore } from "../../../core/mesh-store.js";
 import { CommsError } from "../../../core/store.js";
@@ -99,19 +98,6 @@ function frontendOrUnavailable(
 }
 
 // ---------------------------------------------------------------------------
-// Active handles — needed so HTTP handlers can reach the PushManager
-// ---------------------------------------------------------------------------
-
-const activeHandles = new Set<WebServerHandle>();
-
-function findHandle(controller: ChatController): WebServerHandle | undefined {
-  for (const handle of activeHandles) {
-    if (handle.controller === controller) return handle;
-  }
-  return undefined;
-}
-
-// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -119,7 +105,6 @@ export interface WebServerHandle {
   server: http.Server;
   controller: ChatController;
   wss: WebSocketServer;
-  pushManager: PushManager;
   publisher: MeshEventPublisher;
   /** The address the server is bound to: loopback unless the operator opted into LAN reachability (AGENT_COMMS_WEB_HOST). */
   host: string;
@@ -232,7 +217,6 @@ export async function createWebServer(options?: {
     handleRequest(req, res, controller, webConsoleDist);
   });
 
-  const pushManager = new PushManager();
   const publisher = new MeshEventPublisher();
   ensurePatchListener(controller.meshStore, publisher);
   controller.on("message", (event: DeliveryEvent) => {
@@ -265,7 +249,7 @@ export async function createWebServer(options?: {
 
   wss.on("connection", (ws) => {
     // RPCHandler.upgrade() wants a DOM-shaped WebSocket (addEventListener's overload set), which "ws"'s own type declarations don't structurally satisfy (its addEventListener options param is narrower than DOM's) -- .message()/.close() accept the looser { send } shape "ws" does satisfy, and are the documented manual equivalent to .upgrade().
-    const context = { controller, publisher, pushManager };
+    const context = { controller, publisher };
     ws.on("message", (data, isBinary) => {
       // "ws" types incoming data as Buffer | ArrayBuffer | Buffer[] regardless of frame type; normalise to a real Buffer first so both branches below have a type they can trust rather than calling .toString()/Uint8Array.from() on a union that could be an ArrayBuffer.
       const raw = Array.isArray(data) ? Buffer.concat(data) : data;
@@ -296,7 +280,7 @@ export async function createWebServer(options?: {
     }
   });
 
-  return { server, controller, wss, pushManager, publisher, host, accessToken };
+  return { server, controller, wss, publisher, host, accessToken };
 }
 
 function requestOf(req: http.IncomingMessage): {
@@ -375,25 +359,12 @@ function announceLanAccess(
   });
 }
 
-class HandleRef {
-  constructor(public readonly handle: WebServerHandle) {
-    activeHandles.add(handle);
-  }
-
-  dispose(): void {
-    activeHandles.delete(this.handle);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Standalone mode — `npx agent-comms chat`
 // ---------------------------------------------------------------------------
 
 export async function runWeb(userName: string, port = 0): Promise<void> {
   const handle = await createWebServer({ port });
-  // Keep handle alive for cleanup — variable is intentionally unused
-  new HandleRef(handle);
-
   handle.server.on("listening", () => {
     console.log(
       `Connected as ${userName} (user) [${handle.controller.agentId}]`,
@@ -513,16 +484,6 @@ function handleRequest(
       res.end(icon);
       return;
     }
-  }
-
-  // VAPID public key for push subscription
-  if (url.pathname === "/api/push/vapid-key" && req.method === "GET") {
-    // Lazy-initialise PushManager on first request — this endpoint
-    // is only hit from the frontend when push is supported.
-    const handle = findHandle(controller);
-    const key = handle?.pushManager.getPublicKey() ?? "";
-    json(res, { publicKey: key });
-    return;
   }
 
   // API routes

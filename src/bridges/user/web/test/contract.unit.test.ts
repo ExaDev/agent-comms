@@ -49,9 +49,9 @@ describe("meshContract", () => {
     });
   }
 
-  it("has push_subscribe/push_unsubscribe as first-class typed procedures", () => {
-    expect(meshContract.pushSubscribe).toBeDefined();
-    expect(meshContract.pushUnsubscribe).toBeDefined();
+  it("has no web push procedures", () => {
+    expect(Object.keys(meshContract)).not.toContain("pushSubscribe");
+    expect(Object.keys(meshContract)).not.toContain("pushUnsubscribe");
   });
 
   it("has a single subscribeEvents procedure for the unified event stream", () => {

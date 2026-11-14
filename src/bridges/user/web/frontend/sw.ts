@@ -1,10 +1,7 @@
 /**
  * Service worker for the Agent Comms PWA.
  *
- * Handles push events from the browser push service and displays
- * notifications. On notification click, focuses or opens the PWA window.
- *
- * Also provides offline caching:
+ * Provides offline caching:
  * - Install: pre-caches the app shell (HTML, JS, manifest, icons).
  * - Fetch:  network-first for API calls, cache-first for static assets.
  * - Activate: removes old caches when the SW version changes.
@@ -21,40 +18,9 @@ interface ExtendableEvent extends Event {
   waitUntil: (promise: Readonly<Promise<unknown>>) => void;
 }
 
-interface PushMessageData {
-  json: () => Record<string, unknown>;
-  text: () => string;
-}
-
-interface PushEvent extends ExtendableEvent {
-  readonly data: PushMessageData | null;
-}
-
-interface NotificationEvent extends ExtendableEvent {
-  readonly notification: Notification & {
-    data: Record<string, unknown> | undefined;
-  };
-  readonly action: string;
-}
-
 interface FetchEvent extends ExtendableEvent {
   readonly request: Request;
   respondWith: (response: Readonly<Promise<Response>>) => void;
-}
-
-interface Client {
-  url: string;
-  focus: () => Promise<Client>;
-}
-
-interface Clients {
-  matchAll: (
-    opts: Readonly<{
-      type: "window";
-      includeUncontrolled: boolean;
-    }>,
-  ) => Promise<Client[]>;
-  openWindow: (url: string) => Promise<Client>;
 }
 
 interface CacheStorage {
@@ -69,13 +35,6 @@ interface Cache {
   put: (request: Request, response: Response) => Promise<void>;
 }
 
-interface ServiceWorkerRegistration {
-  showNotification: (
-    title: string,
-    options?: NotificationOptions & { data?: Record<string, unknown> },
-  ) => Promise<void>;
-}
-
 /** One entry of the precache manifest vite-plugin-pwa injects at build time, replacing the literal string `self.__WB_MANIFEST` in this file's compiled output with an array literal. */
 interface PrecacheEntry {
   url: string;
@@ -83,23 +42,12 @@ interface PrecacheEntry {
 }
 
 interface ServiceWorkerGlobalScope {
-  location: { origin: string };
-  registration: ServiceWorkerRegistration;
-  clients: Clients;
   caches: CacheStorage;
   __WB_MANIFEST: PrecacheEntry[];
   addEventListener: ((
-    type: "push",
-    listener: (event: PushEvent) => void,
+    type: "install" | "activate",
+    listener: (event: ExtendableEvent) => void,
   ) => void) &
-    ((
-      type: "notificationclick",
-      listener: (event: NotificationEvent) => void,
-    ) => void) &
-    ((
-      type: "install" | "activate",
-      listener: (event: ExtendableEvent) => void,
-    ) => void) &
     ((type: "fetch", listener: (event: FetchEvent) => void) => void);
   skipWaiting: () => Promise<void>;
 }
@@ -214,65 +162,6 @@ self.addEventListener("fetch", (event: FetchEvent) => {
           }
           return response;
         });
-      }),
-  );
-});
-
-// ---------------------------------------------------------------------------
-// Push event handler
-// ---------------------------------------------------------------------------
-
-self.addEventListener("push", (event: PushEvent) => {
-  let title = "Agent Comms";
-  let body = "New message";
-
-  if (event.data) {
-    try {
-      const data = event.data.json();
-      if (typeof data.title === "string") title = data.title;
-      if (typeof data.body === "string") body = data.body;
-    } catch {
-      const text = event.data.text();
-      if (text) body = text;
-    }
-  }
-
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      data: {
-        url: self.location.origin,
-      },
-    }),
-  );
-});
-
-// ---------------------------------------------------------------------------
-// Notification click handler
-// ---------------------------------------------------------------------------
-
-self.addEventListener("notificationclick", (event: NotificationEvent) => {
-  event.notification.close();
-
-  const notificationData: unknown = event.notification.data;
-  const targetUrl =
-    typeof notificationData === "object" &&
-    notificationData !== null &&
-    "url" in notificationData &&
-    typeof notificationData.url === "string"
-      ? notificationData.url
-      : self.location.origin;
-
-  event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then(async (clientList: readonly Client[]) => {
-        for (const client of clientList) {
-          if (client.url === targetUrl && "focus" in client) {
-            return client.focus();
-          }
-        }
-        return self.clients.openWindow(targetUrl);
       }),
   );
 });

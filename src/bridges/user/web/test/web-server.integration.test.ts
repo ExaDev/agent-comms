@@ -283,6 +283,16 @@ describe("Web server integration", () => {
     }
   });
 
+  it("serves no web push route", async () => {
+    const { port, cleanup } = await setup();
+    try {
+      const { status } = await fetchJson(port, "/api/push/vapid-key");
+      expect(status).toBe(HTTP_NOT_FOUND);
+    } finally {
+      await cleanup();
+    }
+  });
+
   it("getWebUrlStatus reports ready with the actual listening port once the server is up", async () => {
     const { port, handle, cleanup } = await setup();
     try {

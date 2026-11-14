@@ -109,15 +109,6 @@ const MeshEventSchema = z.discriminatedUnion("kind", [
 ]);
 
 // ---------------------------------------------------------------------------
-// Push subscription (PWA)
-// ---------------------------------------------------------------------------
-
-const PushSubscriptionSchema = z.object({
-  endpoint: z.string(),
-  keys: z.object({ p256dh: z.string(), auth: z.string() }),
-});
-
-// ---------------------------------------------------------------------------
 // Contract
 // ---------------------------------------------------------------------------
 
@@ -172,19 +163,6 @@ export const meshContract = {
 
   renameAgent: oc
     .input(z.object({ agent: z.string(), name: z.string() }))
-    .output(ActionResultSchema),
-
-  pushSubscribe: oc
-    .input(
-      z.object({
-        subscription: PushSubscriptionSchema,
-        agentId: z.string().optional(),
-      }),
-    )
-    .output(ActionResultSchema),
-
-  pushUnsubscribe: oc
-    .input(z.object({ agentId: z.string().optional() }))
     .output(ActionResultSchema),
 
   subscribeEvents: oc

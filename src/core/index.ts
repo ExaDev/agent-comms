@@ -45,10 +45,6 @@ export {
   MCP_TOOL_PARAMS,
 } from "./bridge.js";
 export type { RegistrationResult } from "./bridge.js";
-export { generateVapidKeys } from "./vapid.js";
-export type { VapidKeys } from "./vapid.js";
-export { PushManager } from "./push-manager.js";
-export type { PushSubscription, PushPayload } from "./web-push.js";
 export { DiscoveryManager } from "./discovery.js";
 export type {
   DiscoveredMesh,
