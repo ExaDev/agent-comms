@@ -1,5 +1,5 @@
 /**
- * Whose coordinator claims count: a claim is evaluated only when its holder is this side, the peer that sent it, or a peer this side has a machine-local session to. Any other claim waits in one pending slot until its holder's session is enrolled and is dropped after one claim wait, so a claim for an absent device neither changes the incumbent nor starts a takeover.
+ * Whose coordinator claims count: a claim is evaluated only when its holder is this side, the peer that sent it, or a peer this side has a machine-local session to. Any other claim waits, among a few per sender, until its holder's session is enrolled and is dropped after one claim wait, so a claim for an absent device neither changes the incumbent nor starts a takeover.
  */
 
 import { afterEach, expect, test, vi } from "vitest";
@@ -30,7 +30,13 @@ function claimFor(holder: string, term: number): CoordinatorFrame {
 }
 
 /** A role whose machine-local sessions are exactly `peers`, which the test may change; everything it broadcasts is recorded. */
-function roleWith(peers: Set<string>) {
+function roleWith(
+  peers: Set<string>,
+  options: {
+    sendCoordinatorClaim?: () => Promise<void>;
+    errors?: unknown[];
+  } = {},
+) {
   const broadcast: CoordinatorFrame[] = [];
   const role = new CoordinatorRole({
     getPeerId: () => SELF,
@@ -39,13 +45,15 @@ function roleWith(peers: Set<string>) {
       broadcastCoordinatorClaim: async (frame) => {
         broadcast.push(frame);
       },
-      sendCoordinatorClaim: async () => undefined,
+      sendCoordinatorClaim:
+        options.sendCoordinatorClaim ?? (async () => undefined),
       electionPeerIds: () => peers,
     }),
     onGained: async () => undefined,
     onLost: async () => undefined,
     onError: (error) => {
-      throw error;
+      if (options.errors === undefined) throw error;
+      options.errors.push(error);
     },
   });
   return { role, broadcast };
@@ -247,4 +255,168 @@ test("stopping the role drops every waiting claim and its timer", async () => {
   await role.stop();
 
   expect(vi.getTimerCount()).toBe(0);
+});
+
+const UNSUPERSEDABLE_TERM = Number.MAX_SAFE_INTEGER;
+const VALID_TERM = 9;
+
+test("claims of a term no later claim could supersede take no place among a sender's waiting claims", async () => {
+  const peers = new Set([SENDER]);
+  const { role } = roleWith(peers);
+  for (let index = 0; index < PER_SENDER; index += 1) {
+    await role.handleClaim(
+      { id: SENDER },
+      claimFor(absent(index), UNSUPERSEDABLE_TERM),
+    );
+  }
+  await role.handleClaim({ id: SENDER }, claimFor(ABSENT, VALID_TERM));
+
+  peers.add(ABSENT);
+  await role.announceTo({ id: ABSENT });
+
+  expect(role.current()).toEqual({ term: VALID_TERM, holder: ABSENT });
+});
+
+test("an equal-term claim that arrives last and names a lower holder id displaces the highest id, not the claim that arrived first", async () => {
+  const peers = new Set([SENDER]);
+  const { role } = roleWith(peers);
+  const holders = Array.from({ length: PER_SENDER + 1 }, (_, index) =>
+    absent(index),
+  );
+  for (const holder of holders.slice(1)) {
+    await role.handleClaim({ id: SENDER }, claimFor(holder, LATER_TERM));
+  }
+  await role.handleClaim(
+    { id: SENDER },
+    claimFor(holders[0] ?? "", LATER_TERM),
+  );
+
+  const firstSent = holders[1] ?? "";
+  peers.add(firstSent);
+  await role.announceTo({ id: firstSent });
+
+  expect(role.current()).toEqual({ term: LATER_TERM, holder: firstSent });
+});
+
+test("a claim that ranks lowest is the one dropped when a sender is at its share, not the claim that arrived first", async () => {
+  const peers = new Set([SENDER]);
+  const { role } = roleWith(peers);
+  for (let index = 0; index <= PER_SENDER; index += 1) {
+    await role.handleClaim(
+      { id: SENDER },
+      claimFor(absent(index), ABSURD_TERM - index),
+    );
+  }
+
+  peers.add(absent(0));
+  await role.announceTo({ id: absent(0) });
+
+  expect(role.current()).toEqual({ term: ABSURD_TERM, holder: absent(0) });
+});
+
+test("repeated claims for one holder leave a sender's claims for other holders waiting", async () => {
+  const peers = new Set([SENDER]);
+  const { role } = roleWith(peers);
+  for (let index = 0; index < PER_SENDER + 1; index += 1) {
+    await role.handleClaim(
+      { id: SENDER },
+      claimFor(ABSENT, INCUMBENT_TERM + index),
+    );
+  }
+  const others = [absent(0), absent(1), absent(2)];
+  for (const holder of others) {
+    await role.handleClaim({ id: SENDER }, claimFor(holder, EARLIER_TERM));
+  }
+
+  for (const holder of [...others].reverse()) {
+    peers.add(holder);
+    await role.announceTo({ id: holder });
+    expect(role.current()).toEqual({ term: EARLIER_TERM, holder });
+  }
+});
+
+test("a claim waiting for its holder ends with its sender's last session: nothing is accepted when the holder enrols, and no timer is left", async () => {
+  vi.useFakeTimers();
+  const peers = new Set([SENDER]);
+  const { role } = roleWith(peers);
+  await role.handleClaim({ id: SENDER }, claimFor(ABSENT, LATER_TERM));
+  expect(vi.getTimerCount()).toBe(1);
+
+  peers.delete(SENDER);
+  await role.handleDeparture(SENDER, async () => undefined);
+  expect(vi.getTimerCount()).toBe(0);
+
+  peers.add(ABSENT);
+  await role.announceTo({ id: ABSENT });
+  expect(role.current()).toBeUndefined();
+});
+
+test("a claim waiting for its holder stays when its sender still has another machine-local session", async () => {
+  const peers = new Set([SENDER]);
+  const { role } = roleWith(peers);
+  await role.handleClaim({ id: SENDER }, claimFor(ABSENT, LATER_TERM));
+
+  await role.handleDeparture(SENDER, async () => undefined);
+  peers.add(ABSENT);
+  await role.announceTo({ id: ABSENT });
+
+  expect(role.current()).toEqual({ term: LATER_TERM, holder: ABSENT });
+});
+
+test("a claim whose sender is no longer here is not evaluated when its holder enrols", async () => {
+  const peers = new Set([SENDER]);
+  const { role } = roleWith(peers);
+  await role.handleClaim({ id: SENDER }, claimFor(ABSENT, LATER_TERM));
+
+  peers.delete(SENDER);
+  peers.add(ABSENT);
+  await role.announceTo({ id: ABSENT });
+
+  expect(role.current()).toBeUndefined();
+});
+
+test("a claim released by an enrolment is evaluated even when the announcement is still being sent after one claim wait", async () => {
+  vi.useFakeTimers();
+  const peers = new Set([SENDER]);
+  let finishSend: () => void = () => undefined;
+  const { role } = roleWith(peers, {
+    sendCoordinatorClaim: async () =>
+      new Promise<void>((resolve) => {
+        finishSend = resolve;
+      }),
+  });
+  await role.handleClaim({ id: SENDER }, claimFor(SENDER, INCUMBENT_TERM));
+  await role.handleClaim({ id: SENDER }, claimFor(ABSENT, LATER_TERM));
+  peers.add(ABSENT);
+
+  const announced = role.announceTo({ id: ABSENT });
+  await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS * LONG_WAIT_FACTOR);
+  finishSend();
+  await announced;
+
+  expect(role.current()).toEqual({ term: LATER_TERM, holder: ABSENT });
+});
+
+test("a claim that fails to evaluate is reported, and the claims released with it still are evaluated", async () => {
+  const peers = new Set([SENDER, OTHER_SENDER]);
+  const errors: unknown[] = [];
+  const { role } = roleWith(peers, { errors });
+  await role.handleClaim({ id: SENDER }, claimFor(ABSENT, LATER_TERM));
+  await role.handleClaim(
+    { id: OTHER_SENDER },
+    claimFor(ABSENT, LATER_TERM + 1),
+  );
+  peers.add(ABSENT);
+  const evaluate = role.handleClaim.bind(role);
+  let calls = 0;
+  vi.spyOn(role, "handleClaim").mockImplementation(async (handle, frame) => {
+    calls += 1;
+    if (calls === 1) throw new Error("evaluation failed");
+    await evaluate(handle, frame);
+  });
+
+  await role.announceTo({ id: ABSENT });
+
+  expect(errors).toHaveLength(1);
+  expect(role.current()).toEqual({ term: LATER_TERM, holder: ABSENT });
 });

@@ -408,8 +408,10 @@ test("a claim naming a holder whose session this side then enrols within the cla
   const self = bus.add(hexId("5"));
   const holderId = hexId("1");
   const term = 3;
+  const senderId = hexId("7");
+  bus.add(senderId);
 
-  await self.role.handleClaim({ id: hexId("7") }, claimFor(holderId, term));
+  await self.role.handleClaim({ id: senderId }, claimFor(holderId, term));
   bus.add(holderId);
   await self.role.announceTo({ id: holderId });
   await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
