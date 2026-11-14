@@ -138,7 +138,10 @@ export function openLedgerEntry(
   }
   const iv = sealed.subarray(VERSION_BYTES, VERSION_BYTES + IV_BYTES);
   const tag = sealed.subarray(VERSION_BYTES + IV_BYTES, headerBytes);
-  const decipher = createDecipheriv("aes-256-gcm", keys.entryKey, iv);
+  // The tag is the fixed TAG_BYTES slice above; pinning the length as well means Node can never accept a shortened one if the layout changes.
+  const decipher = createDecipheriv("aes-256-gcm", keys.entryKey, iv, {
+    authTagLength: TAG_BYTES,
+  });
   decipher.setAAD(associatedData(logId, seq));
   decipher.setAuthTag(tag);
   try {
