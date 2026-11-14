@@ -1,3 +1,10 @@
+## [9.0.13](https://github.com/ExaDev/agent-comms/compare/v9.0.12...v9.0.13) (2026-11-14)
+
+### Bug Fixes
+
+* **web:** answer page navigations from the network and give the dashboard page a content security policy ([6fb0425](https://github.com/ExaDev/agent-comms/commit/6fb04258fe201ff014d327a1a297e8694816959d))
+* **web:** keep the service worker to its own caches and its own page ([e96f4ab](https://github.com/ExaDev/agent-comms/commit/e96f4ab53c7704430549f54ee7c108ff2c6e2c09))
+
 ## [9.0.12](https://github.com/ExaDev/agent-comms/compare/v9.0.11...v9.0.12) (2026-11-14)
 
 ### Bug Fixes
