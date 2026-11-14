@@ -123,7 +123,7 @@ export function buildProjectTree(
 // ---------------------------------------------------------------------------
 
 function splitPath(p: string): string[] {
-  // "/Users/joe/Developer" → ["Users", "joe", "Developer"]
+  // "/Users/example/Developer" → ["Users", "example", "Developer"]
   return p.split("/").filter((s) => s.length > 0);
 }
 

@@ -70,7 +70,7 @@ describe("buildProjectTree", () => {
 
   it("places a single agent under its directory basename", () => {
     const agents = [
-      makeAgent({ id: "a1", cwd: "/Users/joe/Developer/my-app" }),
+      makeAgent({ id: "a1", cwd: "/Users/example/Developer/my-app" }),
     ];
     const result = buildProjectTree(agents, []);
     expect(result.roots.length).toBe(1);
@@ -89,8 +89,8 @@ describe("buildProjectTree", () => {
 
   it("groups agents in the same directory as siblings", () => {
     const agents = [
-      makeAgent({ id: "a1", cwd: "/Users/joe/Developer/my-app" }),
-      makeAgent({ id: "a2", cwd: "/Users/joe/Developer/my-app" }),
+      makeAgent({ id: "a1", cwd: "/Users/example/Developer/my-app" }),
+      makeAgent({ id: "a2", cwd: "/Users/example/Developer/my-app" }),
     ];
     const result = buildProjectTree(agents, []);
 
@@ -105,12 +105,12 @@ describe("buildProjectTree", () => {
 
   it("creates nested directories for agents at different depths", () => {
     const agents = [
-      makeAgent({ id: "a1", cwd: "/Users/joe/Developer" }),
-      makeAgent({ id: "a2", cwd: "/Users/joe/Developer/my-app" }),
+      makeAgent({ id: "a1", cwd: "/Users/example/Developer" }),
+      makeAgent({ id: "a2", cwd: "/Users/example/Developer/my-app" }),
     ];
     const result = buildProjectTree(agents, []);
 
-    // Common prefix is /Users/joe, trimmed
+    // Common prefix is /Users/example, trimmed
     // Remaining: "Developer" → "Developer/my-app"
     expect(result.roots.length).toBe(1);
 
@@ -141,15 +141,15 @@ describe("buildProjectTree", () => {
       makeAgent({
         id: "z-agent",
         name: "z-agent",
-        cwd: "/Users/joe/Developer",
+        cwd: "/Users/example/Developer",
       }),
       makeAgent({
         id: "a-agent",
         name: "a-agent",
-        cwd: "/Users/joe/Developer",
+        cwd: "/Users/example/Developer",
       }),
-      makeAgent({ id: "a3", cwd: "/Users/joe/Developer/z-project" }),
-      makeAgent({ id: "a4", cwd: "/Users/joe/Developer/a-project" }),
+      makeAgent({ id: "a3", cwd: "/Users/example/Developer/z-project" }),
+      makeAgent({ id: "a4", cwd: "/Users/example/Developer/a-project" }),
     ];
     const result = buildProjectTree(agents, []);
 
@@ -242,12 +242,12 @@ describe("buildProjectTree", () => {
 
   it("trims common prefix shared by all agents", () => {
     const agents = [
-      makeAgent({ id: "a1", cwd: "/Users/joe/Developer/app1" }),
-      makeAgent({ id: "a2", cwd: "/Users/joe/Developer/app2" }),
+      makeAgent({ id: "a1", cwd: "/Users/example/Developer/app1" }),
+      makeAgent({ id: "a2", cwd: "/Users/example/Developer/app2" }),
     ];
     const result = buildProjectTree(agents, []);
 
-    // Common path: /Users/joe/Developer → parent trim → /Users/joe
+    // Common path: /Users/example/Developer → parent trim → /Users/example
     // Remaining: Developer/app1 and Developer/app2
     expect(result.roots.length).toBe(1);
 
