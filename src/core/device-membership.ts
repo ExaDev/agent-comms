@@ -98,7 +98,7 @@ export interface RemoveDeviceOptions {
 }
 
 /**
- * Revokes every group:member grant for deviceId that the account's ledger holds as outstanding, whichever machine of the account minted it: mints a revocation-entry for each token-id, records it in the given RevocationView immediately, and appends it to the ledger, so every other machine of the account sees the grant as revoked and a later re-admission starts from nothing outstanding. Returns no entries for a device the account never admitted.
+ * Revokes every group:member grant for deviceId that the account's ledger holds as outstanding, whichever machine of the account minted it: mints a revocation-entry for each token-id, records it in the given RevocationView immediately, and appends it to the ledger, so every other machine of the account sees the grant as revoked and a later re-admission starts from nothing outstanding. Returns no entries for a device the account never admitted. A ledger entry that cannot be read is reported and skipped rather than stopping the removal (account-ledger.ts): every grant the readable entries record is still revoked, and one recorded only in an unreadable entry is not.
  *
  * Returns the minted entries so the caller can broadcast them to the mesh (this module has no MeshTransport dependency to do so itself, mirroring the module-level "no assumption about locality" boundary documented above): every other device that might hold one of this device's grants needs the entry to independently start refusing it.
  */

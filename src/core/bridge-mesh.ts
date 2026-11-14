@@ -24,6 +24,7 @@ import { FIRST_CONTACT_PORT } from "./first-contact.js";
 import { CommsTool } from "./tool.js";
 import { WireMeshTransport } from "./wire-mesh-transport.js";
 import { loadOrCreateIdentity, oplogDirFor } from "./identity-store.js";
+import { damagedEntryReporter } from "./account-ledger.js";
 import { openAccountLedger } from "./account-ledger-store.js";
 import type { IdentitySlot } from "./identity-store.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
@@ -144,6 +145,7 @@ export function createBridgeMeshSyncFromIdentity(
           userIdentityOptions,
           userIdentity,
           clock,
+          onDamagedEntry: damagedEntryReporter(() => store.onError),
         }),
         userIdentityOptions,
         machineIdentity: await toIdentityPort(machineIdentity),

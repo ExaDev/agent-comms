@@ -818,7 +818,7 @@ export class RoomLifecycle {
   }
 
   /**
-   * Revokes every dm:send grant for bearerId that the account's replicated ledger holds as outstanding, whichever machine of the account minted it: mints a revocation-entry for each token-id, records it in this store's own RevocationView immediately, announces it to every connected peer, and appends it to the ledger so every machine of the account sees it revoked and a later re-admission starts from nothing outstanding. The same revocation shape revokeMemberGrant gives room:member grants, applied to the user principal's own dm:send grants. Does nothing when the ledger holds no outstanding grant for bearerId.
+   * Revokes every dm:send grant for bearerId that the account's replicated ledger holds as outstanding, whichever machine of the account minted it: mints a revocation-entry for each token-id, records it in this store's own RevocationView immediately, announces it to every connected peer, and appends it to the ledger so every machine of the account sees it revoked and a later re-admission starts from nothing outstanding. The same revocation shape revokeMemberGrant gives room:member grants, applied to the user principal's own dm:send grants. Does nothing when the ledger holds no outstanding grant for bearerId. A ledger entry that cannot be read is reported and skipped rather than stopping the revocation (account-ledger.ts): every grant the readable entries record is still revoked, and one recorded only in an unreadable entry is not.
    */
   async revokeAgentDmAccess(bearerId: string): Promise<void> {
     const { userIdentity, accountLedger, clock, revocation } =
