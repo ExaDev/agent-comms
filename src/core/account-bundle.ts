@@ -48,22 +48,13 @@ function base64urlBytes(bytes: number): z.ZodType<string> {
   );
 }
 
-/** The ciphertext part of an envelope; its length is whatever the plaintext was. */
-
 /** The parts of an envelope sealed with AES-256-GCM, each at the length `seal` writes and GCM specifies. */
 const gcmFields = {
   iv: base64urlBytes(IV_BYTES),
   tag: base64urlBytes(TAG_BYTES),
+  /** The ciphertext: its length is whatever the plaintext was. */
   ct: base64url,
 };
-
-/** Whether `n` is a power of two of at least two, the only values scrypt accepts for its cost. */
-function isScryptCost(n: number): boolean {
-  if (!Number.isSafeInteger(n) || n < 2) return false;
-  // BigInt, since the bitwise operators on a number wrap it to 32 bits.
-  const cost = BigInt(n);
-  return (cost & (cost - BigInt(1))) === BigInt(0);
-}
 
 /** What an account export or a join carries: the PEM private key and the name the account asserts for itself, if it has one. */
 export interface AccountContents {
@@ -107,10 +98,10 @@ function parseContents(plaintext: string, damaged: string): AccountContents {
 const passphraseEnvelopeSchema = z
   .object({
     kdf: z.literal("scrypt"),
-    // Bounded above by this build's own cost (so reading a bundle never costs more time or memory than writing one), and below by what scrypt accepts: a power-of-two N of at least two, and positive r and p.
-    n: z.number().refine(isScryptCost).max(SCRYPT_COST),
-    r: z.number().int().positive().max(SCRYPT_BLOCK_SIZE),
-    p: z.number().int().positive().max(SCRYPT_PARALLELISM),
+    // Exactly what this build writes. Above it, reading a bundle would cost more time and memory than writing one. Below it, a bundle would be accepted at a cost that does not protect the passphrase: every released version has written these parameters and no others, so nothing older is refused by requiring them, and a bundle sealed at a lower cost by another tool is refused.
+    n: z.literal(SCRYPT_COST),
+    r: z.literal(SCRYPT_BLOCK_SIZE),
+    p: z.literal(SCRYPT_PARALLELISM),
     salt: base64urlBytes(SALT_BYTES),
     ...gcmFields,
   })
@@ -191,7 +182,7 @@ export function sealAccountBundle(
   return `${ACCOUNT_BUNDLE_PREFIX}${Buffer.from(JSON.stringify(envelope)).toString("base64url")}`;
 }
 
-/** The account contents a bundle holds. Throws INVALID_BUNDLE for text that is not a bundle this build can read (including one whose cost parameters, salt, iv or authentication tag are not in the form this build writes), and WRONG_PASSPHRASE when the passphrase does not open it. The cost parameters are read from the bundle but must be valid scrypt costs no higher than this build's own, so reading a bundle costs no more than writing one and never fails with a raw error. */
+/** The account contents a bundle holds. Throws INVALID_BUNDLE for text that is not a bundle this build can read (including one whose cost parameters, salt, iv or authentication tag are not in the form this build writes), and WRONG_PASSPHRASE when the passphrase does not open it. The cost parameters in the bundle must be exactly the ones this build writes, so reading a bundle costs no more than writing one, no weak derivation is accepted, and nothing fails with a raw error. */
 export function openAccountBundle(
   bundle: string,
   passphrase: string,
@@ -212,12 +203,7 @@ export function openAccountBundle(
     throw new CommsError("The account bundle is damaged", "INVALID_BUNDLE");
   }
   const envelope = passphraseEnvelopeSchema.safeParse(decoded);
-  if (
-    !envelope.success ||
-    envelope.data.n > SCRYPT_COST ||
-    envelope.data.r > SCRYPT_BLOCK_SIZE ||
-    envelope.data.p > SCRYPT_PARALLELISM
-  ) {
+  if (!envelope.success) {
     throw new CommsError("The account bundle is damaged", "INVALID_BUNDLE");
   }
   const key = passphraseKey(
