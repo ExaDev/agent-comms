@@ -17,6 +17,9 @@ import {
   bridgeMeshUrl,
   bridgePortRange,
   findBridgePort,
+  HIGHEST_PORT,
+  LOWEST_UNPRIVILEGED_PORT,
+  InvalidBridgePortBaseError,
   isBridgeAt,
   probeForBridge,
 } from "../bridge-port-range.js";
@@ -36,7 +39,7 @@ import {
 const DASHBOARD_PROBE_FIRST_PORT = 19_877;
 const DASHBOARD_PROBE_LAST_PORT = 19_886;
 
-/** A TEST-NET-1 address (RFC 5737): no interface of the machine holds it, so binding it fails with a code other than "address in use". */
+/** A TEST-NET-1 address (RFC 5737), reserved for documentation, so no ordinary host holds it and binding it fails with a code other than "address in use". The test proves that assumption on the host it runs on before relying on it. */
 const UNASSIGNED_ADDRESS = "192.0.2.1";
 
 /** How long a probe in these tests waits on a listener that never answers: short, because the answer is known to be silence. */
@@ -126,6 +129,25 @@ async function startTestController(): Promise<ChatController> {
   });
 }
 
+/** Fails with a message naming the cause when this host owns the documentation address, since the bind-error test below would then be testing nothing. */
+async function expectDocumentationAddressNotBindable(): Promise<void> {
+  const probe = net.createServer();
+  const bound = await new Promise<boolean>((resolve) => {
+    probe.once("error", () => {
+      resolve(false);
+    });
+    probe.listen(0, UNASSIGNED_ADDRESS, () => {
+      resolve(true);
+    });
+  });
+  if (bound) {
+    probe.close();
+    throw new Error(
+      `This host owns ${UNASSIGNED_ADDRESS}, an address reserved for documentation, so a bind there cannot fail: the non-"address in use" bind error test needs a host that does not own it`,
+    );
+  }
+}
+
 describe("the bridge port range", () => {
   it("starts at the port the dashboard has always probed and spans ten ports", () => {
     const range = bridgePortRange();
@@ -205,6 +227,7 @@ describe("the bridge port range", () => {
   });
 
   it("rejects with the bind error itself when it is not 'address in use', and does not walk on or fall back", async () => {
+    await expectDocumentationAddressNotBindable();
     const controller = await startTestController();
 
     await expect(
@@ -221,6 +244,41 @@ describe("the bridge port range", () => {
         existingController: controller,
       }),
     ).rejects.toMatchObject({ code: "EADDRNOTAVAIL" });
+  });
+});
+
+describe("a bridge port base", () => {
+  it.each([
+    ["a fraction", Math.PI * BRIDGE_PORT_BASE],
+    ["not a number", Number.NaN],
+    ["below the unprivileged ports", LOWEST_UNPRIVILEGED_PORT - 1],
+    ["negative", -1],
+    ["leaving the last port past the highest", HIGHEST_PORT],
+  ])("is refused when it is %s", (_label, base) => {
+    expect(() => bridgePortRange(base)).toThrow(InvalidBridgePortBaseError);
+  });
+
+  it("accepts the lowest and highest bases whose whole range fits", () => {
+    expect(bridgePortRange(LOWEST_UNPRIVILEGED_PORT)[0]).toBe(
+      LOWEST_UNPRIVILEGED_PORT,
+    );
+    expect(bridgePortRange(HIGHEST_PORT - BRIDGE_PORT_COUNT + 1).at(-1)).toBe(
+      HIGHEST_PORT,
+    );
+  });
+
+  it("is refused by a web server start before anything is bound, and the controller it created is shut down", async () => {
+    const controller = await startTestController();
+    const subscribed = controller.listenerCount("message");
+
+    await expect(
+      createWebServer({
+        bridgePortBase: Math.PI * BRIDGE_PORT_BASE,
+        existingController: controller,
+      }),
+    ).rejects.toBeInstanceOf(InvalidBridgePortBaseError);
+
+    expect(controller.listenerCount("message")).toBe(subscribed);
   });
 });
 
