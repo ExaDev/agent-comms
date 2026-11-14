@@ -14,6 +14,7 @@ const DIST = fileURLToPath(new URL("../dist", import.meta.url));
 const HTTP_OK = 200;
 const HTTP_FOUND = 302;
 const HTTP_NOT_FOUND = 404;
+const HTTP_BAD_GATEWAY = 502;
 
 /** How long the inline-script probe waits for a script the policy should have refused. */
 const REFUSED_SCRIPT_WAIT_MS = 100;
@@ -28,10 +29,12 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 /** A static host serving the built dashboard, whose answer for the page can be changed while it runs. */
 interface StaticHost {
   readonly origin: string;
-  /** Replaces the page's HTML, or restores the built one with undefined. */
-  setPage: (html: string | undefined) => void;
+  /** Replaces the page's body, served as `contentType` (HTML unless said), or restores the built page with undefined. */
+  setPage: (body: string | undefined, contentType?: string) => void;
   /** Answers the page with a redirect to `location`, or stops redirecting with undefined. */
   redirectPageTo: (location: string | undefined) => void;
+  /** Answers every request with this status instead of the page, as a proxy in front of a failed host does, or stops with undefined. */
+  failWith: (status: number | undefined) => void;
   /** Closes every connection at once instead of answering, as an unreachable host does. */
   goOffline: () => void;
   close: () => Promise<void>;
@@ -49,12 +52,19 @@ function readDistFile(pathname: string): Buffer | undefined {
 
 async function startStaticHost(): Promise<StaticHost> {
   let page: string | undefined;
+  let pageType: string | undefined;
   let redirect: string | undefined;
   let offline = false;
+  let failure: number | undefined;
   const sockets = new Set<net.Socket>();
   const server = http.createServer((request, response) => {
     if (offline) {
       request.socket.destroy();
+      return;
+    }
+    if (failure !== undefined) {
+      response.writeHead(failure, { "Content-Type": "text/plain" });
+      response.end("upstream failed");
       return;
     }
     const pathname = new URL(request.url ?? "/", "http://host").pathname;
@@ -75,9 +85,11 @@ async function startStaticHost(): Promise<StaticHost> {
     }
     response.writeHead(HTTP_OK, {
       "Content-Type":
-        CONTENT_TYPES[path.extname(pathname)] ??
-        CONTENT_TYPES[".html"] ??
-        "text/plain",
+        isPage && page !== undefined && pageType !== undefined
+          ? pageType
+          : (CONTENT_TYPES[path.extname(pathname)] ??
+            CONTENT_TYPES[".html"] ??
+            "text/plain"),
       "Cache-Control": "no-store",
     });
     response.end(body);
@@ -97,11 +109,15 @@ async function startStaticHost(): Promise<StaticHost> {
   }
   return {
     origin: `http://127.0.0.1:${String(address.port)}`,
-    setPage: (html) => {
-      page = html;
+    setPage: (body, contentType) => {
+      page = body;
+      pageType = contentType;
     },
     redirectPageTo: (location) => {
       redirect = location;
+    },
+    failWith: (status) => {
+      failure = status;
     },
     goOffline: () => {
       offline = true;
@@ -140,6 +156,14 @@ async function loadPage(page: Page, url: string): Promise<void> {
   await page.goto(url);
   await expect(page.locator("#root")).not.toBeEmpty();
   await page.evaluate(async () => navigator.serviceWorker.ready);
+}
+
+/** The addresses stored in the application's cache. */
+async function cacheKeys(page: Page): Promise<string[]> {
+  return page.evaluate(async () => {
+    const cache = await caches.open("agent-comms-v2");
+    return (await cache.keys()).map((request) => request.url).sort();
+  });
 }
 
 /** Waits until a service worker controls the page, reloading once if the first load was not controlled. */
@@ -261,7 +285,64 @@ test.describe("the dashboard page served by a static host", () => {
     expect(await page.title()).toBe("Agent Comms");
   });
 
-  test("keeps the app shell in a cache named for this version and drops the old one", async ({
+  test("does not keep a page that is not the application's, and falls back to the one that is", async ({
+    page,
+  }) => {
+    await page.goto(`${host.origin}/`);
+    await untilControlled(page);
+
+    // A captive portal's answer: a success, but not HTML.
+    host.setPage('{"portal":true}', "application/json");
+    await page.goto(`${host.origin}/`).catch(() => undefined);
+    host.goOffline();
+    await page.goto(`${host.origin}/`);
+
+    expect(await page.title()).toBe("Agent Comms");
+  });
+
+  test("serves the cached page when the host answers a server error, and never keeps the error", async ({
+    page,
+  }) => {
+    await page.goto(`${host.origin}/`);
+    await untilControlled(page);
+
+    host.failWith(HTTP_BAD_GATEWAY);
+    await page.goto(`${host.origin}/`);
+    expect(await page.title()).toBe("Agent Comms");
+
+    // The error was not stored: once the host recovers the page is the host's again.
+    host.failWith(undefined);
+    host.setPage("<!doctype html><title>Back</title>");
+    await page.goto(`${host.origin}/`);
+    expect(await page.title()).toBe("Back");
+  });
+
+  test("returns a server error as it is when there is no cached page to stand in", async ({
+    page,
+  }) => {
+    host.failWith(HTTP_BAD_GATEWAY);
+
+    const response = await page.goto(`${host.origin}/`);
+
+    expect(response?.status()).toBe(HTTP_BAD_GATEWAY);
+  });
+
+  test("keeps one page entry however many addresses a navigation asked for", async ({
+    page,
+  }) => {
+    await page.goto(`${host.origin}/`);
+    await untilControlled(page);
+    const keysBefore = await cacheKeys(page);
+
+    await page.goto(`${host.origin}/?room=first`);
+    await page.goto(`${host.origin}/?room=second`);
+
+    const keysAfter = await cacheKeys(page);
+    expect(keysAfter.filter((key) => key.includes("?"))).toEqual([]);
+    expect(keysAfter).toEqual(keysBefore);
+  });
+
+  test("keeps the app shell in a cache named for this version, drops this application's old one and leaves another application's alone", async ({
     page,
   }) => {
     // Only on the first load of the tab: the script runs again on every navigation, which would put the old cache back after the new worker had removed it.
@@ -269,13 +350,15 @@ test.describe("the dashboard page served by a static host", () => {
       if (sessionStorage.getItem("old-cache-made") !== null) return;
       sessionStorage.setItem("old-cache-made", "yes");
       void caches.open("agent-comms-v1");
+      // Another application on the same origin keeps a cache of its own, which this worker must leave alone.
+      void caches.open("other-application-v1");
     });
     await page.goto(`${host.origin}/`);
     await untilControlled(page);
 
     await expect
-      .poll(async () => page.evaluate(async () => caches.keys()))
-      .toEqual(["agent-comms-v2"]);
+      .poll(async () => page.evaluate(async () => (await caches.keys()).sort()))
+      .toEqual(["agent-comms-v2", "other-application-v1"]);
   });
 
   test("loads with no policy violation and requests nothing from another host", async ({
