@@ -38,6 +38,14 @@ it("shows how to pair, and not the plain connect offer, when the browser is not 
   expect(screen.queryByText("Connect to local mesh")).toBeNull();
 });
 
+it("tells the person to update a bridge that predates pairing, since such a bridge has no pairing page", () => {
+  renderWithMantine(<ChatArea {...props} pairingNeeded={true} />);
+
+  expect(
+    screen.getByText(/older than pairing: update agent-comms/),
+  ).toBeTruthy();
+});
+
 it("shows the plain connect offer when the browser is paired", () => {
   renderWithMantine(<ChatArea {...props} pairingNeeded={false} />);
 
