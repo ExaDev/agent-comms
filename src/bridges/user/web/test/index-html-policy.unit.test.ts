@@ -37,6 +37,26 @@ function policyOf(html: string): Map<string, string[]> {
 describe("the dashboard page's content security policy", () => {
   const policy = policyOf(INDEX_HTML);
 
+  it("states exactly the directives and sources the page needs, and no others", () => {
+    expect(Object.fromEntries(policy)).toEqual({
+      "default-src": ["'none'"],
+      "script-src": ["'self'"],
+      "style-src": ["'self'", "'unsafe-inline'"],
+      "img-src": ["'self'", "data:"],
+      "connect-src": [
+        "'self'",
+        "ws://127.0.0.1:*",
+        "http://127.0.0.1:*",
+        "ws://localhost:*",
+        "http://localhost:*",
+      ],
+      "worker-src": ["'self'"],
+      "manifest-src": ["'self'"],
+      "base-uri": ["'none'"],
+      "form-action": ["'none'"],
+    });
+  });
+
   it("denies everything by default and allows script only from the page's own origin", () => {
     expect(policy.get("default-src")).toEqual(["'none'"]);
     expect(policy.get("script-src")).toEqual(["'self'"]);
