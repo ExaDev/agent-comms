@@ -162,9 +162,38 @@ class BuildActionError extends Error {
   }
 }
 
+/** Thrown by buildAction for parameters MCP_TOOL_PARAMS rejects, so a malformed tool call reaches its caller as an error naming what is wrong and is never run as some other action. `issues` is every problem found, each with the path of the parameter at fault. */
+export class InvalidToolParamsError extends Error {
+  constructor(
+    readonly issues: readonly {
+      readonly path: readonly (string | number)[];
+      readonly message: string;
+    }[],
+  ) {
+    super(
+      `Invalid parameters: ${issues
+        .map(
+          (issue) =>
+            `${issue.path.length === 0 ? "(root)" : issue.path.join(".")}: ${issue.message}`,
+        )
+        .join("; ")}`,
+    );
+    this.name = "InvalidToolParamsError";
+  }
+}
+
 export function buildAction(params: Record<string, unknown>): CommsAction {
   const parsed = MCP_TOOL_PARAMS.safeParse(params);
-  if (!parsed.success) return { action: "whoami" };
+  if (!parsed.success) {
+    throw new InvalidToolParamsError(
+      parsed.error.issues.map((issue) => ({
+        path: issue.path.map((step) =>
+          typeof step === "number" ? step : String(step),
+        ),
+        message: issue.message,
+      })),
+    );
+  }
   const p = parsed.data;
 
   switch (p.action) {
