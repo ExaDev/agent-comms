@@ -189,3 +189,80 @@ describe("serveWebConsole", () => {
     expect(status).toBe(HTTP_NOT_FOUND);
   });
 });
+
+describe("a symbolic link inside the served directory", () => {
+  function served(
+    dist: string,
+    pathname: string,
+  ): { status: number; body: string } {
+    let status = 0;
+    let body = "";
+    const res = {
+      writeHead: (code: number) => {
+        status = code;
+      },
+      end: (chunk?: string | Buffer) => {
+        body = chunk === undefined ? "" : chunk.toString();
+      },
+    } as unknown as http.ServerResponse;
+    serveWebConsole(dist, pathname, res);
+    return { status, body };
+  }
+
+  function layout(): { dist: string; outside: string } {
+    const root = scratchDirectory("agent-comms-web-console-links-");
+    const dist = path.join(root, "dist");
+    const outside = path.join(root, "outside");
+    fs.mkdirSync(dist);
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(dist, "index.html"), "<html>index</html>");
+    fs.writeFileSync(path.join(outside, "secret.txt"), "outside content");
+    return { dist, outside };
+  }
+
+  it("to a file outside the directory is not served", () => {
+    const { dist, outside } = layout();
+    fs.symlinkSync(
+      path.join(outside, "secret.txt"),
+      path.join(dist, "link.txt"),
+    );
+
+    const answer = served(dist, "/web-console/link.txt");
+
+    expect(answer.status).toBe(HTTP_NOT_FOUND);
+    expect(answer.body).not.toContain("outside content");
+  });
+
+  it("to a directory outside the directory does not serve what is under it", () => {
+    const { dist, outside } = layout();
+    fs.symlinkSync(outside, path.join(dist, "linked"));
+
+    const answer = served(dist, "/web-console/linked/secret.txt");
+
+    expect(answer.status).toBe(HTTP_NOT_FOUND);
+    expect(answer.body).not.toContain("outside content");
+  });
+
+  it("to a file inside the directory is served", () => {
+    const { dist } = layout();
+    fs.symlinkSync(
+      path.join(dist, "index.html"),
+      path.join(dist, "alias.html"),
+    );
+
+    const answer = served(dist, "/web-console/alias.html");
+
+    expect(answer.status).toBe(HTTP_OK);
+    expect(answer.body).toBe("<html>index</html>");
+  });
+
+  it("as the served directory itself still serves its files", () => {
+    const { dist } = layout();
+    const alias = path.join(path.dirname(dist), "dist-alias");
+    fs.symlinkSync(dist, alias);
+
+    const answer = served(alias, "/web-console/index.html");
+
+    expect(answer.status).toBe(HTTP_OK);
+  });
+});
