@@ -101,6 +101,22 @@ describe("tab-facing oRPC downstream", () => {
     await resumed.return?.(undefined);
   });
 
+  it("starts a subscription whose lastEventId belongs to another instance from a state_sync, not a replay", async () => {
+    localPublisher.publish({
+      kind: "state_patch",
+      patch: { type: "agent_offline", agentId: "published-earlier" },
+    });
+    const { client } = connectTab();
+
+    const iterator = toMeshIterator(
+      await client.subscribeEvents({ lastEventId: "0000000000000000.1" }),
+    );
+    const first = await nextMeshEvent(iterator);
+
+    expect(first?.kind).toBe("state_sync");
+    await iterator.return?.(undefined);
+  });
+
   it("mutating procedures report not-connected when no upstream client exists yet", async () => {
     const { client } = connectTab();
     const result = await client.listRooms({});

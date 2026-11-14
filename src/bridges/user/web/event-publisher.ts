@@ -1,7 +1,7 @@
 /**
  * In-memory, resumable event publisher for the web UI's subscribeEvents stream.
  *
- * oRPC v2 beta (`\@orpc/server`, `\@orpc/client`, `\@orpc/contract` at 2.0.0-beta.35 -- confirmed against the actual published tarballs, not just docs) ships no MemoryPublisher/EventPublisher class. This is a hand-written equivalent built on the primitives that do exist: a plain async generator (satisfies AsyncIteratorObject on its own) and withEventMeta (from `\@standard-server/core`, re-exported by `\@orpc/server`) to tag each published event with a monotonic id oRPC's own RetryLinkPlugin already knows how to read back as lastEventId on reconnect.
+ * oRPC v2 beta (`\@orpc/server`, `\@orpc/client`, `\@orpc/contract` at 2.0.0-beta.35 -- confirmed against the actual published tarballs, not just docs) ships no MemoryPublisher/EventPublisher class. This is a hand-written equivalent built on the primitives that do exist: a plain async generator (satisfies AsyncIteratorObject on its own) and withEventMeta (from `\@standard-server/core`, re-exported by `\@orpc/server`) to tag each published event with an id oRPC's own RetryLinkPlugin already knows how to read back as lastEventId on reconnect. An id is `<instance>.<seq>`: the instance is drawn at random when the publisher starts, so an id from before a restart, or from another publisher, can never be mistaken for one of this publisher's events.
  *
  * One instance per WebServerHandle -- not a module-level singleton -- so multiple concurrent web server instances (multiple bridges each starting their own web UI) never share replay buffers.
  */
@@ -21,8 +21,17 @@ export interface MeshEventPublisherOptions {
 
 const DEFAULT_RETENTION_MS = 60_000;
 
+/** Bytes of randomness in a publisher's instance; the instance is their hex form. */
+const INSTANCE_BYTES = 8;
+
+/** Radix of the hex form of the instance. */
+const HEX_RADIX = 16;
+
+/** The separator between an id's instance and its sequence number. Hex never contains it. */
+const ID_SEPARATOR = ".";
+
 interface BufferedEvent {
-  id: string;
+  seq: number;
   event: MeshEvent;
   publishedAt: number;
 }
@@ -30,10 +39,20 @@ interface BufferedEvent {
 export interface MeshEventSubscribeOptions {
   signal?: AbortSignal;
   lastEventId?: string;
+  /** Builds the snapshot a subscriber starts from when it has no usable id. The snapshot is built after the subscriber is listening, so no event published meanwhile is lost. */
+  snapshot: () => MeshEvent;
+}
+
+function drawInstance(): string {
+  return Array.from(
+    globalThis.crypto.getRandomValues(new Uint8Array(INSTANCE_BYTES)),
+    (byte) => byte.toString(HEX_RADIX).padStart(2, "0"),
+  ).join("");
 }
 
 export class MeshEventPublisher {
   private seq = 0;
+  private readonly instance = drawInstance();
   private readonly buffer: BufferedEvent[] = [];
   private readonly listeners = new Set<(event: MeshEvent) => void>();
   private readonly retentionMs: number;
@@ -44,9 +63,11 @@ export class MeshEventPublisher {
 
   publish(event: MeshEvent): void {
     this.prune();
-    const id = String(++this.seq);
-    const tagged = withEventMeta(event, { id });
-    this.buffer.push({ id, event: tagged, publishedAt: Date.now() });
+    const seq = ++this.seq;
+    const tagged = withEventMeta(event, {
+      id: `${this.instance}${ID_SEPARATOR}${String(seq)}`,
+    });
+    this.buffer.push({ seq, event: tagged, publishedAt: Date.now() });
     for (const listener of this.listeners) listener(tagged);
   }
 
@@ -61,23 +82,31 @@ export class MeshEventPublisher {
   }
 
   /**
-   * Replays buffered events after `lastEventId` (or every buffered event, if a resuming subscriber's `lastEventId` has already aged out of the retention window), then yields new events as they're published until `signal` aborts.
+   * The events a subscriber holding `lastEventId` is missing, or undefined when they cannot be known: the id is not this publisher's, is malformed, or is older than the oldest retained event, so events between it and the retained ones are gone.
+   */
+  private missedSince(lastEventId: string): BufferedEvent[] | undefined {
+    const [instance, rawSeq, ...rest] = lastEventId.split(ID_SEPARATOR);
+    if (instance !== this.instance || rawSeq === undefined || rest.length > 0) {
+      return undefined;
+    }
+    if (!/^[0-9]+$/u.test(rawSeq)) return undefined;
+    const seq = Number(rawSeq);
+    if (seq > this.seq) return undefined;
+    const oldest = this.buffer[0];
+    // With nothing retained the only id that is not missing anything is the latest one.
+    if (oldest === undefined) return seq === this.seq ? [] : undefined;
+    if (seq < oldest.seq - 1) return undefined;
+    return this.buffer.filter((buffered) => buffered.seq > seq);
+  }
+
+  /**
+   * Starts a subscriber and yields to it until `signal` aborts. A subscriber with a usable `lastEventId` first gets exactly the events it missed. Any other subscriber, with no id or with one that cannot be resumed from (see {@link MeshEventPublisher.missedSince}), first gets `snapshot()`. Live events follow in both cases, and none published while the replay or snapshot is being delivered is lost.
    */
   async *subscribe(
-    options: Readonly<MeshEventSubscribeOptions> = {},
+    options: Readonly<MeshEventSubscribeOptions>,
   ): AsyncGenerator<MeshEvent, void, void> {
-    const { signal, lastEventId } = options;
+    const { signal, lastEventId, snapshot } = options;
     this.prune();
-
-    if (lastEventId !== undefined) {
-      const startIndex = this.buffer.findIndex((b) => b.id === lastEventId);
-      const replay =
-        startIndex === -1 ? this.buffer : this.buffer.slice(startIndex + 1);
-      for (const buffered of replay) {
-        if (isAborted(signal)) return;
-        yield buffered.event;
-      }
-    }
 
     const queue: MeshEvent[] = [];
     let wake: (() => void) | undefined;
@@ -88,6 +117,16 @@ export class MeshEventPublisher {
     this.listeners.add(listener);
 
     try {
+      const missed =
+        lastEventId === undefined ? undefined : this.missedSince(lastEventId);
+      if (missed === undefined) {
+        yield snapshot();
+      } else {
+        for (const buffered of missed) {
+          if (isAborted(signal)) return;
+          yield buffered.event;
+        }
+      }
       for (;;) {
         if (isAborted(signal)) return;
         if (queue.length === 0) {

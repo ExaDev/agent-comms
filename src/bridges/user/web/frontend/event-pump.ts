@@ -40,7 +40,7 @@ async function wait(ms: number, signal: AbortSignal): Promise<void> {
  *
  * A failed subscription, or a stream that drops mid-way, is retried after a wait that doubles from {@link PUMP_RETRY_INITIAL_MS} to {@link PUMP_RETRY_MAX_MS} and starts over once an event arrives, so a port that has gone away costs one timer every {@link PUMP_RETRY_MAX_MS} at most and never keeps the event loop busy. Nothing in a browser reports a closed message port or says a socket will not come back, so the pump ends only when `signal` aborts (the owner disconnected or started a newer pump; a wait in progress ends at once) or the server ends the stream normally.
  *
- * A failure thrown by `onEvent` is not a transport failure: it is passed to `onHandlerError`, the pump carries on with the next event, and that event's id is not recorded, so a later resume replays from the last event that was applied. A resubscribe never happens because of a handler.
+ * An id is recorded only after `onEvent` has applied the event. A failure thrown by `onEvent` is not a transport failure: it is passed to `onHandlerError`, and because the client's state can no longer be trusted to match the stream, the pump forgets its id and resubscribes after the same wait, which starts it again from a snapshot.
  * @param subscribe - Opens the stream, resuming after `lastEventId` when one is given.
  * @param onEvent - Applies one event.
  * @param onHandlerError - Receives what `onEvent` threw.
@@ -58,20 +58,23 @@ export async function pumpEvents<Event extends object>(
   while (!signal.aborted) {
     try {
       const events = await subscribe(lastEventId);
+      let resynchronising = false;
       for await (const event of events) {
         if (isAborted(signal)) return;
-        retryDelayMs = PUMP_RETRY_INITIAL_MS;
         try {
           onEvent(event);
         } catch (error) {
           onHandlerError(error);
-          continue;
+          lastEventId = undefined;
+          resynchronising = true;
+          break;
         }
+        retryDelayMs = PUMP_RETRY_INITIAL_MS;
         const meta = getEventMeta(event);
         if (meta?.id !== undefined) lastEventId = meta.id;
       }
       // The server ended the stream normally: nothing left to resume.
-      return;
+      if (!resynchronising) return;
     } catch {
       // Transport dropped, or the subscription could not be opened: wait, then resume from lastEventId.
     }
