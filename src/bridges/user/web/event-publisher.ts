@@ -8,6 +8,11 @@
 
 import { withEventMeta } from "@orpc/server";
 import type { MeshEvent } from "./contract.js";
+import {
+  ID_SEPARATOR,
+  INSTANCE_BYTES,
+  MAX_EVENT_ID_LENGTH,
+} from "./event-id.js";
 
 /** A plain function call is opaque to TS's control-flow narrowing, unlike a direct `signal?.aborted` comparison -- narrowing that across an `await` (the abort can genuinely flip mid-wait) produces a false "these types have no overlap" error at the re-check below the await. */
 function isAborted(signal: AbortSignal | undefined): boolean {
@@ -17,18 +22,17 @@ function isAborted(signal: AbortSignal | undefined): boolean {
 export interface MeshEventPublisherOptions {
   /** How long a published event stays available for replay by a resuming subscriber. */
   retentionMs?: number;
+  /** The most events kept for replay. Defaults to {@link DEFAULT_MAX_BUFFERED_EVENTS}. */
+  maxBufferedEvents?: number;
 }
 
 const DEFAULT_RETENTION_MS = 60_000;
 
-/** Bytes of randomness in a publisher's instance; the instance is their hex form. */
-const INSTANCE_BYTES = 8;
+/** The most events a publisher keeps for replay, whatever their age. An event can carry a whole mesh snapshot, so a burst of resynchronisations must not hold sixty seconds of them: past this a subscriber whose id fell off the end starts from a snapshot, as one whose id aged out does. */
+const DEFAULT_MAX_BUFFERED_EVENTS = 1_000;
 
 /** Radix of the hex form of the instance. */
 const HEX_RADIX = 16;
-
-/** The separator between an id's instance and its sequence number. Hex never contains it. */
-const ID_SEPARATOR = ".";
 
 interface BufferedEvent {
   seq: number;
@@ -56,9 +60,12 @@ export class MeshEventPublisher {
   private readonly buffer: BufferedEvent[] = [];
   private readonly listeners = new Set<(event: MeshEvent) => void>();
   private readonly retentionMs: number;
+  private readonly maxBufferedEvents: number;
 
   constructor(options: Readonly<MeshEventPublisherOptions> = {}) {
     this.retentionMs = options.retentionMs ?? DEFAULT_RETENTION_MS;
+    this.maxBufferedEvents =
+      options.maxBufferedEvents ?? DEFAULT_MAX_BUFFERED_EVENTS;
   }
 
   publish(event: MeshEvent): void {
@@ -68,6 +75,8 @@ export class MeshEventPublisher {
       id: `${this.instance}${ID_SEPARATOR}${String(seq)}`,
     });
     this.buffer.push({ seq, event: tagged, publishedAt: Date.now() });
+    // Sequence numbers stay contiguous, so dropping from the head leaves "older than the oldest retained" exact.
+    while (this.buffer.length > this.maxBufferedEvents) this.buffer.shift();
     for (const listener of this.listeners) listener(tagged);
   }
 
@@ -85,6 +94,8 @@ export class MeshEventPublisher {
    * The events a subscriber holding `lastEventId` is missing, or undefined when they cannot be known: the id is not this publisher's, is malformed, or is older than the oldest retained event, so events between it and the retained ones are gone.
    */
   private missedSince(lastEventId: string): BufferedEvent[] | undefined {
+    // Refused before any split: no id of any publisher is this long.
+    if (lastEventId.length > MAX_EVENT_ID_LENGTH) return undefined;
     const [instance, rawSeq, ...rest] = lastEventId.split(ID_SEPARATOR);
     if (instance !== this.instance || rawSeq === undefined || rest.length > 0) {
       return undefined;

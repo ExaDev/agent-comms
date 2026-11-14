@@ -4,6 +4,7 @@
 import { withEventMeta } from "@orpc/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
+  PUMP_HANDLER_RECOVERY_EVENTS,
   PUMP_RETRY_FACTOR,
   PUMP_RETRY_INITIAL_MS,
   PUMP_RETRY_MAX_MS,
@@ -227,6 +228,118 @@ it("backs off between resynchronisations when the handler keeps failing", async 
 
   controller.abort();
   await pumped;
+});
+
+it("keeps backing off when the handler applies each snapshot and fails on a recurring later event", async () => {
+  const controller = new AbortController();
+  const subscribe = vi.fn(async (): Promise<AsyncIterable<TestEvent>> => {
+    if (subscribe.mock.calls.length >= SPIN_LIMIT) controller.abort();
+    return stream([{ n: 1 }, { n: SECOND_ATTEMPT }], false);
+  });
+
+  const pumped = pumpEvents(
+    subscribe,
+    (event) => {
+      if (event.n === SECOND_ATTEMPT) throw new Error("cannot apply");
+    },
+    ignore,
+    controller.signal,
+  );
+  await settle();
+  expect(subscribe).toHaveBeenCalledTimes(1);
+
+  // The waits between resynchronisations double (250, 500, 1000) although the first event of each subscription applies.
+  await vi.advanceTimersByTimeAsync(PUMP_RETRY_INITIAL_MS - 1);
+  expect(subscribe).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(subscribe).toHaveBeenCalledTimes(SECOND_ATTEMPT);
+  await vi.advanceTimersByTimeAsync(
+    PUMP_RETRY_INITIAL_MS * PUMP_RETRY_FACTOR - 1,
+  );
+  expect(subscribe).toHaveBeenCalledTimes(SECOND_ATTEMPT);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(subscribe).toHaveBeenCalledTimes(THIRD_ATTEMPT);
+  await vi.advanceTimersByTimeAsync(
+    PUMP_RETRY_INITIAL_MS * PUMP_RETRY_FACTOR ** SECOND_ATTEMPT - 1,
+  );
+  expect(subscribe).toHaveBeenCalledTimes(THIRD_ATTEMPT);
+
+  controller.abort();
+  await pumped;
+});
+
+it("starts the handler's backoff over after a run of events applied without a failure", async () => {
+  const controller = new AbortController();
+  let subscription = 0;
+  const subscribe = vi.fn(async (): Promise<AsyncIterable<TestEvent>> => {
+    subscription++;
+    if (subscription >= SPIN_LIMIT) controller.abort();
+    if (subscription === 1) return stream([{ n: 0 }], false);
+    // A run long enough to count as recovered, then an event the handler cannot apply.
+    return stream(
+      [
+        ...Array.from({ length: PUMP_HANDLER_RECOVERY_EVENTS }, (_, index) => ({
+          n: index + 1,
+        })),
+        { n: -1 },
+      ],
+      false,
+    );
+  });
+
+  const pumped = pumpEvents(
+    subscribe,
+    (event) => {
+      if (event.n <= 0) throw new Error("cannot apply");
+    },
+    ignore,
+    controller.signal,
+  );
+  await settle();
+  // First failure waits the first step and doubles the handler's wait.
+  await vi.advanceTimersByTimeAsync(PUMP_RETRY_INITIAL_MS);
+  expect(subscribe).toHaveBeenCalledTimes(SECOND_ATTEMPT);
+  // The run of applied events started it over, so the next failure waits the first step again, not the doubled one.
+  await vi.advanceTimersByTimeAsync(PUMP_RETRY_INITIAL_MS);
+  expect(subscribe).toHaveBeenCalledTimes(THIRD_ATTEMPT);
+
+  controller.abort();
+  await pumped;
+});
+
+it("forgets the id before reporting a handler failure, so a callback that throws cannot keep it", async () => {
+  const resumedFrom: (string | undefined)[] = [];
+  const controller = new AbortController();
+  const subscribe = vi.fn(
+    async (
+      lastEventId: string | undefined,
+    ): Promise<AsyncIterable<TestEvent>> => {
+      resumedFrom.push(lastEventId);
+      if (resumedFrom.length >= SECOND_ATTEMPT) controller.abort();
+      return stream(
+        [
+          withEventMeta({ n: 1 }, { id: "a" }),
+          withEventMeta({ n: SECOND_ATTEMPT }, { id: "b" }),
+        ],
+        false,
+      );
+    },
+  );
+
+  const pumped = pumpEvents(
+    subscribe,
+    (event) => {
+      if (event.n === SECOND_ATTEMPT) throw new Error("cannot apply");
+    },
+    () => {
+      throw new Error("the report failed too");
+    },
+    controller.signal,
+  );
+  await vi.advanceTimersByTimeAsync(PUMP_RETRY_INITIAL_MS);
+  await pumped;
+
+  expect(resumedFrom).toEqual([undefined, undefined]);
 });
 
 it("does not record the id of an event the handler failed on", async () => {
