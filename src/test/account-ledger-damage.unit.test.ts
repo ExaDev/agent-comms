@@ -12,6 +12,7 @@ import {
   deriveAccountLedgerKeys,
   generateWriterNonce,
   sealLedgerEntry,
+  writerLogId,
 } from "../core/account-ledger-crypto.js";
 import {
   AccountLedger,
@@ -110,6 +111,23 @@ const DAMAGE: readonly (readonly [
 ];
 
 describe("an unreadable entry in the account ledger", () => {
+  it("received from another machine is reported with fixed text too", async () => {
+    const { ledger, account, reports } = await ledgerWithGrants([]);
+    const keys = deriveAccountLedgerKeys(account.privateKey);
+    const log = writerLogId(keys, generateWriterNonce());
+
+    await ledger.handleDataFrame({
+      type: "data-entries",
+      peer: log,
+      "from-seq": 0,
+      entries: [sealLedgerEntry(keys, log, 1, NOT_CBOR)],
+    });
+
+    expect(reports.map((report) => report.reason)).toEqual([
+      UNDECODABLE_REASON,
+    ]);
+  });
+
   it.each(DAMAGE.slice(1))(
     "is reported with fixed text, never the decoder's own message: %s",
     async (_name, damage) => {
