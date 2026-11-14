@@ -245,6 +245,7 @@ export class AccountJoin {
         userIdentityOptions: current.userIdentityOptions,
         userIdentity: identity,
         clock: current.clock,
+        onDamagedEntry: current.accountLedger.reportDamagedEntry,
       }),
     });
     this.trustOwnAccount();

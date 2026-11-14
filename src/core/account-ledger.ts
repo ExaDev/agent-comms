@@ -4,6 +4,8 @@
  * Each machine appends to a writer log of its own rather than all of them sharing one: a data-domain log is single-writer, and two machines appending to one log while apart would both write the same sequence number and fork it, silently losing one side's grants. A writer log's id is self-authenticating (account-ledger-crypto.ts), so any account holder recognises every writer log it is offered without a roster, and the ledger is the union of all of them.
  *
  * Holding a replica grants no authority: an entry is sealed under a key derived from the account key, so a replica held by anyone else is ciphertext they can neither read nor forge, and minting or revoking still needs the account's private key.
+ *
+ * A single entry that cannot be read never blocks the rest of the ledger. Revoking is the operation the ledger exists for, and storage can lose or damage an entry, so an unreadable entry that stopped listing and revoking would turn one damaged file into a permanent inability to revoke anything for that account. Each unreadable entry is instead skipped and reported on every read as a LedgerEntryDamagedError (to `onDamagedEntry`, stderr by default), naming its log and position: a grant recorded only in that entry is not listed, so it is not revoked until the entry is repaired or replaced from another machine's replica.
  */
 
 import {
@@ -101,6 +103,32 @@ export interface AccountLedgerDeps {
   /** Serialises every read and write of `storage` across every bridge sharing it: appends to this machine's writer log, replicated entries stored for another machine's, and every read of either. The store's writes are not atomic (a file is truncated, then written), so a read racing another bridge's write could see an empty head and treat a log as empty. */
   lock: LedgerLock;
   clock: Clock;
+  /** Called with each ledger entry that could not be read, every time a read meets it. Defaults to a line on stderr. */
+  onDamagedEntry?: (error: LedgerEntryDamagedError) => void;
+}
+
+/** A ledger entry that is stored but cannot be read: it does not open under the account's key for its log and position, or what it holds is not a record this build can decode. */
+export class LedgerEntryDamagedError extends Error {
+  constructor(
+    /** The writer log the entry belongs to, as hex. */
+    public readonly log: string,
+    /** The entry's position in that log, counting from one. */
+    public readonly seq: number,
+    /** Why it could not be read. */
+    public readonly reason: string,
+  ) {
+    super(
+      `account ledger entry ${String(seq)} of writer log ${log} cannot be read (${reason}); it was skipped, so a grant recorded only in it is not listed and cannot be revoked until the entry is repaired or replaced from another machine's replica of this account`,
+    );
+    this.name = "LedgerEntryDamagedError";
+  }
+}
+
+/** The default place an unreadable ledger entry is reported: one line on stderr. */
+export function reportDamagedEntryToStderr(
+  error: Readonly<LedgerEntryDamagedError>,
+): void {
+  process.stderr.write(`agent-comms: ${error.message}\n`);
 }
 
 /** Answers and stores the data-domain frames for the account's writer logs; what a transport needs of the ledger to replicate it. */
@@ -119,9 +147,20 @@ const versionProbeSchema = z.object({ v: z.number() });
 
 const HEAD_KEY_PATTERN = /^data\/([0-9a-f]+)\/head$/;
 
+/** Where a store's unreadable ledger entries are reported: its own error handler once it has one, otherwise stderr, since a handler that is not assigned yet or not at all must not make an entry that can hide a grant go unreported. `getOnError` is read on every report. */
+export function damagedEntryReporter(
+  getOnError: () => ((error: Error) => void) | undefined,
+): (error: LedgerEntryDamagedError) => void {
+  return (error) => {
+    (getOnError() ?? reportDamagedEntryToStderr)(error);
+  };
+}
+
 export class AccountLedger implements AccountLedgerReplica {
   /** This machine's own writer log. */
   readonly writerLog: DeviceId;
+  /** Where this ledger reports an entry it cannot read; also what a ledger opened for another account on the same machine is given, so the destination follows the store and not the account. */
+  readonly reportDamagedEntry: (error: LedgerEntryDamagedError) => void;
   private readonly keys: AccountLedgerKeys;
   private readonly revocationListeners = new Set<
     (entry: RevocationEntry) => void
@@ -130,6 +169,7 @@ export class AccountLedger implements AccountLedgerReplica {
   constructor(private readonly deps: Readonly<AccountLedgerDeps>) {
     this.keys = deriveAccountLedgerKeys(deps.accountPrivateKey);
     this.writerLog = writerLogId(this.keys, deps.writerNonce);
+    this.reportDamagedEntry = deps.onDamagedEntry ?? reportDamagedEntryToStderr;
   }
 
   /** Records that the principal minted `tokenId` for `subjectHex`. */
@@ -274,8 +314,12 @@ export class AccountLedger implements AccountLedgerReplica {
       handleDataEntries(storage, frame),
     );
     if (!stored.ok) return null;
-    for (const plaintext of plaintexts) {
-      const record = decodeRecord(plaintext);
+    for (const [index, plaintext] of plaintexts.entries()) {
+      const record = this.decodeOrReport(
+        frame.peer,
+        firstSeq + index,
+        plaintext,
+      );
       if (record?.op !== "revoke") continue;
       for (const listener of this.revocationListeners) {
         listener(record.revocation);
@@ -316,7 +360,31 @@ export class AccountLedger implements AccountLedgerReplica {
     return logs;
   }
 
-  /** Every record in every held writer log. Throws on an entry that does not open: handleDataFrame and append never store one, so it means the storage was damaged outside the ledger, and carrying on would hide grants that can then never be revoked. */
+  /** The record an entry holds, or undefined after reporting why it cannot be read (or, silently, for a record of a later format version). */
+  private decodeOrReport(
+    log: DeviceId,
+    seq: number,
+    plaintext: Uint8Array,
+  ): LedgerRecord | undefined {
+    try {
+      return decodeRecord(plaintext);
+    } catch (err) {
+      this.reportDamaged(
+        log,
+        seq,
+        err instanceof Error ? err.message : String(err),
+      );
+      return undefined;
+    }
+  }
+
+  private reportDamaged(log: DeviceId, seq: number, reason: string): void {
+    this.reportDamagedEntry(
+      new LedgerEntryDamagedError(deviceIdToHex(log), seq, reason),
+    );
+  }
+
+  /** Every readable record in every held writer log, in the order stored. An entry that cannot be read is reported and skipped (see the module comment for why that is not a failure). handleDataFrame and append never store one, so it means the storage was damaged outside the ledger or a holder of the account key wrote one this build cannot decode. */
   private async records(): Promise<LedgerRecord[]> {
     const held = await this.deps.lock.run(async () =>
       Promise.all(
@@ -332,11 +400,14 @@ export class AccountLedger implements AccountLedgerReplica {
         const seq = index + 1;
         const plaintext = openLedgerEntry(this.keys, log, seq, sealed);
         if (plaintext === undefined) {
-          throw new Error(
-            `account ledger entry ${String(seq)} of writer log ${deviceIdToHex(log)} does not open under this account's key`,
+          this.reportDamaged(
+            log,
+            seq,
+            "it does not open under this account's key",
           );
+          return;
         }
-        const record = decodeRecord(plaintext);
+        const record = this.decodeOrReport(log, seq, plaintext);
         if (record !== undefined) records.push(record);
       });
     }
