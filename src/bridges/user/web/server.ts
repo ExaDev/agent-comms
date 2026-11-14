@@ -60,6 +60,12 @@ import {
 import { bridgePortRange } from "./bridge-port-range.js";
 import { startWebBeacon } from "./web-beacon.js";
 import {
+  MAX_REQUEST_BODY_BYTES,
+  invalidJsonBody,
+  readBoundedBody,
+  serveRoute,
+} from "./request-handling.js";
+import {
   createFrontendAssetLoader,
   FrontendNotBuiltError,
   type FrontendAssets,
@@ -283,8 +289,20 @@ export async function createWebServer(options?: {
   };
 
   const server = http.createServer((req, res) => {
-    if (!admitRequest(accessPolicy, req, res)) return;
-    handleRequest(req, res, controller, webConsoleDist);
+    try {
+      if (!admitRequest(accessPolicy, req, res)) return;
+      handleRequest(req, res, controller, webConsoleDist);
+    } catch (err) {
+      // A request the synchronous routing cannot handle is answered, not thrown: an exception out of this listener would end the process.
+      process.stderr.write(
+        `agent-comms web UI: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+      if (!res.headersSent) {
+        jsonError(res, "Internal server error", HTTP_INTERNAL_SERVER_ERROR);
+      } else {
+        res.end();
+      }
+    }
   });
 
   let boundPort: number;
@@ -308,10 +326,15 @@ export async function createWebServer(options?: {
     publisher.publish({ kind: "delivery", event });
   });
 
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({
+    noServer: true,
+    maxPayload: MAX_REQUEST_BODY_BYTES,
+  });
   const rpcHandler = new RPCHandler(meshRouter);
 
   server.on("upgrade", (req, socket, head) => {
+    // A socket error before or after the upgrade (a peer that resets, say) is that connection's alone.
+    socket.on("error", reportSocketError);
     const decision = authorise(accessPolicy, requestOf(req));
     if (decision.kind !== "allow") {
       const status =
@@ -333,6 +356,8 @@ export async function createWebServer(options?: {
   });
 
   wss.on("connection", (ws) => {
+    // A socket error (a message over the size limit closes the socket with code 1009 and raises one) is handled here: an error event with no listener would end the process.
+    ws.on("error", reportSocketError);
     // RPCHandler.upgrade() wants a DOM-shaped WebSocket (addEventListener's overload set), which "ws"'s own type declarations don't structurally satisfy (its addEventListener options param is narrower than DOM's) -- .message()/.close() accept the looser { send } shape "ws" does satisfy, and are the documented manual equivalent to .upgrade().
     const context = { controller, publisher };
     ws.on("message", (data, isBinary) => {
@@ -341,10 +366,10 @@ export async function createWebServer(options?: {
       const bytes = raw instanceof ArrayBuffer ? Buffer.from(raw) : raw;
       // Buffer's .buffer is typed ArrayBufferLike (Buffer can wrap a SharedArrayBuffer); RPCHandler.message() wants the narrower Uint8Array<ArrayBuffer> -- a fresh Uint8Array.from() copy is always backed by a plain ArrayBuffer, satisfying that exactly.
       const payload = isBinary ? Uint8Array.from(bytes) : bytes.toString();
-      void rpcHandler.message(ws, payload, { context });
+      rpcHandler.message(ws, payload, { context }).catch(reportSocketError);
     });
     ws.on("close", () => {
-      void rpcHandler.close(ws);
+      rpcHandler.close(ws).catch(reportSocketError);
     });
   });
 
@@ -360,6 +385,13 @@ export async function createWebServer(options?: {
   }
 
   return { server, controller, wss, publisher, host, accessToken };
+}
+
+/** Reports a failure of one WebSocket connection to stderr: it only ever affects that connection. */
+function reportSocketError(err: unknown): void {
+  process.stderr.write(
+    `agent-comms web UI: socket error: ${err instanceof Error ? err.message : String(err)}\n`,
+  );
 }
 
 function requestOf(req: http.IncomingMessage): {
@@ -454,12 +486,16 @@ export async function runWeb(userName: string, port?: number): Promise<void> {
     process.exit(0);
   };
 
-  process.on("SIGINT", () => {
-    void cleanup();
-  });
-  process.on("SIGTERM", () => {
-    void cleanup();
-  });
+  const shutDown = (): void => {
+    cleanup().catch((err: unknown) => {
+      process.stderr.write(
+        `agent-comms web UI: shutdown failed: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+      process.exit(1);
+    });
+  };
+  process.on("SIGINT", shutDown);
+  process.on("SIGTERM", shutDown);
 }
 
 // ---------------------------------------------------------------------------
@@ -472,7 +508,14 @@ function handleRequest(
   controller: ChatController,
   webConsoleDist: string | undefined,
 ): void {
-  const url = new URL(req.url ?? "/", `http://localhost`);
+  let url: URL;
+  try {
+    url = new URL(req.url ?? "/", `http://localhost`);
+  } catch {
+    // A request target that names no URL (an empty authority, say) is a bad request, not a fault.
+    jsonError(res, "Bad request", HTTP_BAD_REQUEST);
+    return;
+  }
 
   // wire-mesh's web-console — an alternate, generic reference-client UI, served only when AGENT_COMMS_WEB_CONSOLE_DIST resolves to a real build.
   if (
@@ -563,18 +606,16 @@ function handleRequest(
 
   // API routes
   if (url.pathname === "/api/agents" && req.method === "GET") {
-    void (async () => {
-      const agents = await controller.getAgents();
-      json(res, agents);
-    })();
+    serveRoute(req, res, async () => {
+      json(res, await controller.getAgents());
+    });
     return;
   }
 
   if (url.pathname === "/api/rooms" && req.method === "GET") {
-    void (async () => {
-      const rooms = await controller.getRooms();
-      json(res, rooms);
-    })();
+    serveRoute(req, res, async () => {
+      json(res, await controller.getRooms());
+    });
     return;
   }
 
@@ -583,7 +624,7 @@ function handleRequest(
     url.pathname.endsWith("/messages") &&
     req.method === "GET"
   ) {
-    void (async () => {
+    serveRoute(req, res, async () => {
       const roomId = url.pathname.split("/")[3];
       if (roomId === undefined || roomId === "") {
         jsonError(res, "Room ID required", HTTP_BAD_REQUEST);
@@ -595,7 +636,7 @@ function handleRequest(
         since,
       });
       json(res, messages);
-    })();
+    });
     return;
   }
 
@@ -613,7 +654,7 @@ function handleRequest(
   }
 
   if (url.pathname === "/api/mesh/trace" && req.method === "GET") {
-    void (async () => {
+    serveRoute(req, res, async () => {
       const target = url.searchParams.get("target");
       if (target === null || target === "") {
         jsonError(res, "target query parameter required", HTTP_BAD_REQUEST);
@@ -635,23 +676,27 @@ function handleRequest(
           meshErrorStatus(err, HTTP_BAD_REQUEST),
         );
       }
-    })();
+    });
     return;
   }
 
   if (url.pathname === "/api/action" && req.method === "POST") {
-    void (async () => {
-      const body = await readBody(req);
-      const parsed: unknown = JSON.parse(body);
+    serveRoute(req, res, async () => {
+      const body = await readBoundedBody(req);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        throw invalidJsonBody();
+      }
       if (typeof parsed !== "object" || parsed === null) {
-        jsonError(res, "Invalid JSON", HTTP_BAD_REQUEST);
-        return;
+        throw invalidJsonBody();
       }
       const params = Object.fromEntries(Object.entries(parsed));
 
       const result = await executeAction(controller, params);
       json(res, result);
-    })();
+    });
     return;
   }
 
@@ -802,17 +847,4 @@ function meshErrorStatus(err: unknown, otherwise: number): number {
     return HTTP_NOT_IMPLEMENTED;
   }
   return otherwise;
-}
-
-async function readBody(req: http.IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => {
-      chunks.push(chunk);
-    });
-    req.on("end", () => {
-      resolve(Buffer.concat(chunks).toString());
-    });
-    req.on("error", reject);
-  });
 }
