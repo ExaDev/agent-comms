@@ -19,6 +19,7 @@ import { theme } from "./theme.js";
 import type { Action, DisplayMessage } from "./types.js";
 
 import { shouldAutoConnect } from "./boot-logic.js";
+import { registerServiceWorker } from "./register-service-worker.js";
 
 const mantineStyleEl = document.createElement("style");
 mantineStyleEl.textContent = mantineStyles;
@@ -245,6 +246,8 @@ createRoot(rootEl).render(
 
 // Capture the deep link from the URL BEFORE syncUrl's first run clears the query parameters via replaceState, which would make location.search empty by the time parseDeepLink runs.
 const deepLink = parseDeepLink(location.search);
+
+registerServiceWorker();
 
 // Auto-connect when served by a bridge (loopback, or its own origin over the LAN), or when the user has connected before. First-time visitors to the standalone PWA see a connect prompt instead of Chrome's unexpected "access device" permission prompt.
 if (shouldAutoConnect(location, localStorage)) {

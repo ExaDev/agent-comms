@@ -7,6 +7,7 @@
 import * as crypto from "node:crypto";
 import * as net from "node:net";
 import * as os from "node:os";
+import { HOSTED_DASHBOARD_ORIGIN } from "./hosted-dashboard.js";
 
 /** The environment variable that opts the web server into binding beyond loopback. Its value is an IP address literal to bind: `0.0.0.0` or `::` for every interface, or one interface's own address. */
 export const WEB_HOST_ENV = "AGENT_COMMS_WEB_HOST";
@@ -37,9 +38,6 @@ const HTTP_FOUND = 302;
 
 /** The authentication scheme of an `Authorization` header carrying the token. Scheme names are case-insensitive (RFC 9110 section 11.1). */
 const BEARER_SCHEME = "bearer";
-
-/** The origin of the dashboard deployed to GitHub Pages. It discovers a bridge's server by probing loopback ports and then opens its `/ws/mesh` socket cross-origin, so its Origin is admitted from a client on this machine; every other foreign origin is refused. */
-export const HOSTED_DASHBOARD_ORIGIN = "https://exadev.github.io";
 
 /** How long the address sets derived from the machine's interfaces and hostname are reused. Reading them costs a system call per interface, which every request would otherwise pay; this bounds how long a newly attached interface waits to be recognised. */
 const INTERFACE_CACHE_MS = 5000;

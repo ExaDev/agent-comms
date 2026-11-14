@@ -323,6 +323,8 @@ Any bridge that starts a web server (`npx agent-comms chat`, or any other comman
 
 A bridge's web server binds the first free TCP port from 19877 to 19886, so several bridges on one machine each get a port of their own in that range, and takes a port the operating system picks only when all ten are taken. The hosted dashboard looks for a bridge on those same ports, which is how it finds one without being told a port. The address a bridge prints, and the `web_url` action returns, is the port it actually holds.
 
+The dashboard page carries a content security policy (a meta tag, since a static host sets no headers): it denies everything by default, allows script only from its own origin, and allows connections only to its own origin and to `127.0.0.1` and `localhost`, so it can reach a bridge on the same machine and nothing else. Its service worker answers a page navigation from the network while the host is reachable and from its cache only when the host cannot be reached, so a redirect the host answers is always followed. The origin the hosted dashboard is served from is defined once, in `src/bridges/user/web/hosted-dashboard.ts`.
+
 Two independent transports sit inside that dashboard, both built on [oRPC](https://orpc.unnoq.com/), a contract-first RPC layer with Zod-validated inputs and outputs and native support for streaming procedures:
 
 - **Worker ↔ server**, over a real WebSocket at `/ws/mesh`. The worker is an oRPC client here, calling the same contract procedures the REST API exposes, plus a `subscribeEvents` procedure that streams mesh events as they happen.

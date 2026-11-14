@@ -18,9 +18,9 @@ import {
   getWebUrlStatus,
   type WebServerHandle,
 } from "../server.js";
+import { HOSTED_DASHBOARD_ORIGIN } from "../hosted-dashboard.js";
 import {
   accessCookieName,
-  HOSTED_DASHBOARD_ORIGIN,
   ownInterfaceAddresses,
   WEB_HOST_ENV,
 } from "../web-access.js";
