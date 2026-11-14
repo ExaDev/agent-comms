@@ -120,7 +120,7 @@ export const MCP_TOOL_PARAMS = z.object({
     .string()
     .optional()
     .describe(
-      "gateway_redeem_connection_code: the code's nonce. An unsigned connection code is a bearer hint, not authentication: redeeming it trusts whatever device-id its text names, whoever wrote it, so it is not a way to establish trust in a stranger. Supply publicKey or fingerprint to require a signature from a key you already trust.",
+      "gateway_redeem_connection_code: the code's nonce. This tool redeems only a signed code, and only when publicKey or fingerprint names the signer you already trust, because an unsigned connection code is a bearer hint, not authentication: it names whatever device-id its text says, whoever wrote it. It refuses any other code, and only a person can redeem one by running `agent-comms gateway redeem` in a terminal; tell the person, never try to work round the refusal.",
     ),
   /** ISO-8601 expiry for gateway_generate_connection_code's ttlMs override, or the redeemed code's own expiresAt field for gateway_redeem_connection_code. */
   expiresAt: z.string().optional(),
@@ -132,7 +132,7 @@ export const MCP_TOOL_PARAMS = z.object({
     .string()
     .optional()
     .describe(
-      "gateway_redeem_connection_code: armored PGP public key to verify the code's signature against. Supplying it makes an unsigned code refused.",
+      "gateway_redeem_connection_code: armored PGP public key to verify the code's signature against. Required (or fingerprint) for this tool to redeem a code, and it makes an unsigned code refused.",
     ),
   /** Passphrase for privateKey, if it is passphrase-protected (gateway_generate_connection_code). */
   passphrase: z.string().optional(),
@@ -147,7 +147,7 @@ export const MCP_TOOL_PARAMS = z.object({
     .string()
     .optional()
     .describe(
-      "gateway_redeem_connection_code: a PGP fingerprint you already trust. Supplying it makes an unsigned code refused, and the signing key must match it.",
+      "gateway_redeem_connection_code: a PGP fingerprint you already trust. Required (or publicKey) for this tool to redeem a code, and it makes an unsigned code refused; the signing key must match it.",
     ),
   /** For gateway_trust/gateway_untrust (and dm_admit, where `target` names it): when true, the id names a user principal (agent-comms#187) rather than a bare remote device-id (agent-comms#193). */
   principal: z.boolean().optional(),

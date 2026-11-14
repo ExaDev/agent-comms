@@ -43,7 +43,7 @@ describe("CommsTool connection-code actions", () => {
     await store.shutdown();
   });
 
-  test("gateway_redeem_connection_code trusts the vouched-for device on success", async () => {
+  test("gateway_redeem_connection_code refuses an unsigned code, names the command, and trusts nothing", async () => {
     const issuerStore = new MeshStore({ coordinatorPort: TEST_PORT });
     await wireTestTransport(issuerStore);
     await issuerStore.init();
@@ -83,8 +83,10 @@ describe("CommsTool connection-code actions", () => {
       },
     );
 
-    expect(redeemResult.isError, redeemResult.content).toBe(false);
-    expect(redeemerStore.listTrustedGateways()).toEqual([issuerStore.peerId]);
+    expect(redeemResult.isError).toBe(true);
+    expect(redeemResult.content).toContain("not signed");
+    expect(redeemResult.content).toContain("agent-comms gateway redeem");
+    expect(redeemerStore.listTrustedGateways()).toEqual([]);
 
     await issuerStore.shutdown();
     await redeemerStore.shutdown();
@@ -104,6 +106,9 @@ describe("CommsTool connection-code actions", () => {
         code: "some-nonce",
         expiresAt: new Date(Date.now() - ONE_MINUTE_MS).toISOString(),
         device: "aabbcc",
+        signature:
+          "-----BEGIN PGP SIGNATURE-----\nfake\n-----END PGP SIGNATURE-----",
+        publicKey: "not read: the expiry is checked first",
       },
     );
 
@@ -136,6 +141,68 @@ describe("CommsTool connection-code actions", () => {
     expect(result.content).toContain("PGP-signed");
 
     await store.shutdown();
+  });
+
+  test("gateway_generate_connection_code tells the counterpart to redeem with the command", async () => {
+    const store = new MeshStore({ coordinatorPort: TEST_PORT });
+    await wireTestTransport(store);
+    await store.init();
+    const tool = new CommsTool(store);
+    const agent = await registerAgent(store, "generate-text-test");
+
+    const result = await tool.handle(
+      { agentId: agent.id, harness: "test", cwd: "/test", pid: process.pid },
+      { action: "gateway_generate_connection_code" },
+    );
+
+    expect(result.content).toContain("agent-comms gateway redeem");
+    await store.shutdown();
+  });
+
+  test("gateway_redeem_connection_code refuses a signed code when neither a public key nor a fingerprint says whose signature to accept", async () => {
+    const { privateKey } = await openpgp.generateKey({
+      type: "ecc",
+      curve: "curve25519Legacy",
+      userIDs: [{ name: "Alice", email: "alice@example.com" }],
+      format: "armored",
+    });
+    const issuerStore = new MeshStore({ coordinatorPort: TEST_PORT });
+    await wireTestTransport(issuerStore);
+    await issuerStore.init();
+    const code = await issuerStore.generateConnectionCode({
+      privateKeyArmored: privateKey,
+    });
+    const redeemerStore = new MeshStore({ coordinatorPort: TEST_PORT });
+    await wireTestTransport(redeemerStore);
+    await redeemerStore.init();
+    const redeemerAgent = await registerAgent(
+      redeemerStore,
+      "unpinned-redeemer",
+    );
+
+    const result = await new CommsTool(redeemerStore).handle(
+      {
+        agentId: redeemerAgent.id,
+        harness: "test",
+        cwd: "/test",
+        pid: process.pid,
+      },
+      {
+        action: "gateway_redeem_connection_code",
+        code: code.code,
+        expiresAt: code.expiresAt,
+        device: code.deviceId,
+        ...(code.signature !== undefined && { signature: code.signature }),
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("no publicKey or fingerprint");
+    expect(result.content).toContain("agent-comms gateway redeem");
+    expect(redeemerStore.listTrustedGateways()).toEqual([]);
+
+    await issuerStore.shutdown();
+    await redeemerStore.shutdown();
   });
 
   test("gateway_redeem_connection_code verifies a signature against a pasted public key", async () => {
