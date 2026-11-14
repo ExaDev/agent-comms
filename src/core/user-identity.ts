@@ -7,6 +7,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveDataDir } from "./data-directory.js";
+import { withWriteLock } from "./pid-lock-file.js";
 import type { AccountContents } from "./account-bundle.js";
 import { certifyKeyPair } from "./identity.js";
 import type { PeerIdentity } from "./identity.js";
@@ -110,16 +111,23 @@ export function loadOrCreateLedgerWriterNonce(
   generate: () => Uint8Array,
 ): Uint8Array<ArrayBuffer> {
   const file = userIdentityFile(options);
-  const stored = requireStoredUserIdentity(file);
-  if (stored.ledgerWriter !== undefined) {
-    return Uint8Array.from(Buffer.from(stored.ledgerWriter, "base64"));
+  const existing = requireStoredUserIdentity(file).ledgerWriter;
+  if (existing !== undefined) {
+    return Uint8Array.from(Buffer.from(existing, "base64"));
   }
-  const nonce = Uint8Array.from(generate());
-  writeStoredUserIdentity(file, {
-    ...stored,
-    ledgerWriter: Buffer.from(nonce).toString("base64"),
+  // Read again under the lock: another process may have stored one meanwhile, and two would each keep its own, forking the writer log.
+  return withWriteLock(file, () => {
+    const stored = requireStoredUserIdentity(file);
+    if (stored.ledgerWriter !== undefined) {
+      return Uint8Array.from(Buffer.from(stored.ledgerWriter, "base64"));
+    }
+    const nonce = Uint8Array.from(generate());
+    writeStoredUserIdentity(file, {
+      ...stored,
+      ledgerWriter: Buffer.from(nonce).toString("base64"),
+    });
+    return nonce;
   });
-  return nonce;
 }
 
 /** One grant a build before the replicated ledger recorded in user-identity.json. */
@@ -177,14 +185,16 @@ export function clearLegacyIssuedGrants(
   migrated: readonly Readonly<LegacyIssuedGrant>[],
 ): void {
   const file = userIdentityFile(options);
-  const { issuedDeviceGrants, issuedDmGrants, ...rest } =
-    requireStoredUserIdentity(file);
-  const device = withoutMigrated(issuedDeviceGrants, "device", migrated);
-  const dm = withoutMigrated(issuedDmGrants, "dm", migrated);
-  writeStoredUserIdentity(file, {
-    ...rest,
-    ...(device === undefined ? {} : { issuedDeviceGrants: device }),
-    ...(dm === undefined ? {} : { issuedDmGrants: dm }),
+  withWriteLock(file, () => {
+    const { issuedDeviceGrants, issuedDmGrants, ...rest } =
+      requireStoredUserIdentity(file);
+    const device = withoutMigrated(issuedDeviceGrants, "device", migrated);
+    const dm = withoutMigrated(issuedDmGrants, "dm", migrated);
+    writeStoredUserIdentity(file, {
+      ...rest,
+      ...(device === undefined ? {} : { issuedDeviceGrants: device }),
+      ...(dm === undefined ? {} : { issuedDmGrants: dm }),
+    });
   });
 }
 
@@ -201,10 +211,12 @@ export function saveUserDisplayName(
   displayName: string | undefined,
 ): void {
   const file = userIdentityFile(options);
-  const next: StoredUserIdentity = { ...requireStoredUserIdentity(file) };
-  if (displayName === undefined) delete next.displayName;
-  else next.displayName = displayName;
-  writeStoredUserIdentity(file, next);
+  withWriteLock(file, () => {
+    const next: StoredUserIdentity = { ...requireStoredUserIdentity(file) };
+    if (displayName === undefined) delete next.displayName;
+    else next.displayName = displayName;
+    writeStoredUserIdentity(file, next);
+  });
 }
 
 /** What an export or a join carries of the account: its PEM private key and the name it asserts for itself, if any. Throws if the principal has never been created. */
@@ -263,28 +275,30 @@ export function importAccountKey(
       ? {}
       : { displayName: contents.displayName }),
   });
-  const existing = readStoredUserIdentity(file);
-  if (existing === undefined) {
-    writeStoredUserIdentity(file, named(issuerKeyRecord(imported)));
-    return { identity: imported };
-  }
-  const current = issuerPeerIdentity(existing);
-  if (Buffer.from(current.deviceId).equals(Buffer.from(imported.deviceId))) {
-    if (contents.displayName !== undefined) {
-      writeStoredUserIdentity(file, named(existing));
+  return withWriteLock(file, () => {
+    const existing = readStoredUserIdentity(file);
+    if (existing === undefined) {
+      writeStoredUserIdentity(file, named(issuerKeyRecord(imported)));
+      return { identity: imported };
     }
-    return { identity: current };
-  }
-  const replacedFile = replacedUserIdentityFile(options, current);
-  setAside(replacedFile, existing, file);
-  writeStoredUserIdentity(
-    file,
-    named({
-      ...issuerKeyRecord(imported),
-      ...(existing.ledgerWriter === undefined
-        ? {}
-        : { ledgerWriter: existing.ledgerWriter }),
-    }),
-  );
-  return { identity: imported, replacedFile };
+    const current = issuerPeerIdentity(existing);
+    if (Buffer.from(current.deviceId).equals(Buffer.from(imported.deviceId))) {
+      if (contents.displayName !== undefined) {
+        writeStoredUserIdentity(file, named(existing));
+      }
+      return { identity: current };
+    }
+    const replacedFile = replacedUserIdentityFile(options, current);
+    setAside(replacedFile, existing, file);
+    writeStoredUserIdentity(
+      file,
+      named({
+        ...issuerKeyRecord(imported),
+        ...(existing.ledgerWriter === undefined
+          ? {}
+          : { ledgerWriter: existing.ledgerWriter }),
+      }),
+    );
+    return { identity: imported, replacedFile };
+  });
 }
