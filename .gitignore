@@ -1,4 +1,5 @@
 node_modules/
+rust/target/
 dist/
 *.tsbuildinfo
 .DS_Store

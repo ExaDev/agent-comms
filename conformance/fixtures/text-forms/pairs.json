@@ -1,0 +1,41 @@
+{
+  "pairs": [
+    {
+      "codeUnits": [
+        97
+      ],
+      "text": "a"
+    },
+    {
+      "codeUnits": [],
+      "text": ""
+    },
+    {
+      "codeUnits": [
+        233
+      ],
+      "text": "é"
+    },
+    {
+      "codeUnits": [
+        55357,
+        56832
+      ],
+      "text": "😀"
+    },
+    {
+      "codeUnits": [
+        0,
+        31,
+        127
+      ],
+      "text": "\u0000\u001f"
+    },
+    {
+      "codeUnits": [
+        65535
+      ],
+      "text": "￿"
+    }
+  ]
+}

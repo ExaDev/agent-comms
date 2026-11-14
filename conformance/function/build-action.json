@@ -1,0 +1,3507 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "action": "register",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "register",
+        "name": "n",
+        "tags": [
+          "t"
+        ],
+        "visibility": "visible"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "register-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "register"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "register-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"name\" for action \"register\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "update",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "update",
+        "name": "n",
+        "status": "busy",
+        "tags": [
+          "t"
+        ],
+        "visibility": "visible"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "update-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "update"
+        }
+      ],
+      "expect": {
+        "action": "update"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "update-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "whoami",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "whoami"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "whoami-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "whoami"
+        }
+      ],
+      "expect": {
+        "action": "whoami"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "whoami-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "web_url",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "web_url"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "web-url-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "web_url"
+        }
+      ],
+      "expect": {
+        "action": "web_url"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "web-url-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "create_room",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "create_room",
+        "description": "d",
+        "name": "r",
+        "type": "private"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "create-room-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "create_room"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "create-room-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"room\" for action \"create_room\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "list_rooms",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "list_rooms"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "list-rooms-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "list_rooms"
+        }
+      ],
+      "expect": {
+        "action": "list_rooms"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "list-rooms-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "join_room",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "join_room",
+        "room": "r"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "join-room-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "join_room"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "join-room-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"room\" for action \"join_room\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "leave_room",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "leave_room",
+        "room": "r"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "leave-room-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "leave_room"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "leave-room-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"room\" for action \"leave_room\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "send",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "send",
+        "content": "c",
+        "replyTo": "rt",
+        "target": "tg"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "send-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "send"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "send-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"content\" for action \"send\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "dm",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "dm",
+        "content": "c",
+        "target": "tg"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "dm-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "dm"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "dm-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"content\" for action \"dm\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "list_agents",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "list_agents"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "list-agents-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "list_agents"
+        }
+      ],
+      "expect": {
+        "action": "list_agents"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "list-agents-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "read_room",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "read_room",
+        "room": "r",
+        "since": "s"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "read-room-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "read_room"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "read-room-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"room\" for action \"read_room\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "invite",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "invite",
+        "agent": "ag",
+        "room": "r"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "invite-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "invite"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "invite-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"room\" for action \"invite\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "decline_invite",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "decline_invite",
+        "reason": "why",
+        "room": "r"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "decline-invite-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "decline_invite"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "decline-invite-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"room\" for action \"decline_invite\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "kick",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "kick",
+        "agent": "ag",
+        "room": "r"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "kick-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "kick"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "kick-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"room\" for action \"kick\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "destroy_room",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "destroy_room",
+        "room": "r"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "destroy-room-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "destroy_room"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "destroy-room-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"room\" for action \"destroy_room\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_connect",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_connect",
+        "host": "h",
+        "policy": "p",
+        "port": 7
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-connect-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_connect"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-connect-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"host\" for action \"mesh_connect\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_accept",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_accept",
+        "connectionId": "cn"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-accept-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_accept"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-accept-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"connectionId\" for action \"mesh_accept\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_reject",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_reject",
+        "connectionId": "cn",
+        "reason": "why"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-reject-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_reject"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-reject-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"connectionId\" for action \"mesh_reject\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_pending",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_pending"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-pending-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_pending"
+        }
+      ],
+      "expect": {
+        "action": "mesh_pending"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-pending-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "room_accept",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "room_accept",
+        "requesterId": "rq",
+        "room": "r"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "room-accept-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "room_accept"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "room-accept-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"room\" for action \"room_accept\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "room_reject",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "room_reject",
+        "reason": "why",
+        "requesterId": "rq",
+        "room": "r"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "room-reject-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "room_reject"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "room-reject-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"room\" for action \"room_reject\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "room_pending",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "room_pending"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "room-pending-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "room_pending"
+        }
+      ],
+      "expect": {
+        "action": "room_pending"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "room-pending-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "capability_accept",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "capability_accept",
+        "capability": "cap",
+        "delegationsRemaining": 1,
+        "expires": 9,
+        "requestId": "rid"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "capability-accept-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "capability_accept"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "capability-accept-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"requestId\" for action \"capability_accept\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "capability_reject",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "capability_reject",
+        "reason": "why",
+        "requestId": "rid"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "capability-reject-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "capability_reject"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "capability-reject-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"requestId\" for action \"capability_reject\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "capability_pending",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "capability_pending"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "capability-pending-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "capability_pending"
+        }
+      ],
+      "expect": {
+        "action": "capability_pending"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "capability-pending-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_discover",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_discover",
+        "method": "m"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-discover-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_discover"
+        }
+      ],
+      "expect": {
+        "action": "mesh_discover"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-discover-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_advertise",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_advertise",
+        "adapter": "ad",
+        "method": "m",
+        "name": "n",
+        "port": 7
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-advertise-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_advertise"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-advertise-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"name\" for action \"mesh_advertise\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_unadvertise",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_unadvertise",
+        "id": "i"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-unadvertise-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_unadvertise"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-unadvertise-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"id\" for action \"mesh_unadvertise\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_interfaces",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_interfaces"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-interfaces-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_interfaces"
+        }
+      ],
+      "expect": {
+        "action": "mesh_interfaces"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-interfaces-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "lan_web_uis",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "whoami"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "lan-web-uis-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "lan_web_uis"
+        }
+      ],
+      "expect": {
+        "action": "whoami"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "lan-web-uis-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_listen",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_listen",
+        "host": "h",
+        "policy": "p",
+        "port": 7
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-listen-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_listen"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-listen-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"host\" for action \"mesh_listen\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_unlisten",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_unlisten",
+        "id": "i"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-unlisten-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_unlisten"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-unlisten-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"id\" for action \"mesh_unlisten\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_listeners",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_listeners"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-listeners-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_listeners"
+        }
+      ],
+      "expect": {
+        "action": "mesh_listeners"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-listeners-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_set_visibility",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_set_visibility",
+        "adapter": "ad",
+        "visibility": "quiet"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-set-visibility-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_set_visibility"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-set-visibility-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"meshVisibility\" for action \"mesh_set_visibility\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_get_visibility",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_get_visibility"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-get-visibility-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_get_visibility"
+        }
+      ],
+      "expect": {
+        "action": "mesh_get_visibility"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-get-visibility-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "gateway_trust",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "gateway_trust",
+        "device": "dv"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "gateway-trust-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "gateway_trust"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "gateway-trust-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"device\" for action \"gateway_trust\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "gateway_untrust",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "gateway_untrust",
+        "device": "dv"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "gateway-untrust-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "gateway_untrust"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "gateway-untrust-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"device\" for action \"gateway_untrust\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "gateway_list_trusted",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "gateway_list_trusted"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "gateway-list-trusted-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "gateway_list_trusted"
+        }
+      ],
+      "expect": {
+        "action": "gateway_list_trusted"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "gateway-list-trusted-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "petname_set",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "petname_set",
+        "device": "dv",
+        "name": "n"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "petname-set-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "petname_set"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "petname-set-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"device\" for action \"petname_set\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "petname_clear",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "petname_clear",
+        "device": "dv"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "petname-clear-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "petname_clear"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "petname-clear-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"device\" for action \"petname_clear\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "petname_list",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "petname_list"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "petname-list-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "petname_list"
+        }
+      ],
+      "expect": {
+        "action": "petname_list"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "petname-list-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "machine_name",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "machine_name",
+        "name": "n"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "machine-name-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "machine_name"
+        }
+      ],
+      "expect": {
+        "action": "machine_name"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "machine-name-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "principal_name",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "principal_name",
+        "name": "n"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "principal-name-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "principal_name"
+        }
+      ],
+      "expect": {
+        "action": "principal_name"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "principal-name-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "dm_admit",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "dm_admit",
+        "target": "tg"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "dm-admit-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "dm_admit"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "dm-admit-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"target\" for action \"dm_admit\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "dm_use_grant",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "dm_use_grant",
+        "grant": "g",
+        "target": "tg"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "dm-use-grant-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "dm_use_grant"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "dm-use-grant-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"target\" for action \"dm_use_grant\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "dm_revoke",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "dm_revoke",
+        "target": "tg"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "dm-revoke-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "dm_revoke"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "dm-revoke-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"target\" for action \"dm_revoke\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "gateway_generate_connection_code",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "gateway_generate_connection_code",
+        "ttlMs": 5
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "gateway-generate-connection-code-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "gateway_generate_connection_code"
+        }
+      ],
+      "expect": {
+        "action": "gateway_generate_connection_code"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "gateway-generate-connection-code-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "gateway_redeem_connection_code",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "gateway_redeem_connection_code",
+        "code": "cd",
+        "device": "dv",
+        "expiresAt": "2030-01-01T00:00:00Z",
+        "fingerprint": "fp",
+        "signature": "sig"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "gateway-redeem-connection-code-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "gateway_redeem_connection_code"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "gateway-redeem-connection-code-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"code\" for action \"gateway_redeem_connection_code\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "query_version",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "query_version",
+        "device": "dv"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "query-version-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "query_version"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "query-version-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"device\" for action \"query_version\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_graph",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_graph"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-graph-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_graph"
+        }
+      ],
+      "expect": {
+        "action": "mesh_graph"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-graph-with-no-fields",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_trace",
+          "adapter": "ad",
+          "agent": "ag",
+          "capability": "cap",
+          "code": "cd",
+          "connectionId": "cn",
+          "content": "c",
+          "delegationsRemaining": 1,
+          "description": "d",
+          "device": "dv",
+          "expires": 9,
+          "expiresAt": "2030-01-01T00:00:00Z",
+          "fingerprint": "fp",
+          "grant": "g",
+          "host": "h",
+          "id": "i",
+          "meshVisibility": "quiet",
+          "method": "m",
+          "name": "n",
+          "policy": "p",
+          "port": 7,
+          "reason": "why",
+          "replyTo": "rt",
+          "requestId": "rid",
+          "requesterId": "rq",
+          "room": "r",
+          "signature": "sig",
+          "since": "s",
+          "status": "busy",
+          "tags": [
+            "t"
+          ],
+          "target": "tg",
+          "timeoutMs": 3,
+          "ttlMs": 5,
+          "type": "private",
+          "visibility": "visible"
+        }
+      ],
+      "expect": {
+        "action": "mesh_trace",
+        "target": "tg",
+        "timeoutMs": 3
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with every optional field given)",
+      "function": "bridge.buildAction",
+      "id": "mesh-trace-with-every-field",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_trace"
+        }
+      ],
+      "from": "recorded: src/core/bridge.ts (buildAction, an action with no field but its name)",
+      "function": "bridge.buildAction",
+      "id": "mesh-trace-with-no-fields",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "Missing required field \"target\" for action \"mesh_trace\""
+        ]
+      }
+    },
+    {
+      "args": [
+        {
+          "action": "no_such_action"
+        }
+      ],
+      "expect": {
+        "action": "whoami"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, an unknown action)",
+      "function": "bridge.buildAction",
+      "id": "unknown-action-falls-back-to-whoami",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "action": "mesh_listen",
+          "host": "h",
+          "port": "7"
+        }
+      ],
+      "expect": {
+        "action": "whoami"
+      },
+      "from": "recorded: src/core/bridge.ts (buildAction, a parameter of the wrong type)",
+      "function": "bridge.buildAction",
+      "id": "wrong-type-falls-back-to-whoami",
+      "kind": "function"
+    }
+  ]
+}

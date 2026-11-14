@@ -1,0 +1,10 @@
+[package]
+name = "platform-gated-member"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# A crate that exists in the graph only for another platform: cargo-deny checks every platform, so it must be
+# allowed, and a graph read for the host alone does not see it.
+[target.'cfg(windows)'.dev-dependencies]
+cfg-if = "1"

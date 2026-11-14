@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "codeUnits": [
+            97
+          ],
+          "extra": 1
+        }
+      ],
+      "expect": 2,
+      "from": "example.test.ts: group > test",
+      "function": "module.helper",
+      "id": "a",
+      "kind": "function"
+    }
+  ]
+}

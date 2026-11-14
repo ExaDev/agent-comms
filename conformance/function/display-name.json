@@ -1,0 +1,203 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "petname": "work laptop",
+          "selfName": "joe-mbp"
+        }
+      ],
+      "expect": "work laptop \"joe-mbp\" 0123456789ab",
+      "from": "display-name.unit.test.ts: formatDisplayName > puts the petname first, then the self-asserted name quoted, then the short id",
+      "function": "display-name.formatDisplayName",
+      "id": "format-display-name-petname-first",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "selfName": "joe-mbp"
+        }
+      ],
+      "expect": "\"joe-mbp\" 0123456789ab",
+      "from": "display-name.unit.test.ts: formatDisplayName > shows the self-asserted name and short id when the viewer has no petname",
+      "function": "display-name.formatDisplayName",
+      "id": "format-display-name-self-name-and-short-id",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        }
+      ],
+      "expect": "0123456789ab",
+      "from": "display-name.unit.test.ts: formatDisplayName > falls back to the short id alone when nothing is named",
+      "function": "display-name.formatDisplayName",
+      "id": "format-display-name-short-id-alone",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "petname": "joe-mbp",
+          "selfName": "joe-mbp"
+        }
+      ],
+      "expect": "joe-mbp 0123456789ab",
+      "from": "display-name.unit.test.ts: formatDisplayName > does not repeat a self-asserted name that only echoes the petname",
+      "function": "display-name.formatDisplayName",
+      "id": "format-display-name-echo-not-repeated",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "selfName": "x\" boss-laptop \"y"
+        }
+      ],
+      "expect": "\"x\\\" boss-laptop \\\"y\" 0123456789ab",
+      "from": "display-name.unit.test.ts: formatDisplayName > escapes a quote in a self-asserted name, so it cannot close the quotes and pass the rest off as an unquoted label",
+      "function": "display-name.formatDisplayName",
+      "id": "format-display-name-quote-escaped",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "petname": "evil\u001b[2J",
+          "selfName": "also\u0007evil"
+        }
+      ],
+      "expect": "0123456789ab",
+      "from": "display-name.unit.test.ts: formatDisplayName > leaves out a name parseDisplayName refuses, whichever tier it is in, so a control sequence never reaches the output",
+      "function": "display-name.formatDisplayName",
+      "id": "format-display-name-refused-names-left-out",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "selfName": "evil\u001b[2Jname"
+        }
+      ],
+      "expect": "0123456789ab",
+      "from": "display-name.unit.test.ts: formatDisplayName > leaves out a name parseDisplayName refuses, whichever tier it is in, so a control sequence never reaches the output",
+      "function": "display-name.formatDisplayName",
+      "id": "format-display-name-escape-sequence-self-name",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      ],
+      "expect": "0123456789ab",
+      "from": "display-name.unit.test.ts: formatDisplayName > shortens an id to a prefix of it",
+      "function": "display-name.shortId",
+      "id": "short-id-is-a-prefix",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "petname": "work laptop",
+          "selfName": "joe-mbp"
+        }
+      ],
+      "expect": "work laptop \"joe-mbp\"",
+      "from": "display-name.unit.test.ts: formatNames > gives the names alone, for a surface that prints the full id beside them",
+      "function": "display-name.formatNames",
+      "id": "format-names-names-alone",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        }
+      ],
+      "expect": "",
+      "from": "display-name.unit.test.ts: formatNames > is empty when nothing is named",
+      "function": "display-name.formatNames",
+      "id": "format-names-empty",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "  Joe's laptop "
+      ],
+      "expect": "Joe's laptop",
+      "from": "display-name.unit.test.ts: parseDisplayName > accepts a name and trims the space around it",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-trims",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "   "
+      ],
+      "expectUndefined": true,
+      "from": "display-name.unit.test.ts: parseDisplayName > refuses an empty name, one over the length limit, and one carrying a control sequence",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-refuses-blank",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "expectUndefined": true,
+      "from": "display-name.unit.test.ts: parseDisplayName > refuses an empty name, one over the length limit, and one carrying a control sequence",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-refuses-over-length",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "expect": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "from": "display-name.unit.test.ts: parseDisplayName > refuses an empty name, one over the length limit, and one carrying a control sequence",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-accepts-at-length-limit",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "evil\u001b[2Jname"
+      ],
+      "expectUndefined": true,
+      "from": "display-name.unit.test.ts: parseDisplayName > refuses an empty name, one over the length limit, and one carrying a control sequence",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-refuses-escape-sequence",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "tab\tname"
+      ],
+      "expectUndefined": true,
+      "from": "display-name.unit.test.ts: parseDisplayName > refuses an empty name, one over the length limit, and one carrying a control sequence",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-refuses-tab",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "c1name"
+      ],
+      "expectUndefined": true,
+      "from": "display-name.unit.test.ts: parseDisplayName > refuses an empty name, one over the length limit, and one carrying a control sequence",
+      "function": "display-name.parseDisplayName",
+      "id": "parse-display-name-refuses-c1-control",
+      "kind": "function"
+    }
+  ]
+}

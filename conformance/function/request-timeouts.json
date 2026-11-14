@@ -1,0 +1,110 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "params": {
+            "verb": "room.join"
+          },
+          "verb": "room:member"
+        },
+        4000
+      ],
+      "expect": 14000,
+      "from": "request-timeouts.unit.test.ts: manageRequestTimeoutMs > gives a room.join the approval window plus the response grace, since a human decides it",
+      "function": "request-timeouts.manageRequestTimeoutMs",
+      "id": "room-join-gets-approval-window-plus-grace",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "params": {
+            "verb": "room.send"
+          },
+          "verb": "room:member"
+        },
+        4000
+      ],
+      "expect": 15000,
+      "from": "request-timeouts.unit.test.ts: manageRequestTimeoutMs > gives every other room request the short network deadline",
+      "function": "request-timeouts.manageRequestTimeoutMs",
+      "id": "other-room-request-room-send-gets-network-deadline",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "params": {
+            "verb": "room.read"
+          },
+          "verb": "room:member"
+        },
+        4000
+      ],
+      "expect": 15000,
+      "from": "request-timeouts.unit.test.ts: manageRequestTimeoutMs > gives every other room request the short network deadline",
+      "function": "request-timeouts.manageRequestTimeoutMs",
+      "id": "other-room-request-room-read-gets-network-deadline",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "params": {
+            "verb": "room.members"
+          },
+          "verb": "room:member"
+        },
+        4000
+      ],
+      "expect": 15000,
+      "from": "request-timeouts.unit.test.ts: manageRequestTimeoutMs > gives every other room request the short network deadline",
+      "function": "request-timeouts.manageRequestTimeoutMs",
+      "id": "other-room-request-room-members-gets-network-deadline",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "params": {
+            "verb": "room.leave"
+          },
+          "verb": "room:member"
+        },
+        4000
+      ],
+      "expect": 15000,
+      "from": "request-timeouts.unit.test.ts: manageRequestTimeoutMs > gives every other room request the short network deadline",
+      "function": "request-timeouts.manageRequestTimeoutMs",
+      "id": "other-room-request-room-leave-gets-network-deadline",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "params": {},
+          "verb": "version:get"
+        },
+        4000
+      ],
+      "expect": 15000,
+      "from": "request-timeouts.unit.test.ts: manageRequestTimeoutMs > gives a command with no params the short network deadline",
+      "function": "request-timeouts.manageRequestTimeoutMs",
+      "id": "command-without-params-gets-network-deadline",
+      "kind": "function"
+    },
+    {
+      "args": [],
+      "expect": {
+        "approvalResponseGraceMs": 10000,
+        "roomJoinApprovalTimeoutMs": 300000,
+        "roomRequestTimeoutMs": 15000
+      },
+      "from": "request-timeouts.unit.test.ts: manageRequestTimeoutMs > keeps the approval window well above the network deadline at its default, so a human has real time to answer",
+      "function": "request-timeouts.constants",
+      "id": "approval-window-above-network-deadline",
+      "kind": "function"
+    }
+  ]
+}

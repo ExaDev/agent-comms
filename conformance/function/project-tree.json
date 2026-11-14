@@ -1,0 +1,586 @@
+{
+  "cases": [
+    {
+      "args": [
+        [],
+        []
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": []
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > returns empty tree for no agents and no rooms",
+      "function": "project-tree.buildProjectTree",
+      "id": "empty-tree-for-no-agents-and-no-rooms",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [],
+        [
+          {
+            "description": "Project room for /home/user/dev/my-app",
+            "id": "my-app",
+            "name": "my-app"
+          }
+        ]
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": [
+          {
+            "children": [],
+            "name": "my-app",
+            "path": "/home/user/dev/my-app",
+            "roomId": "my-app",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > shows directories from project rooms even with no agents",
+      "function": "project-tree.buildProjectTree",
+      "id": "directories-from-project-rooms-without-agents",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [],
+        [
+          {
+            "description": "General chat",
+            "id": "general"
+          }
+        ]
+      ],
+      "expect": {
+        "manualRooms": [
+          {
+            "createdAt": "",
+            "description": "General chat",
+            "id": "general",
+            "invited": [],
+            "members": [],
+            "name": "general",
+            "owner": "a1",
+            "type": "public"
+          }
+        ],
+        "roots": []
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > returns empty roots when no agents but has manual rooms",
+      "function": "project-tree.buildProjectTree",
+      "id": "manual-rooms-only",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "/Users/joe/Developer/my-app",
+            "id": "a1"
+          }
+        ],
+        []
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": [
+          {
+            "children": [
+              {
+                "agentId": "a1",
+                "cwd": "/Users/joe/Developer/my-app",
+                "name": "agent-a1",
+                "status": "active",
+                "type": "agent"
+              }
+            ],
+            "name": "my-app",
+            "path": "/Users/joe/Developer/my-app",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > places a single agent under its directory basename",
+      "function": "project-tree.buildProjectTree",
+      "id": "single-agent-under-directory-basename",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "/Users/joe/Developer/my-app",
+            "id": "a1"
+          },
+          {
+            "cwd": "/Users/joe/Developer/my-app",
+            "id": "a2"
+          }
+        ],
+        []
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": [
+          {
+            "children": [
+              {
+                "agentId": "a1",
+                "cwd": "/Users/joe/Developer/my-app",
+                "name": "agent-a1",
+                "status": "active",
+                "type": "agent"
+              },
+              {
+                "agentId": "a2",
+                "cwd": "/Users/joe/Developer/my-app",
+                "name": "agent-a2",
+                "status": "active",
+                "type": "agent"
+              }
+            ],
+            "name": "my-app",
+            "path": "/Users/joe/Developer/my-app",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > groups agents in the same directory as siblings",
+      "function": "project-tree.buildProjectTree",
+      "id": "agents-in-one-directory-are-siblings",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "/Users/joe/Developer",
+            "id": "a1"
+          },
+          {
+            "cwd": "/Users/joe/Developer/my-app",
+            "id": "a2"
+          }
+        ],
+        []
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": [
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "agentId": "a2",
+                    "cwd": "/Users/joe/Developer/my-app",
+                    "name": "agent-a2",
+                    "status": "active",
+                    "type": "agent"
+                  }
+                ],
+                "name": "my-app",
+                "path": "/Users/joe/Developer/my-app",
+                "type": "directory"
+              },
+              {
+                "agentId": "a1",
+                "cwd": "/Users/joe/Developer",
+                "name": "agent-a1",
+                "status": "active",
+                "type": "agent"
+              }
+            ],
+            "name": "Developer",
+            "path": "/Users/joe/Developer",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > creates nested directories for agents at different depths",
+      "function": "project-tree.buildProjectTree",
+      "id": "nested-directories-for-different-depths",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "/Users/joe/Developer",
+            "id": "z-agent",
+            "name": "z-agent"
+          },
+          {
+            "cwd": "/Users/joe/Developer",
+            "id": "a-agent",
+            "name": "a-agent"
+          },
+          {
+            "cwd": "/Users/joe/Developer/z-project",
+            "id": "a3"
+          },
+          {
+            "cwd": "/Users/joe/Developer/a-project",
+            "id": "a4"
+          }
+        ],
+        []
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": [
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "agentId": "a4",
+                    "cwd": "/Users/joe/Developer/a-project",
+                    "name": "agent-a4",
+                    "status": "active",
+                    "type": "agent"
+                  }
+                ],
+                "name": "a-project",
+                "path": "/Users/joe/Developer/a-project",
+                "type": "directory"
+              },
+              {
+                "children": [
+                  {
+                    "agentId": "a3",
+                    "cwd": "/Users/joe/Developer/z-project",
+                    "name": "agent-a3",
+                    "status": "active",
+                    "type": "agent"
+                  }
+                ],
+                "name": "z-project",
+                "path": "/Users/joe/Developer/z-project",
+                "type": "directory"
+              },
+              {
+                "agentId": "a-agent",
+                "cwd": "/Users/joe/Developer",
+                "name": "a-agent",
+                "status": "active",
+                "type": "agent"
+              },
+              {
+                "agentId": "z-agent",
+                "cwd": "/Users/joe/Developer",
+                "name": "z-agent",
+                "status": "active",
+                "type": "agent"
+              }
+            ],
+            "name": "Developer",
+            "path": "/Users/joe/Developer",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > sorts directories before agents, both alphabetically",
+      "function": "project-tree.buildProjectTree",
+      "id": "directories-before-agents-both-alphabetical",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "/home/user/app",
+            "id": "a1"
+          }
+        ],
+        [
+          {
+            "description": "General chat",
+            "id": "general"
+          },
+          {
+            "description": "Project room for /home/user/app",
+            "id": "app"
+          }
+        ]
+      ],
+      "expect": {
+        "manualRooms": [
+          {
+            "createdAt": "",
+            "description": "General chat",
+            "id": "general",
+            "invited": [],
+            "members": [],
+            "name": "general",
+            "owner": "a1",
+            "type": "public"
+          }
+        ],
+        "roots": [
+          {
+            "children": [
+              {
+                "agentId": "a1",
+                "cwd": "/home/user/app",
+                "name": "agent-a1",
+                "status": "active",
+                "type": "agent"
+              }
+            ],
+            "name": "app",
+            "path": "/home/user/app",
+            "roomId": "app",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > separates manual rooms from project rooms",
+      "function": "project-tree.buildProjectTree",
+      "id": "manual-rooms-separated-from-project-rooms",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "/home/user/dev/my-app",
+            "id": "a1"
+          }
+        ],
+        [
+          {
+            "description": "Project room for /home/user/dev/my-app",
+            "id": "my-app",
+            "name": "my-app"
+          }
+        ]
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": [
+          {
+            "children": [
+              {
+                "agentId": "a1",
+                "cwd": "/home/user/dev/my-app",
+                "name": "agent-a1",
+                "status": "active",
+                "type": "agent"
+              }
+            ],
+            "name": "my-app",
+            "path": "/home/user/dev/my-app",
+            "roomId": "my-app",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > attaches roomId to directory nodes with project rooms",
+      "function": "project-tree.buildProjectTree",
+      "id": "room-id-attached-to-directory-with-project-room",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "/home/user/dev/my-app",
+            "id": "a1"
+          }
+        ],
+        []
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": [
+          {
+            "children": [
+              {
+                "agentId": "a1",
+                "cwd": "/home/user/dev/my-app",
+                "name": "agent-a1",
+                "status": "active",
+                "type": "agent"
+              }
+            ],
+            "name": "my-app",
+            "path": "/home/user/dev/my-app",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > does not attach roomId when no project room matches",
+      "function": "project-tree.buildProjectTree",
+      "id": "no-room-id-without-matching-project-room",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "/Users/alice/project",
+            "id": "a1"
+          },
+          {
+            "cwd": "/Users/bob/project",
+            "id": "a2"
+          }
+        ],
+        []
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": [
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "children": [
+                      {
+                        "agentId": "a1",
+                        "cwd": "/Users/alice/project",
+                        "name": "agent-a1",
+                        "status": "active",
+                        "type": "agent"
+                      }
+                    ],
+                    "name": "project",
+                    "path": "/Users/alice/project",
+                    "type": "directory"
+                  }
+                ],
+                "name": "alice",
+                "path": "/Users/alice",
+                "type": "directory"
+              },
+              {
+                "children": [
+                  {
+                    "children": [
+                      {
+                        "agentId": "a2",
+                        "cwd": "/Users/bob/project",
+                        "name": "agent-a2",
+                        "status": "active",
+                        "type": "agent"
+                      }
+                    ],
+                    "name": "project",
+                    "path": "/Users/bob/project",
+                    "type": "directory"
+                  }
+                ],
+                "name": "bob",
+                "path": "/Users/bob",
+                "type": "directory"
+              }
+            ],
+            "name": "Users",
+            "path": "/Users",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > handles agents with no common prefix",
+      "function": "project-tree.buildProjectTree",
+      "id": "agents-with-no-common-prefix",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "/Users/joe/Developer/app1",
+            "id": "a1"
+          },
+          {
+            "cwd": "/Users/joe/Developer/app2",
+            "id": "a2"
+          }
+        ],
+        []
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": [
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "agentId": "a1",
+                    "cwd": "/Users/joe/Developer/app1",
+                    "name": "agent-a1",
+                    "status": "active",
+                    "type": "agent"
+                  }
+                ],
+                "name": "app1",
+                "path": "/Users/joe/Developer/app1",
+                "type": "directory"
+              },
+              {
+                "children": [
+                  {
+                    "agentId": "a2",
+                    "cwd": "/Users/joe/Developer/app2",
+                    "name": "agent-a2",
+                    "status": "active",
+                    "type": "agent"
+                  }
+                ],
+                "name": "app2",
+                "path": "/Users/joe/Developer/app2",
+                "type": "directory"
+              }
+            ],
+            "name": "Developer",
+            "path": "/Users/joe/Developer",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > trims common prefix shared by all agents",
+      "function": "project-tree.buildProjectTree",
+      "id": "trims-common-prefix-shared-by-all-agents",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "/a/b/c/d",
+            "id": "a1"
+          }
+        ],
+        []
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": [
+          {
+            "children": [
+              {
+                "agentId": "a1",
+                "cwd": "/a/b/c/d",
+                "name": "agent-a1",
+                "status": "active",
+                "type": "agent"
+              }
+            ],
+            "name": "d",
+            "path": "/a/b/c/d",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "project-tree.unit.test.ts: buildProjectTree > handles deeply nested paths",
+      "function": "project-tree.buildProjectTree",
+      "id": "deeply-nested-path",
+      "kind": "function"
+    }
+  ]
+}

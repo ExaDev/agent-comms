@@ -1,0 +1,14 @@
+{
+  "cases": [
+    {
+      "args": [
+        1
+      ],
+      "expect": 2,
+      "from": "example.test.ts: group > test",
+      "function": "",
+      "id": "a",
+      "kind": "function"
+    }
+  ]
+}

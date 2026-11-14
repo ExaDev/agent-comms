@@ -1,0 +1,451 @@
+{
+  "cases": [
+    {
+      "args": [
+        "",
+        null,
+        null
+      ],
+      "expect": {
+        "kind": "ignored"
+      },
+      "from": "input.unit.test.ts: parseInput > ignores empty input",
+      "function": "input.parseInput",
+      "id": "ignores-empty-input",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "   ",
+        null,
+        null
+      ],
+      "expect": {
+        "kind": "ignored"
+      },
+      "from": "input.unit.test.ts: parseInput > ignores empty input",
+      "function": "input.parseInput",
+      "id": "ignores-blank-input",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "hello",
+        null,
+        null
+      ],
+      "expect": {
+        "kind": "local",
+        "result": {
+          "text": "Join a room or select an agent first",
+          "type": "error"
+        }
+      },
+      "from": "input.unit.test.ts: parseInput > returns error for message with no current room or DM target",
+      "function": "input.parseInput",
+      "id": "no-room-or-dm-target-is-an-error",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "hello there",
+        null,
+        "agent-42"
+      ],
+      "expect": {
+        "action": {
+          "action": "dm",
+          "content": "hello there",
+          "target": "agent-42"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > returns DM action when DM target is set and no current room",
+      "function": "input.parseInput",
+      "id": "dm-target-without-room-sends-a-dm",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "hello",
+        "room-1",
+        "agent-42"
+      ],
+      "expect": {
+        "action": {
+          "action": "send",
+          "content": "hello",
+          "target": "room-1"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > prefers current room over DM target for plain text",
+      "function": "input.parseInput",
+      "id": "current-room-beats-dm-target",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "hello there",
+        "room-1",
+        null
+      ],
+      "expect": {
+        "action": {
+          "action": "send",
+          "content": "hello there",
+          "target": "room-1"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > returns send action for message in current room",
+      "function": "input.parseInput",
+      "id": "message-in-current-room-is-a-send",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/join my-room",
+        null,
+        null
+      ],
+      "expect": {
+        "action": {
+          "action": "join_room",
+          "room": "my-room"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > parses /join command",
+      "function": "input.parseInput",
+      "id": "join-command",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/join",
+        null,
+        null
+      ],
+      "expect": {
+        "kind": "local",
+        "result": {
+          "text": "Usage: /join <room>",
+          "type": "error"
+        }
+      },
+      "from": "input.unit.test.ts: parseInput > returns error for /join without room",
+      "function": "input.parseInput",
+      "id": "join-without-room-is-a-usage-error",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/leave room-1",
+        null,
+        null
+      ],
+      "expect": {
+        "action": {
+          "action": "leave_room",
+          "room": "room-1"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > parses /leave with explicit room",
+      "function": "input.parseInput",
+      "id": "leave-with-explicit-room",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/leave",
+        "current-room",
+        null
+      ],
+      "expect": {
+        "action": {
+          "action": "leave_room",
+          "room": "current-room"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > parses /leave with current room",
+      "function": "input.parseInput",
+      "id": "leave-with-current-room",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/dm agent-1 hello friend",
+        null,
+        null
+      ],
+      "expect": {
+        "action": {
+          "action": "dm",
+          "content": "hello friend",
+          "target": "agent-1"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > parses /dm command",
+      "function": "input.parseInput",
+      "id": "dm-command",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/dm",
+        null,
+        null
+      ],
+      "expect": {
+        "kind": "local",
+        "result": {
+          "text": "Usage: /dm <agent> <message>",
+          "type": "error"
+        }
+      },
+      "from": "input.unit.test.ts: parseInput > returns error for /dm without target or message",
+      "function": "input.parseInput",
+      "id": "dm-without-target-or-message-is-an-error",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/create new-room",
+        null,
+        null
+      ],
+      "expect": {
+        "action": {
+          "action": "create_room",
+          "name": "new-room",
+          "type": "public"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > parses /create command",
+      "function": "input.parseInput",
+      "id": "create-command",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/destroy old-room",
+        null,
+        null
+      ],
+      "expect": {
+        "action": {
+          "action": "destroy_room",
+          "room": "old-room"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > parses /destroy command",
+      "function": "input.parseInput",
+      "id": "destroy-command",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/rooms",
+        null,
+        null
+      ],
+      "expect": {
+        "action": {
+          "action": "list_rooms"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > parses /rooms command",
+      "function": "input.parseInput",
+      "id": "rooms-command",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/agents",
+        null,
+        null
+      ],
+      "expect": {
+        "action": {
+          "action": "list_agents"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > parses /agents command",
+      "function": "input.parseInput",
+      "id": "agents-command",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/help",
+        null,
+        null
+      ],
+      "expect": {
+        "kind": "local",
+        "result": {
+          "text": "Commands: /join, /leave, /rooms, /agents, /dm, /create, /destroy, /rename, /help",
+          "type": "help"
+        }
+      },
+      "from": "input.unit.test.ts: parseInput > parses /help command",
+      "function": "input.parseInput",
+      "id": "help-command-lists-join-dm-and-rename",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/foobar",
+        null,
+        null
+      ],
+      "expect": {
+        "kind": "local",
+        "result": {
+          "text": "Unknown command: /foobar",
+          "type": "unknown"
+        }
+      },
+      "from": "input.unit.test.ts: parseInput > returns unknown for unrecognized commands",
+      "function": "input.parseInput",
+      "id": "unknown-command-names-itself",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/rename agent-1 New Name",
+        null,
+        null
+      ],
+      "expect": {
+        "action": {
+          "action": "rename_agent",
+          "agent": "agent-1",
+          "name": "New Name"
+        },
+        "kind": "action"
+      },
+      "from": "input.unit.test.ts: parseInput > parses /rename command",
+      "function": "input.parseInput",
+      "id": "rename-command",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/rename",
+        null,
+        null
+      ],
+      "expect": {
+        "kind": "local",
+        "result": {
+          "text": "Usage: /rename <agent> <new-name>",
+          "type": "error"
+        }
+      },
+      "from": "input.unit.test.ts: parseInput > returns error for /rename without agent or name",
+      "function": "input.parseInput",
+      "id": "rename-without-agent-or-name-is-a-usage-error",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/join my-room",
+        null,
+        null
+      ],
+      "expect": {
+        "kind": "join_room",
+        "room": "my-room"
+      },
+      "from": "input.unit.test.ts: routeAction > routes join_room through local handler",
+      "function": "input.routeParsedInput",
+      "id": "routes-join-room-locally",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/leave",
+        "current-room",
+        null
+      ],
+      "expect": {
+        "kind": "leave_room"
+      },
+      "from": "input.unit.test.ts: routeAction > routes leave_room through local handler",
+      "function": "input.routeParsedInput",
+      "id": "routes-leave-room-locally",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/leave other-room",
+        "current-room",
+        null
+      ],
+      "expect": {
+        "kind": "leave_room"
+      },
+      "from": "input.unit.test.ts: routeAction > routes leave_room with explicit room through local handler",
+      "function": "input.routeParsedInput",
+      "id": "routes-leave-with-explicit-room-locally",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "hello",
+        "room-1",
+        null
+      ],
+      "expect": null,
+      "from": "input.unit.test.ts: routeAction > returns null for send action",
+      "function": "input.routeParsedInput",
+      "id": "send-action-has-no-local-route",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "hello",
+        null,
+        "agent-1"
+      ],
+      "expect": null,
+      "from": "input.unit.test.ts: routeAction > returns null for DM action",
+      "function": "input.routeParsedInput",
+      "id": "dm-action-has-no-local-route",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "/help",
+        null,
+        null
+      ],
+      "expect": null,
+      "from": "input.unit.test.ts: routeAction > returns null for local results",
+      "function": "input.routeParsedInput",
+      "id": "local-result-has-no-route",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "",
+        null,
+        null
+      ],
+      "expect": null,
+      "from": "input.unit.test.ts: routeAction > returns null for ignored input",
+      "function": "input.routeParsedInput",
+      "id": "ignored-input-has-no-route",
+      "kind": "function"
+    }
+  ]
+}

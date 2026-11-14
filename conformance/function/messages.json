@@ -1,0 +1,330 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "message": {
+            "content": "Hello world",
+            "from": "agent-1",
+            "id": "msg-1",
+            "readBy": [],
+            "room": "room-1",
+            "timestamp": "2025-05-23T14:30:45.123Z"
+          },
+          "type": "room_message"
+        },
+        "room-1"
+      ],
+      "expect": {
+        "content": "Hello world",
+        "sender": "agent-1",
+        "timestamp": "2025-05-23T14:30:45.123Z",
+        "type": "chat"
+      },
+      "from": "messages.unit.test.ts: deliveryEventToMessage > room_message > converts room_message for current room",
+      "function": "messages.deliveryEventToMessage",
+      "id": "room-message-for-current-room",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "message": {
+            "content": "Hello world",
+            "from": "agent-1",
+            "id": "msg-1",
+            "readBy": [],
+            "room": "room-1",
+            "timestamp": "2025-05-23T14:30:45.123Z"
+          },
+          "type": "room_message"
+        },
+        "other-room"
+      ],
+      "expectUndefined": true,
+      "from": "messages.unit.test.ts: deliveryEventToMessage > room_message > returns undefined for room_message in other room",
+      "function": "messages.deliveryEventToMessage",
+      "id": "room-message-in-other-room-is-dropped",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "message": {
+            "content": "Hello world",
+            "from": "agent-1",
+            "id": "msg-1",
+            "readBy": [],
+            "room": "room-1",
+            "timestamp": "2025-05-23T14:30:45.123Z"
+          },
+          "type": "room_message"
+        },
+        null
+      ],
+      "expectUndefined": true,
+      "from": "messages.unit.test.ts: deliveryEventToMessage > room_message > returns undefined for room_message with no current room",
+      "function": "messages.deliveryEventToMessage",
+      "id": "room-message-with-no-current-room-is-dropped",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "message": {
+            "content": "hey",
+            "from": "a1",
+            "id": "dm-1",
+            "readBy": [],
+            "timestamp": "2025-05-23T14:30:45Z",
+            "to": "a2"
+          },
+          "type": "dm"
+        },
+        null
+      ],
+      "expect": {
+        "content": "hey",
+        "sender": "a1",
+        "timestamp": "2025-05-23T14:30:45Z",
+        "type": "dm"
+      },
+      "from": "messages.unit.test.ts: deliveryEventToMessage > dm > converts dm regardless of current room",
+      "function": "messages.deliveryEventToMessage",
+      "id": "dm-converts-regardless-of-current-room",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agent": "a1",
+          "room": "r1",
+          "type": "member_joined"
+        },
+        "r1"
+      ],
+      "expect": {
+        "text": "a1 joined r1",
+        "type": "system"
+      },
+      "from": "messages.unit.test.ts: deliveryEventToMessage > member_joined > converts to system message",
+      "function": "messages.deliveryEventToMessage",
+      "id": "member-joined-is-a-system-message",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agent": "a1",
+          "room": "r1",
+          "type": "member_left"
+        },
+        "r1"
+      ],
+      "expect": {
+        "text": "a1 left r1",
+        "type": "system"
+      },
+      "from": "messages.unit.test.ts: deliveryEventToMessage > member_left > converts to system message",
+      "function": "messages.deliveryEventToMessage",
+      "id": "member-left-is-a-system-message",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agent": "a1",
+          "room": "r1",
+          "status": "busy",
+          "type": "member_status"
+        },
+        "r1"
+      ],
+      "expect": {
+        "text": "a1 is now busy in r1",
+        "type": "status"
+      },
+      "from": "messages.unit.test.ts: deliveryEventToMessage > member_status > converts to status message",
+      "function": "messages.deliveryEventToMessage",
+      "id": "member-status-is-a-status-message",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agent": "a1",
+          "delivery": {
+            "status": "delivered"
+          },
+          "messageId": "msg-1",
+          "type": "delivery_status"
+        },
+        null
+      ],
+      "expect": {
+        "text": "Message msg-1 delivered to a1",
+        "type": "status"
+      },
+      "from": "messages.unit.test.ts: deliveryEventToMessage > delivery_status > converts to status message",
+      "function": "messages.deliveryEventToMessage",
+      "id": "delivery-status-delivered-is-a-status-message",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agent": "a1",
+          "delivery": {
+            "reason": "timeout",
+            "status": "queued"
+          },
+          "messageId": "msg-1",
+          "type": "delivery_status"
+        },
+        null
+      ],
+      "expect": {
+        "text": "Message msg-1 queued for a1 (timeout), not yet delivered",
+        "type": "status"
+      },
+      "from": "messages.unit.test.ts: deliveryEventToMessage > delivery_status > says a queued message is not yet delivered, naming why",
+      "function": "messages.deliveryEventToMessage",
+      "id": "delivery-status-queued-says-not-yet-delivered",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "members": [
+            {
+              "id": "a1",
+              "name": "Alice",
+              "status": "active"
+            },
+            {
+              "id": "a2",
+              "name": "Bob",
+              "status": "idle"
+            }
+          ],
+          "room": "r1",
+          "type": "room_members"
+        },
+        "r1"
+      ],
+      "expect": {
+        "text": "Members: Alice (active), Bob (idle)",
+        "type": "system"
+      },
+      "from": "messages.unit.test.ts: deliveryEventToMessage > room_members > converts for current room",
+      "function": "messages.deliveryEventToMessage",
+      "id": "room-members-for-current-room",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "members": [
+            {
+              "id": "a1",
+              "name": "Alice",
+              "status": "active"
+            }
+          ],
+          "room": "r1",
+          "type": "room_members"
+        },
+        "other-room"
+      ],
+      "expectUndefined": true,
+      "from": "messages.unit.test.ts: deliveryEventToMessage > room_members > returns undefined for other room",
+      "function": "messages.deliveryEventToMessage",
+      "id": "room-members-for-other-room-is-dropped",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "from": "a1",
+          "fromCwd": "/home",
+          "fromName": "Alice",
+          "room": "r1",
+          "roomDescription": "A cool room",
+          "type": "room_invite"
+        },
+        null
+      ],
+      "expect": {
+        "text": "Alice invited you to \"r1\" — A cool room",
+        "type": "system"
+      },
+      "from": "messages.unit.test.ts: deliveryEventToMessage > room_invite > converts with description",
+      "function": "messages.deliveryEventToMessage",
+      "id": "room-invite-with-description",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "from": "a1",
+          "fromCwd": "/home",
+          "fromName": "Alice",
+          "room": "r1",
+          "roomDescription": "",
+          "type": "room_invite"
+        },
+        null
+      ],
+      "expect": {
+        "text": "Alice invited you to \"r1\"",
+        "type": "system"
+      },
+      "from": "messages.unit.test.ts: deliveryEventToMessage > room_invite > converts without description",
+      "function": "messages.deliveryEventToMessage",
+      "id": "room-invite-without-description",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "agent": "a1",
+          "agentName": "Alice",
+          "reason": "Too busy",
+          "room": "r1",
+          "type": "invite_declined"
+        },
+        null
+      ],
+      "expect": {
+        "text": "Alice declined invite to r1: \"Too busy\"",
+        "type": "system"
+      },
+      "from": "messages.unit.test.ts: deliveryEventToMessage > invite_declined > converts with reason",
+      "function": "messages.deliveryEventToMessage",
+      "id": "invite-declined-with-reason",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "content": "Hello world",
+          "from": "agent-1",
+          "id": "msg-1",
+          "readBy": [],
+          "room": "room-1",
+          "timestamp": "2025-05-23T14:30:45.123Z"
+        }
+      ],
+      "expect": {
+        "content": "Hello world",
+        "sender": "agent-1",
+        "timestamp": "2025-05-23T14:30:45.123Z",
+        "type": "chat"
+      },
+      "from": "messages.unit.test.ts: roomMessageToDisplay > converts a room message to a chat display message",
+      "function": "messages.roomMessageToDisplay",
+      "id": "room-message-to-chat-display-message",
+      "kind": "function"
+    }
+  ]
+}

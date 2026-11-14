@@ -1,0 +1,14 @@
+{
+  "files": {
+    "function/café.json": {
+      "cases": 2,
+      "only": [
+        "a"
+      ]
+    },
+    "validate/b.json": {
+      "cases": 1,
+      "only": []
+    }
+  }
+}

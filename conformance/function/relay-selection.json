@@ -1,0 +1,331 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "offers": [
+            {
+              "addresses": [
+                "wss://relay.example.net/"
+              ],
+              "deviceHex": "3333333333333333333333333333333333333333333333333333333333333333",
+              "machineLocal": false
+            },
+            {
+              "addresses": [
+                "ws://127.0.0.1:4200/",
+                "ws://10.0.0.7:4200/"
+              ],
+              "deviceHex": "2222222222222222222222222222222222222222222222222222222222222222",
+              "machineLocal": false
+            },
+            {
+              "addresses": [
+                "ws://127.0.0.1:4100/",
+                "ws://192.168.1.10:4100/"
+              ],
+              "deviceHex": "1111111111111111111111111111111111111111111111111111111111111111",
+              "machineLocal": true
+            }
+          ],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "2222222222222222222222222222222222222222222222222222222222222222",
+            "3333333333333333333333333333333333333333333333333333333333333333"
+          ]
+        }
+      ],
+      "expect": {
+        "deviceHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "tier": "machine",
+        "url": "ws://127.0.0.1:4100/"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > prefers a relay on this machine, over its loopback address",
+      "function": "relay-selection.selectRelay",
+      "id": "prefers-this-machine-over-loopback",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "offers": [
+            {
+              "addresses": [
+                "wss://relay.example.net/"
+              ],
+              "deviceHex": "3333333333333333333333333333333333333333333333333333333333333333",
+              "machineLocal": false
+            },
+            {
+              "addresses": [
+                "ws://127.0.0.1:4200/",
+                "ws://10.0.0.7:4200/"
+              ],
+              "deviceHex": "2222222222222222222222222222222222222222222222222222222222222222",
+              "machineLocal": false
+            }
+          ],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "2222222222222222222222222222222222222222222222222222222222222222",
+            "3333333333333333333333333333333333333333333333333333333333333333"
+          ]
+        }
+      ],
+      "expect": {
+        "deviceHex": "2222222222222222222222222222222222222222222222222222222222222222",
+        "tier": "lan",
+        "url": "ws://10.0.0.7:4200/"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > falls to a trusted relay on the local network next, over its private address",
+      "function": "relay-selection.selectRelay",
+      "id": "falls-to-trusted-lan-private-address",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "offers": [
+            {
+              "addresses": [
+                "wss://relay.example.net/"
+              ],
+              "deviceHex": "3333333333333333333333333333333333333333333333333333333333333333",
+              "machineLocal": false
+            }
+          ],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "2222222222222222222222222222222222222222222222222222222222222222",
+            "3333333333333333333333333333333333333333333333333333333333333333"
+          ]
+        }
+      ],
+      "expect": {
+        "deviceHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "tier": "trusted",
+        "url": "wss://relay.example.net/"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > falls to any trusted relay-offering device next",
+      "function": "relay-selection.selectRelay",
+      "id": "falls-to-any-trusted-relay",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "offers": [],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "2222222222222222222222222222222222222222222222222222222222222222",
+            "3333333333333333333333333333333333333333333333333333333333333333"
+          ]
+        }
+      ],
+      "expect": {
+        "tier": "public",
+        "url": "wss://mesh.example.com/"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > falls back to the configured public hub when no offer qualifies",
+      "function": "relay-selection.selectRelay",
+      "id": "falls-back-to-public-hub",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "offers": [
+            {
+              "addresses": [
+                "ws://192.168.1.99:4300/",
+                "wss://stranger.example.org/"
+              ],
+              "deviceHex": "4444444444444444444444444444444444444444444444444444444444444444",
+              "machineLocal": false
+            },
+            {
+              "addresses": [
+                "wss://relay.example.net/"
+              ],
+              "deviceHex": "3333333333333333333333333333333333333333333333333333333333333333",
+              "machineLocal": false
+            }
+          ],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "2222222222222222222222222222222222222222222222222222222222222222",
+            "3333333333333333333333333333333333333333333333333333333333333333"
+          ]
+        }
+      ],
+      "expect": {
+        "deviceHex": "3333333333333333333333333333333333333333333333333333333333333333",
+        "tier": "trusted",
+        "url": "wss://relay.example.net/"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > never uses an offer from an untrusted device, however well placed",
+      "function": "relay-selection.selectRelay",
+      "id": "never-uses-untrusted-offer-beside-a-trusted-one",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "offers": [
+            {
+              "addresses": [
+                "ws://192.168.1.99:4300/",
+                "wss://stranger.example.org/"
+              ],
+              "deviceHex": "4444444444444444444444444444444444444444444444444444444444444444",
+              "machineLocal": false
+            }
+          ],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "2222222222222222222222222222222222222222222222222222222222222222",
+            "3333333333333333333333333333333333333333333333333333333333333333"
+          ]
+        }
+      ],
+      "expect": {
+        "tier": "public",
+        "url": "wss://mesh.example.com/"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > never uses an offer from an untrusted device, however well placed",
+      "function": "relay-selection.selectRelay",
+      "id": "never-uses-untrusted-offer-alone",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "offers": [
+            {
+              "addresses": [
+                "ws://127.0.0.1:4400/"
+              ],
+              "deviceHex": "3333333333333333333333333333333333333333333333333333333333333333",
+              "machineLocal": false
+            }
+          ],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "2222222222222222222222222222222222222222222222222222222222222222",
+            "3333333333333333333333333333333333333333333333333333333333333333"
+          ]
+        }
+      ],
+      "expect": {
+        "tier": "public",
+        "url": "wss://mesh.example.com/"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > never reaches a device learned through a hub over a loopback address, which would only reach this machine",
+      "function": "relay-selection.selectRelay",
+      "id": "never-reaches-hub-learned-device-over-loopback",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "offers": [
+            {
+              "addresses": [
+                "ws://127.0.0.1:4100/",
+                "ws://192.168.1.10:4100/"
+              ],
+              "deviceHex": "0000000000000000000000000000000000000000000000000000000000000000",
+              "machineLocal": true
+            }
+          ],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "2222222222222222222222222222222222222222222222222222222222222222",
+            "3333333333333333333333333333333333333333333333333333333333333333"
+          ]
+        }
+      ],
+      "expect": {
+        "tier": "public",
+        "url": "wss://mesh.example.com/"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > never relays through this store's own offer",
+      "function": "relay-selection.selectRelay",
+      "id": "never-relays-through-own-offer",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "offers": [
+            {
+              "addresses": [
+                "tcp://relay.example.net:9"
+              ],
+              "deviceHex": "3333333333333333333333333333333333333333333333333333333333333333",
+              "machineLocal": false
+            }
+          ],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "2222222222222222222222222222222222222222222222222222222222222222",
+            "3333333333333333333333333333333333333333333333333333333333333333"
+          ]
+        }
+      ],
+      "expect": {
+        "tier": "public",
+        "url": "wss://mesh.example.com/"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > ignores an address that is not a ws:// or wss:// URL",
+      "function": "relay-selection.selectRelay",
+      "id": "ignores-non-websocket-address",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "offers": [
+            {
+              "addresses": [
+                "ws://127.0.0.1:4200/",
+                "ws://10.0.0.7:4200/"
+              ],
+              "deviceHex": "2222222222222222222222222222222222222222222222222222222222222222",
+              "machineLocal": false
+            },
+            {
+              "addresses": [
+                "ws://192.168.5.5:4500/"
+              ],
+              "deviceHex": "1111111111111111111111111111111111111111111111111111111111111111",
+              "machineLocal": false
+            }
+          ],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "2222222222222222222222222222222222222222222222222222222222222222",
+            "1111111111111111111111111111111111111111111111111111111111111111"
+          ]
+        }
+      ],
+      "expectSubset": {
+        "deviceHex": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > breaks a tie within a tier by lowest device-id, so every store hearing the same offers chooses alike",
+      "function": "relay-selection.selectRelay",
+      "id": "breaks-a-tie-by-lowest-device-id",
+      "kind": "function"
+    }
+  ]
+}

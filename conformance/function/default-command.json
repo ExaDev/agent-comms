@@ -1,0 +1,159 @@
+{
+  "cases": [
+    {
+      "args": [
+        [],
+        false
+      ],
+      "expect": [
+        "bridge",
+        "mcp"
+      ],
+      "from": "default-command.unit.test.ts: resolveDefaultCommand > serves the generic MCP bridge for a bare command whose stdin is not a terminal",
+      "function": "default-command.resolveDefaultCommand",
+      "id": "bare-command-without-terminal-serves-mcp",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [],
+        true
+      ],
+      "expect": [],
+      "from": "default-command.unit.test.ts: resolveDefaultCommand > leaves a bare command on a terminal to the setup default",
+      "function": "default-command.resolveDefaultCommand",
+      "id": "bare-command-on-terminal-is-setup",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "setup"
+        ],
+        false
+      ],
+      "expect": [
+        "setup"
+      ],
+      "from": "default-command.unit.test.ts: resolveDefaultCommand > returns the explicit subcommand [\"setup\"] untouched when stdin is a terminal: false",
+      "function": "default-command.resolveDefaultCommand",
+      "id": "explicit-setup-without-terminal",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "status"
+        ],
+        false
+      ],
+      "expect": [
+        "status"
+      ],
+      "from": "default-command.unit.test.ts: resolveDefaultCommand > returns the explicit subcommand [\"status\"] untouched when stdin is a terminal: false",
+      "function": "default-command.resolveDefaultCommand",
+      "id": "explicit-status-without-terminal",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "remove"
+        ],
+        false
+      ],
+      "expect": [
+        "remove"
+      ],
+      "from": "default-command.unit.test.ts: resolveDefaultCommand > returns the explicit subcommand [\"remove\"] untouched when stdin is a terminal: false",
+      "function": "default-command.resolveDefaultCommand",
+      "id": "explicit-remove-without-terminal",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "bridge",
+          "claude-code"
+        ],
+        false
+      ],
+      "expect": [
+        "bridge",
+        "claude-code"
+      ],
+      "from": "default-command.unit.test.ts: resolveDefaultCommand > returns the explicit subcommand [\"bridge\", \"claude-code\"] untouched when stdin is a terminal: false",
+      "function": "default-command.resolveDefaultCommand",
+      "id": "explicit-bridge-claude-code-without-terminal",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "bridge",
+          "mcp"
+        ],
+        false
+      ],
+      "expect": [
+        "bridge",
+        "mcp"
+      ],
+      "from": "default-command.unit.test.ts: resolveDefaultCommand > returns the explicit subcommand [\"bridge\", \"mcp\"] untouched when stdin is a terminal: false",
+      "function": "default-command.resolveDefaultCommand",
+      "id": "explicit-bridge-mcp-without-terminal",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "send",
+          "room",
+          "hello"
+        ],
+        false
+      ],
+      "expect": [
+        "send",
+        "room",
+        "hello"
+      ],
+      "from": "default-command.unit.test.ts: resolveDefaultCommand > returns the explicit subcommand [\"send\", \"room\", \"hello\"] untouched when stdin is a terminal: false",
+      "function": "default-command.resolveDefaultCommand",
+      "id": "explicit-send-room-hello-without-terminal",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "setup"
+        ],
+        true
+      ],
+      "expect": [
+        "setup"
+      ],
+      "from": "default-command.unit.test.ts: resolveDefaultCommand > returns the explicit subcommand [\"setup\"] untouched when stdin is a terminal: true",
+      "function": "default-command.resolveDefaultCommand",
+      "id": "explicit-setup-on-terminal",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          "bridge",
+          "codex"
+        ],
+        true
+      ],
+      "expect": [
+        "bridge",
+        "codex"
+      ],
+      "from": "default-command.unit.test.ts: resolveDefaultCommand > returns the explicit subcommand [\"bridge\", \"codex\"] untouched when stdin is a terminal: true",
+      "function": "default-command.resolveDefaultCommand",
+      "id": "explicit-bridge-codex-on-terminal",
+      "kind": "function"
+    }
+  ]
+}

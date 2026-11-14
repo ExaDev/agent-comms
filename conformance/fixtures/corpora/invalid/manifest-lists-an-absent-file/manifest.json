@@ -1,0 +1,18 @@
+{
+  "files": {
+    "function/a.json": {
+      "cases": 2,
+      "only": [
+        "a"
+      ]
+    },
+    "function/gone.json": {
+      "cases": 1,
+      "only": []
+    },
+    "validate/b.json": {
+      "cases": 1,
+      "only": []
+    }
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "cases": [
+    {
+      "args": [
+        {
+          "host": "localhost:19877",
+          "protocol": "http:"
+        }
+      ],
+      "expect": true,
+      "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats localhost:19877 over http: as served by a bridge",
+      "function": "served-by-bridge.isServedByBridge",
+      "id": "served-by-bridge-0",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "127.0.0.1:4000",
+          "protocol": "http:"
+        }
+      ],
+      "expect": true,
+      "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats 127.0.0.1:4000 over http: as served by a bridge",
+      "function": "served-by-bridge.isServedByBridge",
+      "id": "served-by-bridge-1",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "127.0.0.1:4000",
+          "protocol": "https:"
+        }
+      ],
+      "expect": true,
+      "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats 127.0.0.1:4000 over https: as served by a bridge",
+      "function": "served-by-bridge.isServedByBridge",
+      "id": "served-by-bridge-2",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "192.168.1.10:4000",
+          "protocol": "http:"
+        }
+      ],
+      "expect": true,
+      "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats 192.168.1.10:4000 over http: as served by a bridge",
+      "function": "served-by-bridge.isServedByBridge",
+      "id": "served-by-bridge-3",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "studio.local:4000",
+          "protocol": "http:"
+        }
+      ],
+      "expect": true,
+      "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats studio.local:4000 over http: as served by a bridge",
+      "function": "served-by-bridge.isServedByBridge",
+      "id": "served-by-bridge-4",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "exadev.github.io",
+          "protocol": "https:"
+        }
+      ],
+      "expect": false,
+      "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats exadev.github.io over https: as a standalone deployment",
+      "function": "served-by-bridge.isServedByBridge",
+      "id": "standalone-deployment-0",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "host": "mesh.exadev.io",
+          "protocol": "https:"
+        }
+      ],
+      "expect": false,
+      "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats mesh.exadev.io over https: as a standalone deployment",
+      "function": "served-by-bridge.isServedByBridge",
+      "id": "standalone-deployment-1",
+      "kind": "function"
+    }
+  ]
+}

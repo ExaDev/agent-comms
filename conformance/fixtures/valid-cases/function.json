@@ -1,0 +1,114 @@
+{
+  "cases": [
+    {
+      "args": [
+        1
+      ],
+      "expect": 2,
+      "from": "example.test.ts: group > test",
+      "function": "module.helper",
+      "id": "expect",
+      "kind": "function"
+    },
+    {
+      "args": [
+        1
+      ],
+      "expectSubset": {
+        "a": 1
+      },
+      "from": "example.test.ts: group > test",
+      "function": "module.helper",
+      "id": "subset",
+      "kind": "function"
+    },
+    {
+      "args": [
+        1
+      ],
+      "expectUndefined": true,
+      "from": "example.test.ts: group > test",
+      "function": "module.helper",
+      "id": "undefined",
+      "kind": "function"
+    },
+    {
+      "args": [
+        1
+      ],
+      "from": "example.test.ts: group > test",
+      "function": "module.helper",
+      "id": "throws",
+      "kind": "function",
+      "throws": {}
+    },
+    {
+      "args": [
+        1
+      ],
+      "from": "example.test.ts: group > test",
+      "function": "module.helper",
+      "id": "throws-message",
+      "kind": "function",
+      "throws": {
+        "code": "E",
+        "message": [
+          "a",
+          {
+            "codeUnits": [
+              98
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "args": [
+        1
+      ],
+      "expect": 2,
+      "from": "example.test.ts: group > test",
+      "function": "module.helper",
+      "id": "only",
+      "kind": "function",
+      "only": "ts",
+      "reason": "why"
+    },
+    {
+      "args": [
+        9007199254740991,
+        -9007199254740991,
+        0,
+        97,
+        {
+          "codeUnits": []
+        },
+        {
+          "codeUnits": [
+            0,
+            65535
+          ]
+        },
+        null,
+        true,
+        "",
+        [],
+        {},
+        {
+          "k": [
+            {
+              "codeUnits": [
+                55357
+              ]
+            }
+          ]
+        }
+      ],
+      "expect": 2,
+      "from": "example.test.ts: group > test",
+      "function": "module.helper",
+      "id": "bounds",
+      "kind": "function"
+    }
+  ]
+}

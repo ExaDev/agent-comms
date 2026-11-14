@@ -22,3 +22,21 @@ updates:
       day: monday
     labels:
       - dependencies
+
+  # The Rust workspace's lock file and its toolchain pin. The cargo-deny version the workflows install is outside both ecosystems, and scripts/check-tool-pins.py checks it on a schedule.
+  - package-ecosystem: cargo
+    directory: /rust
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+
+  - package-ecosystem: rust-toolchain
+    directory: /rust
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
