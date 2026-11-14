@@ -7,7 +7,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as http from "node:http";
 import * as os from "node:os";
+import * as path from "node:path";
 import WS from "ws";
+import { scratchDirectory } from "../../../../test/scratch-directory.helper.js";
+import { meshSocketProtocols } from "../pairing-protocol.js";
+import { openPairingSecret } from "../web-pairing.js";
 import {
   freeLocalPort,
   TeardownStack,
@@ -56,6 +60,7 @@ const LAN = lanAddress();
 interface Started {
   handle: WebServerHandle;
   port: number;
+  pairingDir: string;
 }
 
 /** By default the server is told it has no interface addresses of its own, so a request to this machine's LAN address is treated as coming from a remote device: the real thing needs a second machine. */
@@ -63,8 +68,13 @@ async function start(
   host: string | undefined,
   localClientAddresses: () => ReadonlySet<string> = () => new Set(),
 ): Promise<Started> {
+  const pairingDir = path.join(
+    scratchDirectory("agent-comms-lan-pairing-"),
+    "state",
+  );
   const handle = await createWebServer({
     port: 0,
+    pairingDir,
     host,
     localClientAddresses,
     coordinatorPort: await freeLocalPort(),
@@ -96,7 +106,7 @@ async function start(
   if (address === null || typeof address === "string") {
     throw new Error("expected a TCP listen address");
   }
-  return { handle, port: address.port };
+  return { handle, port: address.port, pairingDir };
 }
 
 interface Reply {
@@ -147,9 +157,14 @@ async function upgrade(
   target: string,
   port: number,
   headers: Readonly<Record<string, string>>,
+  protocols?: readonly string[],
 ): Promise<"open" | "rejected"> {
   return new Promise((resolve) => {
-    const ws = new WS(`ws://${target}:${String(port)}/ws/mesh`, { headers });
+    const ws = new WS(
+      `ws://${target}:${String(port)}/ws/mesh`,
+      protocols === undefined ? undefined : [...protocols],
+      { headers },
+    );
     ws.on("open", () => {
       ws.close();
       resolve("open");
@@ -227,10 +242,14 @@ describe("Origin check on loopback", () => {
     },
   );
 
-  it("admits the hosted dashboard's Origin from loopback", async () => {
-    const { port } = await start(undefined);
+  it("admits the hosted dashboard's Origin from loopback only with the pairing secret", async () => {
+    const { port, pairingDir } = await start(undefined);
     const hosted = { origin: HOSTED_DASHBOARD_ORIGIN };
-    expect(await upgrade("127.0.0.1", port, hosted)).toBe("open");
+    expect(await upgrade("127.0.0.1", port, hosted)).toBe("rejected");
+    const protocols = meshSocketProtocols(
+      openPairingSecret({ dir: pairingDir }).current(),
+    );
+    expect(await upgrade("127.0.0.1", port, hosted, protocols)).toBe("open");
   });
 });
 
