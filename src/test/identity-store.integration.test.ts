@@ -263,7 +263,7 @@ test("saveGroupToken persists a token, loadGroupTokens reloads it keyed by group
   loadOrCreateIdentity(slot);
   const token = await mintGroupToken("group-path-1");
 
-  saveGroupToken(slot, "group-path-1", token);
+  await saveGroupToken(slot, "group-path-1", token);
 
   expect(loadGroupTokens(slot)).toEqual({ "group-path-1": token });
   releaseIdentityLock(slot);
@@ -274,11 +274,11 @@ test("saveGroupToken overwrites only the given group path, leaving others and th
   const identity = loadOrCreateIdentity(slot);
   const tokenA = await mintGroupToken("group-a");
   const tokenB = await mintGroupToken("group-b");
-  saveGroupToken(slot, "group-a", tokenA);
-  saveGroupToken(slot, "group-b", tokenB);
+  await saveGroupToken(slot, "group-a", tokenA);
+  await saveGroupToken(slot, "group-b", tokenB);
 
   const tokenAReplacement = await mintGroupToken("group-a");
-  saveGroupToken(slot, "group-a", tokenAReplacement);
+  await saveGroupToken(slot, "group-a", tokenAReplacement);
 
   expect(loadGroupTokens(slot)).toEqual({
     "group-a": tokenAReplacement,
@@ -294,21 +294,19 @@ test("deleteGroupToken removes one group path's token, leaving others in place",
   loadOrCreateIdentity(slot);
   const tokenA = await mintGroupToken("group-a");
   const tokenB = await mintGroupToken("group-b");
-  saveGroupToken(slot, "group-a", tokenA);
-  saveGroupToken(slot, "group-b", tokenB);
+  await saveGroupToken(slot, "group-a", tokenA);
+  await saveGroupToken(slot, "group-b", tokenB);
 
-  deleteGroupToken(slot, "group-a");
+  await deleteGroupToken(slot, "group-a");
 
   expect(loadGroupTokens(slot)).toEqual({ "group-b": tokenB });
   releaseIdentityLock(slot);
 });
 
-test("deleteGroupToken is a no-op when nothing was saved for that group path", () => {
+test("deleteGroupToken is a no-op when nothing was saved for that group path", async () => {
   const { slot } = tempSlot("pi");
   loadOrCreateIdentity(slot);
-  expect(() => {
-    deleteGroupToken(slot, "never-saved");
-  }).not.toThrow();
+  await expect(deleteGroupToken(slot, "never-saved")).resolves.toBeUndefined();
   expect(loadGroupTokens(slot)).toEqual({});
   releaseIdentityLock(slot);
 });

@@ -28,9 +28,8 @@ import {
   isPidAlive,
   readLockPid,
   releaseLockFile,
-  sleepSync,
   tryAcquireLock,
-  withWriteLock,
+  withWriteLockAsync,
 } from "./pid-lock-file.js";
 
 /** A bridge's identity slot: one persisted identity per harness and cwd. */
@@ -247,7 +246,7 @@ export function probeSlotOwner(
 }
 
 /**
- * Loads (creating on first use) the persisted identity for a slot without taking its exclusivity lock. Throws UnusableIdentityRecordError exactly as loadOrCreateIdentity does, and the front reports it for that session without fronting it. The cc-peer front (agent-comms#157) uses this to assume a not-yet-live session's own future identity, so the device-id -- and with it every agent id, room membership, and pending delivery already addressed to it -- carries over unchanged the moment that session's own bridge starts and claims the slot for real. Callers must have already confirmed via probeSlotOwner that no live bridge currently holds the slot; re-probing atomically against a concurrent acquisition isn't possible across the two separate files (identity vs lock) this store keeps, so it's the front's own periodic re-probe, not this function, that detects and reacts to a real bridge taking over afterwards.
+ * Loads (creating on first use) the persisted identity for a slot without taking its exclusivity lock. Throws UnusableIdentityRecordError exactly as loadOrCreateIdentity does, and the front reports it for that session without fronting it. The cc-peer front (agent-comms#157) uses this to assume a not-yet-live session's own future identity, so the device-id, and with it every agent id, room membership, and pending delivery already addressed to it, carries over unchanged the moment that session's own bridge starts and claims the slot for real. Callers must have already confirmed via probeSlotOwner that no live bridge currently holds the slot; re-probing atomically against a concurrent acquisition isn't possible across the two separate files (identity vs lock) this store keeps, so it's the front's own periodic re-probe, not this function, that detects and reacts to a real bridge taking over afterwards.
  */
 export function loadIdentityForFront(
   slot: Readonly<IdentitySlot>,
@@ -287,15 +286,18 @@ function writeStoredIdentity(
   );
 }
 
-// Total time to wait for a concurrent lock holder to finish creating the slot's identity file before giving up. loadOrCreateIdentity always finishes creating the file before any other process can observe its lock as taken (tryAcquireLock is the very first thing it does), so a caller that lost that race and is left holding an ephemeral identity may still reach here before the winner's own creation (a keygen plus one atomic write) has completed -- 2s is generously above that real cost even on a loaded machine, while still bounded so a holder that crashed mid-creation doesn't wedge this call forever.
+// Total time to wait for a concurrent lock holder to finish creating the slot's identity file before giving up. loadOrCreateIdentity always finishes creating the file before any other process can observe its lock as taken (tryAcquireLock is the very first thing it does), so a caller that lost that race and is left holding an ephemeral identity may still reach here before the winner's own creation (a keygen plus one atomic write) has completed, 2s is generously above that real cost even on a loaded machine, while still bounded so a holder that crashed mid-creation doesn't wedge this call forever.
 const CONCURRENT_CREATE_WAIT_MS = 2000;
 // Poll interval while waiting -- deliberately short, since the wait is expected to resolve in low single-digit milliseconds in the overwhelmingly common case.
 const CONCURRENT_CREATE_POLL_MS = 10;
 
 /**
- * Waits briefly for the slot's identity file to appear if it doesn't exist yet but a different live process currently holds the slot's lock -- that process is, by construction, in the middle of creating it (see loadOrCreateIdentity/tryAcquireLock), so a caller racing as this slot's own loser should wait for the real winner to finish rather than fail outright. Returns once the file exists, or once the lock is no longer held by a different live process, or the wait budget runs out -- the last two signal there is genuinely nothing to wait for.
+ * Waits briefly for the slot's identity file to appear if it doesn't exist yet but a different live process currently holds the slot's lock, that process is, by construction, in the middle of creating it (see loadOrCreateIdentity/tryAcquireLock), so a caller racing as this slot's own loser should wait for the real winner to finish rather than fail outright. Returns once the file exists, or once the lock is no longer held by a different live process, or the wait budget runs out, the last two signal there is genuinely nothing to wait for.
  */
-function waitForConcurrentCreate(identityFile: string, lockFile: string): void {
+async function waitForConcurrentCreate(
+  identityFile: string,
+  lockFile: string,
+): Promise<void> {
   const deadline = Date.now() + CONCURRENT_CREATE_WAIT_MS;
   for (;;) {
     if (fs.existsSync(identityFile)) return;
@@ -305,7 +307,9 @@ function waitForConcurrentCreate(identityFile: string, lockFile: string): void {
       heldBy !== undefined && heldBy !== process.pid && isPidAlive(heldBy);
     if (!heldByDifferentLiveProcess || Date.now() >= deadline) return;
 
-    sleepSync(CONCURRENT_CREATE_POLL_MS);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, CONCURRENT_CREATE_POLL_MS);
+    });
   }
 }
 
@@ -323,11 +327,11 @@ function readTokenRecords(identityFile: string): SlotTokenRecords {
  *
  * With `requireIdentity`, throws when the slot has no identity file yet (waiting briefly for a concurrent creator first); otherwise a missing file is a no-op. Either way a file that exists but cannot be used throws UnusableIdentityRecordError and is not written.
  */
-function updateTokenRecords(
+async function updateTokenRecords(
   slot: Readonly<IdentitySlot>,
   change: (records: Readonly<SlotTokenRecords>) => SlotTokenRecords | undefined,
   requireIdentity: boolean,
-): void {
+): Promise<void> {
   const { identityFile, lockFile } = slotPaths(slot);
   const ephemeral = ephemeralTokenRecords.get(identityFile);
   if (ephemeral !== undefined) {
@@ -337,13 +341,13 @@ function updateTokenRecords(
     });
     return;
   }
-  if (requireIdentity) waitForConcurrentCreate(identityFile, lockFile);
-  withWriteLock(identityFile, () => {
+  if (requireIdentity) await waitForConcurrentCreate(identityFile, lockFile);
+  await withWriteLockAsync(identityFile, () => {
     const stored = readIssuerRecord(identityFile, isStoredIdentity);
     if (stored === undefined) {
       if (requireIdentity) {
         throw new Error(
-          `no identity persisted for this slot yet -- call loadOrCreateIdentity first (${identityFile})`,
+          `no identity persisted for this slot yet, call loadOrCreateIdentity first (${identityFile})`,
         );
       }
       return;
@@ -373,12 +377,12 @@ export function loadRoomTokens(
 /**
  * Persists a capability token for the given room path, surviving a restart the same way the identity it was minted against does. Overwrites any token already saved for that room; leaves every other room's token and the identity's own key material untouched. A slot running under an ephemeral identity keeps it in this process's memory only.
  */
-export function saveRoomToken(
+export async function saveRoomToken(
   slot: Readonly<IdentitySlot>,
   roomPath: string,
   token: CapabilityToken,
-): void {
-  updateTokenRecords(
+): Promise<void> {
+  await updateTokenRecords(
     slot,
     (records) => ({
       roomTokens: { ...records.roomTokens, [roomPath]: serializeToken(token) },
@@ -388,11 +392,11 @@ export function saveRoomToken(
 }
 
 /** Removes the persisted token for one room path, if any. A no-op if none was saved for that path. */
-export function deleteRoomToken(
+export async function deleteRoomToken(
   slot: Readonly<IdentitySlot>,
   roomPath: string,
-): void {
-  updateTokenRecords(
+): Promise<void> {
+  await updateTokenRecords(
     slot,
     (records) =>
       records.roomTokens === undefined
@@ -426,12 +430,12 @@ export function loadGroupTokens(
 /**
  * Persists this device's own group:member token for the given group path, surviving a restart the same way the identity it was minted against does. Overwrites any token already saved for that group path; leaves every other group's token and the identity's own key material untouched. The device-membership counterpart of saveRoomToken.
  */
-export function saveGroupToken(
+export async function saveGroupToken(
   slot: Readonly<IdentitySlot>,
   groupPath: string,
   token: CapabilityToken,
-): void {
-  updateTokenRecords(
+): Promise<void> {
+  await updateTokenRecords(
     slot,
     (records) => ({
       groupTokens: {
@@ -444,11 +448,11 @@ export function saveGroupToken(
 }
 
 /** Removes the persisted token for one group path, if any. A no-op if none was saved for that path. The device-membership counterpart of deleteRoomToken. */
-export function deleteGroupToken(
+export async function deleteGroupToken(
   slot: Readonly<IdentitySlot>,
   groupPath: string,
-): void {
-  updateTokenRecords(
+): Promise<void> {
+  await updateTokenRecords(
     slot,
     (records) =>
       records.groupTokens === undefined
@@ -489,13 +493,13 @@ export function loadIssuedRoomGrant(
 /**
  * Records the token-id of a room:member grant this identity has just minted for memberDeviceHex in roomPath, surviving a restart the same way roomTokens does. Overwrites any earlier record for the same (roomPath, member) pair -- a fresh join/invite always supersedes the grant it replaces, so only the current token-id is ever worth revoking.
  */
-export function saveIssuedRoomGrant(
+export async function saveIssuedRoomGrant(
   slot: Readonly<IdentitySlot>,
   roomPath: string,
   memberDeviceHex: string,
   tokenId: Uint8Array,
-): void {
-  updateTokenRecords(
+): Promise<void> {
+  await updateTokenRecords(
     slot,
     (records) => ({
       issuedGrants: {
@@ -509,13 +513,13 @@ export function saveIssuedRoomGrant(
 }
 
 /** Removes the recorded token-id for one (roomPath, member) grant, if any -- called once a kick has revoked it, so a later re-join mints and records a genuinely fresh one rather than leaving a stale entry alongside it. A no-op if none was recorded. */
-export function deleteIssuedRoomGrant(
+export async function deleteIssuedRoomGrant(
   slot: Readonly<IdentitySlot>,
   roomPath: string,
   memberDeviceHex: string,
-): void {
+): Promise<void> {
   const key = issuedGrantKey(roomPath, memberDeviceHex);
-  updateTokenRecords(
+  await updateTokenRecords(
     slot,
     (records) =>
       records.issuedGrants === undefined

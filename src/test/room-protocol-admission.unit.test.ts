@@ -33,7 +33,7 @@ describe("RoomProtocol — sendRoomRequestToMember / flushPendingRoomRequests", 
   /** flushPendingRoomRequests drops (rather than retries) any queued entry whose room this store holds no persisted token for -- so every test that expects a real retry needs one. The token's own cryptographic validity for the specific path doesn't matter here: flushPendingRoomRequests only checks presence via loadRoomTokens, never re-verifies it (that happens receiver-side). */
   async function persistToken(h: Harness, roomPath: string): Promise<void> {
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(
+    await saveRoomToken(
       { harness: "test", cwd: "room-protocol", dir: h.slotDir },
       roomPath,
       token,

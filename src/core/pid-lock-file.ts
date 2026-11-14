@@ -6,6 +6,7 @@
 
 import { randomBytes } from "node:crypto";
 import * as fs from "node:fs";
+import { CommsError } from "./store.js";
 
 /** Random bytes in each claim's content, enough that two claims never collide. */
 const CLAIM_NONCE_BYTES = 16;
@@ -114,14 +115,27 @@ export function tryAcquireLock(
   return { acquired: false, heldBy: readLockPid(lockFile) };
 }
 
-/** Total time a writer waits for another process's write to the same file to finish. A write is one small file read and one atomic rename, so this is far above its real cost, and bounded so a holder stuck inside it cannot wedge every other writer. */
-const WRITE_LOCK_WAIT_MS = 5000;
+/** Total time a writer waits for another process's write to the same file to finish. A write is one small file read and one atomic rename, so this is far above its real cost, and bounded so a holder that never releases cannot wedge every other writer. */
+export const WRITE_LOCK_WAIT_MS = 5000;
 /** Poll interval while waiting for a write lock. */
 const WRITE_LOCK_POLL_MS = 10;
 /** One Int32 element's worth of bytes: all Atomics.wait needs to block on. */
 const INT32_BYTE_LENGTH = 4;
+/** The `code` of the error thrown when a write lock stays held beyond the wait budget. */
+export const WRITE_LOCK_TIMEOUT = "WRITE_LOCK_TIMEOUT";
 
-/** Blocks this thread for `ms` milliseconds. */
+/** Thrown when the write lock of a file stays held by a live process beyond WRITE_LOCK_WAIT_MS. Nothing was written. */
+export class WriteLockTimeoutError extends CommsError {
+  constructor(public readonly file: string) {
+    super(
+      `Timed out waiting for another process to finish writing ${file}; nothing was written. If no other agent-comms process is running, remove ${writeLockFor(file)}.`,
+      WRITE_LOCK_TIMEOUT,
+    );
+    this.name = "WriteLockTimeoutError";
+  }
+}
+
+/** Blocks this thread for `ms` milliseconds. Only for callers that are themselves synchronous. */
 export function sleepSync(ms: number): void {
   Atomics.wait(
     new Int32Array(new SharedArrayBuffer(INT32_BYTE_LENGTH)),
@@ -131,24 +145,42 @@ export function sleepSync(ms: number): void {
   );
 }
 
-/** The lock file serialising writes to `file`. */
+/**
+ * The lock file serialising writes to `file`. Its name ends in `.write-lock`, which no lock file this package names for a bridge slot (`.lock`) or any other file ends in, so it cannot equal another file's name whatever the slot's working directory is called.
+ */
 export function writeLockFor(file: string): string {
-  return `${file}.write.lock`;
+  return `${file}.write-lock`;
 }
 
 /**
- * Runs `action` holding the write lock of `file`, so the read-modify-write it performs cannot interleave with another process's. The lock is not reentrant: `action` must not take the same lock again (this process would count as having left it stale). A lock left by a process that died is taken over. Throws when the lock stays held by a live process beyond the wait budget.
+ * Runs `action` holding the write lock of `file`, so the read-modify-write it performs cannot interleave with another process's. The lock is not reentrant: `action` must not take the same lock again (this process would count as having left it stale). A lock whose holder process has died is taken over (see tryAcquireLock). Throws WriteLockTimeoutError when the lock stays held by a live process beyond WRITE_LOCK_WAIT_MS. Blocks this thread while it waits, so a caller that is asynchronous uses withWriteLockAsync.
  */
 export function withWriteLock<T>(file: string, action: () => T): T {
   const lockFile = writeLockFor(file);
   const deadline = Date.now() + WRITE_LOCK_WAIT_MS;
   while (!tryAcquireLock(lockFile).acquired) {
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `timed out waiting for another process to finish writing ${file}`,
-      );
-    }
+    if (Date.now() >= deadline) throw new WriteLockTimeoutError(file);
     sleepSync(WRITE_LOCK_POLL_MS);
+  }
+  try {
+    return action();
+  } finally {
+    releaseLockFile(lockFile);
+  }
+}
+
+/** withWriteLock for an asynchronous caller: waits on timers, so the event loop keeps running while another process holds the lock. `action` is synchronous, so the lock is never held across an await. */
+export async function withWriteLockAsync<T>(
+  file: string,
+  action: () => T,
+): Promise<T> {
+  const lockFile = writeLockFor(file);
+  const deadline = Date.now() + WRITE_LOCK_WAIT_MS;
+  while (!tryAcquireLock(lockFile).acquired) {
+    if (Date.now() >= deadline) throw new WriteLockTimeoutError(file);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, WRITE_LOCK_POLL_MS);
+    });
   }
   try {
     return action();

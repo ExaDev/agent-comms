@@ -78,7 +78,7 @@ async function grantMembership(
     "expected the fixture grant to mint successfully",
   ).toBeTruthy();
   if (!verdict.ok) return;
-  saveRoomToken(memberSlot, roomPath, verdict.token);
+  await saveRoomToken(memberSlot, roomPath, verdict.token);
 }
 
 test("a directed room.send delivers to the recipient's own onDelivery", async () => {

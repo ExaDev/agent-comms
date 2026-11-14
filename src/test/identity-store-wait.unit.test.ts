@@ -66,7 +66,7 @@ describe("saveRoomToken racing a concurrent identity creation", () => {
     return dir;
   }
 
-  it("finds an identity file that appeared, with its creator already gone, between the file read and the lock read", () => {
+  it("finds an identity file that appeared, with its creator already gone, between the file read and the lock read", async () => {
     // Real identity text to "appear": made in a separate slot so nothing shares state with the slot under test.
     const sourceSlot = {
       harness: "wait",
@@ -92,7 +92,7 @@ describe("saveRoomToken racing a concurrent identity creation", () => {
       fs.writeFileSync(`${targetBase}.json`, identityText);
     };
 
-    saveRoomToken(slot, "race-room", FAKE_TOKEN);
+    await saveRoomToken(slot, "race-room", FAKE_TOKEN);
 
     expect(Object.keys(loadRoomTokens(slot))).toEqual(["race-room"]);
   });

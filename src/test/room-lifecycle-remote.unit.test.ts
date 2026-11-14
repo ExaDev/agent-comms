@@ -251,7 +251,7 @@ describe("RoomLifecycle — refreshRoomMembers", () => {
     const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
+    await saveRoomToken(slot, roomPath, token);
     h.sendRoomRequest.mockResolvedValue({
       result: "error",
       code: "not_a_member",
@@ -269,7 +269,7 @@ describe("RoomLifecycle — refreshRoomMembers", () => {
     const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
+    await saveRoomToken(slot, roomPath, token);
     h.sendRoomRequest.mockResolvedValue({
       result: "ok",
       nonsense: true,
@@ -287,7 +287,7 @@ describe("RoomLifecycle — refreshRoomMembers", () => {
     const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
+    await saveRoomToken(slot, roomPath, token);
     h.sendRoomRequest.mockResolvedValue(roomMembersOkOutcome([h.ids.ownerId]));
     await h.lifecycle.refreshRoomMembers(roomPath);
     expect(h.sendRoomRequest).toHaveBeenCalledWith(
@@ -305,7 +305,7 @@ describe("RoomLifecycle — refreshRoomMembers", () => {
     const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
+    await saveRoomToken(slot, roomPath, token);
     h.sendRoomRequest.mockResolvedValue(roomMembersOkOutcome([h.ids.ownerId]));
     const refreshed = await h.lifecycle.refreshRoomMembers(roomPath);
     expect(refreshed.version).toBe(1);
@@ -320,7 +320,7 @@ describe("RoomLifecycle — refreshRoomMembers", () => {
     h.deps.rooms.set(roomPath, room({ id: roomPath, version: 1 }));
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
+    await saveRoomToken(slot, roomPath, token);
     h.sendRoomRequest.mockResolvedValue(roomMembersOkOutcome([h.ids.ownerId]));
     const refreshed = await h.lifecycle.refreshRoomMembers(roomPath);
     expect(refreshed.version).toBe(2);
@@ -335,7 +335,7 @@ describe("RoomLifecycle — refreshRoomMembers", () => {
     );
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
+    await saveRoomToken(slot, roomPath, token);
     h.sendRoomRequest.mockResolvedValue(
       roomMembersOkOutcome([h.ids.ownerId], {
         "room-state": {
@@ -440,7 +440,7 @@ async function seedIssuedGrant(
   });
   if (!verdict.ok)
     throw new Error("expected the fixture token to mint successfully");
-  saveIssuedRoomGrant(slot, roomPath, memberId, tokenId);
+  await saveIssuedRoomGrant(slot, roomPath, memberId, tokenId);
 }
 
 describe("RoomLifecycle — revokeMemberGrant", () => {
@@ -489,7 +489,7 @@ describe("RoomLifecycle — declineInvite", () => {
     const roomPath = ownerNamedRoomPath(h.ids.memberId, "r");
     const { slot } = h.deps.requireIdentity();
     const token = await mintRoomToken(h.ids.ownerPort, h.ids.ownerId, roomPath);
-    saveRoomToken(slot, roomPath, token);
+    await saveRoomToken(slot, roomPath, token);
     h.sendRoomRequest.mockResolvedValue({
       result: "ok",
     } satisfies ManageOutcome);

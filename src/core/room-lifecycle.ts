@@ -116,7 +116,7 @@ export class RoomLifecycle {
         `MeshStore: failed to mint room owner grant for ${roomPath}: ${verdict.reason}`,
       );
     }
-    saveRoomToken(slot, roomPath, verdict.token);
+    await saveRoomToken(slot, roomPath, verdict.token);
   }
 
   async createRoom(
@@ -255,7 +255,7 @@ export class RoomLifecycle {
       parsedOutcome.data;
 
     const { slot } = this.deps.requireIdentity();
-    saveRoomToken(slot, roomPath, grantedToken);
+    await saveRoomToken(slot, roomPath, grantedToken);
 
     const members = memberList.map((member) => deviceIdToHex(member.device));
     const roomState = parseRoomStateExtension(parsedOutcome.data["room-state"]);
@@ -376,7 +376,7 @@ export class RoomLifecycle {
       );
     }
     const { slot } = this.deps.requireIdentity();
-    saveRoomToken(slot, dmPath, parsedOutcome.data["granted-token"]);
+    await saveRoomToken(slot, dmPath, parsedOutcome.data["granted-token"]);
   }
 
   /**
@@ -543,7 +543,7 @@ export class RoomLifecycle {
         "LEAVE_FAILED",
       );
     }
-    deleteRoomToken(slot, roomPath);
+    await deleteRoomToken(slot, roomPath);
     this.deps.rooms.delete(roomPath);
     this.deps.messages.delete(roomPath);
   }
@@ -598,7 +598,7 @@ export class RoomLifecycle {
         "MINT_FAILED",
       );
     }
-    saveIssuedRoomGrant(slot, roomId, targetId, tokenId);
+    await saveIssuedRoomGrant(slot, roomId, targetId, tokenId);
 
     const inviter = this.deps.agents.get(inviterId);
     const params: Record<string, unknown> = {
@@ -659,7 +659,7 @@ export class RoomLifecycle {
     });
     await revocation.record(entry, { identity });
     await this.deps.requireTransport().broadcastRevocation([entry]);
-    deleteIssuedRoomGrant(slot, roomId, memberId);
+    await deleteIssuedRoomGrant(slot, roomId, memberId);
   }
 
   /**
