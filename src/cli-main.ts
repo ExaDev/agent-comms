@@ -272,7 +272,7 @@ export function main(options: Readonly<CliOptions>): void {
       }
       rotatePairingSecret();
       console.log(
-        "The pairing secret has been replaced. Every browser paired with the hosted dashboard must pair again, from each running bridge's /pair page.",
+        "The pairing secret has been replaced. A running bridge ends the hosted dashboard's open connections within a second, and every browser paired with the hosted dashboard must pair again, from each running bridge's /pair page.",
       );
       process.exit(0);
       break;
