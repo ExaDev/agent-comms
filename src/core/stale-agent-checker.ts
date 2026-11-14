@@ -3,6 +3,7 @@
  */
 
 import type { AgentIdentity, AgentStatus, DeliveryEvent } from "./types.js";
+import { parseIsoTimestampMs } from "./iso-timestamp.js";
 import type { MeshStatePatch, PeerInfo } from "./wire-protocol.js";
 
 /** The state and collaborators StaleAgentChecker needs from MeshStore -- the core agent/delivery/peer/identity Maps it reads and mutates directly (shared references into MeshStore's own fields), plus the two DeliveryEngine operations a status change and an offline patch need to broadcast. */
@@ -84,7 +85,8 @@ export class StaleAgentChecker {
     const purgeIds: string[] = [];
     for (const [id, agent] of agents) {
       if (agent.status !== "offline") continue;
-      const startedAt = new Date(agent.startedAt).getTime();
+      // A start time that does not parse cannot show the agent is recent, so it is purged like an old one.
+      const startedAt = parseIsoTimestampMs(agent.startedAt) ?? 0;
       if (startedAt < offlineThreshold) {
         purgeIds.push(id);
       }
