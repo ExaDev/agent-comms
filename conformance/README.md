@@ -87,6 +87,29 @@ Each loader enforces these beside the schema:
 
 Every rule above has a negative fixture, and every negative fixture has a repaired twin of the same name that differs by that one defect and is valid, so a fixture cannot stay rejected for another reason: each loader asserts both. A rule about one file has a file in `fixtures/invalid-cases` (twin in `fixtures/repaired-cases`); a rule about the manifest has a file in `fixtures/manifests/invalid` (twin in `fixtures/manifests/repaired`); a rule across files, or between the corpus and its manifest, has a whole corpus root in `fixtures/corpora/invalid` (twin in `fixtures/corpora/repaired`), loaded the way the real corpus is. `fixtures/valid-cases` and `fixtures/manifests/valid` hold files every loader must accept, the bounds of every number among them. A file a loader cannot parse counts as rejected, which is how a loader meets an unpaired surrogate escape. Every real corpus file must be accepted by all of them. A rule added to the format gets a fixture and its twin in the same commit.
 
+## Tests kept in TypeScript
+
+A test in an area the corpus covers that stays a TypeScript test is listed here with the reason it cannot be a case. The areas are the modules the corpus has cases for, and a test file named after one of them, or named in this table, is held to the table in both directions with exact titles: a test with no row fails, and a row whose test does not exist fails. A title is the names of the enclosing blocks and the test's own, joined by ` > `.
+
+| File | Test | Reason |
+| --- | --- | --- |
+| `src/test/claude-command.unit.test.ts` | `hooks/drain.sh > matches the process forms the bridge matches` | `file` |
+| `src/test/error-reporting.unit.test.ts` | `createMeshErrorReporter > writes to the real process stderr by default` | `process` |
+| `src/test/version-report-actions.unit.test.ts` | `formatSelfVersionLines / formatSelfVersionSuffix > includes only the wire-mesh-core line when no cc-peer getter is wired` | `process` |
+| `src/test/version-report-actions.unit.test.ts` | `formatSelfVersionLines / formatSelfVersionSuffix > includes a cc-peer line/suffix once a getter answers one` | `process` |
+| `src/test/version-report-actions.unit.test.ts` | `formatListedAgentVersions > reads local versions for the requester's own entry, ignoring the store's peer getters` | `process` |
+| `src/bridges/user/web/test/web-access.unit.test.ts` | `generateAccessToken > generates distinct tokens` | `random` |
+| `src/bridges/user/web/test/web-access.unit.test.ts` | `generateAccessToken > generates a token that matches itself` | `random` |
+| `src/bridges/user/web/test/web-access.unit.test.ts` | `authorise > accepts this machine's own hostname as the Host` | `process` |
+| `src/test/peer-link-error.integration.test.ts` | `WireMeshTransport dial failures > a refused dial is reported as a PeerLinkError carrying ECONNREFUSED` | `socket` |
+
+The reasons:
+
+- `file`: the test reads a file of this repository, which a language-neutral case cannot name.
+- `process`: the test depends on the running process, its own package and dependency versions, its standard error or this machine's hostname.
+- `random`: the result differs on every call.
+- `socket`: the test needs a real network socket.
+
 ## Adding a case
 
 Add it to the file for the module it belongs to, with a fresh `id`, update `manifest.json`, and run the corpus (`pnpm test` runs the TypeScript runner, and `sh scripts/rust.sh test` loads and checks every file in the Rust workspace). When a behaviour changes on purpose, change the case in the same commit as the code.

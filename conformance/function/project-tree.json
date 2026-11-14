@@ -9,7 +9,7 @@
         "manualRooms": [],
         "roots": []
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > returns empty tree for no agents and no rooms",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > returns empty tree for no agents and no rooms",
       "function": "project-tree.buildProjectTree",
       "id": "empty-tree-for-no-agents-and-no-rooms",
       "kind": "function"
@@ -37,7 +37,7 @@
           }
         ]
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > shows directories from project rooms even with no agents",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > shows directories from project rooms even with no agents",
       "function": "project-tree.buildProjectTree",
       "id": "directories-from-project-rooms-without-agents",
       "kind": "function"
@@ -67,7 +67,7 @@
         ],
         "roots": []
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > returns empty roots when no agents but has manual rooms",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > returns empty roots when no agents but has manual rooms",
       "function": "project-tree.buildProjectTree",
       "id": "manual-rooms-only",
       "kind": "function"
@@ -101,7 +101,7 @@
           }
         ]
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > places a single agent under its directory basename",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > places a single agent under its directory basename",
       "function": "project-tree.buildProjectTree",
       "id": "single-agent-under-directory-basename",
       "kind": "function"
@@ -146,7 +146,7 @@
           }
         ]
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > groups agents in the same directory as siblings",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > groups agents in the same directory as siblings",
       "function": "project-tree.buildProjectTree",
       "id": "agents-in-one-directory-are-siblings",
       "kind": "function"
@@ -198,7 +198,7 @@
           }
         ]
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > creates nested directories for agents at different depths",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > creates nested directories for agents at different depths",
       "function": "project-tree.buildProjectTree",
       "id": "nested-directories-for-different-depths",
       "kind": "function"
@@ -281,7 +281,7 @@
           }
         ]
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > sorts directories before agents, both alphabetically",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > sorts directories before agents, both alphabetically",
       "function": "project-tree.buildProjectTree",
       "id": "directories-before-agents-both-alphabetical",
       "kind": "function"
@@ -336,7 +336,7 @@
           }
         ]
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > separates manual rooms from project rooms",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > separates manual rooms from project rooms",
       "function": "project-tree.buildProjectTree",
       "id": "manual-rooms-separated-from-project-rooms",
       "kind": "function"
@@ -377,7 +377,7 @@
           }
         ]
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > attaches roomId to directory nodes with project rooms",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > attaches roomId to directory nodes with project rooms",
       "function": "project-tree.buildProjectTree",
       "id": "room-id-attached-to-directory-with-project-room",
       "kind": "function"
@@ -411,7 +411,7 @@
           }
         ]
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > does not attach roomId when no project room matches",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > does not attach roomId when no project room matches",
       "function": "project-tree.buildProjectTree",
       "id": "no-room-id-without-matching-project-room",
       "kind": "function"
@@ -484,7 +484,7 @@
           }
         ]
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > handles agents with no common prefix",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > handles agents with no common prefix",
       "function": "project-tree.buildProjectTree",
       "id": "agents-with-no-common-prefix",
       "kind": "function"
@@ -543,7 +543,7 @@
           }
         ]
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > trims common prefix shared by all agents",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > trims common prefix shared by all agents",
       "function": "project-tree.buildProjectTree",
       "id": "trims-common-prefix-shared-by-all-agents",
       "kind": "function"
@@ -577,7 +577,7 @@
           }
         ]
       },
-      "from": "project-tree.unit.test.ts: buildProjectTree > handles deeply nested paths",
+      "from": "project-tree.unit.test.tsx: buildProjectTree > handles deeply nested paths",
       "function": "project-tree.buildProjectTree",
       "id": "deeply-nested-path",
       "kind": "function"
