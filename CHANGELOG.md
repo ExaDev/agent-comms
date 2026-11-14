@@ -1,3 +1,11 @@
+## [9.0.6](https://github.com/ExaDev/agent-comms/compare/v9.0.5...v9.0.6) (2026-11-14)
+
+### Tests
+
+* check the key order the corpus README states, in both loaders ([fa5ec1d](https://github.com/ExaDev/agent-comms/commit/fa5ec1d0914fa4bd32e2aeed622af70e7b291c20))
+* list the tests kept in TypeScript and hold the list to the test files ([07c81fe](https://github.com/ExaDev/agent-comms/commit/07c81fe2178591392dff0d0c4228aaeb10d1b863))
+* scope the kept tests guard by imports, bound corpus nesting and make rust.sh host-independent ([7b86542](https://github.com/ExaDev/agent-comms/commit/7b86542faccbb87c4297c3f00c8f9cd6d7bd3bdb))
+
 ## [9.0.5](https://github.com/ExaDev/agent-comms/compare/v9.0.4...v9.0.5) (2026-11-14)
 
 ### Bug Fixes
