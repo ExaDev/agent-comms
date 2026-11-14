@@ -4,6 +4,7 @@
 
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
+import { inspect } from "node:util";
 import * as path from "node:path";
 import { afterEach, expect, test } from "vitest";
 import {
@@ -168,3 +169,38 @@ test("a bridge that cannot load its identity exits with the message and no stack
   expect(stderr).toContain("does not hold a usable identity record");
   expect(stderr).not.toContain("    at ");
 });
+
+const FILE_CONTENT_MARKER = "private-key-marker-9f3a";
+
+/** Every message, stack and nested cause of an error, as one string. */
+function wholeError(err: unknown): string {
+  return inspect(err, { depth: 10, showHidden: true });
+}
+
+test.each([
+  ["text that is not JSON", `{ "privateKey": "${FILE_CONTENT_MARKER}" oops`],
+  [
+    "JSON of the wrong shape",
+    JSON.stringify({ privateKey: FILE_CONTENT_MARKER, certificate: 3 }),
+  ],
+  [
+    "a key that cannot be certified again",
+    JSON.stringify({
+      privateKey: FILE_CONTENT_MARKER,
+      certificate: FILE_CONTENT_MARKER,
+      expiresAt: new Date(0).toISOString(),
+    }),
+  ],
+])(
+  "the refusal of %s carries no part of the file, in its message or its chain",
+  (_name, content) => {
+    const { slot, file } = freshSlot();
+    overwrite(file, content);
+
+    const err = thrownBy(() => loadOrCreateIdentity(slot));
+
+    expect(err).toMatchObject({ code: UNUSABLE_CODE });
+    expect(wholeError(err)).not.toContain(FILE_CONTENT_MARKER);
+    expect(err instanceof Error ? err.cause : "x").toBeUndefined();
+  },
+);

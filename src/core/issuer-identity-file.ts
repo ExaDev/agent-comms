@@ -67,19 +67,21 @@ export class UnusableIdentityRecordError extends CommsError {
     public readonly file: string,
     /** Why it could not be used, as a short clause. */
     public readonly reason: string,
-    cause?: unknown,
   ) {
     super(
       `${file} exists but does not hold a usable identity record (${reason}). It has been left as it was. Restore it from a backup, or move it aside to start a new identity, which changes this identity's id for every peer that knows it.`,
       IDENTITY_RECORD_UNUSABLE,
     );
+    // No cause is attached and the reason is fixed text: the underlying parse and crypto errors can quote part of the file, which holds a private key, and an error is printed whole by anything that logs it.
     this.name = "UnusableIdentityRecordError";
-    if (cause !== undefined) this.cause = cause;
   }
 }
 
-function describeCause(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
+/** The errno code of a failed read, which is all of the failure that is safe to repeat: its message quotes the path and nothing of the content, but the code is what a person can act on. */
+function readFailureCode(err: unknown): string {
+  return isErrnoException(err) && typeof err.code === "string"
+    ? err.code
+    : "unknown error";
 }
 
 /** Reads the file's raw contents, or undefined if it does not exist yet. A file that exists but cannot be read (permissions, a directory in its place) is refused as unusable, never treated as absent. */
@@ -90,8 +92,7 @@ function readRawFile(file: string): string | undefined {
     if (isErrnoException(err) && err.code === "ENOENT") return undefined;
     throw new UnusableIdentityRecordError(
       file,
-      `it cannot be read: ${describeCause(err)}`,
-      err,
+      `it cannot be read (${readFailureCode(err)})`,
     );
   }
 }
@@ -113,8 +114,8 @@ function parseIssuerRecord<T>(
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch (err) {
-    throw new UnusableIdentityRecordError(file, "it is not valid JSON", err);
+  } catch {
+    throw new UnusableIdentityRecordError(file, "it is not valid JSON");
   }
   if (!guard(parsed)) {
     throw new UnusableIdentityRecordError(
@@ -167,11 +168,10 @@ function identityOfRecord(
 ): PeerIdentity {
   try {
     return issuerPeerIdentity(stored);
-  } catch (err) {
+  } catch {
     throw new UnusableIdentityRecordError(
       file,
-      `its key or certificate cannot be read: ${describeCause(err)}`,
-      err,
+      "its key or certificate cannot be read",
     );
   }
 }
@@ -195,11 +195,10 @@ function renewIfNeeded(
     let renewed: PeerIdentity;
     try {
       renewed = certifyKeyPair(current.privateKey);
-    } catch (err) {
+    } catch {
       throw new UnusableIdentityRecordError(
         file,
-        `its key cannot be certified again: ${describeCause(err)}`,
-        err,
+        "its key cannot be certified again",
       );
     }
     writeIssuerRecord(file, { ...current, ...issuerKeyRecord(renewed) });
