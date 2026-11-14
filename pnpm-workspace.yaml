@@ -13,6 +13,7 @@ minimumReleaseAgeExclude:
   - cc-peer
   - web-ui-primitives
   - trilean@1.6.2
+  - cddl.js@2.0.0
 overrides:
   "@anthropic-ai/sdk": ">=0.91.1"
   basic-ftp: ">=6.0.1"
