@@ -71,12 +71,20 @@ describe("the key-derivation parameters of an untrusted bundle", () => {
     },
   );
 
-  it("opens with lower costs that are valid, since they derive a different key and the passphrase still has to open the envelope", () => {
-    const lower = withField(bundle, { n: 2 ** LOWER_COST_LOG2 });
-    expect(() => openAccountBundle(lower, PASSPHRASE)).toThrow(
-      expect.objectContaining({ code: "WRONG_PASSPHRASE" }),
-    );
-  });
+  it.each([
+    [
+      "a lower valid cost, such as a bundle sealed by another tool",
+      { n: 2 ** LOWER_COST_LOG2 },
+    ],
+    ["a lower r", { r: 1 }],
+  ])(
+    "%s is refused as an invalid bundle, since it would not protect the passphrase",
+    (_name, changes) => {
+      expectInvalid(() =>
+        openAccountBundle(withField(bundle, changes), PASSPHRASE),
+      );
+    },
+  );
 
   it("still opens a bundle this build wrote", () => {
     expect(openAccountBundle(bundle, PASSPHRASE)).toEqual(CONTENTS);
