@@ -25,6 +25,9 @@ import {
   type Harness,
 } from "./room-protocol.helper.js";
 
+/** The latest instant a Date can hold, in milliseconds since the epoch. */
+const MAX_DATE_MS = 8_640_000_000_000_000;
+
 describe("RoomProtocol — handleRoomSend", () => {
   let h: Harness;
   let ownerNamedRoom: string;
@@ -115,6 +118,28 @@ describe("RoomProtocol — handleRoomSend", () => {
     expect(history?.[0]?.from).toBe(h.ids.memberId);
     expect(history?.[0]?.readBy).toEqual([h.ids.memberId]);
   });
+
+  it.each([Number.MAX_VALUE, -Number.MAX_VALUE, MAX_DATE_MS + 1])(
+    "returns malformed_params, not a thrown error, for a sent-at outside the range of dates: %s",
+    async (sentAt) => {
+      const token = await mintRoomToken(
+        h.ids.ownerPort,
+        h.ids.memberId,
+        ownerNamedRoom,
+      );
+      const outcome = await send(
+        {
+          verb: "room.send",
+          "message-id": SAMPLE_MESSAGE_ID,
+          "sent-at": sentAt,
+          text: "hi there",
+        },
+        token,
+      );
+      expect(outcome).toEqual({ result: "error", code: "malformed_params" });
+      expect(h.deps.messages.get(ownerNamedRoom)).toBeUndefined();
+    },
+  );
 
   it('includes replyTo only when a refs entry has relation "reply"', async () => {
     const token = await mintRoomToken(
