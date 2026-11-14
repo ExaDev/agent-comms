@@ -50,7 +50,6 @@ import {
   ACCESS_QUERY_PARAM,
   accessUrls,
   authorise,
-  HOSTED_DASHBOARD_ORIGIN,
   isHostedDashboardOrigin,
   isOwnClient,
   generateAccessToken,

@@ -20,15 +20,13 @@ import {
   createFileExclusive,
   writeFileAtomic,
 } from "../../../core/atomic-file.js";
+import { HOSTED_DASHBOARD_URL } from "./hosted-dashboard.js";
 import {
   MESH_SUBPROTOCOL,
   PAIRING_FRAGMENT_PARAM,
   PAIRING_SECRET_PATTERN,
   TICKET_SUBPROTOCOL_PREFIX,
 } from "./pairing-protocol.js";
-
-/** The origin of the hosted dashboard, and the exact address pairing opens it at: the origin and the path its deployment serves it from. The address is a constant and never taken from a request. */
-export const HOSTED_DASHBOARD_URL = "https://exadev.github.io/agent-comms/";
 
 /** The route the bridge serves its pairing page at. */
 export const PAIRING_PAGE_PATH = "/pair";

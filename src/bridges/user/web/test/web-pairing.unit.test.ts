@@ -12,9 +12,11 @@ import {
   TICKET_SUBPROTOCOL_PREFIX,
   meshSocketProtocols,
 } from "../pairing-protocol.js";
-import { HOSTED_DASHBOARD_ORIGIN } from "../web-access.js";
 import {
+  HOSTED_DASHBOARD_ORIGIN,
   HOSTED_DASHBOARD_URL,
+} from "../hosted-dashboard.js";
+import {
   PAIRING_PAGE_HEADERS,
   dashboardPairingUrl,
   openPairingSecret,
