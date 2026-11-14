@@ -1,3 +1,32 @@
+## [9.0.4](https://github.com/ExaDev/agent-comms/compare/v9.0.3...v9.0.4) (2026-11-14)
+
+### Bug Fixes
+
+* **tool:** refuse tool parameters that fail validation instead of running whoami ([23ba2cd](https://github.com/ExaDev/agent-comms/commit/23ba2cd5afffaa6613f5ee317aacceeda205a941))
+
+### Documentation
+
+* state the corpus runners without time-bound wording ([10817c8](https://github.com/ExaDev/agent-comms/commit/10817c84d66286d645add887aa1d5cd9de8b9abd))
+
+### Tests
+
+* count what the corpus runner ran, and hold the aggregate to jobs that always run ([2ff80c2](https://github.com/ExaDev/agent-comms/commit/2ff80c2652f944daf0a041fea16fad0ce774d31f))
+* let a validate case assert an issue's code and add the call table for the extension helpers ([4516a15](https://github.com/ExaDev/agent-comms/commit/4516a154236d4521f95693ad4cb45ab40a425d73))
+* make both corpus loaders refuse a byte order mark and a line terminator in from ([21ef1d9](https://github.com/ExaDev/agent-comms/commit/21ef1d9c654f30f9f6c74dc6cb76c96e4a61af9d))
+* pin UTF-16, non-finite number and extension-helper behaviour in the corpus ([665d974](https://github.com/ExaDev/agent-comms/commit/665d9741a2b5bdf26c213c071074f0b1e2d0ed2a))
+* read floats as JSON.parse does, run the pinned toolchain and hold each case to an assertion ([625ca89](https://github.com/ExaDev/agent-comms/commit/625ca8944fda5497bea42e19fc20f7eb15877083))
+* run the moved unit tests from the conformance corpus ([1a6c750](https://github.com/ExaDev/agent-comms/commit/1a6c750e2d9ffdd91404d222094f941f5875e3d6))
+
+### Build
+
+* add the Rust workspace, cargo-deny and the conformance corpus with its runners ([4b8a76f](https://github.com/ExaDev/agent-comms/commit/4b8a76f6be68eb060d68221d8b0b7fe6d9c97537))
+* deny default features, hold every allowed crate to a reason and deny clippy's defaults ([c094a72](https://github.com/ExaDev/agent-comms/commit/c094a727b7ccc4c86f38958f9c21841f446632ee))
+* name the case field skip and write non-finite numbers as $number ([ad47c82](https://github.com/ExaDev/agent-comms/commit/ad47c823c649dba73d20a2c997275dfbe3b03390))
+
+### CI
+
+* aggregate the pull request checks into a Required Checks job ([8f1f039](https://github.com/ExaDev/agent-comms/commit/8f1f039227d9ba022cf11d6f5fd131bd60cb963e))
+
 ## [9.0.3](https://github.com/ExaDev/agent-comms/compare/v9.0.2...v9.0.3) (2026-11-14)
 
 ### Bug Fixes
