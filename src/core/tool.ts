@@ -7,6 +7,7 @@
  *   3. Return the result string to the LLM
  */
 
+import type { StalledLedgerLog } from "./ledger-gaps.js";
 import { renderAgentList } from "./agent-list-format.js";
 import type { AgentDetailsExchange } from "./agent-details.js";
 import { plainNamer, type Namer, type Naming } from "./naming.js";
@@ -252,6 +253,8 @@ export interface CommsToolOptions {
   readonly getNewerVersionIfAny?: () => string | undefined;
   /** How many stored account ledger entries cannot be read, for whoami; omitted when the store has no account ledger. */
   readonly getUnreadableLedgerEntries?: () => number;
+  /** The account ledger's writer logs this side has stayed behind for several rounds, for whoami; omitted when the transport has no account ledger. */
+  readonly getStalledLedgerLogs?: () => readonly StalledLedgerLog[];
   /** Fetches a signer's armored PGP public key by fingerprint, used by gateway_redeem_connection_code when the caller supplies a fingerprint but not the key text itself. Defaults to the real keys.openpgp.org lookup (pgp-keyserver.ts); a test that would otherwise trigger real network I/O injects a fake resolver instead, the same reasoning bridge-mesh.ts's own fetchLatestVersion override already establishes for getNewerVersionIfAny above. */
   readonly fetchPgpPublicKeyByFingerprintImpl?: (
     fingerprint: string,
@@ -266,6 +269,8 @@ export class CommsTool {
   private readonly naming: Naming | undefined;
   private readonly getNewerVersionIfAny: (() => string | undefined) | undefined;
   private readonly getUnreadableLedgerEntries: (() => number) | undefined;
+  private readonly getStalledLedgerLogs:
+    (() => readonly StalledLedgerLog[]) | undefined;
   private readonly fetchPgpPublicKeyByFingerprintImpl: (
     fingerprint: string,
   ) => Promise<string>;
@@ -279,12 +284,14 @@ export class CommsTool {
       naming,
       getNewerVersionIfAny,
       getUnreadableLedgerEntries,
+      getStalledLedgerLogs,
       fetchPgpPublicKeyByFingerprintImpl = fetchPgpPublicKeyByFingerprint,
     } = options ?? {};
     this.discovery = discovery;
     this.naming = naming;
     this.getNewerVersionIfAny = getNewerVersionIfAny;
     this.getUnreadableLedgerEntries = getUnreadableLedgerEntries;
+    this.getStalledLedgerLogs = getStalledLedgerLogs;
     this.fetchPgpPublicKeyByFingerprintImpl =
       fetchPgpPublicKeyByFingerprintImpl;
   }
@@ -467,6 +474,11 @@ export class CommsTool {
     if (unreadableLedger > 0) {
       lines.push(
         `Account ledger: ${String(unreadableLedger)} unreadable entries; a grant or revocation recorded only in them is not applied here until they are repaired or replaced from another machine's replica`,
+      );
+    }
+    for (const stalled of this.getStalledLedgerLogs?.() ?? []) {
+      lines.push(
+        `Account ledger log ${stalled.log} is behind: this machine holds up to entry ${String(stalled.localHead)}, a peer announces ${String(stalled.announcedHead)}, and ${String(stalled.rounds)} rounds have passed without the missing entries arriving; a grant or a revocation in them is not applied here`,
       );
     }
     const updateAvailable = this.formatUpdateAvailableLine();

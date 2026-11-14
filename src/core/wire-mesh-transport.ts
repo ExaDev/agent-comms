@@ -240,7 +240,8 @@ export class WireMeshTransport implements MeshTransport {
   getCcPeerVersion: (() => string | undefined) | undefined;
 
   /** Answers, stores and offers this side's core/data frames: the room-notice oplog over dataStorage, and the account's replicated grant ledger (agent-comms#344). See DataFrameRouter. */
-  private readonly dataFrames: DataFrameRouter;
+  /** Public for whoami: the router knows which account ledger logs this side has stayed behind for several rounds (ledger-gaps.ts). */
+  readonly dataFrames: DataFrameRouter;
 
   /** The cross-machine trust boundary (agent-comms#156): gates outbound gossip advertisement (hasAny), inbound directory merge (bare-device trust, a principal's own device, or a verified membership proof, wired into HubSession as admitEntries), the legacy per-device frame path (isTrusted, bare-device trust only), and outbound targeted hub requests (isReachable); see GatewayTrust's own class doc. A real room-domain manage-request relayed through the hub is never gated on this at all since agent-comms#192: hub-session.ts's own dispatchHubRequest relies purely on that verb's own capability-token verification instead. Defaults to a fresh, empty (deny-all) instance when no caller wires one in, matching every existing construction site that predates this feature. */
   private readonly gatewayTrust: GatewayTrustReader;
