@@ -15,11 +15,38 @@ export const BRIDGE_PORT_COUNT = 10;
 /** How long the probe waits for one port to accept the mesh socket before it counts as not a bridge: a listener that accepts and never answers must not stall the walk over the rest of the range. A bridge answers on loopback well inside this. */
 export const BRIDGE_PROBE_TIMEOUT_MS = 1000;
 
+/** The lowest port of the range an unprivileged process may bind. */
+export const LOWEST_UNPRIVILEGED_PORT = 1024;
+
+/** The highest TCP port. */
+export const HIGHEST_PORT = 65_535;
+
+/** Thrown for a base that is not a whole number or would put a port of the range outside 1024 to 65535. */
+export class InvalidBridgePortBaseError extends Error {
+  readonly base: number;
+
+  constructor(base: number) {
+    super(
+      `Bridge port base ${String(base)} is not an integer whose ${String(BRIDGE_PORT_COUNT)} ports all lie in ${String(LOWEST_UNPRIVILEGED_PORT)} to ${String(HIGHEST_PORT)}`,
+    );
+    this.name = "InvalidBridgePortBaseError";
+    this.base = base;
+  }
+}
+
 /**
  * The ports of the range in the order both sides try them.
  * @param base - The first port; defaults to {@link BRIDGE_PORT_BASE}. Tests pass a range of their own.
+ * @throws InvalidBridgePortBaseError when `base` is not an integer or a port of the range would fall outside 1024 to 65535.
  */
 export function bridgePortRange(base: number = BRIDGE_PORT_BASE): number[] {
+  if (
+    !Number.isInteger(base) ||
+    base < LOWEST_UNPRIVILEGED_PORT ||
+    base + BRIDGE_PORT_COUNT - 1 > HIGHEST_PORT
+  ) {
+    throw new InvalidBridgePortBaseError(base);
+  }
   return Array.from({ length: BRIDGE_PORT_COUNT }, (_, index) => base + index);
 }
 
