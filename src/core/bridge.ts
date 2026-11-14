@@ -116,19 +116,39 @@ export const MCP_TOOL_PARAMS = z.object({
   /** A remote gateway's own device-id (hex), for gateway_trust/gateway_untrust, for gateway_redeem_connection_code (the code's own embedded deviceId field), and the device-id petname_set/petname_clear label. */
   device: z.string().optional(),
   /** The connection code's own nonce (gateway_redeem_connection_code). */
-  code: z.string().optional(),
+  code: z
+    .string()
+    .optional()
+    .describe(
+      "gateway_redeem_connection_code: the code's nonce. An unsigned connection code is a bearer hint, not authentication: redeeming it trusts whatever device-id its text names, whoever wrote it, so it is not a way to establish trust in a stranger. Supply publicKey or fingerprint to require a signature from a key you already trust.",
+    ),
   /** ISO-8601 expiry for gateway_generate_connection_code's ttlMs override, or the redeemed code's own expiresAt field for gateway_redeem_connection_code. */
   expiresAt: z.string().optional(),
   /** ttlMs override for gateway_generate_connection_code; defaults to DEFAULT_CONNECTION_CODE_TTL_MS when omitted. */
   ttlMs: z.number().optional(),
   /** Armored PGP private key to sign a generated code with (gateway_generate_connection_code), or armored PGP public key to verify a redeemed code's signature against (gateway_redeem_connection_code). Both are supplied per call -- agent-comms never generates, stores, or manages PGP key material itself. */
   privateKey: z.string().optional(),
-  publicKey: z.string().optional(),
+  publicKey: z
+    .string()
+    .optional()
+    .describe(
+      "gateway_redeem_connection_code: armored PGP public key to verify the code's signature against. Supplying it makes an unsigned code refused.",
+    ),
   /** Passphrase for privateKey, if it is passphrase-protected (gateway_generate_connection_code). */
   passphrase: z.string().optional(),
   /** The redeemed code's own signature field (gateway_redeem_connection_code), or a PGP fingerprint the caller already independently trusts, used either to pin a supplied publicKey or to fetch one from a keyserver when publicKey is omitted. */
-  signature: z.string().optional(),
-  fingerprint: z.string().optional(),
+  signature: z
+    .string()
+    .optional()
+    .describe(
+      "gateway_redeem_connection_code: the code's detached PGP signature, when it has one.",
+    ),
+  fingerprint: z
+    .string()
+    .optional()
+    .describe(
+      "gateway_redeem_connection_code: a PGP fingerprint you already trust. Supplying it makes an unsigned code refused, and the signing key must match it.",
+    ),
   /** For gateway_trust/gateway_untrust (and dm_admit, where `target` names it): when true, the id names a user principal (agent-comms#187) rather than a bare remote device-id (agent-comms#193). */
   principal: z.boolean().optional(),
   /** For gateway_trust/gateway_untrust: when true, the id names a machine (agent-comms#343), whose devices (every bridge one OS account runs on that host) are trusted or revoked at once. */
