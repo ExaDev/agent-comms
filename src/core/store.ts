@@ -585,6 +585,7 @@ export class FileStore implements CommsStore {
           messages.push(msg);
         }
       }
+      // Every timestamp this store writes is `new Date().toISOString()`: fixed width, UTC, millisecond precision, so UTF-16 order is chronological order (held by a test at the producer).
       messages.sort((a, b) => compareCodeUnits(a.timestamp, b.timestamp));
       return messages;
     } catch {
@@ -654,6 +655,7 @@ export class FileStore implements CommsStore {
         events.push(event);
         await fs.unlink(path.join(dir, file));
       }
+      // Same fixed timestamp form as readRoomMessages sorts on.
       events.sort((a, b) => {
         const ta =
           a.type === "room_message" || a.type === "dm"
