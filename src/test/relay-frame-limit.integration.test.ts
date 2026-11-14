@@ -18,9 +18,14 @@ const DESIGNED_LIMIT_MIB = 16;
 
 const servers: RelayServer[] = [];
 
-function collect(errors: readonly Error[]): (error: Error) => void {
-  return (error) => {
-    errors.push(error);
+/** A collector of the errors a relay reports: the list, and the handler that fills it. */
+function collector(): { errors: Error[]; onError: (error: Error) => void } {
+  const errors: Error[] = [];
+  return {
+    errors,
+    onError: (error) => {
+      errors.push(error);
+    },
   };
 }
 const sockets: WS[] = [];
@@ -73,8 +78,8 @@ async function closeCodeAfterSending(
 }
 
 it("closes a connection that sends a message one byte over the limit with the too-big status, and keeps its other connections and the listener", async () => {
-  const errors: Error[] = [];
-  const { url } = await startRelay(collect(errors));
+  const { errors, onError } = collector();
+  const { url } = await startRelay(onError);
   const bystander = await connect(url);
   const offender = await connect(url);
 
@@ -88,8 +93,8 @@ it("closes a connection that sends a message one byte over the limit with the to
 });
 
 it("does not refuse a message of exactly the limit for its size", async () => {
-  const errors: Error[] = [];
-  const { url } = await startRelay(collect(errors));
+  const { onError } = collector();
+  const { url } = await startRelay(onError);
   const socket = await connect(url);
 
   const code = await closeCodeAfterSending(socket, MAX_RELAY_FRAME_BYTES);
@@ -103,8 +108,8 @@ it("states the limit as sixteen mebibytes", () => {
 });
 
 it("settles connection accounting after an oversized message", async () => {
-  const errors: Error[] = [];
-  const { url } = await startRelay(collect(errors));
+  const { errors, onError } = collector();
+  const { url } = await startRelay(onError);
   const offender = await connect(url);
   await closeCodeAfterSending(offender, MAX_RELAY_FRAME_BYTES + 1);
 
@@ -115,8 +120,8 @@ it("settles connection accounting after an oversized message", async () => {
 });
 
 it("reports an error of its own listener through its error handler instead of throwing", async () => {
-  const errors: Error[] = [];
-  await startRelay(collect(errors));
+  const { errors, onError } = collector();
+  await startRelay(onError);
   const listener: unknown = Reflect.get(servers[0] ?? {}, "http");
   if (!(listener instanceof EventEmitter)) {
     throw new Error("the relay has no HTTP listener");
