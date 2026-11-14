@@ -1,3 +1,10 @@
+## [9.0.3](https://github.com/ExaDev/agent-comms/compare/v9.0.2...v9.0.3) (2026-11-14)
+
+### Bug Fixes
+
+* **web:** bind a bridge's web server from the port range the dashboard probes ([b4b8487](https://github.com/ExaDev/agent-comms/commit/b4b8487cb3d53bc5bfa4943eed31a7152a0105eb))
+* **web:** refuse a bridge port base that leaves the unprivileged range ([af7d837](https://github.com/ExaDev/agent-comms/commit/af7d837fb56be76b2b9c8b9021674c95276acec1))
+
 ## [9.0.2](https://github.com/ExaDev/agent-comms/compare/v9.0.1...v9.0.2) (2026-11-14)
 
 ### Tests
