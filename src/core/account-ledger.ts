@@ -5,7 +5,7 @@
  *
  * Holding a replica grants no authority: an entry is sealed under a key derived from the account key, so a replica held by anyone else is ciphertext they can neither read nor forge, and minting or revoking still needs the account's private key.
  *
- * A single entry that cannot be read never blocks the rest of the ledger. Revoking is the operation the ledger exists for, and storage can lose or damage an entry, so an unreadable entry that stopped listing and revoking would turn one damaged file into a permanent inability to revoke anything for that account. Each unreadable entry is instead skipped and reported on every read as a LedgerEntryDamagedError (to `onDamagedEntry`, stderr by default), naming its log and position: a grant recorded only in that entry is not listed, so it is not revoked until the entry is repaired or replaced from another machine's replica.
+ * A single entry that cannot be read never blocks the rest of the ledger. Revoking is the operation the ledger exists for, and storage can lose or damage an entry, so an unreadable entry that stopped listing and revoking would turn one damaged file into a permanent inability to revoke anything for that account. Each unreadable entry is instead skipped, and a skipped entry is never silent: it is reported once per ledger as a LedgerEntryDamagedError (to `onDamagedEntry`, stderr by default), naming its log and position, listed by `unreadableEntries()` for `whoami`, and counted in the result of every read that met it (`outstandingGrantsChecked` and `revocations`), so a caller that revokes can tell its outcome is incomplete. An unreadable entry may hold a grant or a revocation: a grant recorded only in it is not listed, so it is not revoked, and a revocation recorded only in it is not applied by this machine, until the entry is repaired or replaced from another machine's replica. Revocations in the readable entries are still applied, and a revocation announced over the mesh still reaches the store.
  */
 
 import {
@@ -103,7 +103,7 @@ export interface AccountLedgerDeps {
   /** Serialises every read and write of `storage` across every bridge sharing it: appends to this machine's writer log, replicated entries stored for another machine's, and every read of either. The store's writes are not atomic (a file is truncated, then written), so a read racing another bridge's write could see an empty head and treat a log as empty. */
   lock: LedgerLock;
   clock: Clock;
-  /** Called with each ledger entry that could not be read, every time a read meets it. Defaults to a line on stderr. */
+  /** Called once for each ledger entry that could not be read. Defaults to a line on stderr. */
   onDamagedEntry?: (error: LedgerEntryDamagedError) => void;
 }
 
@@ -118,7 +118,7 @@ export class LedgerEntryDamagedError extends Error {
     public readonly reason: string,
   ) {
     super(
-      `account ledger entry ${String(seq)} of writer log ${log} cannot be read (${reason}); it was skipped, so a grant recorded only in it is not listed and cannot be revoked until the entry is repaired or replaced from another machine's replica of this account`,
+      `account ledger entry ${String(seq)} of writer log ${log} cannot be read (${reason}); it was skipped, so a grant or a revocation recorded only in it is not read: such a grant is not listed or revoked, and such a revocation is not applied here, until the entry is repaired or replaced from another machine's replica of this account`,
     );
     this.name = "LedgerEntryDamagedError";
   }
@@ -141,6 +141,13 @@ export interface AccountLedgerReplica {
   ) => Promise<DataHaveFrame | DataRequestFrame | DataEntriesFrame | null>;
   /** A data-have for every account log this machine holds, to offer peers. */
   announcements: () => Promise<DataHaveFrame[]>;
+  /** The stored entries that could not be read, as far as reads so far have found. */
+  unreadableEntries: () => readonly LedgerEntryDamagedError[];
+}
+
+/** What a read of the ledger could not read: the number of stored entries that were skipped because they cannot be opened or decoded. Zero means the read was complete. */
+export interface LedgerGaps {
+  unreadable: number;
 }
 
 const versionProbeSchema = z.object({ v: z.number() });
@@ -162,6 +169,8 @@ export class AccountLedger implements AccountLedgerReplica {
   /** Where this ledger reports an entry it cannot read; also what a ledger opened for another account on the same machine is given, so the destination follows the store and not the account. */
   readonly reportDamagedEntry: (error: LedgerEntryDamagedError) => void;
   private readonly keys: AccountLedgerKeys;
+  /** Every entry a read has found unreadable, keyed by log and position, each reported once. */
+  private readonly damaged = new Map<string, LedgerEntryDamagedError>();
   private readonly revocationListeners = new Set<
     (entry: RevocationEntry) => void
   >();
@@ -231,14 +240,23 @@ export class AccountLedger implements AccountLedgerReplica {
     ]);
   }
 
-  /** Every grant of `kind` for `subjectHex` that some machine of the account recorded and none has revoked, oldest first. */
+  /** Every grant of `kind` for `subjectHex` that some machine of the account recorded and none has revoked, oldest first, among the entries that can be read. A caller that goes on to revoke uses outstandingGrantsChecked, which also says whether entries were skipped. */
   async outstandingGrants(
     kind: IssuedGrantKind,
     subjectHex: string,
   ): Promise<OutstandingGrant[]> {
+    return (await this.outstandingGrantsChecked(kind, subjectHex)).grants;
+  }
+
+  /** outstandingGrants with the number of entries the read had to skip: when it is above zero, a grant recorded only in a skipped entry is not in `grants`, and revoking `grants` does not make the subject safe. */
+  async outstandingGrantsChecked(
+    kind: IssuedGrantKind,
+    subjectHex: string,
+  ): Promise<{ grants: OutstandingGrant[] } & LedgerGaps> {
     const granted = new Map<string, OutstandingGrant>();
     const revoked = new Set<string>();
-    for (const record of await this.records()) {
+    const { records, unreadable } = await this.records();
+    for (const record of records) {
       if (record.kind !== kind || record.subject !== subjectHex) continue;
       const key = Buffer.from(record.tokenId).toString("hex");
       if (record.op === "revoke") {
@@ -250,17 +268,28 @@ export class AccountLedger implements AccountLedgerReplica {
         });
       }
     }
-    return [...granted]
-      .filter(([key]) => !revoked.has(key))
-      .map(([, grant]) => grant)
-      .sort((a, b) => a.at - b.at);
+    return {
+      grants: [...granted]
+        .filter(([key]) => !revoked.has(key))
+        .map(([, grant]) => grant)
+        .sort((a, b) => a.at - b.at),
+      unreadable,
+    };
   }
 
-  /** Every revocation entry the ledger holds, from every machine, for a RevocationView to learn at start-up. */
-  async revocations(): Promise<RevocationEntry[]> {
-    return (await this.records()).flatMap((record) =>
-      record.op === "revoke" ? [record.revocation] : [],
-    );
+  /** Every revocation entry the readable part of the ledger holds, from every machine, for a RevocationView to learn at start-up, and how many entries were skipped: a revocation recorded only in one of those is not in `entries`. */
+  async revocations(): Promise<{ entries: RevocationEntry[] } & LedgerGaps> {
+    const { records, unreadable } = await this.records();
+    return {
+      entries: records.flatMap((record) =>
+        record.op === "revoke" ? [record.revocation] : [],
+      ),
+      unreadable,
+    };
+  }
+
+  unreadableEntries(): readonly LedgerEntryDamagedError[] {
+    return [...this.damaged.values()];
   }
 
   ownsLog(peer: DeviceId): boolean {
@@ -360,7 +389,7 @@ export class AccountLedger implements AccountLedgerReplica {
     return logs;
   }
 
-  /** The record an entry holds, or undefined after reporting why it cannot be read (or, silently, for a record of a later format version). */
+  /** The record an entry holds, or undefined after noting why it cannot be read (or, silently, for a record of a later format version). */
   private decodeOrReport(
     log: DeviceId,
     seq: number,
@@ -369,7 +398,7 @@ export class AccountLedger implements AccountLedgerReplica {
     try {
       return decodeRecord(plaintext);
     } catch (err) {
-      this.reportDamaged(
+      this.noteDamaged(
         log,
         seq,
         err instanceof Error ? err.message : String(err),
@@ -378,14 +407,20 @@ export class AccountLedger implements AccountLedgerReplica {
     }
   }
 
-  private reportDamaged(log: DeviceId, seq: number, reason: string): void {
-    this.reportDamagedEntry(
-      new LedgerEntryDamagedError(deviceIdToHex(log), seq, reason),
-    );
+  /** Remembers an unreadable entry and reports it the first time it is met. */
+  private noteDamaged(log: DeviceId, seq: number, reason: string): void {
+    const hex = deviceIdToHex(log);
+    const key = `${hex}:${String(seq)}`;
+    if (this.damaged.has(key)) return;
+    const error = new LedgerEntryDamagedError(hex, seq, reason);
+    this.damaged.set(key, error);
+    this.reportDamagedEntry(error);
   }
 
-  /** Every readable record in every held writer log, in the order stored. An entry that cannot be read is reported and skipped (see the module comment for why that is not a failure). handleDataFrame and append never store one, so it means the storage was damaged outside the ledger or a holder of the account key wrote one this build cannot decode. */
-  private async records(): Promise<LedgerRecord[]> {
+  /** Every readable record in every held writer log, in the order stored, and how many entries were skipped. An entry that cannot be read is noted and skipped (see the module comment for why that is not a failure). handleDataFrame and append never store one, so it means the storage was damaged outside the ledger or a holder of the account key wrote one this build cannot decode. */
+  private async records(): Promise<
+    { records: LedgerRecord[] } & { unreadable: number }
+  > {
     const held = await this.deps.lock.run(async () =>
       Promise.all(
         (await this.heldLogs()).map(async (log) => ({
@@ -395,23 +430,36 @@ export class AccountLedger implements AccountLedgerReplica {
       ),
     );
     const records: LedgerRecord[] = [];
+    let unreadable = 0;
     for (const { log, entries } of held) {
       entries.forEach((sealed, index) => {
         const seq = index + 1;
         const plaintext = openLedgerEntry(this.keys, log, seq, sealed);
         if (plaintext === undefined) {
-          this.reportDamaged(
+          this.noteDamaged(
             log,
             seq,
             "it does not open under this account's key",
           );
+          unreadable += 1;
           return;
         }
-        const record = this.decodeOrReport(log, seq, plaintext);
+        let record: LedgerRecord | undefined;
+        try {
+          record = decodeRecord(plaintext);
+        } catch (err) {
+          this.noteDamaged(
+            log,
+            seq,
+            err instanceof Error ? err.message : String(err),
+          );
+          unreadable += 1;
+          return;
+        }
         if (record !== undefined) records.push(record);
       });
     }
-    return records;
+    return { records, unreadable };
   }
 }
 
@@ -449,8 +497,15 @@ export function followLedgerRevocations(
       }, report);
   };
   const unsubscribe = identity.accountLedger.onReplicatedRevocation(learn);
-  identity.accountLedger.revocations().then((entries) => {
+  identity.accountLedger.revocations().then(({ entries, unreadable }) => {
     entries.forEach(learn);
+    if (unreadable > 0) {
+      report(
+        new Error(
+          `${String(unreadable)} account ledger entries cannot be read, so a revocation recorded only in them is not applied on this machine until they are repaired or replaced from another machine's replica`,
+        ),
+      );
+    }
   }, report);
   return unsubscribe;
 }

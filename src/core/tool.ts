@@ -36,6 +36,7 @@ import type { CommsStore } from "./comms-store.js";
 import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import type { DiscoveryManager } from "./discovery.js";
 import { CommsError } from "./store.js";
+import type { LedgerGaps } from "./account-ledger.js";
 import { getOwnPackageVersion } from "./package-version.js";
 import { describeDeliveryFor } from "./send-outcome.js";
 import {
@@ -178,7 +179,8 @@ export interface MeshOnlyFeatures {
   removeTrustedGatewayMachine?: (deviceHex: string) => void;
   listTrustedGatewayMachines?: () => string[];
   /** Withdraws the dm:send grant issued for bearerId. */
-  revokeAgentDmAccess?: (bearerId: string) => Promise<void>;
+  revokeAgentDmAccess?: (bearerId: string) => Promise<LedgerGaps>;
+
   removeTrustedGatewayPrincipal?: (deviceHex: string) => void;
   listTrustedGatewayPrincipals?: () => string[];
   /** Devices trusted only because a trusted principal or machine vouches for them (a verified membership proof), with that issuer. */
@@ -248,6 +250,8 @@ export interface CommsToolOptions {
   readonly naming?: Naming;
   /** Returns the newest npm release known to be available, or undefined when none is known (no checker wired up, no successful check yet, or this bridge is already current). Wired at bridge construction time by a VersionDriftChecker (see version-check.ts) -- optional so every call site, and every test that has no interest in drift reporting, is unaffected. */
   readonly getNewerVersionIfAny?: () => string | undefined;
+  /** How many stored account ledger entries cannot be read, for whoami; omitted when the store has no account ledger. */
+  readonly getUnreadableLedgerEntries?: () => number;
   /** Fetches a signer's armored PGP public key by fingerprint, used by gateway_redeem_connection_code when the caller supplies a fingerprint but not the key text itself. Defaults to the real keys.openpgp.org lookup (pgp-keyserver.ts); a test that would otherwise trigger real network I/O injects a fake resolver instead, the same reasoning bridge-mesh.ts's own fetchLatestVersion override already establishes for getNewerVersionIfAny above. */
   readonly fetchPgpPublicKeyByFingerprintImpl?: (
     fingerprint: string,
@@ -261,6 +265,7 @@ export class CommsTool {
   private readonly discovery: DiscoveryManager | undefined;
   private readonly naming: Naming | undefined;
   private readonly getNewerVersionIfAny: (() => string | undefined) | undefined;
+  private readonly getUnreadableLedgerEntries: (() => number) | undefined;
   private readonly fetchPgpPublicKeyByFingerprintImpl: (
     fingerprint: string,
   ) => Promise<string>;
@@ -273,11 +278,13 @@ export class CommsTool {
       discovery,
       naming,
       getNewerVersionIfAny,
+      getUnreadableLedgerEntries,
       fetchPgpPublicKeyByFingerprintImpl = fetchPgpPublicKeyByFingerprint,
     } = options ?? {};
     this.discovery = discovery;
     this.naming = naming;
     this.getNewerVersionIfAny = getNewerVersionIfAny;
+    this.getUnreadableLedgerEntries = getUnreadableLedgerEntries;
     this.fetchPgpPublicKeyByFingerprintImpl =
       fetchPgpPublicKeyByFingerprintImpl;
   }
@@ -456,6 +463,12 @@ export class CommsTool {
     const lines = [
       `Updated: name=${agent.name}, visibility=${agent.visibility}, status=${agent.status}, version=${getOwnPackageVersion()}${formatSelfVersionSuffix(this.store.getCcPeerVersion)}`,
     ];
+    const unreadableLedger = this.getUnreadableLedgerEntries?.() ?? 0;
+    if (unreadableLedger > 0) {
+      lines.push(
+        `Account ledger: ${String(unreadableLedger)} unreadable entries; a grant or revocation recorded only in them is not applied here until they are repaired or replaced from another machine's replica`,
+      );
+    }
     const updateAvailable = this.formatUpdateAvailableLine();
     if (updateAvailable !== undefined) lines.push(updateAvailable);
     return {

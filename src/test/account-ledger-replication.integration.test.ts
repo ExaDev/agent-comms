@@ -62,7 +62,7 @@ describe("account ledger replication", () => {
       async () => (await outstandingDm(ledgerA, bearer)).length === 0,
       "A's ledger to learn B's revocation",
     );
-    expect(await ledgerA.revocations()).toHaveLength(1);
+    expect((await ledgerA.revocations()).entries).toHaveLength(1);
   });
 
   it("teaches a machine a revocation made on another through the replicated ledger alone", async () => {

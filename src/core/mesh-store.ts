@@ -40,6 +40,7 @@ import type { DeviceId } from "wire-mesh-core/generated/protocol";
 import {
   followLedgerRevocations,
   type AccountLedgerReplica,
+  type LedgerGaps,
 } from "./account-ledger.js";
 import { StaleAgentChecker } from "./stale-agent-checker.js";
 import { PeerLifecycle } from "./peer-lifecycle.js";
@@ -711,7 +712,7 @@ export class MeshStore implements CommsStore {
   }
 
   /** Revokes bearerId's own dm:send grant for real (agent-comms#162), the DM-scope counterpart to kickFromRoom. A no-op if bearerId was never admitted. Deliberately outside the CommsStore interface, like requestDmAccess above. Concrete-only -- reached directly by tests. */
-  async revokeAgentDmAccess(bearerId: string): Promise<void> {
+  async revokeAgentDmAccess(bearerId: string): Promise<LedgerGaps> {
     return this.roomLifecycle.revokeAgentDmAccess(bearerId);
   }
 

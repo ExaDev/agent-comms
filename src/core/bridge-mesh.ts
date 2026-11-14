@@ -127,6 +127,8 @@ export function createBridgeMeshSyncFromIdentity(
     discovery: store.discovery,
     naming: store.naming,
     getNewerVersionIfAny: () => versionChecker.getNewerVersionIfAny(),
+    getUnreadableLedgerEntries: () =>
+      store.accountLedger?.unreadableEntries().length ?? 0,
   });
   const revocation = createRevocationView();
   return {

@@ -127,7 +127,7 @@ describe("removeDevice", () => {
     const device = await toIdentityPort(generateIdentity());
     const clock = createSystemClock();
 
-    const entry = await removeDevice({
+    const result = await removeDevice({
       userIdentity: user,
       accountLedger: ledger,
       clock,
@@ -135,7 +135,7 @@ describe("removeDevice", () => {
       deviceId: device.deviceId,
     });
 
-    expect(entry).toEqual([]);
+    expect(result).toEqual({ entries: [], unreadable: 0 });
   });
 
   it("revokes an admitted device's own grant, records it locally, and leaves nothing outstanding in the ledger", async () => {
@@ -154,7 +154,7 @@ describe("removeDevice", () => {
     if (!admitVerdict.ok) throw new Error("expected admission to succeed");
 
     const revocation = createRevocationView();
-    const entry = await removeDevice({
+    const { entries: entry } = await removeDevice({
       userIdentity: user,
       accountLedger: ledger,
       clock,
@@ -241,7 +241,7 @@ describe("removeDevice across grants", () => {
     if (!first.ok || !second.ok) throw new Error("expected both admissions");
 
     const revocation = createRevocationView();
-    const entries = await removeDevice({
+    const { entries } = await removeDevice({
       userIdentity: user,
       accountLedger: ledger,
       clock,

@@ -116,7 +116,9 @@ test("revoking a bearer that was never admitted is a harmless no-op", async () =
   const { a, b } = await makeConnectedPair(await freeLocalPort());
 
   try {
-    await expect(b.revokeAgentDmAccess(a.peerId)).resolves.toBeUndefined();
+    await expect(b.revokeAgentDmAccess(a.peerId)).resolves.toEqual({
+      unreadable: 0,
+    });
   } finally {
     await b.shutdown();
     await a.shutdown();

@@ -127,13 +127,14 @@ describe("an unreadable entry in the account ledger", () => {
       expect(third.map((grant) => grant.tokenId)).toEqual([tokenIds[2]]);
       // A grant recorded only in the unreadable entry cannot be listed, which is why the entry is reported.
       expect(hidden).toEqual([]);
-      expect(reports.length).toBeGreaterThanOrEqual(GRANTED_ENTRIES);
+      // Three reads met the entry; it is reported once.
+      expect(reports).toHaveLength(1);
       expect(reports[0]).toBeInstanceOf(LedgerEntryDamagedError);
       expect(reports[0]).toMatchObject({
         log: deviceIdToHex(ledger.writerLog),
         seq: DAMAGED_SEQ,
       });
-      expect(reports[0]?.message).toContain("cannot be revoked");
+      expect(reports[0]?.message).toContain("is not read");
     },
   );
 
@@ -192,7 +193,7 @@ describe("an unreadable entry in the account ledger", () => {
     ]);
     await storage.set(await entryKey(storage, DAMAGED_SEQ), freshId());
 
-    const entries = await removeDevice({
+    const { entries, unreadable } = await removeDevice({
       userIdentity: await toIdentityPort(account),
       accountLedger: ledger,
       clock: createSystemClock(),
@@ -201,7 +202,8 @@ describe("an unreadable entry in the account ledger", () => {
     });
 
     expect(entries).toHaveLength(2);
-    expect(reports.length).toBeGreaterThanOrEqual(1);
+    expect(unreadable).toBe(1);
+    expect(reports).toHaveLength(1);
     expect(await ledger.outstandingGrants("device", removedHex)).toEqual([]);
   });
 });
