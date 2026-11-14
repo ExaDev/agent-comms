@@ -1,6 +1,6 @@
 # Conformance corpus
 
-Language-neutral cases that pin the behaviour of agent-comms. Every implementation (the TypeScript source today, the native Rust crates and the wasm builds as the port proceeds) runs the same cases, so a port is correct when it passes what the original passes.
+Language-neutral cases that pin the behaviour of agent-comms. Every implementation (the TypeScript source, the native Rust crates and the wasm builds) runs the same cases, so a port is correct when it passes what the original passes.
 
 ## Layout
 
@@ -30,7 +30,7 @@ Every loader applies this one rule, and each runs it over `fixtures/loader-selec
 
 ### The manifest
 
-`manifest.json` records, for every corpus file, its case count and the ids of the cases carrying `skip`, in ascending order. Every runner checks the corpus against it and fails on any difference. A runner also counts the cases it executes and the cases it skips, and asserts that the sum is the manifest's total and that every case it skips because it carries `skip` is listed in the manifest. A case that skips the other implementation is one it executes. The TypeScript runner counts the cases it registers when it collects them, so the check holds whatever the run does with the registered tests (a name filter, a bail, a retry, a shuffled order). The Rust loader executes no case yet: it skips the cases carrying `skip: rust` because they do, every other case because no native executor exists, and makes the same assertions; execution moves cases from the second kind of skip to executed and cannot lose one.
+`manifest.json` records, for every corpus file, its case count and the ids of the cases carrying `skip`, in ascending order. Every runner checks the corpus against it and fails on any difference. A runner also counts the cases it executes and the cases it skips, and asserts that the sum is the manifest's total and that every case it skips because it carries `skip` is listed in the manifest. A case that skips the other implementation is one it executes. The TypeScript runner records each case where it registers it and again where its body starts, and compares both with the manifest, so a loop that registers fewer cases than the manifest holds, or a framework that skips them, fails the check, and so does a run that selects tests by name or stops early. The Rust loader selects, validates and counts the corpus and executes no case: it counts the cases carrying `skip: rust` as skipped because they do and every other case as skipped for want of a native executor, and makes the same assertions, so a case an executor takes over moves from the second count to executed and is never lost.
 
 ## Cases
 
