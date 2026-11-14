@@ -3,7 +3,9 @@
  */
 import http from "node:http";
 import net from "node:net";
+import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import WS, { WebSocketServer } from "ws";
 import { ChatController } from "../../controller.js";
 import {
   freeLocalPort,
@@ -29,6 +31,10 @@ import {
   getWebUrlStatus,
   type WebServerHandle,
 } from "../server.js";
+import { scratchDirectory } from "../../../../test/scratch-directory.helper.js";
+import { isHelloRequest, parseHelloMessage } from "../pairing-protocol.js";
+import { openPairingSecret } from "../web-pairing.js";
+import { computeProof } from "../web-pairing-exchange.js";
 import {
   startTestBridge,
   startTestStore,
@@ -344,9 +350,13 @@ describe("the dashboard's probe", () => {
     });
     await holdForeignHttpServer(base + 1);
 
-    expect(await isBridgeAt(base, SILENT_PROBE_TIMEOUT_MS)).toBe(false);
+    expect(await isBridgeAt(base, { timeoutMs: SILENT_PROBE_TIMEOUT_MS })).toBe(
+      false,
+    );
     expect(accepted).toHaveLength(1);
-    expect(await isBridgeAt(base + 1, SILENT_PROBE_TIMEOUT_MS)).toBe(false);
+    expect(
+      await isBridgeAt(base + 1, { timeoutMs: SILENT_PROBE_TIMEOUT_MS }),
+    ).toBe(false);
   });
 
   it("walks past a silent listener and a foreign server to the bridge behind them", async () => {
@@ -378,5 +388,248 @@ describe("the dashboard's probe", () => {
     );
 
     expect(found).toEqual([]);
+  });
+});
+
+/** How long a probe that must reach a real bridge through a silent listener waits at each port: long enough for three small frames and two HMACs on a loaded host. */
+const PAIRED_PROBE_TIMEOUT_MS = 500;
+const NONCE_HEX_LENGTH = 64;
+const WRONG_SECRET = "0".repeat(NONCE_HEX_LENGTH);
+
+/** What a listener on a port of the range received from the dashboard. */
+interface Received {
+  /** The subprotocols offered in the upgrade. */
+  protocols: string[];
+  /** Every message, as text. */
+  frames: string[];
+  /** The request path of the upgrade. */
+  path: string;
+}
+
+/**
+ * A WebSocket server that completes the upgrade for any path and any offered subprotocol, as a process that squats a port of the range would, and answers each message with `answer`. Everything it receives is recorded. Stopped by `cleanups`.
+ */
+async function holdForeignWebSocketServer(
+  port: number,
+  answer: (text: string, socket: WS) => void,
+): Promise<Received> {
+  const received: Received = { protocols: [], frames: [], path: "" };
+  const server = new WebSocketServer({
+    port,
+    host: "127.0.0.1",
+    handleProtocols: (protocols) => [...protocols][0] ?? false,
+  });
+  await new Promise<void>((resolve) => {
+    server.once("listening", () => {
+      resolve();
+    });
+  });
+  server.on("connection", (socket, request) => {
+    received.path = request.url ?? "";
+    received.protocols.push(
+      ...(request.headers["sec-websocket-protocol"] ?? "")
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== ""),
+    );
+    socket.on("message", (data) => {
+      const text = data.toString();
+      received.frames.push(text);
+      answer(text, socket);
+    });
+  });
+  cleanups.push(async () => {
+    for (const client of server.clients) client.terminate();
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+  });
+  return received;
+}
+
+async function startPairedBridge(
+  base: number,
+): Promise<{ handle: WebServerHandle; secret: string }> {
+  const pairingDir = path.join(
+    scratchDirectory("agent-comms-probe-pairing-"),
+    "state",
+  );
+  const handle = await createWebServer({
+    bridgePortBase: base,
+    pairingDir,
+    existingController: await startTestController(),
+  });
+  cleanups.push(async () => stopWebServer(handle));
+  return { handle, secret: openPairingSecret({ dir: pairingDir }).current() };
+}
+
+describe("the dashboard's probe of a paired browser", () => {
+  it("takes a bridge that holds its secret for the bridge, and one that holds another for none", async () => {
+    const { handle, secret } = await startPairedBridge(testBridgePortBase());
+    const port = heldPort(handle);
+
+    expect(await isBridgeAt(port, { pairingSecret: secret })).toBe(true);
+    expect(await isBridgeAt(port, { pairingSecret: WRONG_SECRET })).toBe(false);
+  });
+
+  it("finds the bridge past a foreign WebSocket server that completes the upgrade, which receives one nonce and not the secret", async () => {
+    const base = testBridgePortBase();
+    const foreign = await holdForeignWebSocketServer(base, () => undefined);
+    const { handle, secret } = await startPairedBridge(base + 1);
+    const found: string[] = [];
+
+    await probeForBridge(
+      (meshUrl) => {
+        found.push(meshUrl);
+      },
+      { base, timeoutMs: PAIRED_PROBE_TIMEOUT_MS, pairingSecret: secret },
+    );
+
+    expect(found).toEqual([bridgeMeshUrl(heldPort(handle))]);
+    expect(foreign.protocols).toEqual([]);
+    expect(foreign.frames).toHaveLength(1);
+    expect(isHelloRequest(parseHelloMessage(foreign.frames[0] ?? ""))).toBe(
+      true,
+    );
+    expect(JSON.stringify(foreign)).not.toContain(secret);
+  });
+
+  it.each([
+    ["says nothing", () => undefined],
+    [
+      "answers text that is not JSON",
+      (_: string, socket: WS) => {
+        socket.send("hello there");
+      },
+    ],
+    [
+      "answers a ticket at once",
+      (_: string, socket: WS) => {
+        socket.send(
+          JSON.stringify({
+            type: "ticket",
+            ticket: "a".repeat(NONCE_HEX_LENGTH),
+          }),
+        );
+      },
+    ],
+    [
+      "answers with a proof it made up",
+      (text: string, socket: WS) => {
+        const hello = parseHelloMessage(text);
+        if (!isHelloRequest(hello)) return;
+        socket.send(
+          JSON.stringify({
+            type: "hello-ok",
+            nonce: "c".repeat(NONCE_HEX_LENGTH),
+            proof: "d".repeat(NONCE_HEX_LENGTH),
+          }),
+        );
+      },
+    ],
+  ])(
+    "does not take a foreign WebSocket server that %s for a bridge, and sends it nothing more",
+    async (_name, answer) => {
+      const base = testBridgePortBase();
+      const foreign = await holdForeignWebSocketServer(base, answer);
+      const { secret } = await startPairedBridge(base + 1);
+
+      expect(
+        await isBridgeAt(base, {
+          pairingSecret: secret,
+          timeoutMs: SILENT_PROBE_TIMEOUT_MS,
+        }),
+      ).toBe(false);
+      expect(foreign.frames).toHaveLength(1);
+      expect(JSON.stringify(foreign)).not.toContain(secret);
+    },
+  );
+
+  it("does not take a listener that holds another secret for a bridge", async () => {
+    const base = testBridgePortBase();
+    const { secret } = await startPairedBridge(base + 1);
+    const foreign = await holdForeignWebSocketServer(base, (text, socket) => {
+      const hello = parseHelloMessage(text);
+      if (!isHelloRequest(hello)) return;
+      const nonce = "e".repeat(NONCE_HEX_LENGTH);
+      socket.send(
+        JSON.stringify({
+          type: "hello-ok",
+          nonce,
+          proof: computeProof(WRONG_SECRET, {
+            role: "bridge",
+            clientNonce: hello.nonce,
+            bridgeNonce: nonce,
+            port: base,
+          }),
+        }),
+      );
+    });
+
+    expect(
+      await isBridgeAt(base, {
+        pairingSecret: secret,
+        timeoutMs: SILENT_PROBE_TIMEOUT_MS,
+      }),
+    ).toBe(false);
+    expect(foreign.frames).toHaveLength(1);
+  });
+
+  it("does not take a listener that relays the real bridge's answer from another port for a bridge", async () => {
+    const base = testBridgePortBase();
+    const { handle, secret } = await startPairedBridge(base + 1);
+    const realPort = heldPort(handle);
+    const foreign = await holdForeignWebSocketServer(base, (text, socket) => {
+      const upstream = new WS(`ws://127.0.0.1:${String(realPort)}/ws/hello`);
+      upstream.on("open", () => {
+        upstream.send(text);
+      });
+      upstream.on("message", (data) => {
+        socket.send(String(data));
+      });
+      upstream.on("error", () => undefined);
+    });
+
+    expect(
+      await isBridgeAt(base, {
+        pairingSecret: secret,
+        timeoutMs: SILENT_PROBE_TIMEOUT_MS,
+      }),
+    ).toBe(false);
+    expect(foreign.frames).toHaveLength(1);
+  });
+
+  it("does not take a listener on the same port that replays an answer recorded from an earlier exchange for a bridge", async () => {
+    const { handle, secret } = await startPairedBridge(testBridgePortBase());
+    const port = heldPort(handle);
+    const recorded = await new Promise<string>((resolve) => {
+      const ws = new WS(`ws://127.0.0.1:${String(port)}/ws/hello`);
+      ws.on("open", () => {
+        ws.send(
+          JSON.stringify({
+            type: "hello",
+            nonce: "9".repeat(NONCE_HEX_LENGTH),
+          }),
+        );
+      });
+      ws.on("message", (data) => {
+        ws.terminate();
+        resolve(String(data));
+      });
+    });
+    await stopWebServer(handle);
+    const foreign = await holdForeignWebSocketServer(port, (_text, socket) => {
+      socket.send(recorded);
+    });
+
+    expect(
+      await isBridgeAt(port, {
+        pairingSecret: secret,
+        timeoutMs: SILENT_PROBE_TIMEOUT_MS,
+      }),
+    ).toBe(false);
+    expect(foreign.frames).toHaveLength(1);
   });
 });

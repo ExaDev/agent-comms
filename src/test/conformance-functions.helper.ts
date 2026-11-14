@@ -308,12 +308,17 @@ function accessPolicy(value: unknown): Parameters<typeof authorise>[0] {
   const localClientAddresses = new Set(
     strings(parts.localClientAddresses ?? []),
   );
+  const acceptedTicket = optStr(parts, "acceptedTicket");
 
   return {
     token: optStr(parts, "token"),
     bindHost: str(parts.bindHost),
     port: num(parts.port),
     localClientAddresses: () => localClientAddresses,
+    tickets:
+      acceptedTicket === undefined
+        ? undefined
+        : { consume: (presented) => presented === acceptedTicket },
   };
 }
 

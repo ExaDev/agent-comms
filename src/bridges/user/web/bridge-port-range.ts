@@ -6,8 +6,15 @@
  * Shared by the Node server and the browser frontend, so it imports nothing from either.
  */
 
+import { acquireTicket } from "./pairing-handshake.js";
+
 /** First port of the range a bridge's web server binds and the dashboard probes. */
 export const BRIDGE_PORT_BASE = 19877;
+
+/** Where the pairing page of a bridge on `port` is. */
+export function bridgePairingPageUrl(port: number): string {
+  return `http://127.0.0.1:${String(port)}/pair`;
+}
 
 /** How many consecutive ports, from the base, belong to the range. */
 export const BRIDGE_PORT_COUNT = 10;
@@ -58,12 +65,20 @@ export function bridgeMeshUrl(port: number): string {
 /**
  * Whether a bridge's mesh socket (the dashboard's own endpoint, `/ws/mesh`) accepts a connection on the port within the timeout. Another kind of server, a refused port and a listener that never answers all give false: a WebSocket handshake needs a bridge to complete, and unlike a plain fetch it is readable from a hosted page without CORS headers.
  * @param port - The loopback port to try.
- * @param timeoutMs - How long to wait for the handshake; defaults to {@link BRIDGE_PROBE_TIMEOUT_MS}.
+ * @param options - `timeoutMs` is how long to wait for the handshake (default {@link BRIDGE_PROBE_TIMEOUT_MS}); `pairingSecret` is the secret this browser was paired with. With one, the listener must first prove it holds it (frontend/pairing-handshake.ts), and a listener that cannot, a bridge that was paired with another secret and a port nothing answers on are all not a bridge; the secret is never sent, and a listener that is not the bridge is sent one random nonce and nothing else. Without one the port is a bridge when its mesh socket accepts a connection.
  */
 export async function isBridgeAt(
   port: number,
-  timeoutMs: number = BRIDGE_PROBE_TIMEOUT_MS,
+  options?: Readonly<{
+    timeoutMs?: number | undefined;
+    pairingSecret?: string | undefined;
+  }>,
 ): Promise<boolean> {
+  const timeoutMs = options?.timeoutMs ?? BRIDGE_PROBE_TIMEOUT_MS;
+  const pairingSecret = options?.pairingSecret;
+  if (pairingSecret !== undefined) {
+    return (await acquireTicket(port, pairingSecret, timeoutMs)) !== undefined;
+  }
   return new Promise((resolve) => {
     const socket = new WebSocket(bridgeMeshUrl(port));
     const settle = (isBridge: boolean): void => {
@@ -112,18 +127,23 @@ export async function findBridgePort(
 /**
  * Looks for a bridge in the range and, when one answers, passes its mesh socket address to `onFound`; calls nothing when none does. Resolves once the walk is over.
  * @param onFound - Receives the mesh socket address of the first bridge found.
- * @param options - `base` is the first port of the range (default {@link BRIDGE_PORT_BASE}); `timeoutMs` is the wait for each port (default {@link BRIDGE_PROBE_TIMEOUT_MS}).
+ * @param options - `base` is the first port of the range (default {@link BRIDGE_PORT_BASE}); `timeoutMs` is the wait for each port (default {@link BRIDGE_PROBE_TIMEOUT_MS}); `pairingSecret` is offered to every port tried.
  */
 export async function probeForBridge(
   onFound: (meshUrl: string) => void,
   options?: Readonly<{
     base?: number | undefined;
     timeoutMs?: number | undefined;
+    pairingSecret?: string | undefined;
   }>,
 ): Promise<void> {
   const timeoutMs = options?.timeoutMs ?? BRIDGE_PROBE_TIMEOUT_MS;
   const port = await findBridgePort(
-    async (candidate) => isBridgeAt(candidate, timeoutMs),
+    async (candidate) =>
+      isBridgeAt(candidate, {
+        timeoutMs,
+        pairingSecret: options?.pairingSecret,
+      }),
     options?.base,
   );
   if (port !== undefined) onFound(bridgeMeshUrl(port));

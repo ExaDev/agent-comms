@@ -36,6 +36,7 @@ import { runCli } from "./bridges/user/cli.js";
 import { readHiddenLine, runAccountCommand } from "./account-cli.js";
 import { openMachineAccountStore } from "./account-join-cli.js";
 import { UnusableIdentityRecordError } from "./core/issuer-identity-file.js";
+import { rotatePairingSecret } from "./bridges/user/web/web-pairing.js";
 
 // ---------------------------------------------------------------------------
 // Zod schemas for config files
@@ -264,9 +265,21 @@ export function main(options: Readonly<CliOptions>): void {
       );
       break;
     }
+    case "pairing": {
+      if (resolvedArgs[1] !== "rotate" || resolvedArgs.length > 2) {
+        console.error("Usage: agent-comms pairing rotate");
+        process.exit(1);
+      }
+      rotatePairingSecret();
+      console.log(
+        "The pairing secret has been replaced. A running bridge ends the hosted dashboard's open connections within a second, and every browser paired with the hosted dashboard must pair again, from each running bridge's /pair page.",
+      );
+      process.exit(0);
+      break;
+    }
     default:
       console.log(
-        "Usage: agent-comms [setup|status|remove|bridge <id>|chat|send|dm|rooms|agents|read|account <export|import|invite|join>]",
+        "Usage: agent-comms [setup|status|remove|bridge <id>|chat|send|dm|rooms|agents|read|account <export|import|invite|join>|pairing rotate]",
       );
       console.log(
         "With no subcommand: setup when stdin is a terminal, the MCP server when it is not.",

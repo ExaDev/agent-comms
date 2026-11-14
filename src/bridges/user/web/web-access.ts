@@ -1,12 +1,14 @@
 /**
  * Network exposure policy for the bridge web server (agent-comms#346).
  *
- * The default is loopback only, with no token. Setting AGENT_COMMS_WEB_HOST to a non-loopback address is the explicit opt-in to LAN reachability. Because the server exposes every mutating action (POST /api/action and the /ws/mesh oRPC socket), a non-loopback bind always comes with a per-process secret token. Every request, from any client, must carry a Host header naming this server (the DNS rebinding defence: a rebound name resolves here but arrives with the attacker's name in Host), and any Origin it carries must be this server over http (the cross-site defence: a page open in the operator's own browser reaches loopback as readily as a LAN page does, so the check cannot be limited to remote clients). The one other origin admitted, and only from a client on this machine, is the hosted dashboard (see HOSTED_DASHBOARD_ORIGIN). A client on this machine (loopback, or one of this machine's own interface addresses) needs nothing more. Any other client must also present the token, as a bearer token or as the cookie a one-time `?token=` URL exchange sets.
+ * The default is loopback only, with no token. Setting AGENT_COMMS_WEB_HOST to a non-loopback address is the explicit opt-in to LAN reachability. Because the server exposes every mutating action (POST /api/action and the /ws/mesh oRPC socket), a non-loopback bind always comes with a per-process secret token. Every request, from any client, must carry a Host header naming this server (the DNS rebinding defence: a rebound name resolves here but arrives with the attacker's name in Host), and any Origin it carries must be this server over http (the cross-site defence: a page open in the operator's own browser reaches loopback as readily as a LAN page does, so the check cannot be limited to remote clients). The one other origin admitted, and only from a client on this machine and only on the two sockets of the pairing exchange (web-pairing.ts), is the hosted dashboard (see HOSTED_DASHBOARD_ORIGIN). A client on this machine (loopback, or one of this machine's own interface addresses) needs nothing more. Any other client must also present the token, as a bearer token or as the cookie a one-time `?token=` URL exchange sets.
  */
 
 import * as crypto from "node:crypto";
 import * as net from "node:net";
 import * as os from "node:os";
+import { HELLO_PATH, MESH_PATH } from "./pairing-protocol.js";
+import { presentedTicket } from "./web-pairing.js";
 
 /** The environment variable that opts the web server into binding beyond loopback. Its value is an IP address literal to bind: `0.0.0.0` or `::` for every interface, or one interface's own address. */
 export const WEB_HOST_ENV = "AGENT_COMMS_WEB_HOST";
@@ -38,8 +40,18 @@ const HTTP_FOUND = 302;
 /** The authentication scheme of an `Authorization` header carrying the token. Scheme names are case-insensitive (RFC 9110 section 11.1). */
 const BEARER_SCHEME = "bearer";
 
-/** The origin of the dashboard deployed to GitHub Pages. It discovers a bridge's server by probing loopback ports and then opens its `/ws/mesh` socket cross-origin, so its Origin is admitted from a client on this machine; every other foreign origin is refused. */
+/** The origin of the dashboard deployed to GitHub Pages. It discovers a bridge's server by probing loopback ports and then opens its `/ws/mesh` socket cross-origin, so its Origin is admitted from a client on this machine, and only on the sockets of the pairing exchange (web-pairing.ts), since every page published under the same account shares this origin; every other foreign origin is refused. */
 export const HOSTED_DASHBOARD_ORIGIN = "https://exadev.github.io";
+
+/** Whether an Origin header names the hosted dashboard's origin. */
+export function isHostedDashboardOrigin(origin: string | undefined): boolean {
+  if (origin === undefined) return false;
+  try {
+    return new URL(origin).origin === HOSTED_DASHBOARD_ORIGIN;
+  } catch {
+    return false;
+  }
+}
 
 /** How long the address sets derived from the machine's interfaces and hostname are reused. Reading them costs a system call per interface, which every request would otherwise pay; this bounds how long a newly attached interface waits to be recognised. */
 const INTERFACE_CACHE_MS = 5000;
@@ -174,6 +186,10 @@ export interface AccessPolicy {
   port: number;
   /** The addresses whose clients count as on this machine besides loopback, read per request. A client connecting to this machine's own LAN address arrives from that address and not from loopback, so without this the `web_url` of a server bound to one interface address would answer 401 to the operator. Tests replace it to stand in for a remote client. */
   readonly localClientAddresses: () => ReadonlySet<string>;
+  /** The tickets that admit the hosted dashboard's mesh socket (web-pairing-exchange.ts). Undefined admits no request from that origin to any path but the exchange's own. */
+  readonly tickets?:
+    | Readonly<{ consume: (presented: string | undefined) => boolean }>
+    | undefined;
 }
 
 /** The parts of an incoming request the gate looks at. Shared by HTTP requests and WebSocket upgrades (an upgrade is an HTTP request). */
@@ -264,12 +280,28 @@ function hostHeaderAllowed(
   return allowedHostnames(policy.bindHost).has(authority.hostname);
 }
 
-/** An Origin, when the browser sends one, must be this very server over http: otherwise a page from anywhere (on the LAN, or open in the operator's own browser) could drive it. The hosted dashboard is the one other origin, and only for a client on this machine. */
+/** What a page of the hosted dashboard's origin may reach: the exchange's own socket with nothing, and the mesh socket with a ticket the exchange issued, which is spent by being presented. Both only as a WebSocket upgrade, so none of the HTTP routes and no ticket is spent by a plain request. */
+function hostedPageAllowed(
+  policy: Readonly<AccessPolicy>,
+  request: AccessRequest,
+): boolean {
+  if (headerValue(request.headers, "upgrade")?.toLowerCase() !== "websocket") {
+    return false;
+  }
+  if (request.url === HELLO_PATH) return true;
+  return (
+    request.url === MESH_PATH &&
+    policy.tickets?.consume(presentedTicket(request.headers)) === true
+  );
+}
+
+/** An Origin, when the browser sends one, must be this very server over http: otherwise a page from anywhere (on the LAN, or open in the operator's own browser) could drive it. The hosted dashboard is the one other origin, and only for a client on this machine that opens the exchange's socket, or the mesh socket with a ticket from it. */
 function originAllowed(
   policy: Readonly<AccessPolicy>,
-  headers: AccessRequest["headers"],
+  request: AccessRequest,
   ownClient: boolean,
 ): boolean {
+  const { headers } = request;
   const origin = headerValue(headers, "origin");
   if (origin === undefined) return true;
   let parsed: URL;
@@ -278,7 +310,9 @@ function originAllowed(
   } catch {
     return false;
   }
-  if (ownClient && parsed.origin === HOSTED_DASHBOARD_ORIGIN) return true;
+  if (parsed.origin === HOSTED_DASHBOARD_ORIGIN) {
+    return ownClient && hostedPageAllowed(policy, request);
+  }
   if (parsed.protocol !== "http:") return false;
   const authority = parseAuthority(parsed.host);
   if (authority?.port !== policy.port) return false;
@@ -324,7 +358,7 @@ function presentedCredential(
 }
 
 /** True for a client on this machine: loopback, or one of this machine's own interface addresses. */
-function isOwnClient(
+export function isOwnClient(
   policy: Readonly<AccessPolicy>,
   remoteAddress: string | undefined,
 ): boolean {
@@ -346,7 +380,7 @@ export function authorise(
     return { kind: "deny", status: HTTP_FORBIDDEN, message: "Forbidden host" };
   }
   const ownClient = isOwnClient(policy, request.remoteAddress);
-  if (!originAllowed(policy, request.headers, ownClient)) {
+  if (!originAllowed(policy, request, ownClient)) {
     return {
       kind: "deny",
       status: HTTP_FORBIDDEN,

@@ -834,31 +834,6 @@
     {
       "args": [
         {
-          "bindHost": "127.0.0.1",
-          "localClientAddresses": [],
-          "port": 41234
-        },
-        {
-          "headers": {
-            "host": "127.0.0.1:41234",
-            "origin": "https://exadev.github.io"
-          },
-          "method": "GET",
-          "remoteAddress": "127.0.0.1",
-          "url": "/"
-        }
-      ],
-      "expect": {
-        "kind": "allow"
-      },
-      "from": "web-access.unit.test.ts: authorise > allows the hosted dashboard's Origin from a loopback client only",
-      "function": "web-access.authorise",
-      "id": "hosted-dashboard-origin-allowed-from-loopback",
-      "kind": "function"
-    },
-    {
-      "args": [
-        {
           "bindHost": "192.168.1.10",
           "localClientAddresses": [],
           "port": 41234,
@@ -868,7 +843,8 @@
           "headers": {
             "cookie": "agent_comms_web_token_41234=tok-secret",
             "host": "192.168.1.10:41234",
-            "origin": "https://exadev.github.io"
+            "origin": "https://exadev.github.io",
+            "upgrade": "websocket"
           },
           "method": "GET",
           "remoteAddress": "192.168.1.50",
@@ -1593,6 +1569,453 @@
       "from": "web-access.unit.test.ts: accessUrls > lists the bound address under a specific bind",
       "function": "web-access.accessUrls",
       "id": "lists-the-bound-address-under-specific-bind",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "acceptedTicket": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "sec-websocket-protocol": "agent-comms, agent-comms-ticket.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/ws/mesh"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access.unit.test.ts: authorise > allows the hosted dashboard's Origin from a loopback client only",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-allowed-on-mesh-socket-with-ticket",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "acceptedTicket": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/ws/mesh"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-on-mesh-socket-without-ticket",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "acceptedTicket": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "sec-websocket-protocol": "agent-comms, agent-comms-ticket.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/ws/mesh"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-on-mesh-socket-with-wrong-ticket",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "sec-websocket-protocol": "agent-comms, agent-comms-ticket.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/ws/mesh"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-on-mesh-socket-when-no-ticket-is-issued",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "acceptedTicket": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "sec-websocket-protocol": "agent-comms, agent-comms-pairing.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/ws/mesh"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-on-mesh-socket-with-ticket-under-other-protocol-name",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/ws/hello"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-allowed-on-hello-socket-without-ticket",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "acceptedTicket": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "sec-websocket-protocol": "agent-comms, agent-comms-ticket.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/api/agents"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-on-http-route-even-with-ticket",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "acceptedTicket": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "sec-websocket-protocol": "agent-comms, agent-comms-ticket.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/ws/mesh?x=1"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-on-mesh-path-with-query-even-with-ticket",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/ws/hello?x=1"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-on-hello-path-with-query",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "acceptedTicket": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "cookie": "agent_comms_web_token_41234=tok-secret",
+            "host": "192.168.1.10:41234",
+            "origin": "https://exadev.github.io",
+            "sec-websocket-protocol": "agent-comms, agent-comms-ticket.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/ws/mesh"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-from-remote-on-mesh-socket-with-ticket",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "tok-secret"
+        },
+        {
+          "headers": {
+            "cookie": "agent_comms_web_token_41234=tok-secret",
+            "host": "192.168.1.10:41234",
+            "origin": "https://exadev.github.io",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "/ws/hello"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-from-remote-on-hello-socket",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "acceptedTicket": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "no-origin-needs-no-ticket-from-loopback",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "acceptedTicket": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "http://127.0.0.1:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "own-origin-needs-no-ticket-from-loopback",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "acceptedTicket": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://example.org",
+            "sec-websocket-protocol": "agent-comms, agent-comms-ticket.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "upgrade": "websocket"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/ws/mesh"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "other-origin-refused-with-ticket",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "acceptedTicket": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io",
+            "sec-websocket-protocol": "agent-comms, agent-comms-ticket.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/ws/mesh"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-on-mesh-path-without-upgrade-even-with-ticket",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "127.0.0.1",
+          "localClientAddresses": [],
+          "port": 41234
+        },
+        {
+          "headers": {
+            "host": "127.0.0.1:41234",
+            "origin": "https://exadev.github.io"
+          },
+          "method": "GET",
+          "remoteAddress": "127.0.0.1",
+          "url": "/ws/hello"
+        }
+      ],
+      "expectSubset": {
+        "kind": "deny",
+        "status": 403
+      },
+      "from": "recorded: src/bridges/user/web/web-access.ts (the hosted dashboard's origin is admitted only on the sockets of the pairing exchange)",
+      "function": "web-access.authorise",
+      "id": "hosted-dashboard-origin-refused-on-hello-path-without-upgrade",
       "kind": "function"
     }
   ]

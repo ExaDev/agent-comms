@@ -49,6 +49,9 @@ import {
   ACCESS_QUERY_PARAM,
   accessUrls,
   authorise,
+  HOSTED_DASHBOARD_ORIGIN,
+  isHostedDashboardOrigin,
+  isOwnClient,
   generateAccessToken,
   localWebUrl,
   ownInterfaceAddresses,
@@ -60,6 +63,23 @@ import {
 import { bridgePortRange } from "./bridge-port-range.js";
 import { startWebBeacon } from "./web-beacon.js";
 import {
+  PAIRING_PAGE_HEADERS,
+  PAIRING_PAGE_PATH,
+  openPairingSecret,
+  pairingPageHtml,
+  selectMeshSubprotocol,
+  type PairingSecretStore,
+} from "./web-pairing.js";
+import {
+  MAX_HELLO_MESSAGE_BYTES,
+  MAX_HELLO_SOCKETS,
+  ROTATION_SWEEP_MS,
+  createHostedSocketGuard,
+  createTicketBook,
+  serveHello,
+} from "./web-pairing-exchange.js";
+import { HELLO_PATH, MESH_PATH } from "./pairing-protocol.js";
+import {
   createFrontendAssetLoader,
   FrontendNotBuiltError,
   type FrontendAssets,
@@ -68,6 +88,7 @@ import {
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 const HTTP_NOT_IMPLEMENTED = 501;
@@ -238,6 +259,10 @@ export async function createWebServer(options?: {
   localClientAddresses?: (() => ReadonlySet<string>) | undefined;
   /** The UDP port the LAN beacon advertises on when the bind is beyond loopback. Defaults to the first-contact port; tests pass an OS-assigned free port. */
   beaconPort?: number | undefined;
+  /** The directory the pairing secret is kept in. Defaults to the bridge's data directory; tests pass one of their own. */
+  pairingDir?: string | undefined;
+  /** How often sockets admitted under a replaced pairing secret are looked for and closed. Defaults to ROTATION_SWEEP_MS; a test sets it long to see that a message alone ends such a socket. */
+  pairingSweepMs?: number | undefined;
   existingController?: ChatController | undefined;
   coordinatorPort?: number | undefined;
   /** Overrides the first-contact UDP port a fresh controller's store runs presence on (ChatController's own firstContactPort); ignored when existingController is supplied. */
@@ -251,6 +276,8 @@ export async function createWebServer(options?: {
     host: requestedHost,
     localClientAddresses = ownInterfaceAddresses,
     beaconPort,
+    pairingDir,
+    pairingSweepMs = ROTATION_SWEEP_MS,
     existingController,
     coordinatorPort,
     firstContactPort,
@@ -275,16 +302,32 @@ export async function createWebServer(options?: {
     : undefined;
 
   // The port is only known once the server listens (port 0 asks the OS), so the policy's port is filled in once the server is bound, before any request can arrive.
+  const pairing = openPairingSecret({
+    dir: pairingDir,
+    onReplaced: (file) => {
+      process.stderr.write(
+        `agent-comms: ${file} was missing or unusable and has been replaced, so browsers paired with the hosted dashboard must pair again\n`,
+      );
+    },
+  });
+  const tickets = createTicketBook(pairing);
+  const hostedSockets = createHostedSocketGuard(pairing);
   const accessPolicy: AccessPolicy = {
     token: accessToken,
     bindHost: host,
     port: port ?? 0,
     localClientAddresses,
+    // Tickets are only accepted under the secret in force, so `agent-comms pairing rotate` refuses every ticket issued before it without a restart.
+    tickets,
   };
 
   const server = http.createServer((req, res) => {
     if (!admitRequest(accessPolicy, req, res)) return;
-    handleRequest(req, res, controller, webConsoleDist);
+    handleRequest(req, res, controller, {
+      pairing,
+      isOwnClient: isOwnClient(accessPolicy, req.socket.remoteAddress),
+      webConsoleDist,
+    });
   });
 
   let boundPort: number;
@@ -308,8 +351,25 @@ export async function createWebServer(options?: {
     publisher.publish({ kind: "delivery", event });
   });
 
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({
+    noServer: true,
+    // The dashboard offers the mesh subprotocol beside its ticket; selecting only the fixed name keeps the ticket from being echoed.
+    handleProtocols: selectMeshSubprotocol,
+  });
+  // The proof exchange's own socket: tiny messages only, and a handful at a time.
+  const helloWss = new WebSocketServer({
+    noServer: true,
+    maxPayload: MAX_HELLO_MESSAGE_BYTES,
+  });
   const rpcHandler = new RPCHandler(meshRouter);
+  // A socket admitted under a secret that has since been replaced is ended, also when it is idle.
+  const rotationSweep = setInterval(() => {
+    hostedSockets.sweep();
+  }, pairingSweepMs);
+  rotationSweep.unref();
+  server.once("close", () => {
+    clearInterval(rotationSweep);
+  });
 
   server.on("upgrade", (req, socket, head) => {
     const decision = authorise(accessPolicy, requestOf(req));
@@ -322,9 +382,20 @@ export async function createWebServer(options?: {
       socket.destroy();
       return;
     }
-    if (req.url === "/ws/mesh") {
+    if (req.url === MESH_PATH) {
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
+      });
+    } else if (
+      req.url === HELLO_PATH &&
+      helloWss.clients.size < MAX_HELLO_SOCKETS
+    ) {
+      helloWss.handleUpgrade(req, socket, head, (ws) => {
+        serveHello(ws, {
+          secret: pairing,
+          tickets,
+          port: () => accessPolicy.port,
+        });
       });
     } else {
       socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
@@ -332,10 +403,12 @@ export async function createWebServer(options?: {
     }
   });
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
+    if (isHostedDashboardOrigin(req.headers.origin)) hostedSockets.track(ws);
     // RPCHandler.upgrade() wants a DOM-shaped WebSocket (addEventListener's overload set), which "ws"'s own type declarations don't structurally satisfy (its addEventListener options param is narrower than DOM's) -- .message()/.close() accept the looser { send } shape "ws" does satisfy, and are the documented manual equivalent to .upgrade().
     const context = { controller, publisher };
     ws.on("message", (data, isBinary) => {
+      if (!hostedSockets.check(ws)) return;
       // "ws" types incoming data as Buffer | ArrayBuffer | Buffer[] regardless of frame type; normalise to a real Buffer first so both branches below have a type they can trust rather than calling .toString()/Uint8Array.from() on a union that could be an ArrayBuffer.
       const raw = Array.isArray(data) ? Buffer.concat(data) : data;
       const bytes = raw instanceof ArrayBuffer ? Buffer.from(raw) : raw;
@@ -350,6 +423,9 @@ export async function createWebServer(options?: {
 
   // stderr, not stdout: a stdio MCP bridge owns stdout for JSON-RPC, so any other line there is protocol noise to a strictly framed client.
   console.error(`Agent Comms web UI: ${localWebUrl(host, boundPort)}`);
+  console.error(
+    `To pair the hosted dashboard with this bridge, open ${localWebUrl(host, boundPort)}${PAIRING_PAGE_PATH} in the browser you use`,
+  );
   if (accessToken !== undefined) {
     announceLanAccess(
       server,
@@ -466,20 +542,55 @@ export async function runWeb(userName: string, port?: number): Promise<void> {
 // HTTP handler
 // ---------------------------------------------------------------------------
 
+/** What a request handler knows about the request beyond its parts: the pairing secret store, and whether the client is on this machine. */
+interface RequestContext {
+  pairing: PairingSecretStore;
+  isOwnClient: boolean;
+  webConsoleDist: string | undefined;
+}
+
+/** The `Sec-Fetch-Site` values of a request a person started from the address bar or a bookmark (`none`), or that this server's own page made. A link or a script on another site sends `cross-site` or `same-site`. */
+const PERSON_INITIATED_FETCH_SITES = new Set(["none", "same-origin"]);
+
+/** Serves the pairing page to a person at this machine: a client on this machine, no Origin of another site and no cross-site fetch metadata. Anything else is a 403, answered without the secret. */
+function servePairingPage(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  context: Readonly<RequestContext>,
+): void {
+  const site = req.headers["sec-fetch-site"];
+  const fromAnotherSite =
+    typeof site === "string" && !PERSON_INITIATED_FETCH_SITES.has(site);
+  // A page of the hosted dashboard, paired or not, is never the person this page is for.
+  const fromHostedDashboard = req.headers.origin === HOSTED_DASHBOARD_ORIGIN;
+  if (!context.isOwnClient || fromAnotherSite || fromHostedDashboard) {
+    res.writeHead(HTTP_FORBIDDEN, { "Content-Type": "text/plain" });
+    res.end("Forbidden");
+    return;
+  }
+  res.writeHead(HTTP_OK, PAIRING_PAGE_HEADERS);
+  res.end(pairingPageHtml(context.pairing.current()));
+}
+
 function handleRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   controller: ChatController,
-  webConsoleDist: string | undefined,
+  context: Readonly<RequestContext>,
 ): void {
   const url = new URL(req.url ?? "/", `http://localhost`);
 
   // wire-mesh's web-console — an alternate, generic reference-client UI, served only when AGENT_COMMS_WEB_CONSOLE_DIST resolves to a real build.
   if (
-    webConsoleDist !== undefined &&
+    context.webConsoleDist !== undefined &&
     req.method === "GET" &&
-    serveWebConsole(webConsoleDist, url.pathname, res)
+    serveWebConsole(context.webConsoleDist, url.pathname, res)
   ) {
+    return;
+  }
+
+  if (url.pathname === PAIRING_PAGE_PATH && req.method === "GET") {
+    servePairingPage(req, res, context);
     return;
   }
 
