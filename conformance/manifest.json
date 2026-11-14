@@ -21,7 +21,7 @@
       "skip": []
     },
     "function/dashboard-input.json": {
-      "cases": 27,
+      "cases": 28,
       "skip": []
     },
     "function/default-command.json": {

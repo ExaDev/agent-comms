@@ -303,6 +303,24 @@
     },
     {
       "args": [
+        "/help",
+        null,
+        null
+      ],
+      "expect": {
+        "kind": "local",
+        "result": {
+          "text": "Commands: /join, /leave, /rooms, /agents, /dm, /create, /destroy, /rename, /help",
+          "type": "help"
+        }
+      },
+      "from": "input.unit.test.ts: parseInput > includes /rename in help text",
+      "function": "input.parseInput",
+      "id": "help-text-lists-rename",
+      "kind": "function"
+    },
+    {
+      "args": [
         "/foobar",
         null,
         null
