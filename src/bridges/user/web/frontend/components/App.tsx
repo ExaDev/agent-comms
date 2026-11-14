@@ -35,6 +35,7 @@ export interface AppProps {
   ) => void;
   onJoinRoomInput: (roomName: string) => void;
   onConnectToMesh: () => void;
+  pairingNeeded: boolean;
 }
 
 export function App(props: AppProps) {
@@ -85,6 +86,7 @@ export function App(props: AppProps) {
             onSendAction={props.onSendAction}
             onLeaveRoom={props.onLeaveRoom}
             onConnectToMesh={props.onConnectToMesh}
+            pairingNeeded={props.pairingNeeded}
           />
         ) : (
           <MeshPanel queryUtils={props.queryUtils} />

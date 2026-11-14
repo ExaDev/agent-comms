@@ -30,6 +30,7 @@ import { probeForBridge } from "../bridge-port-range.js";
 import { pumpEvents } from "./event-pump.js";
 import { dispatchAction } from "./dispatch-action.js";
 import { isServedByBridge } from "./served-by-bridge.js";
+import { capturePairing } from "./pairing.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,6 +107,8 @@ export class MeshClient {
   private readonly deliveryListeners = new Set<MeshDeliveryListener>();
   private eventPump: AbortController | undefined;
   private readonly bridgePortBase: number | undefined;
+  /** The secret this browser was paired with, taken from the address the pairing page opened it with or from storage. Undefined for a dashboard served by a bridge, which needs none, and for a browser that was never paired. */
+  private pairingSecret: string | undefined;
 
   /** Delegates each structured read to `this.client` fresh on every call, throwing "Not connected" the same way a real network failure would if called before connect() -- a stable object createTanstackQueryUtils below can be built from once, since the real tab client doesn't exist until connect() is called but these utils need a stable reference for the lifetime of the app. */
   private readonly readsClient: ReadsClient = buildReadsClient(() =>
@@ -131,6 +134,17 @@ export class MeshClient {
   private requireClient(): TabClient {
     if (!this.client) throw new Error("Not connected to mesh yet");
     return this.client;
+  }
+
+  /**
+   * Whether this is the hosted dashboard in a browser that holds no pairing secret, which a bridge refuses: the dashboard shows how to pair instead of searching for a bridge. Never true for a dashboard served by a bridge.
+   */
+  pairingNeeded(): boolean {
+    if (typeof window === "undefined" || isServedByBridge(location)) {
+      return false;
+    }
+    this.pairingSecret = capturePairing(location, history, window.localStorage);
+    return this.pairingSecret === undefined;
   }
 
   /** Connect to the mesh SharedWorker. Idempotent. */
@@ -170,8 +184,8 @@ export class MeshClient {
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
       const url = `${proto}//${location.host}/ws/mesh`;
       this.postLegacyInit(url);
-    } else {
-      // Standalone PWA (e.g. GitHub Pages): probe the localhost bridge port range.
+    } else if (!this.pairingNeeded()) {
+      // Standalone PWA (e.g. GitHub Pages): probe the localhost bridge port range, offering the pairing secret.
       this.probeLocalMesh();
     }
   }
@@ -317,7 +331,15 @@ export class MeshClient {
   }
 
   private postLegacyInit(url: string): void {
-    this.worker?.port.postMessage(JSON.stringify({ type: "init", url }));
+    this.worker?.port.postMessage(
+      JSON.stringify({
+        type: "init",
+        url,
+        ...(this.pairingSecret !== undefined && {
+          pairing: this.pairingSecret,
+        }),
+      }),
+    );
   }
 
   /**
@@ -328,7 +350,7 @@ export class MeshClient {
       (url) => {
         this.postLegacyInit(url);
       },
-      { base: this.bridgePortBase },
+      { base: this.bridgePortBase, pairingSecret: this.pairingSecret },
     );
   }
 
