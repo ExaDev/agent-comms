@@ -28,6 +28,9 @@ export const ACCOUNT_USAGE = [
   "       agent-comms account import <file>",
   "       agent-comms account invite [--ttl-minutes <n>] [--sign-key <file>]",
   "       agent-comms account join [--public-key <file>] [--fingerprint <hex>] [--label <name>]",
+  "",
+  "An invite without --sign-key is a bearer hint, not authentication: the machine that joins with it trusts whatever device the invite names, whoever wrote it, so carry it only over a channel you trust.",
+  "--public-key and --fingerprint on join require a signed invite and refuse an unsigned one.",
 ].join("\n");
 
 export interface AccountCliIo {
