@@ -581,6 +581,139 @@
       "function": "project-tree.buildProjectTree",
       "id": "deeply-nested-path",
       "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "/Users/example/Developer",
+            "id": "n1",
+            "name": "Zed"
+          },
+          {
+            "cwd": "/Users/example/Developer",
+            "id": "n2",
+            "name": "alpha"
+          },
+          {
+            "cwd": "/Users/example/Developer",
+            "id": "n3",
+            "name": "Äpfel"
+          },
+          {
+            "cwd": "/Users/example/Developer",
+            "id": "n4",
+            "name": "a10"
+          },
+          {
+            "cwd": "/Users/example/Developer",
+            "id": "n5",
+            "name": "a9"
+          },
+          {
+            "cwd": "/Users/example/Developer",
+            "id": "n6",
+            "name": "Alpha"
+          },
+          {
+            "cwd": "/Users/example/Developer/Zed",
+            "id": "n7",
+            "name": "in-zed"
+          },
+          {
+            "cwd": "/Users/example/Developer/alpha",
+            "id": "n8",
+            "name": "in-alpha"
+          }
+        ],
+        []
+      ],
+      "expect": {
+        "manualRooms": [],
+        "roots": [
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "agentId": "n8",
+                    "cwd": "/Users/example/Developer/alpha",
+                    "name": "in-alpha",
+                    "status": "active",
+                    "type": "agent"
+                  }
+                ],
+                "name": "alpha",
+                "path": "/Users/example/Developer/alpha",
+                "type": "directory"
+              },
+              {
+                "children": [
+                  {
+                    "agentId": "n7",
+                    "cwd": "/Users/example/Developer/Zed",
+                    "name": "in-zed",
+                    "status": "active",
+                    "type": "agent"
+                  }
+                ],
+                "name": "Zed",
+                "path": "/Users/example/Developer/Zed",
+                "type": "directory"
+              },
+              {
+                "agentId": "n4",
+                "cwd": "/Users/example/Developer",
+                "name": "a10",
+                "status": "active",
+                "type": "agent"
+              },
+              {
+                "agentId": "n5",
+                "cwd": "/Users/example/Developer",
+                "name": "a9",
+                "status": "active",
+                "type": "agent"
+              },
+              {
+                "agentId": "n6",
+                "cwd": "/Users/example/Developer",
+                "name": "Alpha",
+                "status": "active",
+                "type": "agent"
+              },
+              {
+                "agentId": "n2",
+                "cwd": "/Users/example/Developer",
+                "name": "alpha",
+                "status": "active",
+                "type": "agent"
+              },
+              {
+                "agentId": "n1",
+                "cwd": "/Users/example/Developer",
+                "name": "Zed",
+                "status": "active",
+                "type": "agent"
+              },
+              {
+                "agentId": "n3",
+                "cwd": "/Users/example/Developer",
+                "name": "Äpfel",
+                "status": "active",
+                "type": "agent"
+              }
+            ],
+            "name": "Developer",
+            "path": "/Users/example/Developer",
+            "type": "directory"
+          }
+        ]
+      },
+      "from": "recorded: src/bridges/user/web/frontend/project-tree.ts (siblings sort with ASCII letters folded and compared by UTF-16 code unit, ties by the name as written: digits compare as characters, an accented letter sorts after every ASCII letter)",
+      "function": "project-tree.buildProjectTree",
+      "id": "siblings-sort-by-folded-code-units-not-locale",
+      "kind": "function"
     }
   ]
 }

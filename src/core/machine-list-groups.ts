@@ -4,6 +4,7 @@
 
 import type { AgentIdentity } from "./types.js";
 import type { Namer } from "./naming.js";
+import { compareCodeUnits } from "./ordering.js";
 
 /** One run of listed agents and the heading above it; no heading when nothing is grouped at all. */
 export interface AgentGroup {
@@ -40,7 +41,7 @@ export function groupAgentsByMachine(
     .sort(([a], [b]) => {
       if (a === ownMachine) return -1;
       if (b === ownMachine) return 1;
-      return a.localeCompare(b);
+      return compareCodeUnits(a, b);
     })
     .map(([machine, members]) => ({
       heading: `Machine ${namer(machine)}${machine === ownMachine ? " (this machine)" : ""}:`,

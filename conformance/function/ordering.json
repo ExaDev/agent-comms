@@ -1,0 +1,191 @@
+{
+  "cases": [
+    {
+      "args": [
+        "alpha",
+        "alpha"
+      ],
+      "expect": 0,
+      "from": "recorded: src/core/ordering.ts (equal strings compare equal)",
+      "function": "ordering.compareCodeUnits",
+      "id": "code-units-equal-strings",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "a10",
+        "alpha"
+      ],
+      "expect": -1,
+      "from": "recorded: src/core/ordering.ts (a digit sorts before a letter)",
+      "function": "ordering.compareCodeUnits",
+      "id": "code-units-digits-before-letters",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "a10",
+        "a9"
+      ],
+      "expect": -1,
+      "from": "recorded: src/core/ordering.ts (digits compare as characters, not as numbers)",
+      "function": "ordering.compareCodeUnits",
+      "id": "code-units-digits-compare-character-by-character",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "Zed",
+        "alpha"
+      ],
+      "expect": -1,
+      "from": "recorded: src/core/ordering.ts (every upper-case ASCII letter sorts before every lower-case one)",
+      "function": "ordering.compareCodeUnits",
+      "id": "code-units-upper-case-before-lower-case",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "Äpfel",
+        "zed"
+      ],
+      "expect": 1,
+      "from": "recorded: src/core/ordering.ts (an accented letter sorts after every ASCII letter)",
+      "function": "ordering.compareCodeUnits",
+      "id": "code-units-accented-letter-after-ascii",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "a",
+        "ab"
+      ],
+      "expect": -1,
+      "from": "recorded: src/core/ordering.ts (a prefix sorts before the longer string)",
+      "function": "ordering.compareCodeUnits",
+      "id": "code-units-prefix-sorts-first",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "",
+        "a"
+      ],
+      "expect": -1,
+      "from": "recorded: src/core/ordering.ts (the empty string sorts first)",
+      "function": "ordering.compareCodeUnits",
+      "id": "code-units-empty-sorts-first",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "😀",
+        "～"
+      ],
+      "expect": -1,
+      "from": "recorded: src/core/ordering.ts (a surrogate pair compares by its first code unit, so it sorts before U+FF5E, unlike code point order)",
+      "function": "ordering.compareCodeUnits",
+      "id": "code-units-surrogate-pair-before-higher-bmp-character",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "00ff",
+        "0100"
+      ],
+      "expect": -1,
+      "from": "recorded: src/core/ordering.ts (lower-case hex device ids)",
+      "function": "ordering.compareCodeUnits",
+      "id": "code-units-hex-device-ids",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "2026-01-02T03:04:05.000Z",
+        "2026-01-02T03:04:05.001Z"
+      ],
+      "expect": -1,
+      "from": "recorded: src/core/ordering.ts (ISO timestamps)",
+      "function": "ordering.compareCodeUnits",
+      "id": "code-units-iso-timestamps",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "Zed",
+        "alpha"
+      ],
+      "expect": 1,
+      "from": "recorded: src/core/ordering.ts (names compare with ASCII letters folded, so alpha sorts before Zed)",
+      "function": "ordering.compareDisplayNames",
+      "id": "display-names-fold-ascii-case",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "Alpha",
+        "alpha"
+      ],
+      "expect": -1,
+      "from": "recorded: src/core/ordering.ts (names equal once folded are ordered by the names as written, upper case first)",
+      "function": "ordering.compareDisplayNames",
+      "id": "display-names-equal-fold-ordered-by-written-name",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "alpha",
+        "alpha"
+      ],
+      "expect": 0,
+      "from": "recorded: src/core/ordering.ts (identical names compare equal)",
+      "function": "ordering.compareDisplayNames",
+      "id": "display-names-identical",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "Äpfel",
+        "zed"
+      ],
+      "expect": 1,
+      "from": "recorded: src/core/ordering.ts (only A to Z are folded: an accented letter is not folded and sorts after every ASCII letter)",
+      "function": "ordering.compareDisplayNames",
+      "id": "display-names-accented-letter-after-ascii",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "a10",
+        "a9"
+      ],
+      "expect": -1,
+      "from": "recorded: src/core/ordering.ts (digits within names compare as characters)",
+      "function": "ordering.compareDisplayNames",
+      "id": "display-names-digits-compare-as-characters",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "a_b",
+        "a-b"
+      ],
+      "expect": 1,
+      "from": "recorded: src/core/ordering.ts (punctuation compares by code unit: underscore sorts after hyphen)",
+      "function": "ordering.compareDisplayNames",
+      "id": "display-names-fold-does-not-touch-digits-or-punctuation",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "Äz",
+        "äa"
+      ],
+      "expect": -1,
+      "from": "recorded: src/core/ordering.ts (a non-ASCII upper-case letter is not folded, so Äz sorts before äa by its own code unit, where folding it would put äa first)",
+      "function": "ordering.compareDisplayNames",
+      "id": "display-names-non-ascii-upper-case-not-folded",
+      "kind": "function"
+    }
+  ]
+}

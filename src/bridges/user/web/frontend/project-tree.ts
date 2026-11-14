@@ -5,6 +5,7 @@
  * Project rooms (auto-created per cwd) are embedded in their directory nodes.
  */
 
+import { compareDisplayNames } from "../../../../core/ordering.js";
 import type { Agent, ProjectTree, Room, TreeNode } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -219,6 +220,6 @@ function sortChildren(nodes: readonly TreeNode[]): TreeNode[] {
     if (a.type !== b.type) {
       return a.type === "directory" ? -1 : 1;
     }
-    return a.name.localeCompare(b.name);
+    return compareDisplayNames(a.name, b.name);
   });
 }

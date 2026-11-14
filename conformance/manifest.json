@@ -56,8 +56,12 @@
       "cases": 15,
       "skip": []
     },
+    "function/ordering.json": {
+      "cases": 17,
+      "skip": []
+    },
     "function/project-tree.json": {
-      "cases": 13,
+      "cases": 14,
       "skip": []
     },
     "function/relay-selection.json": {

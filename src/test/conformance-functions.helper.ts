@@ -43,6 +43,7 @@ import {
 import { groupAgentsByMachine } from "../core/machine-list-groups.js";
 import { PeerLinkError } from "../core/peer-link-error.js";
 import { selectRelay } from "../core/relay-selection.js";
+import { compareCodeUnits, compareDisplayNames } from "../core/ordering.js";
 import {
   APPROVAL_RESPONSE_GRACE_MS,
   ROOM_JOIN_APPROVAL_TIMEOUT_MS,
@@ -731,6 +732,8 @@ export const FUNCTIONS: Readonly<Record<string, CorpusFunction>> = {
     deliveryEventToMessage(frontendEvent(event), optionalString(currentRoom)),
   "messages.roomMessageToDisplay": (message) =>
     roomMessageToDisplay(RoomMessageSchema.parse(message)),
+  "ordering.compareCodeUnits": (a, b) => compareCodeUnits(str(a), str(b)),
+  "ordering.compareDisplayNames": (a, b) => compareDisplayNames(str(a), str(b)),
   "project-tree.buildProjectTree": (agents, rooms) =>
     buildProjectTree(
       list(agents).map((entry) => {
