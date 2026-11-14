@@ -34,6 +34,11 @@ pub fn is_name(name: &str) -> bool {
 /// Whether a case's `from` is an original test title (`<test file>.test.ts: <title>`, or `.test.tsx`) or a recorded
 /// behaviour (`recorded: <what>`), so a reader can tell a pinned original from a recorded one.
 fn is_valid_from(from: &str) -> bool {
+    // The schema's pattern matches the text after the colon with `.`, which no line terminator satisfies.
+    let has_line_terminator = from.contains(['\n', '\r', '\u{2028}', '\u{2029}']);
+    if has_line_terminator {
+        return false;
+    }
     if let Some(rest) = from.strip_prefix("recorded: ") {
         return !rest.is_empty();
     }
