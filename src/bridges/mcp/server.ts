@@ -114,7 +114,9 @@ export async function run(options?: Readonly<BridgeRunOptions>): Promise<void> {
   // -----------------------------------------------------------------------
 
   await store.init();
-  const webHandle = await tryStartBridgeWebServer(store, "mcp");
+  const webHandle = await tryStartBridgeWebServer(store, "mcp", {
+    bridgePortBase: options?.webPortBase,
+  });
   tool.getWebUrlStatus = () => getWebUrlStatus(webHandle);
   await mcp.connect(new StdioServerTransport());
 

@@ -13,6 +13,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import {
   createBridgeMesh,
+  type BridgeRunOptions,
   createMeshErrorReporter,
   buildAction,
   ensureRegistered,
@@ -36,7 +37,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Length of the random suffix appended to an auto-generated `codex-<suffix>` agent name. */
 const CODEX_AGENT_NAME_SUFFIX_LENGTH = 4;
 
-export async function run(): Promise<void> {
+export async function run(options?: Readonly<BridgeRunOptions>): Promise<void> {
   // Persistent identity for this slot: a stable device-id means the agent ID survives restarts, so peers can keep targeting us.
   const identitySlot: IdentitySlot = { harness: "codex", cwd: process.cwd() };
   const { store, tool } = await createBridgeMesh(identitySlot);
@@ -109,7 +110,9 @@ export async function run(): Promise<void> {
   // -----------------------------------------------------------------------
 
   await store.init();
-  const webHandle = await tryStartBridgeWebServer(store, "codex");
+  const webHandle = await tryStartBridgeWebServer(store, "codex", {
+    bridgePortBase: options?.webPortBase,
+  });
   tool.getWebUrlStatus = () => getWebUrlStatus(webHandle);
   await mcp.connect(new StdioServerTransport());
 

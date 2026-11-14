@@ -13,6 +13,7 @@ const argumentSchema = z.object({
   firstContactPort: z.number(),
   hubUrl: z.string(),
   slotDir: z.string(),
+  webPortBase: z.number(),
 });
 
 const raw = process.argv[2];
@@ -21,6 +22,7 @@ if (raw === undefined) {
 }
 const args = argumentSchema.parse(JSON.parse(raw));
 
+const webPortBase = args.webPortBase;
 const mesh = {
   coordinatorPort: args.coordinatorPort,
   firstContactPort: args.firstContactPort,
@@ -31,12 +33,14 @@ switch (args.entry) {
   case "mcp":
     await runMcp({
       mesh,
+      webPortBase,
       slot: { harness: "mcp", cwd: process.cwd(), dir: args.slotDir },
     });
     break;
   case "claude-code":
     await runClaudeCode({
       mesh,
+      webPortBase,
       slot: { harness: "claude-code", cwd: process.cwd(), dir: args.slotDir },
     });
     break;
@@ -46,6 +50,7 @@ switch (args.entry) {
       stdinIsTerminal: process.stdin.isTTY,
       bridge: {
         mesh,
+        webPortBase,
         slot: { harness: "mcp", cwd: process.cwd(), dir: args.slotDir },
       },
     });

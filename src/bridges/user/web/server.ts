@@ -8,6 +8,7 @@
  * When AGENT_COMMS_WEB_CONSOLE_DIST points at a built wire-mesh web-console (see web-console-static.ts), GET /web-console/* also serves that as an alternate, generic reference-client UI alongside the frontend above.
  */
 
+import { once } from "node:events";
 import * as http from "node:http";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
@@ -56,6 +57,7 @@ import {
   type AccessDecision,
   type AccessPolicy,
 } from "./web-access.js";
+import { bridgePortRange } from "./bridge-port-range.js";
 import { startWebBeacon } from "./web-beacon.js";
 import {
   createFrontendAssetLoader,
@@ -112,7 +114,7 @@ export interface WebServerHandle {
   accessToken: string | undefined;
 }
 
-/** Resolve the listening port from a running web server handle, or undefined if the OS hasn't assigned one yet. */
+/** The port a web server handle holds. A handle is returned only once its server is listening, so this is undefined only after the server has been closed. */
 export function getWebPort(handle: WebServerHandle): number | undefined {
   const addr = handle.server.address();
   return typeof addr === "object" && addr ? addr.port : undefined;
@@ -135,14 +137,15 @@ export function getWebUrlStatus(
 /**
  * Starts the web UI for a bridge on top of the bridge's own store, so the process stays one mesh peer and one agent (the agent id is the store's peer id, before or after the agent registers). Every bridge entry point that owns a store uses this, and only the standalone dashboard command builds a controller, and so a store, of its own.
  *
- * The server listens on an OS-assigned free port (port 0) to avoid TOCTOU races when multiple bridges start web servers concurrently: the OS atomically allocates a unique free port for each. The PWA discovery path (probe from 19877) is only used when the page is served from a non-local host (e.g. GitHub Pages); when served locally, the browser connects via location.host directly, so the port number doesn't need to be predictable.
+ * The server binds the first free port of the bridge port range (see bridge-port-range.ts), which is where the hosted dashboard looks for a bridge, and takes an operating-system port only when the whole range is taken. Each port is bound for real rather than tested first, so bridges starting at the same moment cannot be handed the same port. `options.bridgePortBase` is the first port of the range to bind from; it defaults to the range the dashboard probes, and tests pass a free range of their own.
  */
 export async function tryStartBridgeWebServer(
   store: MeshStore,
   harness: string,
+  options?: Readonly<{ bridgePortBase?: number | undefined }>,
 ): Promise<WebServerHandle | undefined> {
   return createWebServer({
-    port: 0,
+    bridgePortBase: options?.bridgePortBase,
     existingController: ChatController.fromExisting(store, {
       agentId: store.peerId,
       harness,
@@ -152,8 +155,72 @@ export async function tryStartBridgeWebServer(
   });
 }
 
+/** Whether a listen failure means the port is already taken. */
+function isAddressInUse(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "EADDRINUSE"
+  );
+}
+
+/** Binds `server` to `port` on `host`; true once listening, false when the port is taken, and rejects on any other failure. */
+async function tryListen(
+  server: http.Server,
+  port: number,
+  host: string,
+): Promise<boolean> {
+  // once() rejects when the server emits "error" before "listening", and removes both of its listeners either way.
+  const listening = once(server, "listening");
+  server.listen(port, host);
+  try {
+    await listening;
+    return true;
+  } catch (error) {
+    if (isAddressInUse(error)) return false;
+    throw error;
+  }
+}
+
 /**
- * Create and start the web server on a dynamic port.
+ * Binds `server` to the first of `ports` that is free, in order, and returns the port it holds.
+ *
+ * Each port is bound for real, so a port another process takes between two attempts is simply skipped, where a test-then-bind would hand two processes the same port. Only "already in use" moves on to the next port: any other bind error rejects with that error. When `fallBackToAnyPort` is set and every port is taken the operating system picks one; when nothing could be bound the error names every port tried.
+ */
+async function listen(
+  server: http.Server,
+  host: string,
+  ports: readonly number[],
+  fallBackToAnyPort: boolean,
+): Promise<number> {
+  for (const port of ports) {
+    if (await tryListen(server, port, host)) return boundPortOf(server);
+  }
+  if (fallBackToAnyPort && (await tryListen(server, 0, host))) {
+    return boundPortOf(server);
+  }
+  const tried = fallBackToAnyPort
+    ? [...ports.map(String), "an operating-system port"]
+    : ports.map(String);
+  throw new Error(
+    `Agent Comms web UI: every port tried is already in use on ${host}: ${tried.join(", ")}`,
+  );
+}
+
+/** The port a listening server holds. */
+function boundPortOf(server: http.Server): number {
+  const addr = server.address();
+  if (typeof addr !== "object" || addr === null) {
+    throw new Error("Agent Comms web UI: the listening server has no address");
+  }
+  return addr.port;
+}
+
+/**
+ * Create the web server and resolve once it is listening.
+ *
+ * Without an explicit `port` it binds the first free port of the bridge port range, falling back to an operating-system port when the whole range is taken. An explicit `port` (0 for an operating-system port) is bound as given, and a port that is taken rejects instead of moving on. When binding fails nothing is left behind: the server is bound before the publisher, the listeners and the websocket server are created, and a controller this call created is shut down.
  *
  * Accepts an optional ChatController for reuse — bridges that already
  * have a MeshStore and agent identity pass theirs in so the web UI
@@ -162,7 +229,9 @@ export async function tryStartBridgeWebServer(
  * Dashboard controller is created.
  */
 export async function createWebServer(options?: {
-  port?: number;
+  port?: number | undefined;
+  /** The first port of the bridge port range tried when no explicit `port` is given. Defaults to the range the hosted dashboard probes; tests pass a free range so they neither wait on nor disturb a bridge running on the machine. */
+  bridgePortBase?: number | undefined;
   /** The IP address to bind. Defaults to AGENT_COMMS_WEB_HOST, then loopback. A non-loopback address makes the server reachable from the LAN and turns on the access token (see web-access.ts). */
   host?: string | undefined;
   /** The addresses whose clients count as on this machine besides loopback. Defaults to every interface address of this machine; tests replace it to make a client on the machine's own address stand in for a remote device (see AccessPolicy.localClientAddresses). */
@@ -177,7 +246,8 @@ export async function createWebServer(options?: {
   hubUrl?: string | undefined;
 }): Promise<WebServerHandle> {
   const {
-    port = 0,
+    port,
+    bridgePortBase,
     host: requestedHost,
     localClientAddresses = ownInterfaceAddresses,
     beaconPort,
@@ -204,11 +274,11 @@ export async function createWebServer(options?: {
     ? generateAccessToken()
     : undefined;
 
-  // The port is only known once the server listens (port 0 asks the OS), so the policy's port is filled in by the listen callback, before any request can arrive.
+  // The port is only known once the server listens (port 0 asks the OS), so the policy's port is filled in once the server is bound, before any request can arrive.
   const accessPolicy: AccessPolicy = {
     token: accessToken,
     bindHost: host,
-    port,
+    port: port ?? 0,
     localClientAddresses,
   };
 
@@ -216,6 +286,21 @@ export async function createWebServer(options?: {
     if (!admitRequest(accessPolicy, req, res)) return;
     handleRequest(req, res, controller, webConsoleDist);
   });
+
+  let boundPort: number;
+  try {
+    boundPort = await listen(
+      server,
+      host,
+      port === undefined ? bridgePortRange(bridgePortBase) : [port],
+      port === undefined,
+    );
+  } catch (error) {
+    // A controller this call created is this call's to release; one passed in belongs to its caller.
+    if (!existingController) await controller.shutdown();
+    throw error;
+  }
+  accessPolicy.port = boundPort;
 
   const publisher = new MeshEventPublisher();
   ensurePatchListener(controller.meshStore, publisher);
@@ -263,22 +348,16 @@ export async function createWebServer(options?: {
     });
   });
 
-  server.listen(port, host, () => {
-    const addr = server.address();
-    accessPolicy.port = typeof addr === "object" && addr ? addr.port : port;
-    // stderr, not stdout: a stdio MCP bridge owns stdout for JSON-RPC, so any other line there is protocol noise to a strictly framed client.
-    console.error(
-      `Agent Comms web UI: ${localWebUrl(host, accessPolicy.port)}`,
+  // stderr, not stdout: a stdio MCP bridge owns stdout for JSON-RPC, so any other line there is protocol noise to a strictly framed client.
+  console.error(`Agent Comms web UI: ${localWebUrl(host, boundPort)}`);
+  if (accessToken !== undefined) {
+    announceLanAccess(
+      server,
+      { ...accessPolicy, token: accessToken },
+      controller.meshStore.peerId,
+      beaconPort,
     );
-    if (accessToken !== undefined) {
-      announceLanAccess(
-        server,
-        { ...accessPolicy, token: accessToken },
-        controller.meshStore.peerId,
-        beaconPort,
-      );
-    }
-  });
+  }
 
   return { server, controller, wss, publisher, host, accessToken };
 }
@@ -363,13 +442,9 @@ function announceLanAccess(
 // Standalone mode — `npx agent-comms chat`
 // ---------------------------------------------------------------------------
 
-export async function runWeb(userName: string, port = 0): Promise<void> {
+export async function runWeb(userName: string, port?: number): Promise<void> {
   const handle = await createWebServer({ port });
-  handle.server.on("listening", () => {
-    console.log(
-      `Connected as ${userName} (user) [${handle.controller.agentId}]`,
-    );
-  });
+  console.log(`Connected as ${userName} (user) [${handle.controller.agentId}]`);
 
   // Graceful shutdown
   const cleanup = async (): Promise<void> => {

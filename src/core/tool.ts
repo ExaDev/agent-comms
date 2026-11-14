@@ -89,7 +89,7 @@ export interface CommsContext {
   pid: number;
 }
 
-/** The calling bridge's own web UI address, as reported by the web_url action -- mirrors comms-url's own three-way distinction between a server that was never started, one whose OS-assigned port hasn't come back yet, and one that's actually reachable. */
+/** The calling bridge's own web UI address, as reported by the web_url action; mirrors comms-url's own three-way distinction between a server that was never started, one with no port because it is not listening, and one that's actually reachable. */
 export type WebUrlStatus =
   | { kind: "not_running" }
   | { kind: "pending" }

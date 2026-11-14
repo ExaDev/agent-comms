@@ -29,6 +29,7 @@ async function startServer(): Promise<number> {
   const coordinatorPort = await freeLocalPort();
   const hubUrl = await unreachableHubUrl();
   handle = await createWebServer({
+    port: 0,
     coordinatorPort,
     firstContactPort: await freeLocalPort(),
     hubUrl,

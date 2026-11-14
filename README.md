@@ -313,6 +313,8 @@ When `streamingBehavior` is absent, each bridge falls back to its existing heuri
 
 Any bridge that starts a web server (`npx agent-comms chat`, or any other command that brings one up) serves a small browser dashboard alongside its REST API: agent and room lists, message history, a live mesh graph. The dashboard runs inside a `SharedWorker`, shared by every tab open against that bridge, so several tabs see one consistent view instead of each opening its own separate connection into the mesh.
 
+A bridge's web server binds the first free TCP port from 19877 to 19886, so several bridges on one machine each get a port of their own in that range, and takes a port the operating system picks only when all ten are taken. The hosted dashboard looks for a bridge on those same ports, which is how it finds one without being told a port. The address a bridge prints, and the `web_url` action returns, is the port it actually holds.
+
 Two independent transports sit inside that dashboard, both built on [oRPC](https://orpc.unnoq.com/), a contract-first RPC layer with Zod-validated inputs and outputs and native support for streaming procedures:
 
 - **Worker ↔ server**, over a real WebSocket at `/ws/mesh`. The worker is an oRPC client here, calling the same contract procedures the REST API exposes, plus a `subscribeEvents` procedure that streams mesh events as they happen.

@@ -64,6 +64,7 @@ async function start(
   localClientAddresses: () => ReadonlySet<string> = () => new Set(),
 ): Promise<Started> {
   const handle = await createWebServer({
+    port: 0,
     host,
     localClientAddresses,
     coordinatorPort: await freeLocalPort(),

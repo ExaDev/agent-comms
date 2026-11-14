@@ -53,6 +53,7 @@ let originalEnv: string | undefined;
 async function startAndGetPort(coordinatorPort: number): Promise<number> {
   const hubUrl = await unreachableHubUrl();
   const started = await createWebServer({
+    port: 0,
     coordinatorPort,
     firstContactPort: await freeLocalPort(),
     hubUrl,
