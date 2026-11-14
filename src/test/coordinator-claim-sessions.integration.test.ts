@@ -98,10 +98,13 @@ async function startLoneHolder(
   return store;
 }
 
-function rogueClaim(holderHex: string): CoordinatorFrame {
+function rogueClaim(
+  holderHex: string,
+  term: number = ROGUE_TERM,
+): CoordinatorFrame {
   return {
     type: "coordinator",
-    term: ROGUE_TERM,
+    term,
     coordinator: deviceIdFromHex(holderHex),
   };
 }
@@ -441,6 +444,9 @@ test("a claim naming a holder that does not enrol within the wait is dropped, so
   }
 });
 
+/** The term of the claim a sender that stays sends in the test below: lower than the departed sender's, so which of the two the store evaluated shows in the term it ends up with. */
+const STAYING_SENDER_TERM = 3;
+
 test("a claim held for a holder that is not here is not evaluated once its sender's session has closed, however the holder then enrols", async () => {
   const teardown = new TeardownStack();
   try {
@@ -453,21 +459,33 @@ test("a claim held for a holder that is not here is not evaluated once its sende
       await store.shutdown();
     });
     await store.init();
-    const sender = rawPeer();
+    const departing = rawPeer();
+    const staying = rawPeer();
     const holder = rawPeer();
-    const senderSession = await dialAsRawPeer(
-      sender,
+    const departingSession = await dialAsRawPeer(
+      departing,
       store.coordinatorPort,
       teardown,
     );
-    await introduce(senderSession, sender);
-    await senderSession.sendCoordinatorClaim(rogueClaim(holder.deviceHex));
-    await roundTrip(senderSession);
-    expect(transport.electionPeerIds().has(sender.deviceHex)).toBe(true);
+    const stayingSession = await dialAsRawPeer(
+      staying,
+      store.coordinatorPort,
+      teardown,
+    );
+    await introduce(departingSession, departing);
+    await introduce(stayingSession, staying);
+    // Both name the same holder, so the enrolment releases both together, the departed sender's claim first as it ranks higher.
+    await departingSession.sendCoordinatorClaim(rogueClaim(holder.deviceHex));
+    await roundTrip(departingSession);
+    await stayingSession.sendCoordinatorClaim(
+      rogueClaim(holder.deviceHex, STAYING_SENDER_TERM),
+    );
+    await roundTrip(stayingSession);
+    expect(transport.electionPeerIds().has(departing.deviceHex)).toBe(true);
 
-    await senderSession.close();
+    await departingSession.close();
     await waitForCondition(
-      () => !transport.electionPeerIds().has(sender.deviceHex),
+      () => !transport.electionPeerIds().has(departing.deviceHex),
     );
     const holderSession = await dialAsRawPeer(
       holder,
@@ -475,12 +493,15 @@ test("a claim held for a holder that is not here is not evaluated once its sende
       teardown,
     );
     await introduce(holderSession, holder);
-    await roundTrip(holderSession);
-    // The announcement to the holder is what releases waiting claims, and it is sent before the claim could be evaluated: wait for it, then check.
-    await firstCoordinatorFrame(holderSession);
 
-    expect(store.coordinatorClaim).toEqual({ term: 0, holder: store.peerId });
-    expect(store.holdsCoordinatorRole).toBe(true);
+    // The staying sender's claim is evaluated when the holder enrols, which is observable: the store accepts it. The departed sender's claim, released with it and ranked first, is the one that must not have been.
+    await waitForCondition(
+      () => store.coordinatorClaim?.holder === holder.deviceHex,
+    );
+    expect(store.coordinatorClaim).toEqual({
+      term: STAYING_SENDER_TERM,
+      holder: holder.deviceHex,
+    });
   } finally {
     await teardown.run();
   }
