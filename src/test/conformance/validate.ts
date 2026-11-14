@@ -116,9 +116,9 @@ export function validateManifest(value: unknown): Validation<Manifest> {
     return { ok: false, problems: describeErrors(checkManifest.errors) };
   }
   const problems = Object.entries(value.files).flatMap(([name, entry]) =>
-    isAscending(entry.only)
+    isAscending(entry.skip)
       ? []
-      : [`${name}: "only" must list distinct ids in ascending order`],
+      : [`${name}: "skip" must list distinct ids in ascending order`],
   );
 
   return problems.length === 0 ? { ok: true, value } : { ok: false, problems };

@@ -9,8 +9,7 @@
       "function": "module.helper",
       "id": "a",
       "kind": "function",
-      "only": "node",
-      "reason": "r"
+      "skip": "ts"
     }
   ]
 }

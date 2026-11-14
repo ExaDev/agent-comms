@@ -73,7 +73,7 @@ pub fn decode_text(value: &Value, at: &str) -> Check<Vec<u16>> {
 }
 
 const COMMON_KEYS: [&str; 3] = ["id", "from", "kind"];
-const OPTIONAL_COMMON_KEYS: [&str; 2] = ["only", "reason"];
+const OPTIONAL_COMMON_KEYS: [&str; 2] = ["skip", "reason"];
 
 fn object<'a>(value: &'a Value, at: &str) -> Check<&'a Map<String, Value>> {
     value
@@ -155,10 +155,27 @@ fn check_value(value: &Value, at: &str) -> Check<()> {
         Value::Object(map) => {
             if map.contains_key("codeUnits") {
                 decode_text(value, at).map(drop)
+            } else if map.contains_key("$number") {
+                decode_special_number(value, at).map(drop)
             } else {
                 map.values().try_for_each(|item| check_value(item, at))
             }
         }
+    }
+}
+
+/// The four numbers the canonical form cannot hold, by the names a corpus file gives them. A closed lookup: any other
+/// name is refused, never read as a number.
+pub fn decode_special_number(value: &Value, at: &str) -> Check<f64> {
+    let map = exact_keys(value, at, &["$number"], &[])?;
+    match map["$number"].as_str() {
+        Some("-0") => Ok(-0.0),
+        Some("Infinity") => Ok(f64::INFINITY),
+        Some("-Infinity") => Ok(f64::NEG_INFINITY),
+        Some("NaN") => Ok(f64::NAN),
+        _ => Err(format!(
+            "{at}: \"$number\" must be \"-0\", \"Infinity\", \"-Infinity\" or \"NaN\""
+        )),
     }
 }
 
@@ -301,13 +318,13 @@ fn check_case(value: &Value, at: &str) -> Check<(String, String)> {
             "{at}: \"from\" must be \"<test file>.test.ts: <title>\" or \"recorded: <what>\""
         ));
     }
-    if let Some(only) = map.get("only")
-        && !matches!(only.as_str(), Some("ts" | "rust"))
+    if let Some(skip) = map.get("skip")
+        && !matches!(skip.as_str(), Some("ts" | "rust"))
     {
-        return Err(format!("{at}: \"only\" must be \"ts\" or \"rust\""));
+        return Err(format!("{at}: \"skip\" must be \"ts\" or \"rust\""));
     }
-    if map.contains_key("only") != map.contains_key("reason") {
-        return Err(format!("{at}: \"only\" and \"reason\" go together"));
+    if map.contains_key("skip") != map.contains_key("reason") {
+        return Err(format!("{at}: \"skip\" and \"reason\" go together"));
     }
     if map.contains_key("reason") {
         non_empty_string_field(map, "reason", at)?;
@@ -330,10 +347,10 @@ pub struct FileFacts {
     pub ids: Vec<String>,
     /// The kind of each case, in the order of `ids`.
     pub kinds: Vec<String>,
-    /// The ids of the cases marked for one implementation only, sorted.
-    pub only_ids: Vec<String>,
+    /// The ids of the cases carrying skip, sorted.
+    pub skip_ids: Vec<String>,
     /// The ids of the cases marked `rust`, the ones this implementation skips because they are marked, sorted.
-    pub rust_only_ids: Vec<String>,
+    pub rust_skip_ids: Vec<String>,
 }
 
 pub fn validate_file(value: &Value) -> Check<FileFacts> {
@@ -345,8 +362,8 @@ pub fn validate_file(value: &Value) -> Check<FileFacts> {
     let mut facts = FileFacts {
         ids: Vec::new(),
         kinds: Vec::new(),
-        only_ids: Vec::new(),
-        rust_only_ids: Vec::new(),
+        skip_ids: Vec::new(),
+        rust_skip_ids: Vec::new(),
     };
     let mut seen = BTreeSet::new();
     for (position, case) in cases.iter().enumerate() {
@@ -354,21 +371,21 @@ pub fn validate_file(value: &Value) -> Check<FileFacts> {
         if !seen.insert(id.clone()) {
             return Err(format!("case id {id} is used twice in the file"));
         }
-        if case.get("only").is_some() {
-            facts.only_ids.push(id.clone());
+        if case.get("skip").is_some() {
+            facts.skip_ids.push(id.clone());
         }
-        if case.get("only").and_then(Value::as_str) == Some("rust") {
-            facts.rust_only_ids.push(id.clone());
+        if case.get("skip").and_then(Value::as_str) == Some("rust") {
+            facts.rust_skip_ids.push(id.clone());
         }
         facts.ids.push(id);
         facts.kinds.push(kind);
     }
-    facts.only_ids.sort();
-    facts.rust_only_ids.sort();
+    facts.skip_ids.sort();
+    facts.rust_skip_ids.sort();
     Ok(facts)
 }
 
-/// The manifest as a map from corpus file to its case count and the ids marked for one side only.
+/// The manifest as a map from corpus file to its case count and the ids carrying skip.
 pub fn validate_manifest(value: &Value) -> Check<BTreeMap<String, (usize, Vec<String>)>> {
     let top = exact_keys(value, "manifest", &["files"], &[])?;
     let files = object(&top["files"], "manifest")?;
@@ -382,27 +399,27 @@ pub fn validate_manifest(value: &Value) -> Check<BTreeMap<String, (usize, Vec<St
         if parts.len() != 2 || !parts.iter().all(|part| is_name(part)) || !name.ends_with(".json") {
             return Err(format!("{at}: a corpus file is named <kind>/<name>.json"));
         }
-        let map = exact_keys(entry, &at, &["cases", "only"], &[])?;
+        let map = exact_keys(entry, &at, &["cases", "skip"], &[])?;
         let count = integer_field(map, "cases", &at)?;
         if count == 0 {
             return Err(format!("{at}: \"cases\" must be at least 1"));
         }
-        let mut only = Vec::new();
-        for id in array(&map["only"], &at, "\"only\"")? {
-            only.push(
+        let mut skip = Vec::new();
+        for id in array(&map["skip"], &at, "\"skip\"")? {
+            skip.push(
                 id.as_str()
                     .filter(|text| is_name(text))
-                    .ok_or_else(|| format!("{at}: \"only\" must hold case ids"))?
+                    .ok_or_else(|| format!("{at}: \"skip\" must hold case ids"))?
                     .to_owned(),
             );
         }
-        if !only.windows(2).all(|pair| pair[0] < pair[1]) {
+        if !skip.windows(2).all(|pair| pair[0] < pair[1]) {
             return Err(format!(
-                "{at}: \"only\" must list distinct ids in ascending order"
+                "{at}: \"skip\" must list distinct ids in ascending order"
             ));
         }
         let count = usize::try_from(count).map_err(|error| format!("{at}: {error}"))?;
-        manifest.insert(name.clone(), (count, only));
+        manifest.insert(name.clone(), (count, skip));
     }
     Ok(manifest)
 }
@@ -417,6 +434,18 @@ pub fn self_check(failures: &mut Vec<String>) {
         Ok(Ok(())) => {}
         other => failures.push(format!(
             "self-check: 97.0 must be accepted as an integer, got {other:?}"
+        )),
+    }
+    match value(r#"[{"$number": "-0"}, {"$number": "NaN"}]"#) {
+        Ok(Ok(())) => {}
+        other => failures.push(format!(
+            "self-check: the special numbers must be accepted, got {other:?}"
+        )),
+    }
+    match value(r#"[{"$number": "1"}]"#) {
+        Ok(Err(_)) => {}
+        other => failures.push(format!(
+            "self-check: an unknown $number name must be refused, got {other:?}"
         )),
     }
     match value("[97.5]") {

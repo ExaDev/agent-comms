@@ -2,7 +2,7 @@
   "files": {
     "function/a.json": {
       "cases": 2,
-      "only": [
+      "skip": [
         "a"
       ]
     }

@@ -34,12 +34,39 @@ export function textToCodeUnits(text: Text): readonly number[] {
   );
 }
 
-/** A value with every `{ "codeUnits": [...] }` replaced by the string it denotes, at any depth. The schema has already refused an object that holds a codeUnits key and anything else. */
+/** The numbers a corpus file names with `{ "$number": name }`, a closed lookup: the canonical JSON form writes a negative zero as 0 and has no infinity or NaN. */
+const NAMED_NUMBERS: Readonly<Record<string, number>> = {
+  "-0": -0,
+  Infinity: Number.POSITIVE_INFINITY,
+  "-Infinity": Number.NEGATIVE_INFINITY,
+  NaN: Number.NaN,
+};
+
+/** The name of a special number, as a corpus file writes it, or undefined for any other number. */
+export function specialNumberName(value: number): string | undefined {
+  if (Number.isNaN(value)) return "NaN";
+  if (Object.is(value, -0)) return "-0";
+  if (value === Number.POSITIVE_INFINITY) return "Infinity";
+  if (value === Number.NEGATIVE_INFINITY) return "-Infinity";
+
+  return undefined;
+}
+
+/** A value with every `{ "codeUnits": [...] }` replaced by the string it denotes and every `{ "$number": name }` by the number it names, at any depth. The schema has already refused an object that holds either key and anything else. */
 export function decodeValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item: unknown) => decodeValue(item));
   }
   if (isRecord(value)) {
+    const named = value.$number;
+    if (typeof named === "string" && Object.keys(value).length === 1) {
+      const decoded = NAMED_NUMBERS[named];
+      if (decoded === undefined) {
+        throw new Error(`$number names ${named}, which no corpus file may`);
+      }
+
+      return decoded;
+    }
     if (isCodeUnitsObject(value)) {
       return String.fromCharCode(...value.codeUnits);
     }

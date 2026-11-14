@@ -2,13 +2,13 @@
   "files": {
     "function/a.json": {
       "cases": 3,
-      "only": [
+      "skip": [
         "a"
       ]
     },
     "validate/b.json": {
       "cases": 1,
-      "only": []
+      "skip": []
     }
   }
 }

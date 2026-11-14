@@ -1,15 +1,11 @@
 {
   "files": {
     "function/a.json": {
-      "cases": 2,
-      "only": [
-        "b",
-        "a"
-      ]
+      "cases": 2
     },
     "validate/b.json": {
       "cases": 1,
-      "only": []
+      "skip": []
     }
   }
 }

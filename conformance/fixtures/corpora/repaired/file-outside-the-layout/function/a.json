@@ -9,8 +9,8 @@
       "function": "module.helper",
       "id": "a",
       "kind": "function",
-      "only": "ts",
-      "reason": "r"
+      "reason": "r",
+      "skip": "ts"
     },
     {
       "args": [

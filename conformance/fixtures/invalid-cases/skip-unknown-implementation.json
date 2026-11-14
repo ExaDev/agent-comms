@@ -9,8 +9,8 @@
       "function": "module.helper",
       "id": "a",
       "kind": "function",
-      "only": "go",
-      "reason": "r"
+      "reason": "r",
+      "skip": "go"
     }
   ]
 }

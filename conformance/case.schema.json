@@ -60,11 +60,11 @@
     "function": {
       "additionalProperties": false,
       "dependentRequired": {
-        "only": [
-          "reason"
-        ],
         "reason": [
-          "only"
+          "skip"
+        ],
+        "skip": [
+          "reason"
         ]
       },
       "oneOf": [
@@ -130,11 +130,11 @@
         "kind": {
           "const": "function"
         },
-        "only": {
-          "$ref": "#/$defs/only"
-        },
         "reason": {
           "$ref": "#/$defs/reason"
+        },
+        "skip": {
+          "$ref": "#/$defs/skip"
         },
         "throws": {
           "additionalProperties": false,
@@ -168,13 +168,6 @@
       "pattern": "^[a-z0-9][a-z0-9._-]*$",
       "type": "string"
     },
-    "only": {
-      "description": "The implementation that skips the case, never the host it runs on.",
-      "enum": [
-        "ts",
-        "rust"
-      ]
-    },
     "reason": {
       "minLength": 1,
       "type": "string"
@@ -184,14 +177,39 @@
       "minimum": -9007199254740991,
       "type": "integer"
     },
+    "skip": {
+      "description": "Names the implementation that skips the case, for a case one implementation cannot run: ts for a case the TypeScript implementation skips, rust for a case every build of the Rust implementation skips, wherever it runs (native, or wasm under Node, a browser or Workers). Always with a reason.",
+      "enum": [
+        "ts",
+        "rust"
+      ]
+    },
+    "specialNumber": {
+      "additionalProperties": false,
+      "description": "A number the canonical JSON form cannot hold, written as an object: a negative zero (the canonical form writes it as 0), an infinity or NaN. A loader reads it through a closed lookup of these four names.",
+      "properties": {
+        "$number": {
+          "enum": [
+            "-0",
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      },
+      "required": [
+        "$number"
+      ],
+      "type": "object"
+    },
     "validate": {
       "additionalProperties": false,
       "dependentRequired": {
-        "only": [
-          "reason"
-        ],
         "reason": [
-          "only"
+          "skip"
+        ],
+        "skip": [
+          "reason"
         ]
       },
       "properties": {
@@ -274,15 +292,15 @@
         "kind": {
           "const": "validate"
         },
-        "only": {
-          "$ref": "#/$defs/only"
-        },
         "reason": {
           "$ref": "#/$defs/reason"
         },
         "schema": {
           "minLength": 1,
           "type": "string"
+        },
+        "skip": {
+          "$ref": "#/$defs/skip"
         }
       },
       "required": [
@@ -296,35 +314,49 @@
       "type": "object"
     },
     "value": {
-      "description": "Any JSON value whose numbers are integers no larger than 2^53-1 in magnitude, and whose objects holding a codeUnits key are exactly the code unit form of a string.",
+      "description": "Any JSON value whose numbers are integers no larger than 2^53-1 in magnitude, whose objects holding a codeUnits key are exactly the code unit form of a string and whose objects holding a $number key are exactly one of the four special numbers.",
       "else": {
         "else": {
           "else": {
+            "else": {
+              "if": {
+                "type": "number"
+              },
+              "then": {
+                "$ref": "#/$defs/safeInteger"
+              }
+            },
             "if": {
-              "type": "number"
+              "type": "array"
             },
             "then": {
-              "$ref": "#/$defs/safeInteger"
+              "items": {
+                "$ref": "#/$defs/value"
+              },
+              "type": "array"
             }
           },
           "if": {
-            "type": "array"
+            "type": "object"
           },
           "then": {
-            "items": {
+            "additionalProperties": {
               "$ref": "#/$defs/value"
             },
-            "type": "array"
+            "type": "object"
           }
         },
         "if": {
+          "properties": {
+            "$number": true
+          },
+          "required": [
+            "$number"
+          ],
           "type": "object"
         },
         "then": {
-          "additionalProperties": {
-            "$ref": "#/$defs/value"
-          },
-          "type": "object"
+          "$ref": "#/$defs/specialNumber"
         }
       },
       "if": {

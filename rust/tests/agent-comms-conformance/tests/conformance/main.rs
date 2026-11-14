@@ -178,8 +178,8 @@ fn check_text_pairs(failures: &mut Vec<String>) {
 struct LoadedFile {
     name: String,
     case_count: usize,
-    only_ids: Vec<String>,
-    rust_only_ids: Vec<String>,
+    skip_ids: Vec<String>,
+    rust_skip_ids: Vec<String>,
 }
 
 /// Loads and checks a whole corpus root by every rule `conformance/README.md` states: the files selected, each file
@@ -218,8 +218,8 @@ fn check_corpus(root: &Path) -> (Vec<LoadedFile>, Vec<String>) {
                 files.push(LoadedFile {
                     name,
                     case_count: facts.ids.len(),
-                    only_ids: facts.only_ids,
-                    rust_only_ids: facts.rust_only_ids,
+                    skip_ids: facts.skip_ids,
+                    rust_skip_ids: facts.rust_skip_ids,
                 });
             }
             Err(error) => problems.push(error),
@@ -232,11 +232,11 @@ fn check_corpus(root: &Path) -> (Vec<LoadedFile>, Vec<String>) {
             problems.extend(count_problems(&files, &manifest));
             let actual: BTreeMap<&str, (usize, &Vec<String>)> = files
                 .iter()
-                .map(|file| (file.name.as_str(), (file.case_count, &file.only_ids)))
+                .map(|file| (file.name.as_str(), (file.case_count, &file.skip_ids)))
                 .collect();
             let recorded: BTreeMap<&str, (usize, &Vec<String>)> = manifest
                 .iter()
-                .map(|(name, (count, only))| (name.as_str(), (*count, only)))
+                .map(|(name, (count, skip))| (name.as_str(), (*count, skip)))
                 .collect();
             for name in actual
                 .keys()
@@ -259,7 +259,7 @@ fn check_corpus(root: &Path) -> (Vec<LoadedFile>, Vec<String>) {
 
 /// The completeness check for this implementation, the same rule as the TypeScript runner's `completenessProblems`:
 /// what is executed plus what is skipped is the manifest's total, and every case skipped because it is marked for this
-/// implementation (`only: rust`) is marked in the manifest. No native executor exists yet, so every other case is
+/// implementation (`skip: rust`) is marked in the manifest. No native executor exists yet, so every other case is
 /// skipped for that one stated reason; execution moves cases from skipped to executed and cannot lose one.
 fn count_problems(
     files: &[LoadedFile],
@@ -267,7 +267,7 @@ fn count_problems(
 ) -> Vec<String> {
     let (executed, skipped_marked, skipped_without_executor) = counts(files);
     let total: usize = manifest.values().map(|(count, _)| count).sum();
-    let marked: BTreeSet<&String> = manifest.values().flat_map(|(_, only)| only).collect();
+    let marked: BTreeSet<&String> = manifest.values().flat_map(|(_, skip)| skip).collect();
     let mut problems = Vec::new();
     if executed + skipped_marked + skipped_without_executor != total {
         problems.push(format!(
@@ -275,7 +275,7 @@ fn count_problems(
             skipped_marked + skipped_without_executor
         ));
     }
-    for id in files.iter().flat_map(|file| &file.rust_only_ids) {
+    for id in files.iter().flat_map(|file| &file.rust_skip_ids) {
         if !marked.contains(id) {
             problems.push(format!(
                 "{id} is skipped here because it is marked, and the manifest does not mark it"
@@ -288,7 +288,7 @@ fn count_problems(
 /// The cases this runner executed, skipped because they are marked `rust`, and skipped for want of an executor.
 fn counts(files: &[LoadedFile]) -> (usize, usize, usize) {
     let total: usize = files.iter().map(|file| file.case_count).sum();
-    let skipped_marked: usize = files.iter().map(|file| file.rust_only_ids.len()).sum();
+    let skipped_marked: usize = files.iter().map(|file| file.rust_skip_ids.len()).sum();
     (0, skipped_marked, total - skipped_marked)
 }
 
@@ -321,10 +321,10 @@ fn main() -> ExitCode {
     let (executed, skipped_marked, skipped_without_executor) = counts(&files);
     for file in &files {
         println!(
-            "{}: {} cases ({} for one implementation only)",
+            "{}: {} cases ({} carrying skip)",
             file.name,
             file.case_count,
-            file.only_ids.len()
+            file.skip_ids.len()
         );
     }
     for failure in &failures {
@@ -332,7 +332,7 @@ fn main() -> ExitCode {
     }
     if failures.is_empty() {
         println!(
-            "checked {} files: {executed} executed, {skipped_marked} skipped because they are marked for rust, {skipped_without_executor} skipped because no native executor exists yet",
+            "checked {} files: {executed} executed, {skipped_marked} skipped because they carry skip: rust, {skipped_without_executor} skipped because no native executor exists yet",
             files.len()
         );
         ExitCode::SUCCESS

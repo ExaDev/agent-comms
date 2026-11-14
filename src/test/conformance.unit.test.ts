@@ -13,11 +13,12 @@ import type {
   Text,
   ValidateCase,
 } from "./conformance/corpus-types.js";
-import { KINDS, ONLY_VALUES } from "./conformance/corpus-types.js";
+import { KINDS, SKIP_VALUES } from "./conformance/corpus-types.js";
 import { readJson } from "./conformance/read-json.js";
 import {
   decodeValue,
   textToCodeUnits,
+  specialNumberName,
   textToString,
 } from "./conformance/text.js";
 import {
@@ -108,17 +109,21 @@ function subsetMatches(actual: unknown, expected: unknown): boolean {
   return Object.is(actual, expected);
 }
 
-/** What a function returned, as the JSON value a case expects: an `undefined` stays one, and anything else is what `JSON.stringify` makes of it. */
+/** What a function returned, as the value a case expects: an `undefined` stays one, anything else is what `JSON.stringify` makes of it, except that a number the JSON form cannot hold (a negative zero, an infinity, NaN) is kept as the number. */
 function toJson(value: unknown): unknown {
   if (value === undefined) {
     return undefined;
   }
-  const text = JSON.stringify(value);
+  const text = JSON.stringify(value, (_key, item: unknown) => {
+    const name = typeof item === "number" ? specialNumberName(item) : undefined;
+
+    return name === undefined ? item : { $number: name };
+  });
   if (text === undefined) {
     throw new Error("the function returned a value JSON cannot hold");
   }
 
-  return JSON.parse(text);
+  return decodeValue(JSON.parse(text));
 }
 
 async function runFunctionCase(testCase: FunctionCase): Promise<void> {
@@ -316,6 +321,27 @@ describe("corpus loading", () => {
     }
   });
 
+  it("reads the four special numbers as the numbers they name, and nothing else", () => {
+    const decoded = decodeValue([
+      { $number: "-0" },
+      { $number: "Infinity" },
+      { $number: "-Infinity" },
+      { $number: "NaN" },
+      { a: { $number: "-0" } },
+    ]);
+    expect(decoded).toEqual([
+      -0,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      Number.NaN,
+      { a: -0 },
+    ]);
+    expect(Object.is((decoded as unknown[])[0], -0)).toBe(true);
+    expect(() => decodeValue({ $number: "1" })).toThrow("$number");
+    expect(specialNumberName(-0)).toBe("-0");
+    expect(specialNumberName(0)).toBeUndefined();
+  });
+
   it("reads both forms of a text as the same UTF-16 code units", () => {
     const document = readJson(join(FIXTURES, "text-forms", "pairs.json"));
     const list: unknown = isRecord(document) ? document.pairs : undefined;
@@ -334,7 +360,7 @@ describe("corpus loading", () => {
     }
   });
 
-  it("types the case kinds and the only values the schema defines, and no others", () => {
+  it("types the case kinds and the skip values the schema defines, and no others", () => {
     const schema = readJson(join(CORPUS_ROOT, "case.schema.json"));
     const refs = dig(schema, "$defs", "case", "oneOf");
     if (!Array.isArray(refs)) {
@@ -358,7 +384,7 @@ describe("corpus loading", () => {
       return kind;
     });
     expect([...kinds].sort()).toEqual([...KINDS].sort());
-    expect(dig(schema, "$defs", "only", "enum")).toEqual([...ONLY_VALUES]);
+    expect(dig(schema, "$defs", "skip", "enum")).toEqual([...SKIP_VALUES]);
   });
 });
 
@@ -402,7 +428,7 @@ describe("corpus completeness", () => {
     expect(
       completenessProblems(
         entries.reduce((sum, entry) => sum + entry.cases, 0),
-        new Set(entries.flatMap((entry) => entry.only)),
+        new Set(entries.flatMap((entry) => entry.skip)),
         registered,
         skipped,
       ),
