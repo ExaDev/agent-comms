@@ -29,7 +29,10 @@ import {
   freeLocalPort,
   waitForCondition,
 } from "./hub-helpers.js";
-import { wireTestTransport } from "./test-transport.js";
+import {
+  wireTestTransport,
+  wireTestTransportWithHub,
+} from "./test-transport.js";
 
 /** Above the term 0 a lone store claims at, so accepting this claim would supersede the store's own. */
 const ROGUE_TERM = 7;
@@ -430,6 +433,51 @@ test("a claim naming a holder that does not enrol within the wait is dropped, so
     );
     await introduce(holderSession, holder);
     await roundTrip(holderSession);
+
+    expect(store.coordinatorClaim).toEqual({ term: 0, holder: store.peerId });
+    expect(store.holdsCoordinatorRole).toBe(true);
+  } finally {
+    await teardown.run();
+  }
+});
+
+test("a claim held for a holder that is not here is not evaluated once its sender's session has closed, however the holder then enrols", async () => {
+  const teardown = new TeardownStack();
+  try {
+    const store = new MeshStore({
+      coordinatorPort: await freeLocalPort(),
+      coordinatorClaimWaitMs: HELD_FOR_THE_TEST_MS,
+    });
+    const { transport } = await wireTestTransportWithHub(store);
+    teardown.push(async () => {
+      await store.shutdown();
+    });
+    await store.init();
+    const sender = rawPeer();
+    const holder = rawPeer();
+    const senderSession = await dialAsRawPeer(
+      sender,
+      store.coordinatorPort,
+      teardown,
+    );
+    await introduce(senderSession, sender);
+    await senderSession.sendCoordinatorClaim(rogueClaim(holder.deviceHex));
+    await roundTrip(senderSession);
+    expect(transport.electionPeerIds().has(sender.deviceHex)).toBe(true);
+
+    await senderSession.close();
+    await waitForCondition(
+      () => !transport.electionPeerIds().has(sender.deviceHex),
+    );
+    const holderSession = await dialAsRawPeer(
+      holder,
+      store.coordinatorPort,
+      teardown,
+    );
+    await introduce(holderSession, holder);
+    await roundTrip(holderSession);
+    // The announcement to the holder is what releases waiting claims, and it is sent before the claim could be evaluated: wait for it, then check.
+    await firstCoordinatorFrame(holderSession);
 
     expect(store.coordinatorClaim).toEqual({ term: 0, holder: store.peerId });
     expect(store.holdsCoordinatorRole).toBe(true);

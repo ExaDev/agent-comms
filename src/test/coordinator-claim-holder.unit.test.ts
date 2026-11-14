@@ -335,35 +335,7 @@ test("repeated claims for one holder leave a sender's claims for other holders w
   }
 });
 
-test("a claim waiting for its holder ends with its sender's last session: nothing is accepted when the holder enrols, and no timer is left", async () => {
-  vi.useFakeTimers();
-  const peers = new Set([SENDER]);
-  const { role } = roleWith(peers);
-  await role.handleClaim({ id: SENDER }, claimFor(ABSENT, LATER_TERM));
-  expect(vi.getTimerCount()).toBe(1);
-
-  peers.delete(SENDER);
-  await role.handleDeparture(SENDER, async () => undefined);
-  expect(vi.getTimerCount()).toBe(0);
-
-  peers.add(ABSENT);
-  await role.announceTo({ id: ABSENT });
-  expect(role.current()).toBeUndefined();
-});
-
-test("a claim waiting for its holder stays when its sender still has another machine-local session", async () => {
-  const peers = new Set([SENDER]);
-  const { role } = roleWith(peers);
-  await role.handleClaim({ id: SENDER }, claimFor(ABSENT, LATER_TERM));
-
-  await role.handleDeparture(SENDER, async () => undefined);
-  peers.add(ABSENT);
-  await role.announceTo({ id: ABSENT });
-
-  expect(role.current()).toEqual({ term: LATER_TERM, holder: ABSENT });
-});
-
-test("a claim whose sender is no longer here is not evaluated when its holder enrols", async () => {
+test("a claim whose sender has no machine-local session when its holder enrols is not evaluated", async () => {
   const peers = new Set([SENDER]);
   const { role } = roleWith(peers);
   await role.handleClaim({ id: SENDER }, claimFor(ABSENT, LATER_TERM));
@@ -414,6 +386,25 @@ test("a claim that fails to evaluate is reported, and the claims released with i
     if (calls === 1) throw new Error("evaluation failed");
     await evaluate(handle, frame);
   });
+
+  await role.announceTo({ id: ABSENT });
+
+  expect(errors).toHaveLength(1);
+  expect(role.current()).toEqual({ term: LATER_TERM, holder: ABSENT });
+});
+
+test("an announcement that cannot be sent is reported, and the claims released with it are still evaluated", async () => {
+  const peers = new Set([SENDER]);
+  const errors: unknown[] = [];
+  const { role } = roleWith(peers, {
+    errors,
+    sendCoordinatorClaim: async () => {
+      throw new Error("the session is closing");
+    },
+  });
+  await role.handleClaim({ id: SENDER }, claimFor(SENDER, INCUMBENT_TERM));
+  await role.handleClaim({ id: SENDER }, claimFor(ABSENT, LATER_TERM));
+  peers.add(ABSENT);
 
   await role.announceTo({ id: ABSENT });
 

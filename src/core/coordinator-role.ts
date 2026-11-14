@@ -5,7 +5,7 @@
  *
  * When a claim is made: a store claims only when it knows of no incumbent and is the first on the machine as far as it can tell. A store that bound the well-known port with no first-contact presence configured can meet other stores only through that port, so it claims at once; one that may be reachable through first contact (it bound the port, or could neither join nor bind it) first waits one claim wait for an incumbent's announcement, so a store arriving at an existing mesh never takes the role at an equal term before the holder's claim reaches it. Both ends of every machine-local session announce the incumbent they know as the session is enrolled. When the incumbent departs, the lowest device-id among the peers this side has a machine-local session to claims at once at a raised term, and every other survivor claims too if, one claim wait later, the claim it accepts still names a holder it has no session to, which covers a lowest-id peer that is itself gone or was never reachable. A claim that is accepted names a holder that is here when it is accepted, so the wait after an accepted claim never starts: the claim waits are the one after a departure and the one at start-up.
  *
- * Whose claims count: claims are accepted from the peers this machine already trusts with a machine-local session, and this module does not authenticate them further. A claim is evaluated only when its holder is this side, the peer that sent it (the session's authenticated device-id, never a field of the frame), or a peer this side has a machine-local session to. A claim gossiped onward by a peer other than its holder is therefore still accepted wherever the holder is reachable, which is every peer of a fully connected machine. Any other claim waits until its holder's session is enrolled and is dropped after one claim wait, or when its sender's last machine-local session closes. Waiting claims are bounded per sender: each machine-local peer has at most PENDING_CLAIMS_PER_SENDER of them, at most one per holder, kept in the election's own order (higher term first, an equal term by lowest holder id), and a claim whose term no later claim could supersede is not kept.
+ * Whose claims count: claims are accepted from the peers this machine already trusts with a machine-local session, and this module does not authenticate them further. A claim is evaluated only when its holder is this side, the peer that sent it (the session's authenticated device-id, never a field of the frame), or a peer this side has a machine-local session to. A claim gossiped onward by a peer other than its holder is therefore still accepted wherever the holder is reachable, which is every peer of a fully connected machine. Any other claim waits until its holder's session is enrolled and is dropped after one claim wait, and is not evaluated at all when, by then, its sender has no machine-local session. Waiting claims are bounded per sender: each machine-local peer has at most PENDING_CLAIMS_PER_SENDER of them, at most one per holder, kept in the election's own order (higher term first, an equal term by lowest holder id), and a claim whose term no later claim could supersede is not kept.
  */
 
 import {
@@ -186,10 +186,6 @@ export class CoordinatorRole {
     peerId: string,
     onDelayedTakeover: () => Promise<void>,
   ): Promise<void> {
-    // A claim waiting for a holder ends with the session that sent it, unless the device still has another machine-local session.
-    if (!this.deps.requireTransport().electionPeerIds().has(peerId)) {
-      this.dropPendingFrom(peerId);
-    }
     if (this.stopped || this.current()?.holder !== peerId) return;
     if (this.isLowestSurvivor(peerId)) {
       await this.claim();
@@ -273,13 +269,6 @@ export class CoordinatorRole {
       }
     }
     return taken.sort(rankedFirst);
-  }
-
-  /** Drops every claim a departed sender had waiting. */
-  private dropPendingFrom(sender: string): void {
-    for (const entry of [...(this.pending.get(sender) ?? [])]) {
-      this.forget(sender, entry);
-    }
   }
 
   private dropAllPending(): void {
