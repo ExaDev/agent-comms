@@ -128,6 +128,30 @@ test(
 );
 
 test(
+  "processes that create the pairing secret together settle on one",
+  { timeout: TEST_TIMEOUT_MS },
+  async () => {
+    for (let round = 0; round < NONCE_ROUNDS; round++) {
+      const dir = path.join(
+        scratchDirectory("agent-comms-pairing-secret-race-"),
+        "state",
+      );
+
+      const outcomes = await race(
+        dir,
+        Array.from({ length: NONCE_WORKERS }, () => "pairing-secret"),
+      );
+
+      const secrets = new Set(outcomes.map((o) => o.stdout.trim()));
+      expect([...secrets]).toHaveLength(1);
+      expect(
+        fs.readFileSync(path.join(dir, "web-pairing-secret"), "utf-8").trim(),
+      ).toBe([...secrets][0]);
+    }
+  },
+);
+
+test(
   "clearLegacyIssuedGrants and saveUserDisplayName lose neither the removals nor the name",
   { timeout: TEST_TIMEOUT_MS },
   async () => {

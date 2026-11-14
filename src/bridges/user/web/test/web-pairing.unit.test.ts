@@ -8,9 +8,8 @@ import { describe, expect, it, vi } from "vitest";
 import { scratchDirectory } from "../../../../test/scratch-directory.helper.js";
 import {
   MESH_SUBPROTOCOL,
-  PAIRING_HEADER,
   PAIRING_SECRET_PATTERN,
-  PAIRING_SUBPROTOCOL_PREFIX,
+  TICKET_SUBPROTOCOL_PREFIX,
   meshSocketProtocols,
 } from "../pairing-protocol.js";
 import { HOSTED_DASHBOARD_ORIGIN } from "../web-access.js";
@@ -21,7 +20,7 @@ import {
   openPairingSecret,
   pairingPageHtml,
   pairingSecretFile,
-  presentedPairingSecret,
+  presentedTicket,
   rotatePairingSecret,
   selectMeshSubprotocol,
 } from "../web-pairing.js";
@@ -100,33 +99,25 @@ describe("the secret store", () => {
 });
 
 describe("what a request presents", () => {
-  it("reads the header", () => {
-    expect(presentedPairingSecret({ [PAIRING_HEADER]: SECRET })).toBe(SECRET);
-  });
-
-  it("reads the secret from an offered subprotocol among others", () => {
+  it("reads the ticket from an offered subprotocol among others", () => {
     const offered = meshSocketProtocols(SECRET).join(", ");
 
-    expect(presentedPairingSecret({ "sec-websocket-protocol": offered })).toBe(
-      SECRET,
-    );
+    expect(presentedTicket({ "sec-websocket-protocol": offered })).toBe(SECRET);
   });
 
-  it("presents nothing when neither is offered", () => {
-    expect(presentedPairingSecret({})).toBeUndefined();
+  it("presents nothing when no ticket subprotocol is offered", () => {
+    expect(presentedTicket({})).toBeUndefined();
     expect(
-      presentedPairingSecret({ "sec-websocket-protocol": MESH_SUBPROTOCOL }),
+      presentedTicket({ "sec-websocket-protocol": MESH_SUBPROTOCOL }),
     ).toBeUndefined();
   });
 
-  it("selects only the fixed subprotocol, never the one carrying the secret", () => {
+  it("selects only the fixed subprotocol, never the one carrying the ticket", () => {
     const offered = new Set(meshSocketProtocols(SECRET));
 
     expect(selectMeshSubprotocol(offered)).toBe(MESH_SUBPROTOCOL);
     expect(
-      selectMeshSubprotocol(
-        new Set([`${PAIRING_SUBPROTOCOL_PREFIX}${SECRET}`]),
-      ),
+      selectMeshSubprotocol(new Set([`${TICKET_SUBPROTOCOL_PREFIX}${SECRET}`])),
     ).toBe(false);
     expect(selectMeshSubprotocol(new Set())).toBe(false);
   });
@@ -157,5 +148,51 @@ describe("handing the secret over", () => {
     expect(PAIRING_PAGE_HEADERS["Content-Security-Policy"]).toContain(
       "frame-ancestors 'none'",
     );
+  });
+});
+
+describe("the secret file's protection", () => {
+  const OPEN_FILE = 0o644;
+  const OPEN_DIR = 0o755;
+
+  it("replaces a secret file that is open to others, and says so", () => {
+    const dir = freshDir();
+    const first = openPairingSecret({ dir }).current();
+    fs.chmodSync(pairingSecretFile(dir), OPEN_FILE);
+    const replaced = vi.fn<(file: string) => void>();
+
+    const second = openPairingSecret({ dir, onReplaced: replaced }).current();
+
+    expect(second).not.toBe(first);
+    expect(replaced).toHaveBeenCalledWith(pairingSecretFile(dir));
+    expect(fs.statSync(pairingSecretFile(dir)).mode & PERMISSION_MASK).toBe(
+      OWNER_ONLY_FILE,
+    );
+  });
+
+  it("closes a directory of this user's that was left open to others when it writes the secret there", () => {
+    const dir = freshDir();
+    fs.mkdirSync(dir, { recursive: true });
+    fs.chmodSync(dir, OPEN_DIR);
+
+    openPairingSecret({ dir }).current();
+
+    expect(fs.statSync(dir).mode & PERMISSION_MASK).toBe(OWNER_ONLY_DIR);
+  });
+
+  it("changes its generation when a different secret is read, and only then", () => {
+    const dir = freshDir();
+    const store = openPairingSecret({ dir });
+    store.current();
+    const initial = store.generation();
+
+    store.current();
+    expect(store.generation()).toBe(initial);
+    rotatePairingSecret(dir);
+    store.current();
+
+    expect(store.generation()).toBe(initial + 1);
+    store.current();
+    expect(store.generation()).toBe(initial + 1);
   });
 });

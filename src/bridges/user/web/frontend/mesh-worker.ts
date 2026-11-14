@@ -7,6 +7,7 @@
  */
 
 import { meshSocketProtocols } from "../pairing-protocol.js";
+import { acquireTicket } from "../pairing-handshake.js";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import { RetryLinkPlugin } from "@orpc/client/plugins";
@@ -216,11 +217,20 @@ const RECONNECT_MAX_DELAY_MS = 30_000;
 export function connect(url: string, pairingSecret?: string): void {
   const link = new RPCLink({
     connect: async () => {
-      // A dashboard served by a bridge offers no protocols; the hosted one offers the mesh protocol and the secret it was paired with.
-      const socket =
-        pairingSecret === undefined
-          ? new WebSocket(url)
-          : new WebSocket(url, meshSocketProtocols(pairingSecret));
+      // A dashboard served by a bridge offers no protocols. The hosted one first has the listener prove it holds the secret it was paired with, which also yields the single-use ticket that admits the socket, so the secret itself is never sent and a listener that is not the bridge is never dialled.
+      let socket: WebSocket;
+      if (pairingSecret === undefined) {
+        socket = new WebSocket(url);
+      } else {
+        const ticket = await acquireTicket(
+          Number(new URL(url).port),
+          pairingSecret,
+        );
+        if (ticket === undefined) {
+          throw new Error("the listener did not prove it is the bridge");
+        }
+        socket = new WebSocket(url, meshSocketProtocols(ticket));
+      }
       currentSocket = socket;
       socket.addEventListener("open", () => {
         broadcastToPorts({ type: "connected" });

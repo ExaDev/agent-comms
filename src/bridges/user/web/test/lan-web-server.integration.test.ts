@@ -10,6 +10,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import WS from "ws";
 import { scratchDirectory } from "../../../../test/scratch-directory.helper.js";
+import { acquireTicket } from "../pairing-handshake.js";
 import { meshSocketProtocols } from "../pairing-protocol.js";
 import { openPairingSecret } from "../web-pairing.js";
 import {
@@ -242,14 +243,18 @@ describe("Origin check on loopback", () => {
     },
   );
 
-  it("admits the hosted dashboard's Origin from loopback only with the pairing secret", async () => {
+  it("admits the hosted dashboard's Origin from loopback only with a ticket the pairing exchange issued", async () => {
     const { port, pairingDir } = await start(undefined);
     const hosted = { origin: HOSTED_DASHBOARD_ORIGIN };
     expect(await upgrade("127.0.0.1", port, hosted)).toBe("rejected");
-    const protocols = meshSocketProtocols(
-      openPairingSecret({ dir: pairingDir }).current(),
-    );
-    expect(await upgrade("127.0.0.1", port, hosted, protocols)).toBe("open");
+    const secret = openPairingSecret({ dir: pairingDir }).current();
+    expect(
+      await upgrade("127.0.0.1", port, hosted, meshSocketProtocols(secret)),
+    ).toBe("rejected");
+    const ticket = await acquireTicket(port, secret);
+    expect(
+      await upgrade("127.0.0.1", port, hosted, meshSocketProtocols(ticket)),
+    ).toBe("open");
   });
 });
 
