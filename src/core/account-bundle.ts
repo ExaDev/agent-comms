@@ -30,6 +30,8 @@ const SALT_BYTES = 16;
 const KEY_BYTES = 32;
 /** GCM's specified IV length. */
 const IV_BYTES = 12;
+/** GCM's full-length authentication tag. A shorter tag is weaker evidence that the ciphertext is untouched, and Node accepts one unless the length is pinned, so the length is checked wherever a tag comes from outside. */
+const TAG_BYTES = 16;
 /** The shortest passphrase an export accepts. Twelve characters is the length NCSC and NIST guidance treat as the floor for a passphrase protecting something offline-attackable; the scrypt cost above does the rest. */
 export const MIN_ACCOUNT_PASSPHRASE_LENGTH = 12;
 
@@ -37,6 +39,23 @@ const INVITE_KEY_INFO = "agent-comms/account-invite/v1";
 const BUNDLE_AAD = Buffer.from(ACCOUNT_BUNDLE_PREFIX);
 
 const base64url = z.string().regex(/^[A-Za-z0-9_-]*$/);
+
+/** Base64url text that decodes to exactly `bytes` bytes. */
+function base64urlBytes(bytes: number): z.ZodType<string> {
+  return base64url.refine(
+    (text) => Buffer.from(text, "base64url").length === bytes,
+    `must decode to ${String(bytes)} bytes`,
+  );
+}
+
+/** The ciphertext part of an envelope; its length is whatever the plaintext was. */
+
+/** The parts of an envelope sealed with AES-256-GCM, each at the length `seal` writes and GCM specifies. */
+const gcmFields = {
+  iv: base64urlBytes(IV_BYTES),
+  tag: base64urlBytes(TAG_BYTES),
+  ct: base64url,
+};
 
 /** What an account export or a join carries: the PEM private key and the name the account asserts for itself, if it has one. */
 export interface AccountContents {
@@ -84,15 +103,11 @@ const passphraseEnvelopeSchema = z
     r: z.number().int().positive(),
     p: z.number().int().positive(),
     salt: base64url,
-    iv: base64url,
-    tag: base64url,
-    ct: base64url,
+    ...gcmFields,
   })
   .strict();
 
-const inviteEnvelopeSchema = z
-  .object({ iv: base64url, tag: base64url, ct: base64url })
-  .strict();
+const inviteEnvelopeSchema = z.object(gcmFields).strict();
 
 function seal(
   key: Buffer,
@@ -109,19 +124,20 @@ function seal(
   };
 }
 
-/** The plaintext of a sealed envelope, or undefined if the key is wrong or the envelope was altered. */
+/** The plaintext of a sealed envelope, or undefined if the key is wrong or the envelope was altered. The envelope's iv and tag have already been checked to be the lengths `seal` writes, and the cipher is set to accept only a full-length tag as well, so a shortened one cannot authenticate. */
 function open(
   key: Buffer,
   envelope: Readonly<{ iv: string; tag: string; ct: string }>,
 ): string | undefined {
-  const decipher = createDecipheriv(
-    "aes-256-gcm",
-    key,
-    Buffer.from(envelope.iv, "base64url"),
-  );
-  decipher.setAAD(BUNDLE_AAD);
-  decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
   try {
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      key,
+      Buffer.from(envelope.iv, "base64url"),
+      { authTagLength: TAG_BYTES },
+    );
+    decipher.setAAD(BUNDLE_AAD);
+    decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
     return Buffer.concat([
       decipher.update(Buffer.from(envelope.ct, "base64url")),
       decipher.final(),
