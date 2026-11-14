@@ -103,6 +103,11 @@ export function ChatArea({
             ) and press Pair this browser. Run agent-comms pairing rotate to
             revoke every pairing.
           </Text>
+          <Text c="dimmed" ta="center" size="sm">
+            If that address answers 404 or nothing, the bridge is older than
+            pairing: update agent-comms to its latest release, restart the
+            bridge, and open the address again.
+          </Text>
           <Button variant="outline" onClick={onConnectToMesh}>
             Try again
           </Button>
