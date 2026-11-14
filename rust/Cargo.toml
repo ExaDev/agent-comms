@@ -10,8 +10,8 @@ license = "MIT"
 repository = "https://github.com/ExaDev/agent-comms"
 
 [workspace.dependencies]
-# Default features are off in every dependency, so a crate takes only the features it names.
-serde_json = { version = "1", default-features = false, features = ["std"] }
+# Default features are off in every dependency, so a crate takes only the features it names. float_roundtrip makes a decimal literal parse to the double JSON.parse gives it: without it serde_json can be one unit in the last place away, so the Rust side would disagree with the TypeScript side at numeric boundaries, and tests/conformance/main.rs fails when the feature is off.
+serde_json = { version = "1", default-features = false, features = ["std", "float_roundtrip"] }
 
 [workspace.lints.rust]
 # Binding crates that need wasm-bindgen's generated FFI relax this in their own manifest, not here.

@@ -218,7 +218,7 @@ Aliases are created only on inbound contact from that correspondent, never pre-p
 
 ## Working on the Rust workspace and the conformance corpus
 
-`conformance/` holds language-neutral test cases that every implementation of the package runs, and `rust/` is the workspace the package is being ported into. A push that touches either, or the scripts and workflows that check them, runs `scripts/rust-checks.sh` from the pre-push hook, which needs [rustup](https://rustup.rs) (the toolchain `rust/rust-toolchain.toml` pins is installed on first use) and Python 3.9 or later. Every cargo command goes through `scripts/rust.sh`, never cargo directly. The corpus format, how a case is added and what each field means are in [`conformance/README.md`](conformance/README.md); a dependency is added to the Rust workspace by listing it, with the reason, in `rust/deny.toml`.
+`conformance/` holds language-neutral test cases that every implementation of the package runs, and `rust/` holds the Rust implementation of the package. A push that touches either, or the scripts and workflows that check them, runs `scripts/rust-checks.sh` from the pre-push hook, which needs [rustup](https://rustup.rs) (the toolchain `rust/rust-toolchain.toml` pins is installed on first use) and Python 3.9 or later. Every cargo command goes through `scripts/rust.sh`, never cargo directly. The corpus format, how a case is added and what each field means are in [`conformance/README.md`](conformance/README.md); a dependency is added to the Rust workspace by listing it, with the reason, in `rust/deny.toml`.
 
 ## Adding a new harness
 

@@ -18,10 +18,12 @@ export default defineConfig(
       "**/pnpm-lock.yaml",
       ".stryker-tmp/**",
       "reports/**",
-      // Files the conformance loaders must refuse or select by name, whose contents are deliberately not canonical JSON: the selection tree holds placeholder text, and three fixtures are the raw bytes of a file that is not UTF-8, of a file that starts with a byte order mark and of a lone surrogate escape.
+      // Files the conformance loaders must refuse or select by name, whose contents are deliberately not canonical JSON: the selection tree holds placeholder text, and five fixtures are the raw bytes of a file that is not UTF-8, of a file that starts with a byte order mark, of a lone surrogate escape and of a number written with more digits than its canonical form keeps.
       "conformance/fixtures/loader-selection/tree/**",
       "conformance/fixtures/invalid-cases/file-not-utf8.json",
       "conformance/fixtures/invalid-cases/file-with-byte-order-mark.json",
+      "conformance/fixtures/invalid-cases/integer-written-as-float-one-past-2-53.json",
+      "conformance/fixtures/repaired-cases/integer-written-as-float-one-past-2-53.json",
       "conformance/fixtures/invalid-cases/text-lone-surrogate-escape.json",
     ],
   },

@@ -17,6 +17,14 @@ cd "$(dirname "$0")/../rust"
 # The pinned toolchain is installed on first use, since rustup does not install it by itself. Its output goes to stderr so stdout stays clean for metadata.
 rustup show active-toolchain >/dev/null 2>&1 || rustup toolchain install >&2
 
+# Every check runs on the toolchain rust-toolchain.toml pins, whatever the host has set: a rustup directory override or a RUSTUP_TOOLCHAIN in the environment outranks the file, and a cargo earlier on PATH than rustup's (a package manager's) ignores it. The channel is read from the file, exported, and the directory of that toolchain's own cargo goes first on PATH.
+channel=$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml)
+[ -n "$channel" ] || { echo "rust.sh: no channel in rust/rust-toolchain.toml" >&2; exit 2; }
+RUSTUP_TOOLCHAIN=$channel
+export RUSTUP_TOOLCHAIN
+PATH="$(dirname "$(rustup which cargo)"):$PATH"
+export PATH
+
 check=${1:-}
 [ "$#" -eq 0 ] || shift
 case "$check" in

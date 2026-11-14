@@ -5,10 +5,10 @@
         {
           "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           "petname": "work laptop",
-          "selfName": "example-mbp"
+          "selfName": "laptop-a"
         }
       ],
-      "expect": "work laptop \"example-mbp\" 0123456789ab",
+      "expect": "work laptop \"laptop-a\" 0123456789ab",
       "from": "display-name.unit.test.ts: formatDisplayName > puts the petname first, then the self-asserted name quoted, then the short id",
       "function": "display-name.formatDisplayName",
       "id": "format-display-name-petname-first",
@@ -18,10 +18,10 @@
       "args": [
         {
           "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-          "selfName": "example-mbp"
+          "selfName": "laptop-a"
         }
       ],
-      "expect": "\"example-mbp\" 0123456789ab",
+      "expect": "\"laptop-a\" 0123456789ab",
       "from": "display-name.unit.test.ts: formatDisplayName > shows the self-asserted name and short id when the viewer has no petname",
       "function": "display-name.formatDisplayName",
       "id": "format-display-name-self-name-and-short-id",
@@ -43,11 +43,11 @@
       "args": [
         {
           "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-          "petname": "example-mbp",
-          "selfName": "example-mbp"
+          "petname": "laptop-a",
+          "selfName": "laptop-a"
         }
       ],
-      "expect": "example-mbp 0123456789ab",
+      "expect": "laptop-a 0123456789ab",
       "from": "display-name.unit.test.ts: formatDisplayName > does not repeat a self-asserted name that only echoes the petname",
       "function": "display-name.formatDisplayName",
       "id": "format-display-name-echo-not-repeated",
@@ -108,10 +108,10 @@
         {
           "id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           "petname": "work laptop",
-          "selfName": "example-mbp"
+          "selfName": "laptop-a"
         }
       ],
-      "expect": "work laptop \"example-mbp\"",
+      "expect": "work laptop \"laptop-a\"",
       "from": "display-name.unit.test.ts: formatNames > gives the names alone, for a surface that prints the full id beside them",
       "function": "display-name.formatNames",
       "id": "format-names-names-alone",

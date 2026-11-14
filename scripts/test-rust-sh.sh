@@ -26,4 +26,15 @@ for number in $(grep -nE '^[^#]*[[:space:](]cargo[[:space:]]+[a-z].*--locked' "$
   sed "${number}s/ --locked//" "$here/rust.sh" > "$work/mutant.sh"
   if [ -n "$(unlocked "$work/mutant.sh")" ]; then echo "ok   removing --locked from line $number is noticed"; else echo "FAIL removing --locked from line $number goes unnoticed"; failures=$((failures + 1)); fi
 done
+
+# The pinned toolchain wins over a host's override and over a cargo earlier on PATH: stubs stand in for rustup and for two cargos, one in the pinned toolchain's directory and one a host would have first on PATH.
+mkdir -p "$work/scripts" "$work/rust" "$work/pinned" "$work/host"
+cp "$here/rust.sh" "$work/scripts/rust.sh"
+printf '[toolchain]\nchannel = "9.9.9"\n' > "$work/rust/rust-toolchain.toml"
+printf '#!/bin/sh\necho "pinned cargo on toolchain $RUSTUP_TOOLCHAIN"\n' > "$work/pinned/cargo"
+printf '#!/bin/sh\necho "host cargo"\n' > "$work/host/cargo"
+printf '#!/bin/sh\ncase "$1" in show) exit 0 ;; which) echo "%s/pinned/cargo" ;; esac\n' "$work" > "$work/host/rustup"
+chmod +x "$work/pinned/cargo" "$work/host/cargo" "$work/host/rustup"
+out=$(env RUSTUP_TOOLCHAIN=bogus PATH="$work/host:$PATH" sh "$work/scripts/rust.sh" test 2>&1) || true
+if [ "$out" = "pinned cargo on toolchain 9.9.9" ]; then echo "ok   rust.sh runs the pinned toolchain's cargo whatever the host sets"; else echo "FAIL rust.sh ran: $out"; failures=$((failures + 1)); fi
 exit "$failures"

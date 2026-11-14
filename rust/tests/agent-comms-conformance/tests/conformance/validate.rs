@@ -435,6 +435,7 @@ pub fn validate_manifest(value: &Value) -> Check<BTreeMap<String, (usize, Vec<St
 /// Checks the validator against documents written here rather than read from the corpus, for what a JSON file
 /// cannot hold: the corpus is canonical JSON, which writes `97.0` as `97`.
 pub fn self_check(failures: &mut Vec<String>) {
+    check_float_round_trip(failures);
     let value = |text: &str| {
         serde_json::from_str::<Value>(text).map(|value| check_value(&value, "self-check"))
     };
@@ -459,5 +460,28 @@ pub fn self_check(failures: &mut Vec<String>) {
     match value("[97.5]") {
         Ok(Err(_)) => {}
         other => failures.push(format!("self-check: 97.5 must be refused, got {other:?}")),
+    }
+}
+
+/// Decimal literals whose nearest double is one or two units in the last place away from what serde_json reads
+/// without its `float_roundtrip` feature, with the bits JSON.parse gives each. A reader that rounds differently from
+/// JSON.parse would judge a corpus number against another value than the TypeScript loader does.
+const ROUND_TRIP_LITERALS: [(&str, u64); 3] = [
+    ("2.601815908301661318609e-23", 0x3b3f_743a_efa7_9b47),
+    ("5.6321223307924402685995e30", 0x4651_c597_9992_5db8),
+    ("1.0928159013962459e-7", 0x3e7d_55c6_10a1_9ad1),
+];
+
+fn check_float_round_trip(failures: &mut Vec<String>) {
+    for (literal, bits) in ROUND_TRIP_LITERALS {
+        match serde_json::from_str::<Value>(literal) {
+            Ok(value) => match value.as_f64() {
+                Some(number) if number.to_bits() == bits => {}
+                other => failures.push(format!(
+                    "self-check: {literal} must read as the double with bits {bits:016x}, got {other:?}"
+                )),
+            },
+            Err(error) => failures.push(format!("self-check: {literal} did not parse: {error}")),
+        }
     }
 }

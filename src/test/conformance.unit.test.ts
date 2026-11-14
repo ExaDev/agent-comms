@@ -409,6 +409,8 @@ for (const { name, file } of corpus) {
       const register = testCase.skip === "ts" ? it.skip : it;
       register(`${testCase.id} (${testCase.from})`, async () => {
         ran.add(testCase.id);
+        // A body that returns without asserting would still count as having run.
+        expect.hasAssertions();
         if (testCase.kind === "function") {
           await runFunctionCase(testCase);
         } else {
