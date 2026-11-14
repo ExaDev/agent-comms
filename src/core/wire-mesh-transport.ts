@@ -8,6 +8,7 @@
  * connect_request's accept/reject flow maps onto sendManageRequest's own request/response round trip directly, rather than a separate pair of connect_accepted/connect_rejected messages: manage-request-frame already tolerates arbitrary latency between a request and its response, so "waiting for a human to approve" is simply a manage-response that hasn't been sent yet, not a protocol gap needing its own mechanism. connect_request therefore holds its own IncomingManageRequest open (rather than responding immediately) until acceptConnection/rejectConnection is actually called.
  */
 
+import { reportRejection } from "./detached-work.js";
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
 import {
   ROOM_JOIN_APPROVAL_TIMEOUT_MS,
@@ -435,7 +436,7 @@ export class WireMeshTransport implements MeshTransport {
   ): void {
     // Watched from the start, so any claim this session gossips before it introduces itself is read and dropped rather than held back and replayed once it is trusted.
     this.electionSessions.watch(session, handle);
-    void (async () => {
+    this.detach(async () => {
       let approved = false;
       for await (const request of session.incomingManageRequests) {
         if (this.shutDown) break;
@@ -499,7 +500,7 @@ export class WireMeshTransport implements MeshTransport {
         await session.close().catch(() => undefined);
         return;
       }
-    })();
+    });
   }
 
   /** Opens a mesh session over an already-established connection, wired to this transport's own frame dispatch and advertised addresses. Every session this transport owns is built exactly this way, whether the connection was accepted by a listener or dialled at a peer, at the coordinator, or at a remote gateway, so the wiring lives here rather than being restated at each call site. Resolves undefined, with the session closed, when shutdown() has begun by the time the session is open, whether it began before the connection arrived or while the session was opening: shutdown() closes only the sessions it can see, so one opened after it started would stay open, and its peer would never learn that this side had gone (agent-comms#372). */
@@ -527,18 +528,28 @@ export class WireMeshTransport implements MeshTransport {
     machineLocal: boolean,
   ): void {
     this.roomRouter.drainSession(session, handle);
-    this.drainRevocationAnnouncements(session);
+    // Reads every revocation-entry this session's peer announces, for as long as the session lives, handing each one to MeshStore via onRevocationAnnounce, one call per entry, matching revocationAnnouncements' own per-entry flattening of a revocation-announce frame's entries array. A gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch, so it has its own independent drain.
+    this.detach(async () => {
+      for await (const entry of session.revocationAnnouncements) {
+        this.events.onRevocationAnnounce(entry);
+      }
+    });
     this.electionSessions.watch(session, handle);
     if (machineLocal) this.electionSessions.enrol(session, handle);
   }
 
-  /** Reads every revocation-entry this session's peer announces, for as long as the session lives, handing each one to MeshStore via onRevocationAnnounce -- one call per entry, matching revocationAnnouncements' own per-entry flattening of a revocation-announce frame's entries array. */
-  private drainRevocationAnnouncements(session: AcceptedMeshSession): void {
-    void (async () => {
-      for await (const entry of session.revocationAnnouncements) {
-        this.events.onRevocationAnnounce(entry);
-      }
-    })();
+  /** Runs work a peer's connection started and nothing awaits: a failure goes to the transport's error handler, or stderr, never left as an unhandled rejection that would end the process. */
+  private detach(work: () => Promise<unknown>): void {
+    reportRejection(work(), () => this.events.onError);
+  }
+
+  /** The callback a listener calls with each connection it accepts, handling it without awaiting it (see detach). */
+  private accepting(accept: Readonly<AcceptOptions>) {
+    return (connection: Readonly<Connection>): void => {
+      this.detach(async () =>
+        this.handleAcceptedConnection(connection, accept),
+      );
+    };
   }
 
   private watchForDisconnect(
@@ -546,7 +557,7 @@ export class WireMeshTransport implements MeshTransport {
     handle: Readonly<ConnectionHandle>,
     deviceIdHex: string,
   ): void {
-    void (async () => {
+    this.detach(async () => {
       // The presence this session last reported. Every session event carries the whole directory, including events this side causes by sending a frame and the final closed event, so the peer's advert repeats long after the peer sent it. Only a change is news: re-reporting a stale advert would mark a departed peer's agent running again after the coordinator has set it offline, and nothing would ever correct that.
       let reportedPresence: AgentStatus | undefined;
       for await (const event of session.events) {
@@ -579,7 +590,7 @@ export class WireMeshTransport implements MeshTransport {
           return;
         }
       }
-    })();
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -589,9 +600,7 @@ export class WireMeshTransport implements MeshTransport {
   async startDataServer(): Promise<void> {
     this.dataListener = await this.wireTransport.listen(
       `${COORDINATOR_HOST}:0`,
-      (connection) => {
-        void this.handleAcceptedConnection(connection, DATA_SERVER_ACCEPT);
-      },
+      this.accepting(DATA_SERVER_ACCEPT),
     );
     this._dataPort = listenerPort(this.dataListener);
   }
@@ -642,9 +651,7 @@ export class WireMeshTransport implements MeshTransport {
       coordinatorListeners: this.coordinatorListeners,
       host,
       port,
-      onAccepted: (connection) => {
-        void this.handleAcceptedConnection(connection, DEFAULT_LISTENER_ACCEPT);
-      },
+      onAccepted: this.accepting(DEFAULT_LISTENER_ACCEPT),
       isShuttingDown: () => this.isShuttingDown(),
     });
     this._isCoordinator = true;
@@ -907,12 +914,7 @@ export class WireMeshTransport implements MeshTransport {
       host,
       port,
       policy,
-      onAccepted: (connection) => {
-        void this.handleAcceptedConnection(
-          connection,
-          operatorListenerAccept(policy),
-        );
-      },
+      onAccepted: this.accepting(operatorListenerAccept(policy)),
     });
   }
 
