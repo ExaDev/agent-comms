@@ -3,6 +3,7 @@
  */
 
 import { shortId } from "./display-name.js";
+import { UnusableIdentityRecordError } from "./issuer-identity-file.js";
 import { errnoCode, PeerLinkError } from "./peer-link-error.js";
 
 /** The causes of a refused or dropped connection to a peer, which all mean the process behind that address has gone. */
@@ -52,6 +53,10 @@ export function describeMeshError(
   error: Readonly<Error>,
 ): DescribedMeshError | undefined {
   if (error instanceof PeerLinkError) return describePeerLinkError(error);
+  // Already says what happened and what to do. Keyed by file, since the cc-peer front tries to attach a session on every tick and each try meets the same file.
+  if (error instanceof UnusableIdentityRecordError) {
+    return { key: `identity-unusable:${error.file}`, message: error.message };
+  }
   const code = errnoCode(error);
   if (code !== undefined && NO_NETWORK_CODES.has(code)) {
     return {
