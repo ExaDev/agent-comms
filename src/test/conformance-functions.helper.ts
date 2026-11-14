@@ -1,6 +1,22 @@
 /**
  * The call table the TypeScript conformance runner (`conformance.unit.test.ts`) resolves a corpus case's `function` and `schema` names in. Each entry narrows its JSON arguments, builds any object the function takes that JSON cannot carry (a Set, a Map, a callback), calls the function and returns plain data. A case never names anything but a pure function of its arguments.
  */
+import {
+  AGENT_SELF_GOSSIP_KEY,
+  DEFAULT_PRESENCE_STALE_AFTER_MS,
+  HOSTED_ROOMS_GOSSIP_KEY,
+  PRESENCE_GOSSIP_KEY,
+  PRESENCE_READVERTISE_INTERVAL_MS,
+  hostedRoomAdverts,
+  summariseAgentSelfAdvert,
+  summariseHostedRooms,
+} from "../core/gossip-extensions.js";
+import {
+  inviterAgentExtension,
+  parseInviterAgentExtension,
+  parseRoomStateExtension,
+  roomStateExtension,
+} from "../core/room-wire-extensions.js";
 import type * as os from "node:os";
 import {
   buildAction,
@@ -69,11 +85,12 @@ import {
   resolveDeepLink,
   syncUrl,
 } from "../bridges/user/web/frontend/url-sync.js";
-import { RoomMessageSchema } from "../core/types.js";
+import { RoomMessageSchema, RoomSchema } from "../core/types.js";
 import {
   classifyManageOutcome,
   describeRefusal,
 } from "../core/send-outcome.js";
+import type { Room } from "../core/types.js";
 import { CommsError } from "../core/store.js";
 import {
   AgentIdentitySchema,
@@ -94,6 +111,7 @@ export type ValidateResult =
       readonly ok: false;
       readonly issues: readonly {
         readonly path: readonly (string | number)[];
+        readonly code: string;
         readonly message: string;
       }[];
     };
@@ -203,12 +221,12 @@ async function runBindRetry(
   const steps = list(script).map(rec);
   const rejections = new Map<number, Error>();
   let attempts = 0;
-  const attempt = (): Promise<string> => {
+  const attempt = async (): Promise<string> => {
     const index = Math.min(attempts, steps.length - 1);
     const step = steps[index];
     attempts += 1;
     if (step === undefined) throw new TypeError("an empty script");
-    const rejects = step["rejects"];
+    const rejects = step.rejects;
     if (rejects !== undefined) {
       const error = rejections.get(index) ?? new Error(str(rejects));
       rejections.set(index, error);
@@ -216,7 +234,7 @@ async function runBindRetry(
       return Promise.reject(error);
     }
 
-    return Promise.resolve(str(step["resolves"]));
+    return Promise.resolve(str(step.resolves));
   };
   try {
     return {
@@ -226,7 +244,9 @@ async function runBindRetry(
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : String(error),
-      rethrownRejection: [...rejections.values()].some((sent) => sent === error),
+      rethrownRejection: [...rejections.values()].some(
+        (sent) => sent === error,
+      ),
       attempts,
     };
   }
@@ -434,6 +454,73 @@ function syncedUrls(state: unknown): string[] {
   return urls;
 }
 
+/** A room as the extension helpers read it: the fields a case names, and empty ones for the rest. */
+function roomOf(value: unknown): Room {
+  const parts = rec(value);
+  const type = str(parts.type);
+  if (type !== "public" && type !== "private" && type !== "secret") {
+    throw new TypeError("expected a room type");
+  }
+
+  return RoomSchema.parse({
+    id: str(parts.id),
+    version: 0,
+    name: str(parts.name),
+    type,
+    owner: str(parts.owner),
+    createdAt: "",
+    description: str(parts.description),
+    members: [],
+    invited: [],
+    memberJoins: {},
+    memberLeaves: {},
+    invitedJoins: {},
+    invitedLeaves: {},
+  });
+}
+
+function hostedAdvert(
+  value: unknown,
+): Parameters<typeof summariseHostedRooms>[0][number] {
+  const parts = rec(value);
+  const type = str(parts.type);
+  if (type !== "public" && type !== "private") {
+    throw new TypeError("expected a hosted room type");
+  }
+
+  return {
+    path: str(parts.path),
+    name: str(parts.name),
+    type,
+    description: str(parts.description),
+  };
+}
+
+function selfAdvert(
+  value: unknown,
+): Parameters<typeof summariseAgentSelfAdvert>[0] {
+  const parts = rec(value);
+  const optional = (key: string): string | undefined => optStr(parts, key);
+  const membership = optional("membership");
+  const machine = optional("machine");
+  const machineName = optional("machineName");
+  const principalName = optional("principalName");
+
+  return {
+    name: str(parts.name),
+    harness: str(parts.harness),
+    ...(membership !== undefined && { membership }),
+    ...(machine !== undefined && { machine }),
+    ...(machineName !== undefined && { machineName }),
+    ...(principalName !== undefined && { principalName }),
+    cwd: str(parts.cwd),
+    pid: num(parts.pid),
+    startedAt: str(parts.startedAt),
+    tags: strings(parts.tags),
+    subscribedRooms: strings(parts.subscribedRooms),
+  };
+}
+
 export const FUNCTIONS: Readonly<Record<string, CorpusFunction>> = {
   "display-name.formatDisplayName": (parts) =>
     formatDisplayName(displayParts(parts)),
@@ -589,6 +676,37 @@ export const FUNCTIONS: Readonly<Record<string, CorpusFunction>> = {
     }));
   },
   "relay-selection.selectRelay": relaySelection,
+  "gossip-extensions.hostedRoomAdverts": (rooms, ownerId) =>
+    hostedRoomAdverts(
+      new Map(list(rooms).map((entry) => [str(rec(entry).id), roomOf(entry)])),
+      str(ownerId),
+    ),
+  "gossip-extensions.summariseHostedRooms": (adverts) =>
+    summariseHostedRooms(list(adverts).map(hostedAdvert)),
+  "gossip-extensions.summariseAgentSelfAdvert": (advert) =>
+    summariseAgentSelfAdvert(selfAdvert(advert)),
+  "gossip-extensions.constants": () => ({
+    agentSelfGossipKey: AGENT_SELF_GOSSIP_KEY,
+    defaultPresenceStaleAfterMs: DEFAULT_PRESENCE_STALE_AFTER_MS,
+    hostedRoomsGossipKey: HOSTED_ROOMS_GOSSIP_KEY,
+    presenceGossipKey: PRESENCE_GOSSIP_KEY,
+    presenceReadvertiseIntervalMs: PRESENCE_READVERTISE_INTERVAL_MS,
+  }),
+  "room-wire-extensions.roomStateExtension": (room) =>
+    roomStateExtension(room === null ? undefined : roomOf(room)),
+  "room-wire-extensions.parseRoomStateExtension": (value) =>
+    parseRoomStateExtension(value),
+  "room-wire-extensions.inviterAgentExtension": (inviter) => {
+    const parts = rec(inviter);
+
+    return inviterAgentExtension({
+      ...agent(str(parts.name)),
+      name: str(parts.name),
+      cwd: str(parts.cwd),
+    });
+  },
+  "room-wire-extensions.parseInviterAgentExtension": (value) =>
+    parseInviterAgentExtension(value),
   "input.parseInput": (text, room, dm) =>
     parseInput(str(text), optionalString(room), optionalString(dm)),
   "input.routeParsedInput": (text, room, dm) =>
@@ -701,6 +819,7 @@ export const FUNCTIONS: Readonly<Record<string, CorpusFunction>> = {
 function toIssues(error: {
   readonly issues: readonly {
     readonly path: readonly PropertyKey[];
+    readonly code: string;
     readonly message: string;
   }[];
 }): ValidateResult {
@@ -710,6 +829,7 @@ function toIssues(error: {
       path: issue.path.map((step) =>
         typeof step === "number" ? step : String(step),
       ),
+      code: issue.code,
       message: issue.message,
     })),
   };

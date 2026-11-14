@@ -191,6 +191,9 @@ function runValidateCase(testCase: ValidateCase): void {
     expectation.issues.map((issue) => issue.path),
   );
   expectation.issues.forEach((issue, position) => {
+    if (issue.code !== undefined) {
+      expect(result.issues[position]?.code).toBe(issue.code);
+    }
     const fragments = issue.message;
     const actualMessage = result.issues[position]?.message ?? "";
     if (fragments !== undefined) {
@@ -425,9 +428,9 @@ describe("corpus completeness", () => {
     if (!manifest.ok) {
       throw new Error(manifest.problems.join("\n"));
     }
-    expect(
-      runCompletenessProblems(manifest.value, registrations, ran),
-    ).toEqual([]);
+    expect(runCompletenessProblems(manifest.value, registrations, ran)).toEqual(
+      [],
+    );
   });
 
   describe("fails for a run that did not do what the manifest says", () => {
@@ -444,9 +447,9 @@ describe("corpus completeness", () => {
     ];
 
     it("passes when every case is registered and each one not skipped ran", () => {
-      expect(
-        runCompletenessProblems(held, full, new Set(["a", "c"])),
-      ).toEqual([]);
+      expect(runCompletenessProblems(held, full, new Set(["a", "c"]))).toEqual(
+        [],
+      );
     });
 
     it("fails when the framework skipped every case", () => {
@@ -466,12 +469,12 @@ describe("corpus completeness", () => {
       const moved = full.map((entry) =>
         entry.id === "c" ? { ...entry, file: "function/a.json" } : entry,
       );
-      expect(
-        runCompletenessProblems(held, moved, new Set(["a", "c"])),
-      ).toEqual([
-        "function/a.json: 3 cases registered, the manifest has 2",
-        "function/c.json: 0 cases registered, the manifest has 1",
-      ]);
+      expect(runCompletenessProblems(held, moved, new Set(["a", "c"]))).toEqual(
+        [
+          "function/a.json: 3 cases registered, the manifest has 2",
+          "function/c.json: 0 cases registered, the manifest has 1",
+        ],
+      );
     });
 
     it("fails when a case is skipped here and the manifest does not list it", () => {
