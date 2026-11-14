@@ -37,7 +37,7 @@ export async function handleGatewayGenerateConnectionCode(
 }
 
 /**
- * Validates a candidate connection code (assembled from action's own code/expiresAt/device/signature fields) and, on success, trusts the device-id it vouches for. An unsigned code is a bearer hint, never authentication: whoever produced the text decided which device-id it names. Supplying a publicKey or fingerprint requires the code to be signed, and an unsigned one is then refused. When the candidate carries a signature but action supplies a fingerprint with no publicKey, fetches the signer's public key from a keyserver first via fetchPgpPublicKeyByFingerprintImpl -- injected rather than imported directly so a test can supply a fake resolver instead of making a real network call.
+ * Validates a candidate connection code (assembled from action's own code/expiresAt/device/signature fields) and, on success, trusts the device-id it vouches for. An unsigned code is a bearer hint, never authentication: whoever produced the text decided which device-id it names. Supplying a publicKey or fingerprint requires the code to be signed, and an unsigned one is then refused. When the candidate carries a signature but action supplies a fingerprint with no publicKey, fetches the signer's public key from a keyserver first via fetchPgpPublicKeyByFingerprintImpl, injected rather than imported directly so a test can supply a fake resolver instead of making a real network call.
  */
 export async function handleGatewayRedeemConnectionCode(
   store: Readonly<MeshOnlyFeatures>,
