@@ -1,3 +1,14 @@
+## [9.0.10](https://github.com/ExaDev/agent-comms/compare/v9.0.9...v9.0.10) (2026-11-14)
+
+### Bug Fixes
+
+* **web:** bound the event buffer and ids, and back off on a handler that keeps failing ([348a2de](https://github.com/ExaDev/agent-comms/commit/348a2de4a71e1c6799fbcdaa7682dbc9770e5bb9))
+* **web:** resume the event stream from a snapshot when the client's id cannot be trusted ([b9fe01e](https://github.com/ExaDev/agent-comms/commit/b9fe01ea34f860a2bcaab68825bac2a5656b1f1c))
+
+### Build
+
+* **deps:** bump wire-mesh-core to 4.1.3 ([f0e1df1](https://github.com/ExaDev/agent-comms/commit/f0e1df196ad6ce06237dc95897f17fe0d5866073))
+
 ## [9.0.9](https://github.com/ExaDev/agent-comms/compare/v9.0.8...v9.0.9) (2026-11-14)
 
 ### Bug Fixes
