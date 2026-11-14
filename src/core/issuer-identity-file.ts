@@ -9,6 +9,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createFileExclusive, writeFileAtomic } from "./atomic-file.js";
+import { withWriteLock } from "./pid-lock-file.js";
 import { CommsError } from "./store.js";
 import {
   generateIdentity,
@@ -175,28 +176,35 @@ function identityOfRecord(
   }
 }
 
-/** Renews a stored identity nearing certificate expiry by re-certifying its existing key pair, so its device-id is unchanged (see identity.ts's certifyKeyPair for why a fresh key pair would be wrong). Every other field in the record is kept. Returns the identity unchanged when it is not yet near expiry. */
+/** Whether a stored record is within the renewal margin of its certificate's expiry, or has an expiry that does not parse. */
+function needsRenewal(stored: Readonly<StoredIssuerKey>): boolean {
+  const expiresAt = Date.parse(stored.expiresAt);
+  return Number.isNaN(expiresAt) || Date.now() > expiresAt - RENEWAL_MARGIN_MS;
+}
+
+/** Renews a stored identity nearing certificate expiry by re-certifying its existing key pair, so its device-id is unchanged (see identity.ts's certifyKeyPair for why a fresh key pair would be wrong). Every other field in the record is kept. Returns the identity unchanged when it is not yet near expiry. The record is read again under the file's write lock before it is rewritten, so a field another process wrote since `stored` was read is kept, and a renewal another process has already done is not repeated. */
 function renewIfNeeded(
   file: string,
   stored: Readonly<StoredIssuerKey>,
+  guard: (value: unknown) => value is StoredIssuerKey,
 ): PeerIdentity {
-  const expiresAt = Date.parse(stored.expiresAt);
-  const needsRenewal =
-    Number.isNaN(expiresAt) || Date.now() > expiresAt - RENEWAL_MARGIN_MS;
-  if (!needsRenewal) return identityOfRecord(file, stored);
-
-  let renewed: PeerIdentity;
-  try {
-    renewed = certifyKeyPair(stored.privateKey);
-  } catch (err) {
-    throw new UnusableIdentityRecordError(
-      file,
-      `its key cannot be certified again: ${describeCause(err)}`,
-      err,
-    );
-  }
-  writeIssuerRecord(file, { ...stored, ...issuerKeyRecord(renewed) });
-  return renewed;
+  if (!needsRenewal(stored)) return identityOfRecord(file, stored);
+  return withWriteLock(file, () => {
+    const current = readIssuerRecord(file, guard) ?? stored;
+    if (!needsRenewal(current)) return identityOfRecord(file, current);
+    let renewed: PeerIdentity;
+    try {
+      renewed = certifyKeyPair(current.privateKey);
+    } catch (err) {
+      throw new UnusableIdentityRecordError(
+        file,
+        `its key cannot be certified again: ${describeCause(err)}`,
+        err,
+      );
+    }
+    writeIssuerRecord(file, { ...current, ...issuerKeyRecord(renewed) });
+    return renewed;
+  });
 }
 
 /** Generates a fresh identity and persists it at file, which does not exist yet. The create is exclusive, so when a concurrent caller creates the file first this caller keeps the winner's key and returns that instead of overwriting it, judging the winner's record with the owning module's guard. */
@@ -218,7 +226,7 @@ function createIssuerIdentity(
   if (winner === undefined) {
     throw new Error(`${file} was created and removed again while loading it`);
   }
-  return renewIfNeeded(file, winner);
+  return renewIfNeeded(file, winner, guard);
 }
 
 /**
@@ -235,5 +243,5 @@ export function loadOrCreateIssuerIdentity(
 
   const stored = readIssuerRecord(file, guard);
   if (stored === undefined) return createIssuerIdentity(file, guard);
-  return renewIfNeeded(file, stored);
+  return renewIfNeeded(file, stored, guard);
 }

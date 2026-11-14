@@ -114,6 +114,49 @@ export function tryAcquireLock(
   return { acquired: false, heldBy: readLockPid(lockFile) };
 }
 
+/** Total time a writer waits for another process's write to the same file to finish. A write is one small file read and one atomic rename, so this is far above its real cost, and bounded so a holder stuck inside it cannot wedge every other writer. */
+const WRITE_LOCK_WAIT_MS = 5000;
+/** Poll interval while waiting for a write lock. */
+const WRITE_LOCK_POLL_MS = 10;
+/** One Int32 element's worth of bytes: all Atomics.wait needs to block on. */
+const INT32_BYTE_LENGTH = 4;
+
+/** Blocks this thread for `ms` milliseconds. */
+export function sleepSync(ms: number): void {
+  Atomics.wait(
+    new Int32Array(new SharedArrayBuffer(INT32_BYTE_LENGTH)),
+    0,
+    0,
+    ms,
+  );
+}
+
+/** The lock file serialising writes to `file`. */
+export function writeLockFor(file: string): string {
+  return `${file}.write.lock`;
+}
+
+/**
+ * Runs `action` holding the write lock of `file`, so the read-modify-write it performs cannot interleave with another process's. The lock is not reentrant: `action` must not take the same lock again (this process would count as having left it stale). A lock left by a process that died is taken over. Throws when the lock stays held by a live process beyond the wait budget.
+ */
+export function withWriteLock<T>(file: string, action: () => T): T {
+  const lockFile = writeLockFor(file);
+  const deadline = Date.now() + WRITE_LOCK_WAIT_MS;
+  while (!tryAcquireLock(lockFile).acquired) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `timed out waiting for another process to finish writing ${file}`,
+      );
+    }
+    sleepSync(WRITE_LOCK_POLL_MS);
+  }
+  try {
+    return action();
+  } finally {
+    releaseLockFile(lockFile);
+  }
+}
+
 /** Removes lockFile if this process holds it; a lock another PID has since taken over is left alone. The release half of tryAcquireLock. */
 export function releaseLockFile(lockFile: string): void {
   if (readLockPid(lockFile) === process.pid) {
