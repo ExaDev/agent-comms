@@ -57,6 +57,14 @@ const gcmFields = {
   ct: base64url,
 };
 
+/** Whether `n` is a power of two of at least two, the only values scrypt accepts for its cost. */
+function isScryptCost(n: number): boolean {
+  if (!Number.isSafeInteger(n) || n < 2) return false;
+  // BigInt, since the bitwise operators on a number wrap it to 32 bits.
+  const cost = BigInt(n);
+  return (cost & (cost - BigInt(1))) === BigInt(0);
+}
+
 /** What an account export or a join carries: the PEM private key and the name the account asserts for itself, if it has one. */
 export interface AccountContents {
   privateKey: string;
@@ -99,10 +107,11 @@ function parseContents(plaintext: string, damaged: string): AccountContents {
 const passphraseEnvelopeSchema = z
   .object({
     kdf: z.literal("scrypt"),
-    n: z.number().int().positive(),
-    r: z.number().int().positive(),
-    p: z.number().int().positive(),
-    salt: base64url,
+    // Bounded above by this build's own cost (so reading a bundle never costs more time or memory than writing one), and below by what scrypt accepts: a power-of-two N of at least two, and positive r and p.
+    n: z.number().refine(isScryptCost).max(SCRYPT_COST),
+    r: z.number().int().positive().max(SCRYPT_BLOCK_SIZE),
+    p: z.number().int().positive().max(SCRYPT_PARALLELISM),
+    salt: base64urlBytes(SALT_BYTES),
     ...gcmFields,
   })
   .strict();
@@ -182,7 +191,7 @@ export function sealAccountBundle(
   return `${ACCOUNT_BUNDLE_PREFIX}${Buffer.from(JSON.stringify(envelope)).toString("base64url")}`;
 }
 
-/** The account contents a bundle holds. Throws INVALID_BUNDLE for text that is not a bundle this build can read, and WRONG_PASSPHRASE when the passphrase does not open it. The cost parameters are read from the bundle but capped at this build's own, so a crafted bundle cannot make an import run for hours. */
+/** The account contents a bundle holds. Throws INVALID_BUNDLE for text that is not a bundle this build can read (including one whose cost parameters, salt, iv or authentication tag are not in the form this build writes), and WRONG_PASSPHRASE when the passphrase does not open it. The cost parameters are read from the bundle but must be valid scrypt costs no higher than this build's own, so reading a bundle costs no more than writing one and never fails with a raw error. */
 export function openAccountBundle(
   bundle: string,
   passphrase: string,
