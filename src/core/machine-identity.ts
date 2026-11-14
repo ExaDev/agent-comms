@@ -6,6 +6,7 @@
 
 import * as path from "node:path";
 import { resolveDataDir } from "./data-directory.js";
+import { withWriteLock } from "./pid-lock-file.js";
 import type { PeerIdentity } from "./identity.js";
 import {
   isStoredIssuerKey,
@@ -64,14 +65,16 @@ export function saveMachineDisplayName(
   displayName: string | undefined,
 ): void {
   const file = machineIdentityFile(options);
-  const stored = readIssuerRecord(file, isStoredMachineIdentity);
-  if (stored === undefined) {
-    throw new Error(
-      `no machine identity persisted yet; call loadOrCreateMachineIdentity first (${file})`,
-    );
-  }
-  const next: StoredMachineIdentity = { ...stored };
-  if (displayName === undefined) delete next.displayName;
-  else next.displayName = displayName;
-  writeIssuerRecord(file, next);
+  withWriteLock(file, () => {
+    const stored = readIssuerRecord(file, isStoredMachineIdentity);
+    if (stored === undefined) {
+      throw new Error(
+        `no machine identity persisted yet; call loadOrCreateMachineIdentity first (${file})`,
+      );
+    }
+    const next: StoredMachineIdentity = { ...stored };
+    if (displayName === undefined) delete next.displayName;
+    else next.displayName = displayName;
+    writeIssuerRecord(file, next);
+  });
 }

@@ -28,7 +28,9 @@ import {
   isPidAlive,
   readLockPid,
   releaseLockFile,
+  sleepSync,
   tryAcquireLock,
+  withWriteLock,
 } from "./pid-lock-file.js";
 
 /** A bridge's identity slot: one persisted identity per harness and cwd. */
@@ -41,8 +43,6 @@ export interface IdentitySlot extends DataDirectoryLocation {
 
 /** A persisted identity/token/trust/ledger file holds real key material or capability tokens, so it is written owner-only. */
 const OWNER_ONLY_RW_PERMISSIONS = 0o600;
-/** One Int32 element's worth of bytes -- sleepSync's own shared buffer needs no more than a single slot for Atomics.wait to block on. */
-const INT32_BYTE_LENGTH = 4;
 
 /** A CapabilityToken (COSE_Sign1: [protected header bytes, unprotected header map, payload bytes or null, signature bytes]) with every byte-string field base64-encoded for JSON storage. Only the two named unprotected-header fields (alg, kid) are round-tripped -- every token minted by wire-mesh-core today leaves the unprotected header empty (alg/kid live in the protected header instead), so the schema's own open catchall for arbitrary extra keys is left unhandled until a real caller actually needs one preserved. */
 export type SerializedCapabilityToken = [
@@ -177,7 +177,6 @@ function slotPaths(slot: Readonly<IdentitySlot>): {
   dir: string;
   identityFile: string;
   lockFile: string;
-  writeLockFile: string;
 } {
   const dir = identityDir(slot);
   const base = `identity-${slot.harness}--${slugifyCwd(slot.cwd)}`;
@@ -185,7 +184,6 @@ function slotPaths(slot: Readonly<IdentitySlot>): {
     dir,
     identityFile: path.join(dir, `${base}.json`),
     lockFile: path.join(dir, `${base}.lock`),
-    writeLockFile: path.join(dir, `${base}.write.lock`),
   };
 }
 
@@ -196,29 +194,6 @@ export function oplogDirFor(slot: Readonly<IdentitySlot>): string {
   return path.join(dir, base);
 }
 
-/** Total time a writer waits for another process's write to the same slot file to finish. A write is one small file read and one atomic rename, so this is far above its real cost, and bounded so a holder stuck inside it cannot wedge every other writer. */
-const WRITE_LOCK_WAIT_MS = 5000;
-/** Poll interval while waiting for the write lock. */
-const WRITE_LOCK_POLL_MS = 10;
-
-/** Runs `action` holding the slot file's write lock, which serialises every process's read-modify-write of the file (see the module comment for why the slot lock cannot). A lock left by a process that died is taken over. Throws when the lock stays held by a live process beyond WRITE_LOCK_WAIT_MS. */
-function withWriteLock<T>(writeLockFile: string, action: () => T): T {
-  const deadline = Date.now() + WRITE_LOCK_WAIT_MS;
-  while (!tryAcquireLock(writeLockFile).acquired) {
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `timed out waiting for another process to finish writing this identity slot (${writeLockFile})`,
-      );
-    }
-    sleepSync(WRITE_LOCK_POLL_MS);
-  }
-  try {
-    return action();
-  } finally {
-    releaseLockFile(writeLockFile);
-  }
-}
-
 /** The token records of every slot this process runs under an identity that is not the slot file's (it lost the slot lock to another live process), keyed by the slot's file. They are bound to a throw-away device-id, so they live and die with the process: neither written into the winner's file nor read from it. */
 const ephemeralTokenRecords = new Map<string, SlotTokenRecords>();
 
@@ -226,9 +201,7 @@ const ephemeralTokenRecords = new Map<string, SlotTokenRecords>();
 function loadSlotIdentity(
   paths: Readonly<ReturnType<typeof slotPaths>>,
 ): PeerIdentity {
-  return withWriteLock(paths.writeLockFile, () =>
-    loadOrCreateIssuerIdentity(paths.identityFile, isStoredIdentity),
-  );
+  return loadOrCreateIssuerIdentity(paths.identityFile, isStoredIdentity);
 }
 
 /**
@@ -319,11 +292,6 @@ const CONCURRENT_CREATE_WAIT_MS = 2000;
 // Poll interval while waiting -- deliberately short, since the wait is expected to resolve in low single-digit milliseconds in the overwhelmingly common case.
 const CONCURRENT_CREATE_POLL_MS = 10;
 
-function sleepSync(ms: number): void {
-  const view = new Int32Array(new SharedArrayBuffer(INT32_BYTE_LENGTH));
-  Atomics.wait(view, 0, 0, ms);
-}
-
 /**
  * Waits briefly for the slot's identity file to appear if it doesn't exist yet but a different live process currently holds the slot's lock -- that process is, by construction, in the middle of creating it (see loadOrCreateIdentity/tryAcquireLock), so a caller racing as this slot's own loser should wait for the real winner to finish rather than fail outright. Returns once the file exists, or once the lock is no longer held by a different live process, or the wait budget runs out -- the last two signal there is genuinely nothing to wait for.
  */
@@ -360,7 +328,7 @@ function updateTokenRecords(
   change: (records: Readonly<SlotTokenRecords>) => SlotTokenRecords | undefined,
   requireIdentity: boolean,
 ): void {
-  const { identityFile, lockFile, writeLockFile } = slotPaths(slot);
+  const { identityFile, lockFile } = slotPaths(slot);
   const ephemeral = ephemeralTokenRecords.get(identityFile);
   if (ephemeral !== undefined) {
     ephemeralTokenRecords.set(identityFile, {
@@ -370,7 +338,7 @@ function updateTokenRecords(
     return;
   }
   if (requireIdentity) waitForConcurrentCreate(identityFile, lockFile);
-  withWriteLock(writeLockFile, () => {
+  withWriteLock(identityFile, () => {
     const stored = readIssuerRecord(identityFile, isStoredIdentity);
     if (stored === undefined) {
       if (requireIdentity) {
