@@ -104,7 +104,7 @@ export class MeshClient {
   };
   private readonly listeners = new Set<MeshStateListener>();
   private readonly deliveryListeners = new Set<MeshDeliveryListener>();
-  private eventPumpGeneration = 0;
+  private eventPump: AbortController | undefined;
   private readonly bridgePortBase: number | undefined;
 
   /** Delegates each structured read to `this.client` fresh on every call, throwing "Not connected" the same way a real network failure would if called before connect() -- a stable object createTanstackQueryUtils below can be built from once, since the real tab client doesn't exist until connect() is called but these utils need a stable reference for the lifetime of the app. */
@@ -160,7 +160,10 @@ export class MeshClient {
     const link = new RPCLink({ port: worker.port });
     const client: TabClient = createORPCClient(link);
     this.client = client;
-    void this.pumpEvents(client, ++this.eventPumpGeneration);
+    this.eventPump?.abort();
+    const pump = new AbortController();
+    this.eventPump = pump;
+    void this.pumpEvents(client, pump.signal);
 
     // Discover the web server: look through the bridge port range, the one a bridge binds from. If served by a bridge's own server (loopback, or plain http over the LAN), use that origin directly. Otherwise probe localhost.
     if (isServedByBridge(location)) {
@@ -209,7 +212,8 @@ export class MeshClient {
     const client = this.client;
     this.worker = undefined;
     this.client = undefined;
-    this.eventPumpGeneration++;
+    this.eventPump?.abort();
+    this.eventPump = undefined;
     if (!worker) return;
     if (client) {
       // Tell the worker to evict this port's own peer registration before closing it locally -- confirmed (mesh-worker.ts's own PR) that closing the port synchronously from inside the worker's disconnect handler would hang the call, but that's the worker's own internal sequencing; from this side, firing the call and closing once it settles (success or failure) is sufficient and never blocks the tab from actually going away.
@@ -227,11 +231,11 @@ export class MeshClient {
   }
 
   /**
-   * Consumes the worker's own subscribeEvents() stream for as long as this generation is current (see event-pump.ts, which the worker's own pump shares): resuming by lastEventId after any transport-level drop is this loop's own job, not something either RetryLinkPlugin or the underlying transport does transparently on its own (confirmed empirically in an earlier stage of this migration).
+   * Consumes the worker's own subscribeEvents() stream until `signal` aborts (see event-pump.ts, which the worker's own pump shares): resuming by lastEventId after any transport-level drop is this loop's own job, not something either RetryLinkPlugin or the underlying transport does transparently on its own (confirmed empirically in an earlier stage of this migration).
    */
   private async pumpEvents(
     client: Readonly<TabClient>,
-    generation: number,
+    signal: AbortSignal,
   ): Promise<void> {
     await pumpEvents(
       async (lastEventId) =>
@@ -241,7 +245,10 @@ export class MeshClient {
       (event) => {
         this.applyMeshEvent(event);
       },
-      () => generation === this.eventPumpGeneration,
+      (error) => {
+        console.error("Agent Comms dashboard: applying an event failed", error);
+      },
+      signal,
     );
   }
 

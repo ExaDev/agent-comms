@@ -200,7 +200,7 @@ export function getStateSnapshot(): StateSnapshot {
 type MeshOrpcClient = ContractRouterClient<MeshContract>;
 
 let orpcClient: MeshOrpcClient | undefined;
-let eventPumpGeneration = 0;
+let eventPump: AbortController | undefined;
 /** The current upstream WebSocket, tracked so disconnect() can close it deliberately -- reassigned every time RPCLink's own connect callback runs (the initial dial and every reconnect attempt), so it always names the actual live connection, never a stale one from an earlier attempt. */
 let currentSocket: WebSocket | undefined;
 
@@ -250,33 +250,37 @@ export function connect(url: string): void {
 
   const client: MeshOrpcClient = createORPCClient(link);
   orpcClient = client;
-  void pumpUpstreamEvents(client, ++eventPumpGeneration);
+  eventPump?.abort();
+  const pump = new AbortController();
+  eventPump = pump;
+  void pumpUpstreamEvents(client, pump.signal);
 }
 
 /**
- * Deliberately tears down the current upstream connection: abandons the event pump loop first (bumping eventPumpGeneration the same way a fresh connect() does, so the event pump's own generation check stops it from treating the socket closing next as something to reconnect and resume from), clears orpcClient so upstream()/requireOrpcClient() correctly report "not connected" for anything called afterward, then closes the actual socket. Never previously exported -- nothing closed this worker's own upstream connection on purpose, so a caller tearing down the server this worker was talking to (integration tests in particular) had no way to close its half of the connection first. That left the server's own WebSocketServer.close() waiting indefinitely for a client it was still tracking to disconnect, since ws's WebSocketServer.close() callback only fires once every currently-tracked client connection has actually closed.
+ * Deliberately tears down the current upstream connection: ends the event pump first (aborting its signal the same way a fresh connect() does, so the pump stops at once, even mid-wait, instead of treating the socket closing next as something to reconnect and resume from), clears orpcClient so upstream()/requireOrpcClient() correctly report "not connected" for anything called afterward, then closes the actual socket. Nothing else closed this worker's own upstream connection on purpose, so a caller tearing down the server this worker was talking to (integration tests in particular) needs this to close its half of the connection first: otherwise the server's own WebSocketServer.close() waits indefinitely for a client it still tracks, since ws's WebSocketServer.close() callback only fires once every tracked client connection has closed.
  */
 export function disconnect(): void {
-  ++eventPumpGeneration;
+  eventPump?.abort();
+  eventPump = undefined;
   orpcClient = undefined;
   currentSocket?.close();
   currentSocket = undefined;
 }
 
 /**
- * Consumes the unified event stream for as long as this generation is current -- eventPumpGeneration lets a fresh connect() call (a new "init" message) abandon a stale pump loop instead of running two concurrently against the same worker state.
+ * Consumes the unified event stream until `signal` aborts: a fresh connect() call (a new "init" message) aborts the previous pump instead of running two concurrently against the same worker state.
  *
- * Confirmed empirically (a real server-side socket termination, not assumed from either option's name): RetryLinkPlugin does NOT transparently resume an already-active subscribeEvents() call across a transport-level drop -- the in-flight for-await throws (an AbortError from the closed socket) instead of pausing and resuming underneath the same iterator. The outer while loop here is what actually implements resume-after-reconnect: on any thrown error it loops back and calls subscribeEvents again with lastEventId, which naturally blocks until RPCLink's own reconnect option re-establishes the underlying socket, then resumes exactly where the stream left off.
+ * RetryLinkPlugin does not transparently resume an already-active subscribeEvents() call across a transport-level drop: the in-flight for-await throws (an AbortError from the closed socket) instead of pausing and resuming underneath the same iterator. Resuming from lastEventId after such a drop, with a wait between attempts, is event-pump.ts's job, which the page's own client shares.
  */
 async function pumpUpstreamEvents(
   client: Readonly<MeshOrpcClient>,
-  generation: number,
+  signal: AbortSignal,
 ): Promise<void> {
   await pumpEvents(
     async (lastEventId) =>
       client.subscribeEvents(lastEventId === undefined ? {} : { lastEventId }),
     (event) => {
-      // Republish to the worker's own downstream (tab-contract.ts's subscribeEvents) with a fresh, worker-assigned id -- a separate resumability domain from the server's own, since a tab resumes against this worker, not against the server directly.
+      // Republish to the worker's own downstream (tab-contract.ts's subscribeEvents) with a fresh, worker-assigned id (a separate resumability domain from the server's own, since a tab resumes against this worker, not against the server directly).
       localPublisher.publish(event);
       switch (event.kind) {
         case "state_sync":
@@ -288,11 +292,14 @@ async function pumpUpstreamEvents(
           broadcastToPorts({ type: "patch", patch: event.patch });
           break;
         case "delivery":
-          // Not part of the legacy postMessage protocol's own WorkerOutbound union -- delivery events reach tabs exclusively through the oRPC tab-contract.ts subscribeEvents stream, via localPublisher.publish(event) above (applied uniformly to every event kind, not just this one).
+          // Not part of the legacy postMessage protocol's own WorkerOutbound union: delivery events reach tabs exclusively through the oRPC tab-contract.ts subscribeEvents stream, via localPublisher.publish(event) above (applied uniformly to every event kind, not just this one).
           break;
       }
     },
-    () => generation === eventPumpGeneration,
+    (error) => {
+      console.error("Agent Comms worker: applying an event failed", error);
+    },
+    signal,
   );
 }
 
