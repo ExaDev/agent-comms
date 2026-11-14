@@ -107,6 +107,10 @@ export interface AccountLedgerDeps {
   onDamagedEntry?: (error: LedgerEntryDamagedError) => void;
 }
 
+/** Why an entry that opened under the account key is unreadable. Fixed text: the decoder's own message can quote the entry's content, and the report is printed whole. */
+export const UNDECODABLE_REASON =
+  "its content is not a record this build can decode";
+
 /** A ledger entry that is stored but cannot be read: it does not open under the account's key for its log and position, or what it holds is not a record this build can decode. */
 export class LedgerEntryDamagedError extends Error {
   constructor(
@@ -397,12 +401,8 @@ export class AccountLedger implements AccountLedgerReplica {
   ): LedgerRecord | undefined {
     try {
       return decodeRecord(plaintext);
-    } catch (err) {
-      this.noteDamaged(
-        log,
-        seq,
-        err instanceof Error ? err.message : String(err),
-      );
+    } catch {
+      this.noteDamaged(log, seq, UNDECODABLE_REASON);
       return undefined;
     }
   }
@@ -447,12 +447,8 @@ export class AccountLedger implements AccountLedgerReplica {
         let record: LedgerRecord | undefined;
         try {
           record = decodeRecord(plaintext);
-        } catch (err) {
-          this.noteDamaged(
-            log,
-            seq,
-            err instanceof Error ? err.message : String(err),
-          );
+        } catch {
+          this.noteDamaged(log, seq, UNDECODABLE_REASON);
           unreadable += 1;
           return;
         }

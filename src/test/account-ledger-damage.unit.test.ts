@@ -16,6 +16,7 @@ import {
 import {
   AccountLedger,
   LedgerEntryDamagedError,
+  UNDECODABLE_REASON,
   damagedEntryReporter,
 } from "../core/account-ledger.js";
 import { removeDevice } from "../core/device-membership.js";
@@ -109,6 +110,25 @@ const DAMAGE: readonly (readonly [
 ];
 
 describe("an unreadable entry in the account ledger", () => {
+  it.each(DAMAGE.slice(1))(
+    "is reported with fixed text, never the decoder's own message: %s",
+    async (_name, damage) => {
+      const { ledger, storage, account, reports } = await ledgerWithGrants([
+        "device-a",
+        "device-b",
+        "device-c",
+      ]);
+      await storage.set(
+        await entryKey(storage, DAMAGED_SEQ),
+        damage(account, ledger),
+      );
+
+      await ledger.outstandingGrants("device", "device-a");
+
+      expect(reports[0]?.reason).toBe(UNDECODABLE_REASON);
+    },
+  );
+
   it.each(DAMAGE)(
     "does not stop the other grants being listed, and is reported: %s",
     async (_name, damage) => {
