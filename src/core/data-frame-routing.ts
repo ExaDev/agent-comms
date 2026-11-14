@@ -190,11 +190,20 @@ export async function announceAccountLedger(
   const reportError = (error: unknown): void => {
     deps.onError?.(error instanceof Error ? error : new Error(String(error)));
   };
+  // A device whose membership cannot be read is reported and skipped: one device that makes this throw must not stop the round from being counted.
+  const isAccountPeer = async (deviceHex: string): Promise<boolean> => {
+    try {
+      return await deps.account.isAccountPeer(deviceHex);
+    } catch (error: unknown) {
+      reportError(error);
+      return false;
+    }
+  };
   const direct = new Set<string>();
   const offers: Promise<void>[] = [];
   for (const [deviceHex, connection] of deps.connectionsByPeer) {
     if (!deps.peerSessions.has(deviceHex)) continue;
-    if (!(await deps.account.isAccountPeer(deviceHex))) continue;
+    if (!(await isAccountPeer(deviceHex))) continue;
     direct.add(deviceHex);
     devices += 1;
     for (const frame of frames) {
@@ -208,9 +217,15 @@ export async function announceAccountLedger(
   }
   const { hub } = deps;
   if (hub !== undefined) {
-    for (const deviceHex of hub.peers()) {
+    let hubPeers: readonly string[] = [];
+    try {
+      hubPeers = hub.peers();
+    } catch (error: unknown) {
+      reportError(error);
+    }
+    for (const deviceHex of hubPeers) {
       if (direct.has(deviceHex)) continue;
-      if (!(await deps.account.isAccountPeer(deviceHex))) continue;
+      if (!(await isAccountPeer(deviceHex))) continue;
       devices += 1;
       // Each device is offered concurrently: a pairing to a device that is not there waits out its own handshake, which must not hold up the others.
       offers.push(

@@ -144,6 +144,7 @@ describe("the router's replication rounds", () => {
   const SILENT_SEED = 1;
   const REFUSING_SEED = 2;
   const DROPPING_SEED = 3;
+  const BROKEN_SEED = 4;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -334,6 +335,63 @@ describe("the router's replication rounds", () => {
       sessions.delete(hex(dropping));
       await runRounds(ROUNDS_TO_RUN);
 
+      expect(stallReports(errors)).toHaveLength(1);
+      expect(router.stalledLogs()).toHaveLength(1);
+    } finally {
+      router.stop();
+    }
+  });
+
+  it("still counts every round when reading one device's membership or the hub's peers throws", async () => {
+    const errors: Error[] = [];
+    const broken = deviceBytes(BROKEN_SEED);
+    const sessions = new Map<string, true>([
+      [SENDER_HEX, true],
+      [hex(broken), true],
+    ]);
+    const ledger: AccountLedgerReplica = {
+      ownsLog: () => true,
+      handleDataFrame: async () => null,
+      announcements: async () => [
+        { type: "data-have", peer: OTHER_LOG, "head-seq": 1 },
+      ],
+      unreadableEntries: () => [],
+    };
+    const router = new DataFrameRouter({
+      dataStorage: undefined,
+      account: {
+        ledger: () => ledger,
+        isAccountPeer: async (deviceHex) => {
+          if (deviceHex === hex(broken)) {
+            throw new Error("membership unreadable");
+          }
+          return true;
+        },
+      },
+      peerSessions: sessions,
+      onError: (error) => {
+        errors.push(error);
+      },
+      hub: {
+        peers: () => {
+          throw new Error("hub listing unreadable");
+        },
+        send: async () => undefined,
+      },
+      announceIntervalMs: ROUND_MS,
+    });
+    const connectionOf = (id: Uint8Array): Connection =>
+      ({
+        peerDeviceId: id,
+        send: async () => undefined,
+      }) as unknown as Connection;
+    try {
+      await router.route(connectionOf(SENDER_BYTES), have());
+      await router.route(connectionOf(broken), have());
+      await runRounds(ROUNDS_TO_RUN);
+
+      expect(errors.map((e) => e.message)).toContain("membership unreadable");
+      expect(errors.map((e) => e.message)).toContain("hub listing unreadable");
       expect(stallReports(errors)).toHaveLength(1);
       expect(router.stalledLogs()).toHaveLength(1);
     } finally {
