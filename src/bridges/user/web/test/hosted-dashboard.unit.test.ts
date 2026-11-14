@@ -9,6 +9,7 @@ import {
   HOSTED_DASHBOARD_ORIGIN,
   HOSTED_DASHBOARD_URL,
 } from "../hosted-dashboard.js";
+import { HELLO_PATH } from "../pairing-protocol.js";
 import { authorise } from "../web-access.js";
 
 const SOURCE_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -26,13 +27,18 @@ const POLICY = {
   localClientAddresses: () => new Set<string>(),
 };
 
-/** What the bridge decides about a cross-origin request carrying `origin`, from this machine. */
+/** What the bridge decides about a cross-origin attempt to open the proof exchange's socket, carrying `origin`, from this machine: the one request a page of the hosted origin may make without a ticket. */
 function decisionFor(origin: string): string {
   return authorise(POLICY, {
     method: "GET",
-    url: "/",
+    url: HELLO_PATH,
     remoteAddress: OWN_CLIENT,
-    headers: { host: `${OWN_CLIENT}:${String(POLICY.port)}`, origin },
+    headers: {
+      host: `${OWN_CLIENT}:${String(POLICY.port)}`,
+      origin,
+      connection: "Upgrade",
+      upgrade: "websocket",
+    },
   }).kind;
 }
 
@@ -95,7 +101,7 @@ it("is the one place a production source or a shipped frontend file names the ho
   expect(naming.map((file) => path.relative(SOURCE_ROOT, file))).toEqual([]);
 });
 
-it("is the origin the bridge admits from this machine, and no other origin is", () => {
+it("is the origin the bridge lets open its proof exchange from this machine, to prove it is paired, and no other origin is", () => {
   expect(decisionFor(HOSTED_DASHBOARD_ORIGIN)).toBe("allow");
   expect(decisionFor("https://not-the-dashboard.example")).toBe("deny");
 });

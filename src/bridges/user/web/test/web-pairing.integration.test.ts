@@ -22,7 +22,7 @@ import {
 } from "../pairing-protocol.js";
 import { acquireTicket } from "../pairing-handshake.js";
 import { createWebServer, type WebServerHandle } from "../server.js";
-import { HOSTED_DASHBOARD_ORIGIN } from "../web-access.js";
+import { HOSTED_DASHBOARD_ORIGIN } from "../hosted-dashboard.js";
 import {
   dashboardPairingUrl,
   openPairingSecret,
