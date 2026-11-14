@@ -345,6 +345,30 @@ describe("PeerLifecycle — sendCoordinatorHandover", () => {
     expect(message.peerList).toHaveLength(2);
   });
 
+  it.each(["not a timestamp", ""])(
+    "never picks a peer whose start time does not parse (%j) as the longest-running one",
+    async (unreadable) => {
+      const h = makeHarness();
+      h.transport.isCoordinator = true;
+      h.deps.peerInfo.set(OWNER_ID, peerInfo(OWNER_ID));
+      h.deps.peerInfo.set(
+        "unreadable",
+        peerInfo("unreadable", { startedAt: unreadable }),
+      );
+      h.deps.peerInfo.set(
+        "readable",
+        peerInfo("readable", { startedAt: "2026-06-01T00:00:00.000Z" }),
+      );
+
+      await h.lifecycle.sendCoordinatorHandover();
+
+      expect(h.transport.send).toHaveBeenCalledWith(
+        { id: "readable" },
+        expect.objectContaining({ method: "become_coordinator" }),
+      );
+    },
+  );
+
   it("picks the sole remaining peer as successor and sends an empty handoff list", async () => {
     const h = makeHarness();
     h.transport.isCoordinator = true;

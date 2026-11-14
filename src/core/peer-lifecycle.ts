@@ -5,6 +5,7 @@
  */
 
 import { normaliseWireState } from "./wire-protocol.js";
+import { parseIsoTimestampMs } from "./iso-timestamp.js";
 import type {
   MeshMessage,
   PeerInfo,
@@ -361,10 +362,14 @@ export class PeerLifecycle {
     );
     if (remainingPeers.length === 0) return;
 
-    // filter() above already returned a fresh array, so sorting it in place is safe.
-    remainingPeers.sort(
-      (a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt),
-    );
+    // filter() above already returned a fresh array, so sorting it in place is safe. A start time that does not parse sorts last: an unreadable claim never makes a peer the longest-running one.
+    const startedAtMs = (peer: Readonly<PeerInfo>): number =>
+      parseIsoTimestampMs(peer.startedAt) ?? Number.POSITIVE_INFINITY;
+    remainingPeers.sort((a, b) => {
+      const earlier = startedAtMs(a);
+      const later = startedAtMs(b);
+      return earlier === later ? 0 : earlier < later ? -1 : 1;
+    });
     const [successor, ...handoffList] = remainingPeers;
     // remainingPeers.length > 0 (checked above) guarantees at least one entry here -- this narrows the type for TypeScript rather than handling a real runtime case.
     if (successor === undefined) return;

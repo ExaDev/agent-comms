@@ -265,6 +265,17 @@ describe("StaleAgentChecker", () => {
       expect(deps.deliveryQueues.size).toBe(0);
     });
 
+    it("purges an offline agent whose start time does not parse, since it cannot show the agent is recent", async () => {
+      const { deps, checker } = harness([
+        agent("a1", "offline", DEAD_PID, "not a timestamp"),
+      ]);
+      checker.start();
+      await vi.advanceTimersByTimeAsync(PROBE_INTERVAL_MS);
+      checker.stop();
+
+      expect(deps.agents.has("a1")).toBe(false);
+    });
+
     it("does not purge an offline agent still within the threshold", async () => {
       const { deps, checker } = harness([
         agent(
