@@ -73,6 +73,7 @@ import {
   PAIRING_PAGE_HEADERS,
   PAIRING_PAGE_PATH,
   openPairingSecret,
+  watchPairingSecret,
   pairingPageHtml,
   selectMeshSubprotocol,
   type PairingSecretStore,
@@ -273,6 +274,8 @@ export async function createWebServer(options?: {
   beaconPort?: number | undefined;
   /** The directory the pairing secret is kept in. Defaults to the bridge's data directory; tests pass one of their own. */
   pairingDir?: string | undefined;
+  /** Whether to watch the pairing secret file and act on a rotation the moment it is reported. Defaults to true; a test turns it off to see what the periodic sweep and the next message do alone. */
+  watchPairingFile?: boolean | undefined;
   /** How often sockets admitted under a replaced pairing secret are looked for and closed. Defaults to ROTATION_SWEEP_MS; a test sets it long to see that a message alone ends such a socket. */
   pairingSweepMs?: number | undefined;
   existingController?: ChatController | undefined;
@@ -293,6 +296,7 @@ export async function createWebServer(options?: {
     localClientAddresses = ownInterfaceAddresses,
     beaconPort,
     pairingDir,
+    watchPairingFile = true,
     pairingSweepMs = ROTATION_SWEEP_MS,
     existingController,
     coordinatorPort,
@@ -409,8 +413,23 @@ export async function createWebServer(options?: {
     hostedSockets.sweep();
   }, pairingSweepMs);
   rotationSweep.unref();
+  // The sweep is the backstop. A rotation is acted on the moment the secret file changes, so a revoked socket does not stay open for the length of a poll.
+  const stopWatching = (
+    watchPairingFile ? watchPairingSecret : () => () => undefined
+  )({
+    dir: pairingDir,
+    onChange: () => {
+      hostedSockets.sweep();
+    },
+    onError: (error) => {
+      process.stderr.write(
+        `agent-comms: cannot watch the pairing secret, so a rotation ends hosted sockets at the next sweep: ${error.message}\n`,
+      );
+    },
+  });
   server.once("close", () => {
     clearInterval(rotationSweep);
+    stopWatching();
   });
 
   server.on("upgrade", (req, socket, head) => {

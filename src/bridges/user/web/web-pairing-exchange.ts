@@ -238,7 +238,7 @@ export function serveHello(
   });
 }
 
-/** How often the server looks for sockets admitted under a secret that has been replaced. */
+/** How often the server looks for sockets admitted under a secret that has been replaced, as a backstop to the watch on the secret file: a file system need not report every change, and the watch can fail to start. A rotation is otherwise acted on at once. */
 export const ROTATION_SWEEP_MS = 1000;
 
 /** WebSocket close code a socket gets when the secret it was admitted under is gone. */

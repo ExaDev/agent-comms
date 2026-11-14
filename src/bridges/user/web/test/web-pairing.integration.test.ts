@@ -442,6 +442,78 @@ describe("a page of the hosted dashboard's origin", () => {
   });
 });
 
+describe("rotation ends a hosted socket at once", () => {
+  const NEVER_SWEEP_MS = 3_600_000;
+  const AT_ONCE_MS = 500;
+
+  it("closes an idle socket the moment the secret file changes, with the sweep and every message out of the way", async () => {
+    const dir = path.join(scratchDirectory("agent-comms-pairing-watch-"), "s");
+    const own = await createWebServer({
+      pairingDir: dir,
+      pairingSweepMs: NEVER_SWEEP_MS,
+      coordinatorPort: await freeLocalPort(),
+      firstContactPort: await freeLocalPort(),
+      hubUrl: await unreachableHubUrl(),
+    });
+    try {
+      if (!own.server.listening) {
+        await new Promise<void>((resolve) => {
+          own.server.once("listening", () => {
+            resolve();
+          });
+        });
+      }
+      const address = own.server.address();
+      const ownPort = typeof address === "object" && address ? address.port : 0;
+      const ticket = await acquireTicket(
+        ownPort,
+        openPairingSecret({ dir }).current(),
+      );
+      const ws = new WS(
+        `ws://127.0.0.1:${String(ownPort)}${MESH_PATH}`,
+        [...meshSocketProtocols(ticket)],
+        { origin: HOSTED_DASHBOARD_ORIGIN },
+      );
+      await new Promise<void>((resolve, reject) => {
+        ws.once("open", () => {
+          resolve();
+        });
+        ws.once("error", reject);
+      });
+      const closed = new Promise<number>((resolve) => {
+        ws.on("close", (code) => {
+          resolve(code);
+        });
+      });
+
+      rotatePairingSecret(dir);
+
+      expect(
+        await Promise.race([
+          closed,
+          new Promise<string>((resolve) => {
+            setTimeout(() => {
+              resolve("still open");
+            }, AT_ONCE_MS);
+          }),
+        ]),
+      ).toBe(CLOSE_POLICY_VIOLATION);
+    } finally {
+      await new Promise<void>((resolve) => {
+        own.wss.close(() => {
+          resolve();
+        });
+      });
+      await new Promise<void>((resolve) => {
+        own.server.close(() => {
+          resolve();
+        });
+      });
+      await own.controller.shutdown();
+    }
+  });
+});
+
 describe("a socket admitted under a secret that has been replaced", () => {
   const NEVER_SWEEP_MS = 3_600_000;
 
@@ -453,6 +525,7 @@ describe("a socket admitted under a secret that has been replaced", () => {
     const own = await createWebServer({
       pairingDir: dir,
       pairingSweepMs: NEVER_SWEEP_MS,
+      watchPairingFile: false,
       coordinatorPort: await freeLocalPort(),
       firstContactPort: await freeLocalPort(),
       hubUrl: await unreachableHubUrl(),
