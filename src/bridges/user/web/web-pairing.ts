@@ -124,11 +124,12 @@ export function openPairingSecret(
   };
 
   const load = (): { secret: string; stamp: string } => {
+    // Whether a file was there is read before the file is, so a file another bridge creates in between is not mistaken for an unusable one and replaced.
+    const existed = fs.existsSync(file);
     const existing = readSecret(file);
     if (existing !== undefined) {
       return { secret: existing, stamp: stampOf() ?? "" };
     }
-    const existed = fs.existsSync(file);
     const secret = newSecret();
     if (existed) {
       writeSecret(file, secret);
