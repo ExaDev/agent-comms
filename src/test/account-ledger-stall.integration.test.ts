@@ -21,7 +21,7 @@ import {
   userDir,
 } from "./account-ledger-helpers.js";
 
-/** Long enough for several replication rounds to pass with nothing arriving. */
+/** How long the test lets replication rounds pass to show that something does not happen again (a repeated report). A negative check has no event to wait for, so it is a sleep. */
 const QUIET_PERIOD_MS = 600;
 
 const cleanups = new TeardownStack();
