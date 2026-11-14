@@ -4,6 +4,8 @@
  * Claims travel as wire-mesh session frames (MeshTransport.broadcastCoordinatorClaim/sendCoordinatorClaim), and only over sessions to peers on this machine, because both duties the role assigns are facts about one machine: a PID probe can only see local processes and the cc-peer front can only reach local Claude Code sessions.
  *
  * When a claim is made: a store claims only when it knows of no incumbent and is the first on the machine as far as it can tell. A store that bound the well-known port with no first-contact presence configured can meet other stores only through that port, so it claims at once; one that may be reachable through first contact (it bound the port, or could neither join nor bind it) first waits one claim wait for an incumbent's announcement, so a store arriving at an existing mesh never takes the role at an equal term before the holder's claim reaches it. Both ends of every machine-local session announce the incumbent they know as the session is enrolled. When the incumbent departs, the lowest device-id among the peers this side has a machine-local session to claims at once at a raised term, and every other survivor claims too if, one claim wait later, the claim it accepts still names a holder it has no session to, which covers a lowest-id peer that is itself gone or was never reachable. The same wait follows accepting a claim whose holder this side has no session to, so a claim naming a device that never joined cannot pin the role vacant.
+ *
+ * Whose claims count: a claim is evaluated only when its holder is this side, the peer that sent it (the session's authenticated device-id, never a field of the frame), or a peer this side has a machine-local session to. A claim gossiped onward by a peer other than its holder is therefore still accepted wherever the holder is reachable, which is every peer of a fully connected machine. Any other claim, naming a holder that is not here, waits in one pending slot until that holder's session is enrolled and is dropped after one claim wait, so a claim for an absent device neither changes the incumbent nor starts a takeover.
  */
 
 import {
@@ -67,6 +69,14 @@ export class CoordinatorRole {
   private takeoverStreak = 0;
   /** The claim, as `term:holder`, each peer was last answered with. A peer whose view lags keeps sending the claims it knows, and answering each one with the same incumbent only multiplies the traffic: the answer is repeated only when the incumbent changes or the peer's session is enrolled afresh, since the earlier answer may have been lost with the old session. */
   private readonly answered = new Map<string, string>();
+  /** The one claim set aside because its holder is neither this side, its sender nor a peer with a session here, with who sent it and the timer that drops it after one claim wait. A claim of a higher term replaces it; a claim of the same or a lower term does not. */
+  private pending:
+    | {
+        handle: Readonly<ConnectionHandle>;
+        frame: Readonly<CoordinatorFrame>;
+        timer: ReturnType<typeof setTimeout>;
+      }
+    | undefined;
 
   constructor(private readonly deps: Readonly<CoordinatorRoleDeps>) {}
 
@@ -105,8 +115,18 @@ export class CoordinatorRole {
   async announceTo(handle: Readonly<ConnectionHandle>): Promise<void> {
     this.answered.delete(handle.id);
     const frame = this.electionInstance?.announceCurrent();
-    if (frame === undefined) return;
-    await this.deps.requireTransport().sendCoordinatorClaim(handle, frame);
+    if (frame !== undefined) {
+      await this.deps.requireTransport().sendCoordinatorClaim(handle, frame);
+    }
+    // The session just enrolled may be the holder a claim was set aside for.
+    const waiting = this.pending;
+    if (
+      waiting !== undefined &&
+      deviceIdToHex(waiting.frame.coordinator) === handle.id
+    ) {
+      this.dropPending();
+      await this.handleClaim(waiting.handle, waiting.frame);
+    }
   }
 
   /** Evaluates a claim a peer gossiped. An accepted claim is gossiped on to every peer so the supersession reaches peers the sender is not connected to, and when it names a holder this side has no session to, this side waits one claim wait for that holder to appear before claiming over it; a stale or tiebreak-losing claim is answered with the incumbent so its sender converges, and a claim whose term no later claim could supersede is dropped unevaluated, neither gossiped nor answered. Receiving the incumbent itself is neither, and is dropped without a reply, which is what stops two peers that agree from echoing it forever. */
@@ -115,6 +135,10 @@ export class CoordinatorRole {
     frame: Readonly<CoordinatorFrame>,
   ): Promise<void> {
     if (this.stopped) return;
+    if (!this.holderIsHere(handle, frame)) {
+      this.setAside(handle, frame);
+      return;
+    }
     const result = this.election.evaluate(frame);
     if (result.outcome === "accepted") {
       this.answered.clear();
@@ -155,7 +179,44 @@ export class CoordinatorRole {
   async stop(): Promise<void> {
     this.stopped = true;
     this.cancelClaimWait();
+    this.dropPending();
     await this.syncHolding();
+  }
+
+  /** Whether the holder a claim names is this side, the peer that sent it, or a peer this side has a machine-local session to. The sender is the handle's authenticated device-id, so a peer cannot name itself as someone else. */
+  private holderIsHere(
+    handle: Readonly<ConnectionHandle>,
+    frame: Readonly<CoordinatorFrame>,
+  ): boolean {
+    const holder = deviceIdToHex(frame.coordinator);
+    return (
+      holder === this.deps.getPeerId() ||
+      holder === handle.id ||
+      this.deps.requireTransport().electionPeerIds().has(holder)
+    );
+  }
+
+  /** Keeps a claim whose holder is not here until that holder's session is enrolled, replacing a waiting claim of a lower term, and drops it after one claim wait. */
+  private setAside(
+    handle: Readonly<ConnectionHandle>,
+    frame: Readonly<CoordinatorFrame>,
+  ): void {
+    if (this.pending !== undefined) {
+      if (this.pending.frame.term >= frame.term) return;
+      this.dropPending();
+    }
+    const timer = setTimeout(() => {
+      this.pending = undefined;
+    }, this.deps.claimWaitMs);
+    // Never what keeps a process alive: a store shutting down stops the role anyway.
+    timer.unref();
+    this.pending = { handle, frame, timer };
+  }
+
+  private dropPending(): void {
+    if (this.pending === undefined) return;
+    clearTimeout(this.pending.timer);
+    this.pending = undefined;
   }
 
   private isLowestSurvivor(departedPeerId: string): boolean {
