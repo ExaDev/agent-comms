@@ -1,3 +1,14 @@
+## [9.0.11](https://github.com/ExaDev/agent-comms/compare/v9.0.10...v9.0.11) (2026-11-14)
+
+### Bug Fixes
+
+* **build:** leave the dashboard's compiled sources and the vite config out of the package ([ec6e499](https://github.com/ExaDev/agent-comms/commit/ec6e4997ce725b35d53af68609f3b8e4ff5eebf0)), closes [#572](https://github.com/ExaDev/agent-comms/issues/572)
+* **build:** publish no compiled tests, and check the packed package ([2dd06b5](https://github.com/ExaDev/agent-comms/commit/2dd06b56a0554b12528036423168433735f1e832)), closes [#567](https://github.com/ExaDev/agent-comms/issues/567)
+
+### Build
+
+* **deps:** bump wire-mesh-core to 4.1.4 ([1327721](https://github.com/ExaDev/agent-comms/commit/132772159055fb824acbe8ec0c49024a0ef5e97b))
+
 ## [9.0.10](https://github.com/ExaDev/agent-comms/compare/v9.0.9...v9.0.10) (2026-11-14)
 
 ### Bug Fixes
