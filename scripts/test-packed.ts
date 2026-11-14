@@ -9,11 +9,18 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parse, stringify } from "yaml";
+import { z } from "zod";
+
+const workspaceSettings = z.object({
+  minimumReleaseAgeExclude: z.array(z.string()).optional(),
+});
 
 const work = mkdtempSync(join(tmpdir(), "agent-comms-packed-"));
 try {
@@ -30,6 +37,14 @@ try {
   writeFileSync(
     join(consumer, "package.json"),
     '{"name":"consumer","version":"0.0.0","private":true}\n',
+  );
+  // The consumer is outside the workspace, so it does not see the repository's release-age exclusions: carry them over, so a machine that configures a release age gives the same result as one that does not.
+  const { minimumReleaseAgeExclude = [] } = workspaceSettings.parse(
+    parse(readFileSync("pnpm-workspace.yaml", "utf8")),
+  );
+  writeFileSync(
+    join(consumer, "pnpm-workspace.yaml"),
+    stringify({ minimumReleaseAgeExclude }),
   );
   // pnpm, which the repository's own installs use, so the install honours the same release age and exclusions as everywhere else.
   execFileSync("pnpm", ["add", "--ignore-scripts", tarball], {
