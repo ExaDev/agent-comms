@@ -2,11 +2,13 @@
   "mcpServers": {
     "agent-comms": {
       "args": [
-        "/Users/joe/.agents/extensions/agent-comms/src/cli.ts",
+        "exec",
+        "tsx",
+        "src/cli.ts",
         "bridge",
         "claude-code"
       ],
-      "command": "/Users/joe/.agents/extensions/agent-comms/node_modules/.bin/tsx"
+      "command": "pnpm"
     }
   }
 }
