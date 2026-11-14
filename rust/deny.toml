@@ -8,7 +8,7 @@
 #
 # Library crates use std, serde and serde_json, and the git dependencies on wire-mesh and trilean the sources table
 # allows. The runtime and the wasm bindings are reserved for the crates that need them by the deny entries below,
-# so a library crate cannot take them even though a later change adds them to the allowlist for the binary.
+# so a library crate cannot take them even when the allowlist holds them for the binary.
 
 [graph]
 all-features = true
@@ -26,6 +26,8 @@ allow = ["MIT"]
 
 [bans]
 multiple-versions = "deny"
+# A workspace crate depends on an external crate with its default features off and names the ones it needs.
+external-default-features = "deny"
 # A workspace crate depends on a sibling by path, which the wildcard check would otherwise reject.
 wildcards = "deny"
 allow-wildcard-paths = true

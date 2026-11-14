@@ -1,0 +1,11 @@
+[graph]
+all-features = true
+
+[bans]
+multiple-versions = "deny"
+allow-wildcard-paths = true
+
+allow = [
+    { crate = "platform-gated-member", reason = "the fixture" },
+    { crate = "cfg-if" },
+]
