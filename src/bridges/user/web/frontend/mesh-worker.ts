@@ -6,7 +6,7 @@
  * Built as a separate IIFE bundle (mesh-worker.js) so the SharedWorker runs in its own global scope independent of the main app bundle.
  */
 
-import { createORPCClient, getEventMeta } from "@orpc/client";
+import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import { RetryLinkPlugin } from "@orpc/client/plugins";
 import { implement } from "@orpc/server";
@@ -15,6 +15,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import type { MeshContract } from "../contract.js";
 import { MeshEventPublisher } from "../event-publisher.js";
 import { tabContract } from "./tab-contract.js";
+import { pumpEvents } from "./event-pump.js";
 import { dispatchAction } from "./dispatch-action.js";
 import type {
   AgentIdentity as CoreAgentIdentity,
@@ -249,11 +250,11 @@ export function connect(url: string): void {
 
   const client: MeshOrpcClient = createORPCClient(link);
   orpcClient = client;
-  void pumpEvents(client, ++eventPumpGeneration);
+  void pumpUpstreamEvents(client, ++eventPumpGeneration);
 }
 
 /**
- * Deliberately tears down the current upstream connection: abandons the event pump loop first (bumping eventPumpGeneration the same way a fresh connect() does, so pumpEvents' own generation check stops it from treating the socket closing next as something to reconnect and resume from), clears orpcClient so upstream()/requireOrpcClient() correctly report "not connected" for anything called afterward, then closes the actual socket. Never previously exported -- nothing closed this worker's own upstream connection on purpose, so a caller tearing down the server this worker was talking to (integration tests in particular) had no way to close its half of the connection first. That left the server's own WebSocketServer.close() waiting indefinitely for a client it was still tracking to disconnect, since ws's WebSocketServer.close() callback only fires once every currently-tracked client connection has actually closed.
+ * Deliberately tears down the current upstream connection: abandons the event pump loop first (bumping eventPumpGeneration the same way a fresh connect() does, so the event pump's own generation check stops it from treating the socket closing next as something to reconnect and resume from), clears orpcClient so upstream()/requireOrpcClient() correctly report "not connected" for anything called afterward, then closes the actual socket. Never previously exported -- nothing closed this worker's own upstream connection on purpose, so a caller tearing down the server this worker was talking to (integration tests in particular) had no way to close its half of the connection first. That left the server's own WebSocketServer.close() waiting indefinitely for a client it was still tracking to disconnect, since ws's WebSocketServer.close() callback only fires once every currently-tracked client connection has actually closed.
  */
 export function disconnect(): void {
   ++eventPumpGeneration;
@@ -267,43 +268,32 @@ export function disconnect(): void {
  *
  * Confirmed empirically (a real server-side socket termination, not assumed from either option's name): RetryLinkPlugin does NOT transparently resume an already-active subscribeEvents() call across a transport-level drop -- the in-flight for-await throws (an AbortError from the closed socket) instead of pausing and resuming underneath the same iterator. The outer while loop here is what actually implements resume-after-reconnect: on any thrown error it loops back and calls subscribeEvents again with lastEventId, which naturally blocks until RPCLink's own reconnect option re-establishes the underlying socket, then resumes exactly where the stream left off.
  */
-async function pumpEvents(
+async function pumpUpstreamEvents(
   client: Readonly<MeshOrpcClient>,
   generation: number,
 ): Promise<void> {
-  let lastEventId: string | undefined;
-
-  while (generation === eventPumpGeneration) {
-    try {
-      const events = await client.subscribeEvents(
-        lastEventId === undefined ? {} : { lastEventId },
-      );
-      for await (const event of events) {
-        if (generation !== eventPumpGeneration) return;
-        const meta = getEventMeta(event);
-        if (meta?.id !== undefined) lastEventId = meta.id;
-        // Republish to the worker's own downstream (tab-contract.ts's subscribeEvents) with a fresh, worker-assigned id -- a separate resumability domain from the server's own, since a tab resumes against this worker, not against the server directly.
-        localPublisher.publish(event);
-        switch (event.kind) {
-          case "state_sync":
-            applyStateSync(event.state);
-            broadcastToPorts({ type: "state", state: getStateSnapshot() });
-            break;
-          case "state_patch":
-            applyPatch(event.patch);
-            broadcastToPorts({ type: "patch", patch: event.patch });
-            break;
-          case "delivery":
-            // Not part of the legacy postMessage protocol's own WorkerOutbound union -- delivery events reach tabs exclusively through the oRPC tab-contract.ts subscribeEvents stream, via localPublisher.publish(event) above (applied uniformly to every event kind, not just this one).
-            break;
-        }
+  await pumpEvents(
+    async (lastEventId) =>
+      client.subscribeEvents(lastEventId === undefined ? {} : { lastEventId }),
+    (event) => {
+      // Republish to the worker's own downstream (tab-contract.ts's subscribeEvents) with a fresh, worker-assigned id -- a separate resumability domain from the server's own, since a tab resumes against this worker, not against the server directly.
+      localPublisher.publish(event);
+      switch (event.kind) {
+        case "state_sync":
+          applyStateSync(event.state);
+          broadcastToPorts({ type: "state", state: getStateSnapshot() });
+          break;
+        case "state_patch":
+          applyPatch(event.patch);
+          broadcastToPorts({ type: "patch", patch: event.patch });
+          break;
+        case "delivery":
+          // Not part of the legacy postMessage protocol's own WorkerOutbound union -- delivery events reach tabs exclusively through the oRPC tab-contract.ts subscribeEvents stream, via localPublisher.publish(event) above (applied uniformly to every event kind, not just this one).
+          break;
       }
-      // The server ended the stream normally -- nothing left to resume.
-      return;
-    } catch {
-      // Transport dropped mid-stream. Loop back and resume from lastEventId once subscribeEvents() can succeed again.
-    }
-  }
+    },
+    () => generation === eventPumpGeneration,
+  );
 }
 
 // ---------------------------------------------------------------------------
