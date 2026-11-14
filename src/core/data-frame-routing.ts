@@ -160,7 +160,15 @@ export async function routeRelayedDataFrame(
   }
 }
 
-/** Offers every account writer log this machine holds to every device that holds the same account and that this side can reach (agent-comms#344): over a live, trusted data connection, or, for a device it meets only through the relay hub, over a relay pairing. Such a device that is behind asks for what it is missing, which is the data-domain fan-out that carries each machine's grants and revocations to every other. A device reachable both ways is offered the logs once, directly. Called on the gossip cadence, so a machine that was away when an entry was written still catches up the next time it is reachable. A send that fails is reported and the rest carry on; the next round retries it. Resolves true when every offer was sent, and false when one failed, which is reported through onError as it happens: a round that did not go out is not evidence that a peer withholds anything. */
+/** What one round of offering the account ledger found out. */
+export interface LedgerOfferRound {
+  /** Whether this side reached any device of the account: an offer went out to at least one, or there was nothing to offer and a device was there to offer it to. False means this machine is offline as far as the account goes, which says nothing about whether any peer withholds anything; an offer to one device that failed does not make it false while another got through. */
+  reached: boolean;
+  /** This side's head sequence of each log it holds, by log id hex, read once for the round. */
+  localHeads: ReadonlyMap<string, number>;
+}
+
+/** Offers every account writer log this machine holds to every device that holds the same account and that this side can reach (agent-comms#344): over a live, trusted data connection, or, for a device it meets only through the relay hub, over a relay pairing. Such a device that is behind asks for what it is missing, which is the data-domain fan-out that carries each machine's grants and revocations to every other. A device reachable both ways is offered the logs once, directly. Called on the gossip cadence, so a machine that was away when an entry was written still catches up the next time it is reachable. A send that fails is reported through onError and the rest carry on; the next round retries it. Resolves with whether any device was reached and with this side's heads, read once. */
 export async function announceAccountLedger(
   deps: Readonly<{
     connectionsByPeer: ReadonlyMap<string, Readonly<Connection>>;
@@ -169,14 +177,17 @@ export async function announceAccountLedger(
     peerSessions: ReadonlyMap<string, unknown>;
     onError: ((error: Error) => void) | undefined;
   }>,
-): Promise<boolean> {
+): Promise<LedgerOfferRound> {
   const ledger = deps.account.ledger();
-  if (ledger === undefined) return true;
+  if (ledger === undefined) return { reached: false, localHeads: new Map() };
   const frames = await ledger.announcements();
-  if (frames.length === 0) return true;
-  let complete = true;
+  const localHeads = new Map<string, number>();
+  for (const frame of frames) {
+    localHeads.set(bytesToHex(frame.peer), frame["head-seq"]);
+  }
+  let devices = 0;
+  let sent = 0;
   const reportError = (error: unknown): void => {
-    complete = false;
     deps.onError?.(error instanceof Error ? error : new Error(String(error)));
   };
   const direct = new Set<string>();
@@ -185,35 +196,43 @@ export async function announceAccountLedger(
     if (!deps.peerSessions.has(deviceHex)) continue;
     if (!(await deps.account.isAccountPeer(deviceHex))) continue;
     direct.add(deviceHex);
+    devices += 1;
     for (const frame of frames) {
       try {
         await connection.send(frame);
+        sent += 1;
       } catch (error: unknown) {
         reportError(error);
       }
     }
   }
   const { hub } = deps;
-  if (hub === undefined) return complete;
-  for (const deviceHex of hub.peers()) {
-    if (direct.has(deviceHex)) continue;
-    if (!(await deps.account.isAccountPeer(deviceHex))) continue;
-    // Each device is offered concurrently: a pairing to a device that is not there waits out its own handshake, which must not hold up the others.
-    offers.push(
-      (async () => {
-        for (const frame of frames) {
-          try {
-            await hub.send(deviceHex, frame);
-          } catch (error: unknown) {
-            reportError(error);
+  if (hub !== undefined) {
+    for (const deviceHex of hub.peers()) {
+      if (direct.has(deviceHex)) continue;
+      if (!(await deps.account.isAccountPeer(deviceHex))) continue;
+      devices += 1;
+      // Each device is offered concurrently: a pairing to a device that is not there waits out its own handshake, which must not hold up the others.
+      offers.push(
+        (async () => {
+          for (const frame of frames) {
+            try {
+              await hub.send(deviceHex, frame);
+              sent += 1;
+            } catch (error: unknown) {
+              reportError(error);
+            }
           }
-        }
-      })(),
-    );
+        })(),
+      );
+    }
   }
   await Promise.all(offers);
 
-  return complete;
+  return {
+    reached: sent > 0 || (frames.length === 0 && devices > 0),
+    localHeads,
+  };
 }
 
 export interface DataFrameRouterDeps {
@@ -274,33 +293,15 @@ export class DataFrameRouter {
         peerSessions: deps.peerSessions,
         onError: deps.onError,
       })
-        .catch((error: unknown) => {
-          report(error);
-
-          return false;
-        })
-        .then(async (complete) => this.checkGaps(account, gaps, !complete))
+        .then(async (offered) =>
+          gaps.round(offered.localHeads, { offline: !offered.reached }),
+        )
         .catch(report)
         .finally(() => {
           this.announcing = false;
         });
     }, deps.announceIntervalMs);
     this.announceInterval.unref();
-  }
-
-  /** One round of gap detection against this side's own heads, read fresh from the ledger. It runs whether or not the round's announcements went out, and a round whose announcements failed is not counted as a round the log stayed behind. When the heads cannot be read there is nothing to compare, and that is reported as what it is. */
-  private async checkGaps(
-    account: Readonly<AccountReplication>,
-    gaps: LedgerGapTracker,
-    announceFailed: boolean,
-  ): Promise<void> {
-    const ledger = account.ledger();
-    if (ledger === undefined) return;
-    const localHeads = new Map<string, number>();
-    for (const frame of await ledger.announcements()) {
-      localHeads.set(bytesToHex(frame.peer), frame["head-seq"]);
-    }
-    await gaps.round(localHeads, { announceFailed });
   }
 
   /** Sends a data-request to one source, over its direct session when it has one and through the relay hub otherwise. */

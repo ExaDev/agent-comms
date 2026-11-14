@@ -2,7 +2,7 @@
  * The router records the head every account peer announces, on a direct connection and through the relay hub, before the ledger answers, and only for an account peer's frame for one of the account's logs.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Connection } from "wire-mesh-core/ports/transport";
 import type { DataHaveFrame } from "wire-mesh-core/generated/protocol";
 import type { AccountLedgerReplica } from "../core/account-ledger.js";
@@ -138,7 +138,69 @@ describe("a data-have relayed through the hub", () => {
 
 describe("the router's replication rounds", () => {
   const ROUND_MS = 15;
-  const ROUNDS_TO_WAIT = 8;
+  const ROUNDS_TO_RUN = 8;
+  /** Enough turns of the microtask queue for one round, whose steps all resolve without I/O, to finish before the next tick. */
+  const MICROTASK_TURNS = 200;
+  const SILENT_SEED = 1;
+  const REFUSING_SEED = 2;
+  const DROPPING_SEED = 3;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Runs `count` ticks of the router's interval, each to completion. */
+  async function runRounds(count: number): Promise<void> {
+    for (let round = 0; round < count; round += 1) {
+      vi.advanceTimersByTime(ROUND_MS);
+      for (let turn = 0; turn < MICROTASK_TURNS; turn += 1) {
+        await Promise.resolve();
+      }
+    }
+  }
+
+  function deviceBytes(seed: number): Uint8Array {
+    return Uint8Array.from({ length: DEVICE_ID_BYTES }, () => seed);
+  }
+
+  function hex(bytes: Uint8Array): string {
+    return Buffer.from(bytes).toString("hex");
+  }
+
+  function routerFor(
+    announcements: AccountLedgerReplica["announcements"],
+    peerSessions: Map<string, true>,
+    errors: Readonly<{ push: (error: Error) => unknown }>,
+    isAccountPeer: () => boolean = () => true,
+  ): DataFrameRouter {
+    const ledger: AccountLedgerReplica = {
+      ownsLog: () => true,
+      handleDataFrame: async () => null,
+      announcements,
+      unreadableEntries: () => [],
+    };
+    return new DataFrameRouter({
+      dataStorage: undefined,
+      account: {
+        ledger: () => ledger,
+        isAccountPeer: async () => isAccountPeer(),
+      },
+      peerSessions,
+      onError: (error) => {
+        errors.push(error);
+      },
+      hub: undefined,
+      announceIntervalMs: ROUND_MS,
+    });
+  }
+
+  function stallReports(errors: readonly Error[]): Error[] {
+    return errors.filter((e) => e.message.includes("stayed behind"));
+  }
 
   it("reports a log that stays behind and asks the peer that announced it for the entries, over its direct connection", async () => {
     const sent: unknown[] = [];
@@ -149,32 +211,17 @@ describe("the router's replication rounds", () => {
       },
     } as unknown as Connection;
     const errors: Error[] = [];
-    const ledger: AccountLedgerReplica = {
-      ownsLog: () => true,
-      // This side holds nothing of the log, so every announcement is empty.
-      handleDataFrame: async () => null,
-      announcements: async () => [],
-      unreadableEntries: () => [],
-    };
-    const router = new DataFrameRouter({
-      dataStorage: undefined,
-      account: { ledger: () => ledger, isAccountPeer: async () => true },
-      peerSessions: new Map([[SENDER_HEX, true]]),
-      onError: (error) => {
-        errors.push(error);
-      },
-      hub: undefined,
-      announceIntervalMs: ROUND_MS,
-    });
+    // This side holds nothing of the log, so every announcement is empty.
+    const router = routerFor(
+      async () => [],
+      new Map([[SENDER_HEX, true]]),
+      errors,
+    );
     try {
       await router.route(connection, have());
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, ROUND_MS * ROUNDS_TO_WAIT);
-      });
+      await runRounds(ROUNDS_TO_RUN);
 
-      expect(errors.map((e) => e.message).join("\n")).toContain(
-        "stayed behind",
-      );
+      expect(stallReports(errors)).toHaveLength(1);
       expect(sent).toContainEqual({
         type: "data-request",
         peer: LOG,
@@ -188,22 +235,11 @@ describe("the router's replication rounds", () => {
 
   it("reports nothing when this side's head has caught up", async () => {
     const errors: Error[] = [];
-    const ledger: AccountLedgerReplica = {
-      ownsLog: () => true,
-      handleDataFrame: async () => null,
-      announcements: async () => [have()],
-      unreadableEntries: () => [],
-    };
-    const router = new DataFrameRouter({
-      dataStorage: undefined,
-      account: { ledger: () => ledger, isAccountPeer: async () => true },
-      peerSessions: new Map([[SENDER_HEX, true]]),
-      onError: (error) => {
-        errors.push(error);
-      },
-      hub: undefined,
-      announceIntervalMs: ROUND_MS,
-    });
+    const router = routerFor(
+      async () => [have()],
+      new Map([[SENDER_HEX, true]]),
+      errors,
+    );
     try {
       await router.route(
         {
@@ -212,9 +248,7 @@ describe("the router's replication rounds", () => {
         } as unknown as Connection,
         have(),
       );
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, ROUND_MS * ROUNDS_TO_WAIT);
-      });
+      await runRounds(ROUNDS_TO_RUN);
 
       expect(errors).toEqual([]);
       expect(router.stalledLogs()).toEqual([]);
@@ -223,7 +257,7 @@ describe("the router's replication rounds", () => {
     }
   });
 
-  it("does not count a round whose offers failed as a stall, and counts again once they go through", async () => {
+  it("does not count a round in which every offer failed as a stall, and counts again once they go through", async () => {
     let failing = true;
     const errors: Error[] = [];
     const connection = {
@@ -232,46 +266,130 @@ describe("the router's replication rounds", () => {
         if (failing) throw new Error("the connection dropped");
       },
     } as unknown as Connection;
-    const ledger: AccountLedgerReplica = {
-      ownsLog: () => true,
-      handleDataFrame: async () => null,
-      // This side holds another log, so every round offers it and the offer fails while `failing`.
-      announcements: async () => [
-        { type: "data-have", peer: OTHER_LOG, "head-seq": 1 },
-      ],
-      unreadableEntries: () => [],
-    };
-    const router = new DataFrameRouter({
-      dataStorage: undefined,
-      account: { ledger: () => ledger, isAccountPeer: async () => true },
-      peerSessions: new Map([[SENDER_HEX, true]]),
-      onError: (error) => {
-        errors.push(error);
-      },
-      hub: undefined,
-      announceIntervalMs: ROUND_MS,
-    });
+    // This side holds another log, so every round offers it and the offer fails while `failing`.
+    const router = routerFor(
+      async () => [{ type: "data-have", peer: OTHER_LOG, "head-seq": 1 }],
+      new Map([[SENDER_HEX, true]]),
+      errors,
+    );
     try {
       await router.route(connection, have());
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, ROUND_MS * ROUNDS_TO_WAIT);
-      });
+      await runRounds(ROUNDS_TO_RUN);
       expect(errors.some((e) => e.message === "the connection dropped")).toBe(
         true,
       );
-      expect(errors.some((e) => e.message.includes("stayed behind"))).toBe(
-        false,
-      );
+      expect(stallReports(errors)).toEqual([]);
       expect(router.stalledLogs()).toEqual([]);
 
       failing = false;
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, ROUND_MS * ROUNDS_TO_WAIT);
-      });
-      expect(errors.some((e) => e.message.includes("stayed behind"))).toBe(
-        true,
-      );
+      await runRounds(ROUNDS_TO_RUN);
+      expect(stallReports(errors)).toHaveLength(1);
       expect(router.stalledLogs()).toHaveLength(1);
+    } finally {
+      router.stop();
+    }
+  });
+
+  it("still counts every round while another device is reached, however the other devices fail: one never answers, one refuses, one drops its session", async () => {
+    const errors: Error[] = [];
+    const [silent, refusing, dropping] = [
+      deviceBytes(SILENT_SEED),
+      deviceBytes(REFUSING_SEED),
+      deviceBytes(DROPPING_SEED),
+    ];
+    const sessions = new Map<string, true>([
+      [SENDER_HEX, true],
+      [hex(silent), true],
+      [hex(refusing), true],
+      [hex(dropping), true],
+    ]);
+    const router = routerFor(
+      async () => [{ type: "data-have", peer: OTHER_LOG, "head-seq": 1 }],
+      sessions,
+      errors,
+    );
+    const connectionOf = (
+      id: Uint8Array,
+      send: () => Promise<void>,
+    ): Connection => ({ peerDeviceId: id, send }) as unknown as Connection;
+    try {
+      await router.route(
+        connectionOf(SENDER_BYTES, async () => undefined),
+        have(),
+      );
+      await router.route(
+        connectionOf(silent, async () => undefined),
+        have(),
+      );
+      await router.route(
+        connectionOf(refusing, async () => {
+          throw new Error("refused");
+        }),
+        have(),
+      );
+      await router.route(
+        connectionOf(dropping, async () => undefined),
+        have(),
+      );
+      sessions.delete(hex(dropping));
+      await runRounds(ROUNDS_TO_RUN);
+
+      expect(stallReports(errors)).toHaveLength(1);
+      expect(router.stalledLogs()).toHaveLength(1);
+    } finally {
+      router.stop();
+    }
+  });
+
+  it("counts no round while no peer of the account can be reached at all", async () => {
+    const errors: Error[] = [];
+    let accountPeer = true;
+    const router = routerFor(
+      async () => [{ type: "data-have", peer: OTHER_LOG, "head-seq": 1 }],
+      new Map([[SENDER_HEX, true]]),
+      errors,
+      () => accountPeer,
+    );
+    try {
+      await router.route(
+        {
+          peerDeviceId: SENDER_BYTES,
+          send: async () => undefined,
+        } as unknown as Connection,
+        have(),
+      );
+      accountPeer = false;
+      await runRounds(ROUNDS_TO_RUN);
+
+      expect(errors).toEqual([]);
+      expect(router.stalledLogs()).toEqual([]);
+    } finally {
+      router.stop();
+    }
+  });
+
+  it("reads this side's heads once a round", async () => {
+    const errors: Error[] = [];
+    let reads = 0;
+    const router = routerFor(
+      async () => {
+        reads += 1;
+        return [];
+      },
+      new Map([[SENDER_HEX, true]]),
+      errors,
+    );
+    try {
+      await router.route(
+        {
+          peerDeviceId: SENDER_BYTES,
+          send: async () => undefined,
+        } as unknown as Connection,
+        have(),
+      );
+      await runRounds(ROUNDS_TO_RUN);
+
+      expect(reads).toBe(ROUNDS_TO_RUN);
     } finally {
       router.stop();
     }
@@ -280,43 +398,30 @@ describe("the router's replication rounds", () => {
   it("reports a round whose own heads cannot be read, as that, and keeps checking in the next round", async () => {
     let unreadable = true;
     const errors: Error[] = [];
-    const connection = {
-      peerDeviceId: SENDER_BYTES,
-      send: async () => undefined,
-    } as unknown as Connection;
-    const ledger: AccountLedgerReplica = {
-      ownsLog: () => true,
-      handleDataFrame: async () => null,
-      announcements: async () => {
+    const router = routerFor(
+      async () => {
         if (unreadable) throw new Error("the ledger store is unreadable");
         return [];
       },
-      unreadableEntries: () => [],
-    };
-    const router = new DataFrameRouter({
-      dataStorage: undefined,
-      account: { ledger: () => ledger, isAccountPeer: async () => true },
-      peerSessions: new Map([[SENDER_HEX, true]]),
-      onError: (error) => {
-        errors.push(error);
-      },
-      hub: undefined,
-      announceIntervalMs: ROUND_MS,
-    });
+      new Map([[SENDER_HEX, true]]),
+      errors,
+    );
     try {
-      await router.route(connection, have());
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, ROUND_MS * ROUNDS_TO_WAIT);
-      });
+      await router.route(
+        {
+          peerDeviceId: SENDER_BYTES,
+          send: async () => undefined,
+        } as unknown as Connection,
+        have(),
+      );
+      await runRounds(ROUNDS_TO_RUN);
       expect(
         errors.some((e) => e.message === "the ledger store is unreadable"),
       ).toBe(true);
       expect(router.stalledLogs()).toEqual([]);
 
       unreadable = false;
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, ROUND_MS * ROUNDS_TO_WAIT);
-      });
+      await runRounds(ROUNDS_TO_RUN);
       expect(router.stalledLogs()).toHaveLength(1);
     } finally {
       router.stop();

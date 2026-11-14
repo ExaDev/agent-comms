@@ -1,11 +1,11 @@
 /**
  * Gap detection for the account ledger's replicated writer logs (agent-comms#344), with no wire change. A `data-have` frame already carries the head sequence of the log it names, so each machine can see how far every peer says a log goes. A machine that stays behind that head for several rounds in a row, while the entries it asks for do not arrive, has a log something is withholding or dropping: a revocation could be in the missing part.
  *
- * What is kept: for each log, the highest head any live source announced, and each source's own announced head. A source is a peer this side reached over a direct session or over the relay hub. Each replication round compares those heads with this side's own and counts the rounds a log has stayed behind without advancing. At STALL_ROUNDS the log is reported as stalled, once, and again only if the gap grows, and the entries are asked of every source that announced a higher head, not only the one that answered first. A log that catches up, or whose announcing sources have gone, is forgotten.
+ * What is kept: for each log, each live source's own announced head. A source is a peer this side reached over a direct session or over the relay hub. Each replication round compares those heads with this side's own and counts the rounds a log has stayed behind without advancing. At LEDGER_STALL_ROUNDS the log is reported as stalled, and again only if the gap grew and LEDGER_REPORT_REPEAT_ROUNDS rounds have passed, and the entries are asked of every source that announced a higher head, not only the one that answered first. A log that catches up, or whose announcing sources have gone, is forgotten.
  *
- * What is bounded: the logs tracked (MAX_TRACKED_LEDGER_LOGS), how far ahead of this side's head an announced head may be (MAX_ANNOUNCED_HEAD_DISTANCE), and how often a growing gap is reported again (LEDGER_REPORT_REPEAT_ROUNDS). A device holding the account's key could announce any number of valid log ids, and any account device any head for a log it has seen, so none of these follows what a peer chooses to send.
+ * What is bounded: the logs tracked (MAX_TRACKED_LEDGER_LOGS, preferring logs this side already holds), how far ahead of this side's head an announced head may be (MAX_ANNOUNCED_HEAD_DISTANCE), how many reports of an ignored announcement are remembered, and how often a repeated report is made. Reports of ignored announcements are remembered apart from the logs, so forgetting a log never makes a report repeat.
  *
- * What it cannot see: a single path that withholds everything, including the higher head, since the head is learned from the same frames.
+ * What it cannot see: a single path that withholds everything, including the higher head, since the head is learned from the same frames; a log beyond the tracked limit that this side does not hold; a head more than MAX_ANNOUNCED_HEAD_DISTANCE ahead, which is ignored; a log that is slow but still advancing, which is never behind for LEDGER_STALL_ROUNDS rounds without moving; and a machine that reaches no peer of the account at all, whose rounds are not counted.
  */
 
 import { bytesToHex } from "wire-mesh-core/domain/device-id";
@@ -17,8 +17,13 @@ export const LEDGER_STALL_ROUNDS = 3;
 /** How many rounds pass before a gap that has grown since it was last reported is reported again, so a peer that raises its head every round gets one report per interval and not one per round. */
 export const LEDGER_REPORT_REPEAT_ROUNDS = 10;
 
-/** The most writer logs tracked at once. The account's logs are one per machine that ever wrote, so this is far above any real account; a log announced beyond it is not tracked, and the first one ignored is reported once. */
+/** The most writer logs tracked at once. The account's logs are one per machine that ever wrote, so this is far above any real account. At the limit a log this side holds takes the place of one it does not, and any other log announced is not tracked, which is reported at most once per LEDGER_REPORT_REPEAT_ROUNDS rounds. */
 export const MAX_TRACKED_LEDGER_LOGS = 256;
+
+/** How many out-of-range reports are remembered per tracked log; the oldest is forgotten first. */
+const REMEMBERED_REPORTS_PER_LOG = 4;
+const MAX_REMEMBERED_REPORTS =
+  REMEMBERED_REPORTS_PER_LOG * MAX_TRACKED_LEDGER_LOGS;
 
 /** The furthest an announced head may be ahead of this side's own and still be believed. Heads count ledger entries, which are grants and revocations, and a reply carries a bounded batch, so a head further ahead than this is not an honest gap: it is not recorded, and is reported once. */
 export const MAX_ANNOUNCED_HEAD_DISTANCE = 1_000_000;
@@ -56,20 +61,22 @@ interface LogState {
   /** The gap reported last, so a report repeats only when the gap grows, and the round it was reported in, so it repeats at most once per LEDGER_REPORT_REPEAT_ROUNDS. */
   reportedGap: number;
   reportedAtRound: number | undefined;
-  /** The sources whose out-of-range head has been reported, so each is reported once. */
-  outOfRange: Set<string>;
 }
 
 /** What a round is told about how it went. */
 export interface LedgerRoundOptions {
-  /** True when this round's announcements did not all go out. The round still notices a log that has caught up, but it is not counted as a round the log stayed behind. */
-  announceFailed?: boolean;
+  /** True when this machine reached no peer of the account this round: no offer went out, so nothing was asked of anyone. The round still notices a log that has caught up, but it is not counted as a round the log stayed behind. */
+  offline?: boolean;
 }
 
 export class LedgerGapTracker {
   private readonly logs = new Map<string, LogState>();
   private roundNumber = 0;
-  private overLimitReported = false;
+  private overLimitReportedAtRound: number | undefined;
+  /** The logs this side held at the last round, which a log announced at the tracking limit is preferred for. */
+  private held: ReadonlySet<string> = new Set();
+  /** The `log:source` of every out-of-range announcement reported, oldest first, kept apart from the logs so that a log forgotten and announced again is not reported again. */
+  private readonly reportedOutOfRange = new Set<string>();
 
   constructor(private readonly deps: Readonly<LedgerGapDeps>) {}
 
@@ -78,15 +85,8 @@ export class LedgerGapTracker {
     const key = bytesToHex(log);
     let state = this.logs.get(key);
     if (state === undefined) {
-      if (this.logs.size >= MAX_TRACKED_LEDGER_LOGS) {
-        if (!this.overLimitReported) {
-          this.overLimitReported = true;
-          this.deps.onError(
-            new Error(
-              `the account ledger announces more than ${String(MAX_TRACKED_LEDGER_LOGS)} writer logs, which is more than any account has: the heads of the logs beyond them are ignored`,
-            ),
-          );
-        }
+      if (this.logs.size >= MAX_TRACKED_LEDGER_LOGS && !this.makeRoomFor(key)) {
+        this.reportOverLimit();
         return;
       }
       state = {
@@ -96,11 +96,49 @@ export class LedgerGapTracker {
         rounds: 0,
         reportedGap: 0,
         reportedAtRound: undefined,
-        outOfRange: new Set(),
       };
       this.logs.set(key, state);
     }
     state.heads.set(source, head);
+  }
+
+  /** Makes room for a log at the tracking limit by dropping a tracked log this side holds nothing of, and only when this side holds the new one. */
+  private makeRoomFor(key: string): boolean {
+    if (!this.held.has(key)) return false;
+    for (const other of this.logs.keys()) {
+      if (this.held.has(other)) continue;
+      this.logs.delete(other);
+      return true;
+    }
+    return false;
+  }
+
+  private reportOverLimit(): void {
+    const last = this.overLimitReportedAtRound;
+    if (
+      last !== undefined &&
+      this.roundNumber - last < LEDGER_REPORT_REPEAT_ROUNDS
+    ) {
+      return;
+    }
+    this.overLimitReportedAtRound = this.roundNumber;
+    this.deps.onError(
+      new Error(
+        `the account ledger announces more than ${String(MAX_TRACKED_LEDGER_LOGS)} writer logs, which is more than any account has: the logs beyond them that this machine holds nothing of are ignored, so one of them that stays behind is not reported`,
+      ),
+    );
+  }
+
+  /** Remembers that an out-of-range announcement was reported, and whether it had been before. */
+  private firstReportOfOutOfRange(key: string, source: string): boolean {
+    const id = `${key}:${source}`;
+    if (this.reportedOutOfRange.has(id)) return false;
+    this.reportedOutOfRange.add(id);
+    if (this.reportedOutOfRange.size > MAX_REMEMBERED_REPORTS) {
+      const [oldest] = this.reportedOutOfRange;
+      if (oldest !== undefined) this.reportedOutOfRange.delete(oldest);
+    }
+    return true;
   }
 
   /**
@@ -111,17 +149,16 @@ export class LedgerGapTracker {
     options: Readonly<LedgerRoundOptions> = {},
   ): Promise<void> {
     this.roundNumber += 1;
+    this.held = new Set(localHeads.keys());
     const requests: Promise<void>[] = [];
     for (const [key, state] of this.logs) {
       const local = localHeads.get(key) ?? 0;
       for (const [source, head] of [...state.heads]) {
         if (!this.deps.isLive(source)) {
           state.heads.delete(source);
-          state.outOfRange.delete(source);
         } else if (head - local > MAX_ANNOUNCED_HEAD_DISTANCE) {
           state.heads.delete(source);
-          if (!state.outOfRange.has(source)) {
-            state.outOfRange.add(source);
+          if (this.firstReportOfOutOfRange(key, source)) {
             this.deps.onError(
               new Error(
                 `a peer announced head ${String(head)} for account ledger log ${key}, which is out of range for a log this machine holds up to entry ${String(local)} of, and the announcement is ignored`,
@@ -129,7 +166,7 @@ export class LedgerGapTracker {
             );
           }
         } else {
-          state.outOfRange.delete(source);
+          this.reportedOutOfRange.delete(`${key}:${source}`);
         }
       }
       const announced = Math.max(0, ...state.heads.values());
@@ -137,8 +174,13 @@ export class LedgerGapTracker {
         this.logs.delete(key);
         continue;
       }
-      if (options.announceFailed === true) continue;
-      state.rounds = state.lastLocal === local ? state.rounds + 1 : 1;
+      if (options.offline === true) continue;
+      if (state.lastLocal === local) {
+        state.rounds += 1;
+      } else {
+        state.rounds = 1;
+        state.reportedGap = 0;
+      }
       state.lastLocal = local;
       if (state.rounds < LEDGER_STALL_ROUNDS) continue;
       const gap = announced - local;
@@ -171,8 +213,6 @@ export class LedgerGapTracker {
         );
       }
     }
-    if (this.logs.size < MAX_TRACKED_LEDGER_LOGS)
-      this.overLimitReported = false;
     await Promise.all(requests);
   }
 

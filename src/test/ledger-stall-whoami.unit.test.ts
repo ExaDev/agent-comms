@@ -1,5 +1,5 @@
 /**
- * What whoami says about account ledger logs this side has stayed behind: one line per log, in a fixed wording, no more than a fixed number of them, and none when nothing is behind.
+ * What whoami and update say about account ledger logs this side has stayed behind: one line per log, in a fixed wording, no more than a fixed number of them, and none when nothing is behind.
  */
 
 import { describe, expect, it } from "vitest";
@@ -24,7 +24,10 @@ function stalledLog(index: number): StalledLedgerLog {
   };
 }
 
-async function whoamiWith(
+type Reporter = "whoami" | "update";
+
+async function replyOf(
+  action: Reporter,
   stalled: readonly StalledLedgerLog[],
 ): Promise<string> {
   const store = new MeshStore();
@@ -40,37 +43,43 @@ async function whoamiWith(
   const tool = new CommsTool(store, { getStalledLedgerLogs: () => stalled });
   const result = await tool.handle(
     { agentId: agent.id, harness: "pi", cwd: "/tmp/p", pid: process.pid },
-    buildAction({ action: "whoami" }),
+    action === "whoami"
+      ? buildAction({ action: "whoami" })
+      : buildAction({ action: "update", status: "idle" }),
   );
   expect(result.isError).toBe(false);
 
   return result.content;
 }
 
-describe("whoami and the account ledger", () => {
-  it("says nothing about the ledger when no log is behind", async () => {
-    expect(await whoamiWith([])).not.toContain("Account ledger");
-  });
+describe.each(["whoami", "update"] as const)(
+  "%s and the account ledger",
+  (action) => {
+    it("says nothing about the ledger when no log is behind", async () => {
+      expect(await replyOf(action, [])).not.toContain("Account ledger");
+    });
 
-  it("names a log that is behind, in a fixed wording", async () => {
-    const content = await whoamiWith([stalledLog(1)]);
+    it("names a log that is behind, in a fixed wording", async () => {
+      const content = await replyOf(action, [stalledLog(1)]);
 
-    expect(content.split("\n")).toContain(
-      "Account ledger log 00000001 is behind: this machine holds up to entry 1, a peer announces 6, and 3 rounds have passed without the missing entries arriving; a grant or a revocation in them is not applied here",
-    );
-  });
+      expect(content.split("\n")).toContain(
+        "Account ledger log 00000001 is behind: this machine holds up to entry 1, a peer announces 6, and 3 rounds have passed without the missing entries arriving; a grant or a revocation in them is not applied here",
+      );
+    });
 
-  it("prints at most a fixed number of logs and counts the rest", async () => {
-    const content = await whoamiWith(
-      Array.from({ length: LOG_COUNT }, (_, index) => stalledLog(index)),
-    );
+    it("prints at most a fixed number of logs and counts the rest", async () => {
+      const content = await replyOf(
+        action,
+        Array.from({ length: LOG_COUNT }, (_, index) => stalledLog(index)),
+      );
 
-    const lines = content.split("\n");
-    expect(
-      lines.filter((line) => line.startsWith("Account ledger log ")),
-    ).toHaveLength(SHOWN);
-    expect(lines).toContain(
-      `Account ledger: ${String(LOG_COUNT - SHOWN)} more logs are behind`,
-    );
-  });
-});
+      const lines = content.split("\n");
+      expect(
+        lines.filter((line) => line.startsWith("Account ledger log ")),
+      ).toHaveLength(SHOWN);
+      expect(lines).toContain(
+        `Account ledger: ${String(LOG_COUNT - SHOWN)} more logs are behind`,
+      );
+    });
+  },
+);

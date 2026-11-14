@@ -304,7 +304,110 @@ describe("what the tracker keeps and prints is bounded", () => {
   });
 });
 
-describe("a round whose announcements failed", () => {
+describe("what is reported once stays reported once", () => {
+  const idOf = (index: number): Uint8Array =>
+    Uint8Array.from(
+      Buffer.from(
+        index.toString(HEX_RADIX).padStart(LOG_ID_HEX_DIGITS, "0"),
+        "hex",
+      ),
+    );
+
+  it("an out-of-range head announced every round is reported once, though its log is forgotten each round", async () => {
+    const { gaps, errors } = tracker();
+
+    for (let round = 0; round < LEDGER_STALL_ROUNDS * REPEATS; round += 1) {
+      gaps.noteHave("relay", LOG, MAX_ANNOUNCED_HEAD_DISTANCE + 1);
+      await gaps.round(new Map());
+    }
+
+    expect(
+      errors.filter((e) => e.message.includes("out of range")),
+    ).toHaveLength(1);
+  });
+
+  it("many out-of-range logs announced every round are each reported once", async () => {
+    const { gaps, errors } = tracker();
+    const count = MAX_TRACKED_LEDGER_LOGS + LOGS_OVER_THE_LIMIT;
+
+    for (let round = 0; round < LEDGER_STALL_ROUNDS; round += 1) {
+      for (let index = 0; index < count; index += 1) {
+        gaps.noteHave("relay", idOf(index), MAX_ANNOUNCED_HEAD_DISTANCE + 1);
+      }
+      await gaps.round(new Map());
+    }
+
+    const reported = errors.filter((e) => e.message.includes("out of range"));
+    expect(reported).toHaveLength(MAX_TRACKED_LEDGER_LOGS);
+    expect(new Set(reported.map((e) => e.message)).size).toBe(reported.length);
+  });
+
+  it("the notice that logs are ignored at the limit is not repeated every round while the announcements go on", async () => {
+    const { gaps, errors } = tracker();
+    const count = MAX_TRACKED_LEDGER_LOGS + LOGS_OVER_THE_LIMIT;
+
+    for (let round = 0; round < LEDGER_REPORT_REPEAT_ROUNDS - 1; round += 1) {
+      for (let index = 0; index < count; index += 1) {
+        gaps.noteHave("relay", idOf(index), MAX_ANNOUNCED_HEAD_DISTANCE + 1);
+      }
+      await gaps.round(new Map());
+    }
+
+    expect(
+      errors.filter((e) => e.message.includes("writer logs")),
+    ).toHaveLength(1);
+  });
+});
+
+describe("a log this side holds is preferred at the tracking limit", () => {
+  it("takes the place of a tracked log this side holds nothing of, and one it does not hold is ignored", async () => {
+    const { gaps, errors } = tracker();
+    const idOf = (index: number): Uint8Array =>
+      Uint8Array.from(
+        Buffer.from(
+          index.toString(HEX_RADIX).padStart(LOG_ID_HEX_DIGITS, "0"),
+          "hex",
+        ),
+      );
+    for (let index = 0; index < MAX_TRACKED_LEDGER_LOGS; index += 1) {
+      gaps.noteHave("relay", idOf(index), ANNOUNCED_HEAD);
+    }
+    const held = idOf(MAX_TRACKED_LEDGER_LOGS + 1);
+    const unheld = idOf(MAX_TRACKED_LEDGER_LOGS + 2);
+    await gaps.round(new Map([[bytesToHex(held), 1]]));
+
+    gaps.noteHave("relay", held, ANNOUNCED_HEAD);
+    gaps.noteHave("relay", unheld, ANNOUNCED_HEAD);
+    await rounds(gaps, LEDGER_STALL_ROUNDS, new Map([[bytesToHex(held), 1]]));
+
+    const stalled = gaps.stalled().map((entry) => entry.log);
+    expect(stalled).toContain(bytesToHex(held));
+    expect(stalled).not.toContain(bytesToHex(unheld));
+    expect(stalled).toHaveLength(MAX_TRACKED_LEDGER_LOGS);
+    expect(errors.some((e) => e.message.includes("ignored"))).toBe(true);
+  });
+});
+
+describe("a gap that a log made progress on is reported afresh when it stalls again", () => {
+  it("reports a second stall of the same size after progress in between", async () => {
+    const { gaps, errors } = tracker();
+    gaps.noteHave("relay", LOG, ANNOUNCED_HEAD);
+    await rounds(gaps, LEDGER_STALL_ROUNDS);
+    expect(
+      errors.filter((e) => e.message.includes("stayed behind")),
+    ).toHaveLength(1);
+
+    await gaps.round(new Map([[LOG_HEX, 1]]));
+    gaps.noteHave("relay", LOG, ANNOUNCED_HEAD);
+    await rounds(gaps, LEDGER_REPORT_REPEAT_ROUNDS, new Map([[LOG_HEX, 1]]));
+
+    expect(
+      errors.filter((e) => e.message.includes("stayed behind")),
+    ).toHaveLength(2);
+  });
+});
+
+describe("a round in which this machine reached no peer", () => {
   it("does not count towards a stall, and does not reset the count either", async () => {
     const { gaps, errors } = tracker();
     gaps.noteHave("relay", LOG, ANNOUNCED_HEAD);
@@ -312,7 +415,7 @@ describe("a round whose announcements failed", () => {
     await gaps.round(new Map());
 
     for (let round = 0; round < LEDGER_STALL_ROUNDS * 2; round += 1) {
-      await gaps.round(new Map(), { announceFailed: true });
+      await gaps.round(new Map(), { offline: true });
     }
     expect(errors).toEqual([]);
     expect(gaps.stalled()).toEqual([]);
@@ -328,9 +431,7 @@ describe("a round whose announcements failed", () => {
     await rounds(gaps, LEDGER_STALL_ROUNDS);
     expect(gaps.stalled()).toHaveLength(1);
 
-    await gaps.round(new Map([[LOG_HEX, ANNOUNCED_HEAD]]), {
-      announceFailed: true,
-    });
+    await gaps.round(new Map([[LOG_HEX, ANNOUNCED_HEAD]]), { offline: true });
 
     expect(gaps.stalled()).toEqual([]);
   });
