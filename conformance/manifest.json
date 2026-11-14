@@ -105,7 +105,7 @@
       "skip": []
     },
     "function/web-access.json": {
-      "cases": 97,
+      "cases": 102,
       "skip": []
     },
     "validate/comms-action.json": {

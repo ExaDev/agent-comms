@@ -50,6 +50,7 @@ import {
   accessUrls,
   authorise,
   HOSTED_DASHBOARD_ORIGIN,
+  isHostedDashboardOrigin,
   isOwnClient,
   generateAccessToken,
   localWebUrl,
@@ -69,6 +70,15 @@ import {
   selectMeshSubprotocol,
   type PairingSecretStore,
 } from "./web-pairing.js";
+import {
+  MAX_HELLO_MESSAGE_BYTES,
+  MAX_HELLO_SOCKETS,
+  ROTATION_SWEEP_MS,
+  createHostedSocketGuard,
+  createTicketBook,
+  serveHello,
+} from "./web-pairing-exchange.js";
+import { HELLO_PATH, MESH_PATH } from "./pairing-protocol.js";
 import {
   createFrontendAssetLoader,
   FrontendNotBuiltError,
@@ -251,6 +261,8 @@ export async function createWebServer(options?: {
   beaconPort?: number | undefined;
   /** The directory the pairing secret is kept in. Defaults to the bridge's data directory; tests pass one of their own. */
   pairingDir?: string | undefined;
+  /** How often sockets admitted under a replaced pairing secret are looked for and closed. Defaults to ROTATION_SWEEP_MS; a test sets it long to see that a message alone ends such a socket. */
+  pairingSweepMs?: number | undefined;
   existingController?: ChatController | undefined;
   coordinatorPort?: number | undefined;
   /** Overrides the first-contact UDP port a fresh controller's store runs presence on (ChatController's own firstContactPort); ignored when existingController is supplied. */
@@ -265,6 +277,7 @@ export async function createWebServer(options?: {
     localClientAddresses = ownInterfaceAddresses,
     beaconPort,
     pairingDir,
+    pairingSweepMs = ROTATION_SWEEP_MS,
     existingController,
     coordinatorPort,
     firstContactPort,
@@ -297,15 +310,15 @@ export async function createWebServer(options?: {
       );
     },
   });
+  const tickets = createTicketBook(pairing);
+  const hostedSockets = createHostedSocketGuard(pairing);
   const accessPolicy: AccessPolicy = {
     token: accessToken,
     bindHost: host,
     port: port ?? 0,
     localClientAddresses,
-    // Read per request, so `agent-comms pairing rotate` revokes every pairing without a restart.
-    get pairingSecret() {
-      return pairing.current();
-    },
+    // Tickets are only accepted under the secret in force, so `agent-comms pairing rotate` refuses every ticket issued before it without a restart.
+    tickets,
   };
 
   const server = http.createServer((req, res) => {
@@ -340,10 +353,23 @@ export async function createWebServer(options?: {
 
   const wss = new WebSocketServer({
     noServer: true,
-    // The dashboard offers the mesh subprotocol beside its pairing secret; selecting only the fixed name keeps the secret from being echoed.
+    // The dashboard offers the mesh subprotocol beside its ticket; selecting only the fixed name keeps the ticket from being echoed.
     handleProtocols: selectMeshSubprotocol,
   });
+  // The proof exchange's own socket: tiny messages only, and a handful at a time.
+  const helloWss = new WebSocketServer({
+    noServer: true,
+    maxPayload: MAX_HELLO_MESSAGE_BYTES,
+  });
   const rpcHandler = new RPCHandler(meshRouter);
+  // A socket admitted under a secret that has since been replaced is ended, also when it is idle.
+  const rotationSweep = setInterval(() => {
+    hostedSockets.sweep();
+  }, pairingSweepMs);
+  rotationSweep.unref();
+  server.once("close", () => {
+    clearInterval(rotationSweep);
+  });
 
   server.on("upgrade", (req, socket, head) => {
     const decision = authorise(accessPolicy, requestOf(req));
@@ -356,9 +382,20 @@ export async function createWebServer(options?: {
       socket.destroy();
       return;
     }
-    if (req.url === "/ws/mesh") {
+    if (req.url === MESH_PATH) {
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
+      });
+    } else if (
+      req.url === HELLO_PATH &&
+      helloWss.clients.size < MAX_HELLO_SOCKETS
+    ) {
+      helloWss.handleUpgrade(req, socket, head, (ws) => {
+        serveHello(ws, {
+          secret: pairing,
+          tickets,
+          port: () => accessPolicy.port,
+        });
       });
     } else {
       socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
@@ -366,10 +403,12 @@ export async function createWebServer(options?: {
     }
   });
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
+    if (isHostedDashboardOrigin(req.headers.origin)) hostedSockets.track(ws);
     // RPCHandler.upgrade() wants a DOM-shaped WebSocket (addEventListener's overload set), which "ws"'s own type declarations don't structurally satisfy (its addEventListener options param is narrower than DOM's) -- .message()/.close() accept the looser { send } shape "ws" does satisfy, and are the documented manual equivalent to .upgrade().
     const context = { controller, publisher };
     ws.on("message", (data, isBinary) => {
+      if (!hostedSockets.check(ws)) return;
       // "ws" types incoming data as Buffer | ArrayBuffer | Buffer[] regardless of frame type; normalise to a real Buffer first so both branches below have a type they can trust rather than calling .toString()/Uint8Array.from() on a union that could be an ArrayBuffer.
       const raw = Array.isArray(data) ? Buffer.concat(data) : data;
       const bytes = raw instanceof ArrayBuffer ? Buffer.from(raw) : raw;

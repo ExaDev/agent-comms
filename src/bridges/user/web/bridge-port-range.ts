@@ -6,7 +6,7 @@
  * Shared by the Node server and the browser frontend, so it imports nothing from either.
  */
 
-import { meshSocketProtocols } from "./pairing-protocol.js";
+import { acquireTicket } from "./pairing-handshake.js";
 
 /** First port of the range a bridge's web server binds and the dashboard probes. */
 export const BRIDGE_PORT_BASE = 19877;
@@ -65,7 +65,7 @@ export function bridgeMeshUrl(port: number): string {
 /**
  * Whether a bridge's mesh socket (the dashboard's own endpoint, `/ws/mesh`) accepts a connection on the port within the timeout. Another kind of server, a refused port and a listener that never answers all give false: a WebSocket handshake needs a bridge to complete, and unlike a plain fetch it is readable from a hosted page without CORS headers.
  * @param port - The loopback port to try.
- * @param options - `timeoutMs` is how long to wait for the handshake (default {@link BRIDGE_PROBE_TIMEOUT_MS}); `pairingSecret` is the secret this browser was paired with, offered in the handshake: a bridge refuses a hosted page without it, which this answers as not a bridge.
+ * @param options - `timeoutMs` is how long to wait for the handshake (default {@link BRIDGE_PROBE_TIMEOUT_MS}); `pairingSecret` is the secret this browser was paired with. With one, the listener must first prove it holds it (frontend/pairing-handshake.ts), and a listener that cannot, a bridge that was paired with another secret and a port nothing answers on are all not a bridge; the secret is never sent, and a listener that is not the bridge is sent one random nonce and nothing else. Without one the port is a bridge when its mesh socket accepts a connection.
  */
 export async function isBridgeAt(
   port: number,
@@ -76,11 +76,11 @@ export async function isBridgeAt(
 ): Promise<boolean> {
   const timeoutMs = options?.timeoutMs ?? BRIDGE_PROBE_TIMEOUT_MS;
   const pairingSecret = options?.pairingSecret;
+  if (pairingSecret !== undefined) {
+    return (await acquireTicket(port, pairingSecret, timeoutMs)) !== undefined;
+  }
   return new Promise((resolve) => {
-    const socket = new WebSocket(
-      bridgeMeshUrl(port),
-      meshSocketProtocols(pairingSecret),
-    );
+    const socket = new WebSocket(bridgeMeshUrl(port));
     const settle = (isBridge: boolean): void => {
       socket.close();
       resolve(isBridge);
