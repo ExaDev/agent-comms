@@ -1594,6 +1594,114 @@
       "function": "web-access.accessUrls",
       "id": "lists-the-bound-address-under-specific-bind",
       "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "token-for-the-test"
+        },
+        {
+          "headers": {
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "//"
+        }
+      ],
+      "expect": {
+        "kind": "deny",
+        "message": "Bad request",
+        "status": 400
+      },
+      "from": "web-access-request-target.unit.test.ts: authorise for a request target that names no URL > refuses a target that names no URL from a remote client without throwing",
+      "function": "web-access.authorise",
+      "id": "refuses-target-naming-no-url-double-slash",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "token-for-the-test"
+        },
+        {
+          "headers": {
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "///"
+        }
+      ],
+      "expect": {
+        "kind": "deny",
+        "message": "Bad request",
+        "status": 400
+      },
+      "from": "web-access-request-target.unit.test.ts: authorise for a request target that names no URL > refuses a target that names no URL from a remote client without throwing",
+      "function": "web-access.authorise",
+      "id": "refuses-target-naming-no-url-triple-slash",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [],
+          "port": 41234,
+          "token": "token-for-the-test"
+        },
+        {
+          "headers": {
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "//?x=1"
+        }
+      ],
+      "expect": {
+        "kind": "deny",
+        "message": "Bad request",
+        "status": 400
+      },
+      "from": "web-access-request-target.unit.test.ts: authorise for a request target that names no URL > refuses a target that names no URL from a remote client without throwing",
+      "function": "web-access.authorise",
+      "id": "refuses-target-naming-no-url-double-slash-with-query",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "bindHost": "192.168.1.10",
+          "localClientAddresses": [
+            "192.168.1.50"
+          ],
+          "port": 41234,
+          "token": "token-for-the-test"
+        },
+        {
+          "headers": {
+            "host": "192.168.1.10:41234"
+          },
+          "method": "GET",
+          "remoteAddress": "192.168.1.50",
+          "url": "//"
+        }
+      ],
+      "expect": {
+        "kind": "allow"
+      },
+      "from": "web-access-request-target.unit.test.ts: authorise for a request target that names no URL > still admits a client on this machine, which never reaches the URL",
+      "function": "web-access.authorise",
+      "id": "admits-local-client-for-target-naming-no-url",
+      "kind": "function"
     }
   ]
 }
