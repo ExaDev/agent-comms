@@ -74,8 +74,14 @@ async function dialAsRawPeer(
 }
 
 /** A lone store on its own well-known port, holding the role at term 0 as it claims when nothing else could reach it. */
-async function startLoneHolder(teardown: TeardownStack): Promise<MeshStore> {
-  const store = new MeshStore({ coordinatorPort: await freeLocalPort() });
+async function startLoneHolder(
+  teardown: TeardownStack,
+  claimWaitMs?: number,
+): Promise<MeshStore> {
+  const store = new MeshStore({
+    coordinatorPort: await freeLocalPort(),
+    ...(claimWaitMs !== undefined && { coordinatorClaimWaitMs: claimWaitMs }),
+  });
   await wireTestTransport(store);
   teardown.push(async () => {
     await store.shutdown();
@@ -345,6 +351,80 @@ test("a claim over a data dial at a loopback address is accepted", async () => {
       holder: peer.deviceHex,
     });
     expect(store.holdsCoordinatorRole).toBe(false);
+  } finally {
+    await teardown.run();
+  }
+});
+
+/** How long a claim whose holder is not here is held, in these tests; long enough for a real session to enrol inside it, short enough to outlast it. */
+const SHORT_CLAIM_WAIT_MS = 400;
+/** How many times the short wait a test lets pass to show a claim is dropped, or sets as the wait to show one is held. */
+const WAIT_FACTOR = 3;
+const WELL_PAST_THE_WAIT_MS = SHORT_CLAIM_WAIT_MS * WAIT_FACTOR;
+
+test("a claim naming a holder that is not here is held, then accepted when that holder's real session enrols", async () => {
+  const teardown = new TeardownStack();
+  try {
+    const store = await startLoneHolder(teardown, WELL_PAST_THE_WAIT_MS);
+    const sender = rawPeer();
+    const holder = rawPeer();
+    const senderSession = await dialAsRawPeer(
+      sender,
+      store.coordinatorPort,
+      teardown,
+    );
+    await introduce(senderSession, sender);
+
+    await senderSession.sendCoordinatorClaim(rogueClaim(holder.deviceHex));
+    await roundTrip(senderSession);
+    expect(store.coordinatorClaim).toEqual({ term: 0, holder: store.peerId });
+
+    const holderSession = await dialAsRawPeer(
+      holder,
+      store.coordinatorPort,
+      teardown,
+    );
+    await introduce(holderSession, holder);
+    await roundTrip(holderSession);
+
+    expect(store.coordinatorClaim).toEqual({
+      term: ROGUE_TERM,
+      holder: holder.deviceHex,
+    });
+  } finally {
+    await teardown.run();
+  }
+});
+
+test("a claim naming a holder that does not enrol within the wait is dropped, so a holder that enrols later finds none waiting", async () => {
+  const teardown = new TeardownStack();
+  try {
+    const store = await startLoneHolder(teardown, SHORT_CLAIM_WAIT_MS);
+    const sender = rawPeer();
+    const holder = rawPeer();
+    const senderSession = await dialAsRawPeer(
+      sender,
+      store.coordinatorPort,
+      teardown,
+    );
+    await introduce(senderSession, sender);
+
+    await senderSession.sendCoordinatorClaim(rogueClaim(holder.deviceHex));
+    await roundTrip(senderSession);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, WELL_PAST_THE_WAIT_MS);
+    });
+
+    const holderSession = await dialAsRawPeer(
+      holder,
+      store.coordinatorPort,
+      teardown,
+    );
+    await introduce(holderSession, holder);
+    await roundTrip(holderSession);
+
+    expect(store.coordinatorClaim).toEqual({ term: 0, holder: store.peerId });
+    expect(store.holdsCoordinatorRole).toBe(true);
   } finally {
     await teardown.run();
   }
