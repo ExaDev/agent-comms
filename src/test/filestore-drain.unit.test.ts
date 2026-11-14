@@ -44,6 +44,23 @@ it("returns the events on either side of a file that cannot be parsed, and leave
   expect(reported).toContain("zzzz-damaged.json");
 });
 
+it("reports a file that stays in place once, however often the queue is drained", async () => {
+  const store = new FileStore(scratchDirectory("agent-comms-drain-once-"));
+  const dir = store.deliveryDir("agent");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "poison.json"), "{ not json");
+  const written = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+
+  await store.drainDelivery("agent");
+  await store.drainDelivery("agent");
+  await store.drainDelivery("agent");
+
+  const reports = written.mock.calls
+    .map(([chunk]) => String(chunk))
+    .filter((line) => line.includes("poison.json"));
+  expect(reports).toHaveLength(1);
+});
+
 it("returns nothing for an agent with no queue", async () => {
   const store = new FileStore(scratchDirectory("agent-comms-drain-"));
   expect(await store.drainDelivery("nobody")).toEqual([]);

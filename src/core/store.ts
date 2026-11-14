@@ -73,6 +73,16 @@ export function requireDisplayName(raw: string, what: string): string {
   return name;
 }
 
+/** The delivery files already reported by this process, each with the reason given, so a file that stays where it is is reported once and not on every drain. */
+const reportedDeliveryFiles = new Set<string>();
+
+function reportDeliveryFileOnce(filePath: string, problem: string): void {
+  const key = `${filePath}\n${problem}`;
+  if (reportedDeliveryFiles.has(key)) return;
+  reportedDeliveryFiles.add(key);
+  process.stderr.write(`agent-comms: ${filePath} ${problem}\n`);
+}
+
 /** An agent's registered name is its self-asserted name (display-name.ts), so it is held to the same rules as it is registered or changed: requireDisplayName for "An agent name". */
 export function requireAgentName(raw: string): string {
   return requireDisplayName(raw, "An agent name");
@@ -643,7 +653,7 @@ export class FileStore implements CommsStore {
   }
 
   /**
-   * Returns the events queued for agentId, oldest message first, and removes each from the queue as it is returned. A file that cannot be read or parsed is left in place and reported on stderr with its name, and every other file is still drained, so one bad file never costs the events around it; a file that cannot be removed is reported the same way and its event is not returned, so it is delivered once, on a later drain, not twice.
+   * Returns the events queued for agentId, oldest message first, and removes each from the queue as it is returned. A file that cannot be read or parsed is left in place and reported on stderr with its name, and every other file is still drained, so one bad file never costs the events around it; a file that cannot be removed is reported the same way and its event is not returned, so it is delivered once, on a later drain, not twice. Each file is reported once per process however often the queue is drained, since a file that stays in place would otherwise be reported on every drain.
    */
   async drainDelivery(agentId: string): Promise<DeliveryEvent[]> {
     const dir = this.deliveryDir(agentId);
@@ -661,16 +671,18 @@ export class FileStore implements CommsStore {
       try {
         event = DeliveryEventSchema.parse(await this.readJsonFile(filePath));
       } catch {
-        process.stderr.write(
-          `agent-comms: ${filePath} is not a readable delivery event; it was left in place\n`,
+        reportDeliveryFileOnce(
+          filePath,
+          "is not a readable delivery event; it was left in place",
         );
         continue;
       }
       try {
         await fs.unlink(filePath);
       } catch {
-        process.stderr.write(
-          `agent-comms: ${filePath} could not be removed; its event was not returned\n`,
+        reportDeliveryFileOnce(
+          filePath,
+          "could not be removed; its event was not returned",
         );
         continue;
       }
