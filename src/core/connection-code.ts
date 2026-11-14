@@ -1,7 +1,7 @@
 /**
  * ConnectionCode generation and redemption (agent-comms#188): bootstraps GatewayTrust between two devices that have never established a mesh connection, since GatewayTrust's own deny-by-default, pin-the-key model otherwise requires a device-id to already be known and pasted in by hand (gateway_trust). One artifact, one generation flow, one redemption flow -- never two mechanisms bolted together.
  *
- * `code`/`expiresAt` are the always-checked half: freshness/liveness proof that whoever redeems this was on the other end of this exact exchange, recently. `expiresAt` must be an ISO 8601 timestamp; a code whose expiry does not parse is refused as invalid. `signature` is the optional half: a detached PGP signature (armored) over `${code}:${expiresAt}:${deviceId}`, checked only when present. Redemption never requires a signature -- a device with no PGP identity still generates and redeems a bare code -- but when one is present, verifying it needs the signer's own public key, supplied by the caller either as a pasted armored block or (see pgp-keyserver.ts) fetched from a keyserver by fingerprint. Either way, a caller who also supplies the fingerprint they already independently trust gets it pinned: the verified key's own computed fingerprint must equal it, or redemption fails.
+ * `code`/`expiresAt` are the always-checked half: freshness/liveness proof that whoever redeems this was on the other end of this exact exchange, recently. `expiresAt` must be an ISO 8601 timestamp; a code whose expiry does not parse is refused as invalid. `signature` is the optional half: a detached PGP signature (armored) over `${code}:${expiresAt}:${deviceId}`. An unsigned code is a bearer hint and authenticates nothing about who issued it: redeeming one trusts whatever device-id it names, so a device with no PGP identity can still generate and redeem a bare code, but only where the redeemer has some other reason to believe it. A redeemer who supplies a public key or a fingerprint is asking for the issuer to be authenticated, so the code must then carry a signature that verifies against that key, and a code without one is refused. Verifying needs the signer's own public key, supplied by the caller either as a pasted armored block or (see pgp-keyserver.ts) fetched from a keyserver by fingerprint. A caller who also supplies the fingerprint they already independently trust gets it pinned: the verified key's own computed fingerprint must equal it, or redemption fails.
  *
  * PGP key material is never generated, stored, or managed by this module or by agent-comms generally -- signing and verification both take key material supplied per call by the caller, exactly as invoking `gpg --sign`/`gpg --verify` directly would. Building a persisted PGP-identity subsystem (key generation, passphrase storage, revocation) is a materially larger, security-sensitive scope the settled design (agent-comms#188) never asked for; a caller who wants a code signed brings whatever real-world PGP identity they already have (git-commit signing key, personal key on a keyserver, etc.) rather than trusting agent-comms to mint and hold a new one on their behalf.
  *
@@ -38,6 +38,7 @@ export type ConnectionCodeInvalidReason =
   | "already_redeemed"
   | "invalid_expiry"
   | "signature_required"
+  | "signature_missing"
   | "signature_invalid"
   | "fingerprint_mismatch";
 
@@ -142,9 +143,9 @@ export interface GenerateConnectionCodeOptions {
 }
 
 export interface RedeemConnectionCodeOptions {
-  /** The signer's own armored PGP public key, needed only when the candidate code carries a signature. */
+  /** The signer's own armored PGP public key. Supplying it asks for the code's issuer to be authenticated: a candidate without a signature is refused with "signature_missing", and one with a signature must verify against this key. */
   publicKeyArmored?: string;
-  /** A PGP fingerprint the caller already has independent reason to trust. When supplied alongside a signed code, the verified signing key's own computed fingerprint must equal it (case- and whitespace-insensitive) or redemption fails with "fingerprint_mismatch". When omitted, a present signature is still verified against publicKeyArmored, but nothing pins it to a fingerprint the caller actually recognises. */
+  /** A PGP fingerprint the caller already has independent reason to trust. Supplying it asks for the code's issuer to be authenticated: a candidate without a signature is refused with "signature_missing", and the verified signing key's own computed fingerprint must equal it (case- and whitespace-insensitive) or redemption fails with "fingerprint_mismatch". When omitted, a present signature is still verified against publicKeyArmored, but nothing pins it to a fingerprint the caller actually recognises. */
   expectedFingerprint?: string;
   /** Injectable clock for tests; defaults to Date.now(). */
   now?: number;
@@ -164,7 +165,7 @@ function hasExpired(expiresAt: string, now: number): boolean {
 }
 
 /**
- * Generates and redeems ConnectionCode artifacts, enforcing the always-checked freshness/liveness half (expiry, single-use) and the optional PGP-signature half (checked only when a code carries one). Optionally persisted per bridge slot via identity-store.ts's connection-code ledger (see this file's own header comment for what survives a restart and why); constructed with no slot, stays in-memory only, mirroring GatewayTrust's own no-slot fallback.
+ * Generates and redeems ConnectionCode artifacts, enforcing the always-checked freshness/liveness half (expiry, single-use) and the PGP-signature half (verified when a code carries a signature, and required whenever the redeemer supplies a key or fingerprint to check it against). Optionally persisted per bridge slot via identity-store.ts's connection-code ledger (see this file's own header comment for what survives a restart and why); constructed with no slot, stays in-memory only, mirroring GatewayTrust's own no-slot fallback.
  */
 export class ConnectionCodeLedger {
   private readonly issued = new Map<string, StoredConnectionCode>();
@@ -268,7 +269,18 @@ export class ConnectionCodeLedger {
     }
 
     let fingerprint: string | undefined;
-    if (candidate.signature !== undefined) {
+    if (candidate.signature === undefined) {
+      // The caller supplied something to check the issuer against, and an unsigned code has no issuer to check: accepting it as "freshness only" would pass the pin on nothing.
+      if (
+        options.publicKeyArmored !== undefined ||
+        options.expectedFingerprint !== undefined
+      ) {
+        throw new ConnectionCodeError(
+          "signature_missing",
+          "A public key or fingerprint was supplied to check the issuer against, but this connection code is not signed",
+        );
+      }
+    } else {
       if (options.publicKeyArmored === undefined) {
         throw new ConnectionCodeError(
           "signature_required",

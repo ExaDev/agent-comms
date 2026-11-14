@@ -318,7 +318,7 @@ const IsoTimestampSchema = z
   .string()
   .refine(isIsoTimestamp, "must be an ISO 8601 timestamp");
 
-/** A single-use, short-lived artifact bootstrapping GatewayTrust between two devices that have never established a mesh connection (agent-comms#188): `code`/`expiresAt` answer freshness/liveness and are always checked, and `expiresAt` must be an ISO 8601 timestamp; `signature` is an optional detached PGP signature (armored) over `${code}:${expiresAt}:${deviceId}`, checked only when present, never required -- a device with no PGP identity still generates and redeems a bare code. */
+/** A single-use, short-lived artifact bootstrapping GatewayTrust between two devices that have never established a mesh connection (agent-comms#188): `code`/`expiresAt` answer freshness/liveness and are always checked, and `expiresAt` must be an ISO 8601 timestamp; `signature` is an optional detached PGP signature (armored) over `${code}:${expiresAt}:${deviceId}`. An unsigned code is a bearer hint, not authentication of whoever issued it: redeeming one trusts whatever device-id it names. A redeemer who supplies a public key or fingerprint to check it against requires a signature, and the code is refused without one. */
 export const ConnectionCodeSchema = defineSchema(
   z.object({
     code: z.string(),
