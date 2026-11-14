@@ -1,5 +1,5 @@
 /**
- * Unit test for the interleaving readStoredIdentityWaitingForConcurrentCreate must survive: the slot's identity file is read (absent), then the file is created and its creator exits, and only then is the lock file read (holder no longer alive). Concluding "no identity" from the lock alone would miss the file that appeared in between, so the file has to be checked once more.
+ * Unit test for the interleaving waitForConcurrentCreate must survive: the slot's identity file is read (absent), then the file is created and its creator exits, and only then is the lock file read (holder no longer alive). Concluding "no identity" from the lock alone would miss the file that appeared in between, so the file has to be checked once more.
  *
  * node:fs is wrapped so a hook can create the identity file at the exact moment the lock file is read, which is the only way to land that interleaving deterministically.
  */

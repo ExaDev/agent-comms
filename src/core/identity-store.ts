@@ -4,6 +4,8 @@
  * Mesh state stays in memory and on the wire; the only thing on disk is this local credential (plus, now, the tokens minted against it), the same trust model as an SSH key. A lock file holding a PID keeps two live bridges in one slot from sharing an identity, which would put duplicate peer IDs on the mesh; the second bridge runs with an ephemeral identity (the behaviour before persistence) instead. Bridges without a graceful shutdown hook can skip releasing the lock: a stale lock is detected by probing the recorded PID, the same way the coordinator probes for stale agents.
  *
  * Persisting the key material rather than a bare agent ID is what makes restarts work: delivery routing fires when agentId === peerId, and peerId is deviceIdToHex(identity.deviceId), so an ID without its key can never match the running peer. Renewal near certificate expiry re-certifies the existing key pair, so the device-id survives it. A slot file that exists but cannot be used is never replaced: loading it throws UnusableIdentityRecordError (issuer-identity-file.ts), because a new key would silently change the peer id and discard every token the file holds. Only a missing file starts a new identity.
+ *
+ * Several processes can write one slot file: the bridge holding the slot lock, a cc-peer front loading the same identity without that lock, and whichever of them is renewing the certificate. Every read-modify-write of the file therefore runs under a short-lived write lock of its own (the slot lock is held for the bridge's whole lifetime, so it cannot serialise them). A bridge that lost the slot lock runs under an identity that is not the file's, so the tokens it mints and holds are kept in its own memory for the life of the process and never read from or written to the file.
  */
 
 import * as fs from "node:fs";
@@ -16,7 +18,11 @@ import type { CapabilityToken } from "wire-mesh-core/generated/protocol";
 import { generateIdentity } from "./identity.js";
 import type { PeerIdentity } from "./identity.js";
 import { writeFileAtomic } from "./atomic-file.js";
-import { loadOrCreateIssuerIdentity } from "./issuer-identity-file.js";
+import {
+  loadOrCreateIssuerIdentity,
+  readIssuerRecord,
+  type StoredIssuerKey,
+} from "./issuer-identity-file.js";
 import {
   isPidAlive,
   readLockPid,
@@ -45,16 +51,16 @@ export type SerializedCapabilityToken = [
   string,
 ];
 
-interface StoredIdentity {
-  privateKey: string;
-  certificate: string;
-  expiresAt: string;
+/** What a slot remembers beside its key material: the tokens it bears or has issued. */
+interface SlotTokenRecords {
   roomTokens?: Record<string, SerializedCapabilityToken>;
   /** The token-id (base64) of each room:member grant this identity has itself issued to another device, keyed by "roomPath::memberDeviceHex" -- the bookkeeping a room owner needs to revoke a specific member's own grant later (kickFromRoom), distinct from roomTokens above (which holds tokens this identity BEARS, not ones it issued). */
   issuedGrants?: Record<string, string>;
   /** This device's own held group:member token(s) (agent-comms#161), keyed by group path (the admitting user principal's own device-id in hex, core/user-identity.ts's own userGroupPath) -- the device-membership counterpart of roomTokens above, holding a token this identity BEARS proving the user principal admitted it, never one it issued itself (a device is never the issuer of its own membership). */
   groupTokens?: Record<string, SerializedCapabilityToken>;
 }
+
+interface StoredIdentity extends StoredIssuerKey, SlotTokenRecords {}
 
 /** A COSE_Sign1 tuple always has exactly 4 elements: protected header, unprotected header, payload, signature. */
 const COSE_SIGN1_TUPLE_LENGTH = 4;
@@ -170,6 +176,7 @@ function slotPaths(slot: Readonly<IdentitySlot>): {
   dir: string;
   identityFile: string;
   lockFile: string;
+  writeLockFile: string;
 } {
   const dir = identityDir(slot);
   const base = `identity-${slot.harness}--${slugifyCwd(slot.cwd)}`;
@@ -177,6 +184,7 @@ function slotPaths(slot: Readonly<IdentitySlot>): {
     dir,
     identityFile: path.join(dir, `${base}.json`),
     lockFile: path.join(dir, `${base}.lock`),
+    writeLockFile: path.join(dir, `${base}.write.lock`),
   };
 }
 
@@ -187,6 +195,41 @@ export function oplogDirFor(slot: Readonly<IdentitySlot>): string {
   return path.join(dir, base);
 }
 
+/** Total time a writer waits for another process's write to the same slot file to finish. A write is one small file read and one atomic rename, so this is far above its real cost, and bounded so a holder stuck inside it cannot wedge every other writer. */
+const WRITE_LOCK_WAIT_MS = 5000;
+/** Poll interval while waiting for the write lock. */
+const WRITE_LOCK_POLL_MS = 10;
+
+/** Runs `action` holding the slot file's write lock, which serialises every process's read-modify-write of the file (see the module comment for why the slot lock cannot). A lock left by a process that died is taken over. Throws when the lock stays held by a live process beyond WRITE_LOCK_WAIT_MS. */
+function withWriteLock<T>(writeLockFile: string, action: () => T): T {
+  const deadline = Date.now() + WRITE_LOCK_WAIT_MS;
+  while (!tryAcquireLock(writeLockFile).acquired) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `timed out waiting for another process to finish writing this identity slot (${writeLockFile})`,
+      );
+    }
+    sleepSync(WRITE_LOCK_POLL_MS);
+  }
+  try {
+    return action();
+  } finally {
+    releaseLockFile(writeLockFile);
+  }
+}
+
+/** The token records of every slot this process runs under an identity that is not the slot file's (it lost the slot lock to another live process), keyed by the slot's file. They are bound to a throw-away device-id, so they live and die with the process: neither written into the winner's file nor read from it. */
+const ephemeralTokenRecords = new Map<string, SlotTokenRecords>();
+
+/** Loads the identity the slot file holds, creating it when the file does not exist, renewing it in place near certificate expiry. Throws UnusableIdentityRecordError, leaving the file untouched, when the file exists but cannot be used. */
+function loadSlotIdentity(
+  paths: Readonly<ReturnType<typeof slotPaths>>,
+): PeerIdentity {
+  return withWriteLock(paths.writeLockFile, () =>
+    loadOrCreateIssuerIdentity(paths.identityFile, isStoredIdentity),
+  );
+}
+
 /**
  * Load the persisted identity for the slot, creating it on first use, and take the slot lock. Returns an ephemeral identity when the slot is already held by another live process.
  *
@@ -195,7 +238,8 @@ export function oplogDirFor(slot: Readonly<IdentitySlot>): string {
 export function loadOrCreateIdentity(
   slot: Readonly<IdentitySlot>,
 ): PeerIdentity {
-  const { dir, identityFile, lockFile } = slotPaths(slot);
+  const paths = slotPaths(slot);
+  const { dir, identityFile, lockFile } = paths;
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 
   const claim = tryAcquireLock(lockFile);
@@ -203,11 +247,13 @@ export function loadOrCreateIdentity(
     console.error(
       `agent-comms: identity slot ${slot.harness} (${slot.cwd}) is held by live pid ${String(claim.heldBy)}; running with an ephemeral identity`,
     );
+    ephemeralTokenRecords.set(identityFile, {});
     return generateIdentity();
   }
+  ephemeralTokenRecords.delete(identityFile);
 
   try {
-    return loadOrCreateIssuerIdentity(identityFile, isStoredIdentity);
+    return loadSlotIdentity(paths);
   } catch (err) {
     releaseLockFile(lockFile);
     throw err;
@@ -232,9 +278,10 @@ export function probeSlotOwner(
 export function loadIdentityForFront(
   slot: Readonly<IdentitySlot>,
 ): PeerIdentity {
-  const { dir, identityFile } = slotPaths(slot);
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  return loadOrCreateIssuerIdentity(identityFile, isStoredIdentity);
+  const paths = slotPaths(slot);
+  fs.mkdirSync(paths.dir, { recursive: true, mode: 0o700 });
+  ephemeralTokenRecords.delete(paths.identityFile);
+  return loadSlotIdentity(paths);
 }
 
 /**
@@ -244,7 +291,7 @@ export function releaseIdentityLock(slot: Readonly<IdentitySlot>): void {
   releaseLockFile(slotPaths(slot).lockFile);
 }
 
-/** Reads the slot's raw stored identity record, or undefined if the file is missing or unparseable. Used by the room-token functions below to read-modify-write only the roomTokens field, leaving the persisted key material exactly as it is. */
+/** Reads the slot's raw stored identity record, or undefined if the file is missing or unparseable. Only for reads that treat "no usable record" as "no tokens", which grants nothing; every write goes through updateTokenRecords, which refuses an unusable file instead. */
 function readStoredIdentity(identityFile: string): StoredIdentity | undefined {
   let parsed: unknown;
   try {
@@ -266,7 +313,7 @@ function writeStoredIdentity(
   );
 }
 
-// Total time to wait for a concurrent lock holder to finish creating the slot's identity file before giving up. loadOrCreateIdentity always finishes creating the file before any other process can observe its lock as taken (tryAcquireLock is the very first thing it does), so a caller that lost that race and is left holding an ephemeral identity may still reach here before the winner's own createIdentity call (a keygen plus one atomic write) has completed -- 2s is generously above that real cost even on a loaded machine, while still bounded so a holder that crashed mid-creation doesn't wedge this call forever.
+// Total time to wait for a concurrent lock holder to finish creating the slot's identity file before giving up. loadOrCreateIdentity always finishes creating the file before any other process can observe its lock as taken (tryAcquireLock is the very first thing it does), so a caller that lost that race and is left holding an ephemeral identity may still reach here before the winner's own creation (a keygen plus one atomic write) has completed -- 2s is generously above that real cost even on a loaded machine, while still bounded so a holder that crashed mid-creation doesn't wedge this call forever.
 const CONCURRENT_CREATE_WAIT_MS = 2000;
 // Poll interval while waiting -- deliberately short, since the wait is expected to resolve in low single-digit milliseconds in the overwhelmingly common case.
 const CONCURRENT_CREATE_POLL_MS = 10;
@@ -277,27 +324,66 @@ function sleepSync(ms: number): void {
 }
 
 /**
- * Reads the slot's stored identity, waiting briefly for it to appear if it doesn't exist yet but a different live process currently holds the slot's lock -- that process is, by construction, in the middle of creating it (see loadOrCreateIdentity/tryAcquireLock), so a caller racing as this slot's own ephemeral loser should wait for the real winner to finish rather than fail outright. Falls through to the ordinary "missing" result (undefined) once the lock is no longer held by a different live process, or the wait budget runs out -- both signal there is genuinely nothing to wait for.
+ * Waits briefly for the slot's identity file to appear if it doesn't exist yet but a different live process currently holds the slot's lock -- that process is, by construction, in the middle of creating it (see loadOrCreateIdentity/tryAcquireLock), so a caller racing as this slot's own loser should wait for the real winner to finish rather than fail outright. Returns once the file exists, or once the lock is no longer held by a different live process, or the wait budget runs out -- the last two signal there is genuinely nothing to wait for.
  */
-function readStoredIdentityWaitingForConcurrentCreate(
-  identityFile: string,
-  lockFile: string,
-): StoredIdentity | undefined {
+function waitForConcurrentCreate(identityFile: string, lockFile: string): void {
   const deadline = Date.now() + CONCURRENT_CREATE_WAIT_MS;
   for (;;) {
-    const stored = readStoredIdentity(identityFile);
-    if (stored !== undefined) return stored;
+    if (fs.existsSync(identityFile)) return;
 
     const heldBy = readLockPid(lockFile);
     const heldByDifferentLiveProcess =
       heldBy !== undefined && heldBy !== process.pid && isPidAlive(heldBy);
-    // The holder can finish creating the file and exit between the read above and this lock check, so the file is read once more before concluding it was never created.
-    if (!heldByDifferentLiveProcess || Date.now() >= deadline) {
-      return readStoredIdentity(identityFile);
-    }
+    if (!heldByDifferentLiveProcess || Date.now() >= deadline) return;
 
     sleepSync(CONCURRENT_CREATE_POLL_MS);
   }
+}
+
+/** The token records a slot currently holds for this process: its own in-memory records when it runs under an identity that is not the slot file's, otherwise those in the file (none when the file is missing or unusable). */
+function readTokenRecords(identityFile: string): SlotTokenRecords {
+  return (
+    ephemeralTokenRecords.get(identityFile) ??
+    readStoredIdentity(identityFile) ??
+    {}
+  );
+}
+
+/**
+ * Applies `change` to the slot's token records and persists the result, leaving the key material exactly as it is. The read and the write happen under the slot file's write lock, so two processes updating different tokens cannot drop each other's update. A slot running under a non-file identity keeps the change in this process's memory only.
+ *
+ * With `requireIdentity`, throws when the slot has no identity file yet (waiting briefly for a concurrent creator first); otherwise a missing file is a no-op. Either way a file that exists but cannot be used throws UnusableIdentityRecordError and is not written.
+ */
+function updateTokenRecords(
+  slot: Readonly<IdentitySlot>,
+  change: (records: Readonly<SlotTokenRecords>) => SlotTokenRecords | undefined,
+  requireIdentity: boolean,
+): void {
+  const { identityFile, lockFile, writeLockFile } = slotPaths(slot);
+  const ephemeral = ephemeralTokenRecords.get(identityFile);
+  if (ephemeral !== undefined) {
+    ephemeralTokenRecords.set(identityFile, {
+      ...ephemeral,
+      ...change(ephemeral),
+    });
+    return;
+  }
+  if (requireIdentity) waitForConcurrentCreate(identityFile, lockFile);
+  withWriteLock(writeLockFile, () => {
+    const stored = readIssuerRecord(identityFile, isStoredIdentity);
+    if (stored === undefined) {
+      if (requireIdentity) {
+        throw new Error(
+          `no identity persisted for this slot yet -- call loadOrCreateIdentity first (${identityFile})`,
+        );
+      }
+      return;
+    }
+    const changed = change(stored);
+    if (changed !== undefined) {
+      writeStoredIdentity(identityFile, { ...stored, ...changed });
+    }
+  });
 }
 
 /**
@@ -307,8 +393,7 @@ export function loadRoomTokens(
   slot: Readonly<IdentitySlot>,
 ): Record<string, CapabilityToken> {
   const { identityFile } = slotPaths(slot);
-  const stored = readStoredIdentity(identityFile);
-  const serialized = stored?.roomTokens ?? {};
+  const serialized = readTokenRecords(identityFile).roomTokens ?? {};
   const tokens: Record<string, CapabilityToken> = {};
   for (const [roomPath, token] of Object.entries(serialized)) {
     tokens[roomPath] = deserializeToken(token);
@@ -317,28 +402,20 @@ export function loadRoomTokens(
 }
 
 /**
- * Persists a capability token for the given room path, surviving a restart the same way the identity it was minted against does. Overwrites any token already saved for that room; leaves every other room's token and the identity's own key material untouched.
+ * Persists a capability token for the given room path, surviving a restart the same way the identity it was minted against does. Overwrites any token already saved for that room; leaves every other room's token and the identity's own key material untouched. A slot running under an ephemeral identity keeps it in this process's memory only.
  */
 export function saveRoomToken(
   slot: Readonly<IdentitySlot>,
   roomPath: string,
   token: CapabilityToken,
 ): void {
-  const { identityFile, lockFile } = slotPaths(slot);
-  const stored = readStoredIdentityWaitingForConcurrentCreate(
-    identityFile,
-    lockFile,
+  updateTokenRecords(
+    slot,
+    (records) => ({
+      roomTokens: { ...records.roomTokens, [roomPath]: serializeToken(token) },
+    }),
+    true,
   );
-  if (stored === undefined) {
-    throw new Error(
-      `no identity persisted for this slot yet -- call loadOrCreateIdentity first (${identityFile})`,
-    );
-  }
-  const roomTokens = {
-    ...stored.roomTokens,
-    [roomPath]: serializeToken(token),
-  };
-  writeStoredIdentity(identityFile, { ...stored, roomTokens });
 }
 
 /** Removes the persisted token for one room path, if any. A no-op if none was saved for that path. */
@@ -346,15 +423,20 @@ export function deleteRoomToken(
   slot: Readonly<IdentitySlot>,
   roomPath: string,
 ): void {
-  const { identityFile } = slotPaths(slot);
-  const stored = readStoredIdentity(identityFile);
-  if (stored?.roomTokens === undefined) return;
-  const roomTokens = Object.fromEntries(
-    Object.entries(stored.roomTokens).filter(
-      ([storedRoomPath]) => storedRoomPath !== roomPath,
-    ),
+  updateTokenRecords(
+    slot,
+    (records) =>
+      records.roomTokens === undefined
+        ? undefined
+        : {
+            roomTokens: Object.fromEntries(
+              Object.entries(records.roomTokens).filter(
+                ([storedRoomPath]) => storedRoomPath !== roomPath,
+              ),
+            ),
+          },
+    false,
   );
-  writeStoredIdentity(identityFile, { ...stored, roomTokens });
 }
 
 /**
@@ -364,8 +446,7 @@ export function loadGroupTokens(
   slot: Readonly<IdentitySlot>,
 ): Record<string, CapabilityToken> {
   const { identityFile } = slotPaths(slot);
-  const stored = readStoredIdentity(identityFile);
-  const serialized = stored?.groupTokens ?? {};
+  const serialized = readTokenRecords(identityFile).groupTokens ?? {};
   const tokens: Record<string, CapabilityToken> = {};
   for (const [groupPath, token] of Object.entries(serialized)) {
     tokens[groupPath] = deserializeToken(token);
@@ -381,21 +462,16 @@ export function saveGroupToken(
   groupPath: string,
   token: CapabilityToken,
 ): void {
-  const { identityFile, lockFile } = slotPaths(slot);
-  const stored = readStoredIdentityWaitingForConcurrentCreate(
-    identityFile,
-    lockFile,
+  updateTokenRecords(
+    slot,
+    (records) => ({
+      groupTokens: {
+        ...records.groupTokens,
+        [groupPath]: serializeToken(token),
+      },
+    }),
+    true,
   );
-  if (stored === undefined) {
-    throw new Error(
-      `no identity persisted for this slot yet -- call loadOrCreateIdentity first (${identityFile})`,
-    );
-  }
-  const groupTokens = {
-    ...stored.groupTokens,
-    [groupPath]: serializeToken(token),
-  };
-  writeStoredIdentity(identityFile, { ...stored, groupTokens });
 }
 
 /** Removes the persisted token for one group path, if any. A no-op if none was saved for that path. The device-membership counterpart of deleteRoomToken. */
@@ -403,15 +479,20 @@ export function deleteGroupToken(
   slot: Readonly<IdentitySlot>,
   groupPath: string,
 ): void {
-  const { identityFile } = slotPaths(slot);
-  const stored = readStoredIdentity(identityFile);
-  if (stored?.groupTokens === undefined) return;
-  const groupTokens = Object.fromEntries(
-    Object.entries(stored.groupTokens).filter(
-      ([storedGroupPath]) => storedGroupPath !== groupPath,
-    ),
+  updateTokenRecords(
+    slot,
+    (records) =>
+      records.groupTokens === undefined
+        ? undefined
+        : {
+            groupTokens: Object.fromEntries(
+              Object.entries(records.groupTokens).filter(
+                ([storedGroupPath]) => storedGroupPath !== groupPath,
+              ),
+            ),
+          },
+    false,
   );
-  writeStoredIdentity(identityFile, { ...stored, groupTokens });
 }
 
 function issuedGrantKey(roomPath: string, memberDeviceHex: string): string {
@@ -427,9 +508,10 @@ export function loadIssuedRoomGrant(
   memberDeviceHex: string,
 ): Uint8Array<ArrayBuffer> | undefined {
   const { identityFile } = slotPaths(slot);
-  const stored = readStoredIdentity(identityFile);
   const encoded =
-    stored?.issuedGrants?.[issuedGrantKey(roomPath, memberDeviceHex)];
+    readTokenRecords(identityFile).issuedGrants?.[
+      issuedGrantKey(roomPath, memberDeviceHex)
+    ];
   return encoded === undefined
     ? undefined
     : Uint8Array.from(Buffer.from(encoded, "base64"));
@@ -444,22 +526,17 @@ export function saveIssuedRoomGrant(
   memberDeviceHex: string,
   tokenId: Uint8Array,
 ): void {
-  const { identityFile, lockFile } = slotPaths(slot);
-  const stored = readStoredIdentityWaitingForConcurrentCreate(
-    identityFile,
-    lockFile,
+  updateTokenRecords(
+    slot,
+    (records) => ({
+      issuedGrants: {
+        ...records.issuedGrants,
+        [issuedGrantKey(roomPath, memberDeviceHex)]:
+          Buffer.from(tokenId).toString("base64"),
+      },
+    }),
+    true,
   );
-  if (stored === undefined) {
-    throw new Error(
-      `no identity persisted for this slot yet -- call loadOrCreateIdentity first (${identityFile})`,
-    );
-  }
-  const issuedGrants = {
-    ...stored.issuedGrants,
-    [issuedGrantKey(roomPath, memberDeviceHex)]:
-      Buffer.from(tokenId).toString("base64"),
-  };
-  writeStoredIdentity(identityFile, { ...stored, issuedGrants });
 }
 
 /** Removes the recorded token-id for one (roomPath, member) grant, if any -- called once a kick has revoked it, so a later re-join mints and records a genuinely fresh one rather than leaving a stale entry alongside it. A no-op if none was recorded. */
@@ -468,14 +545,19 @@ export function deleteIssuedRoomGrant(
   roomPath: string,
   memberDeviceHex: string,
 ): void {
-  const { identityFile } = slotPaths(slot);
-  const stored = readStoredIdentity(identityFile);
-  if (stored?.issuedGrants === undefined) return;
   const key = issuedGrantKey(roomPath, memberDeviceHex);
-  const issuedGrants = Object.fromEntries(
-    Object.entries(stored.issuedGrants).filter(([k]) => k !== key),
+  updateTokenRecords(
+    slot,
+    (records) =>
+      records.issuedGrants === undefined
+        ? undefined
+        : {
+            issuedGrants: Object.fromEntries(
+              Object.entries(records.issuedGrants).filter(([k]) => k !== key),
+            ),
+          },
+    false,
   );
-  writeStoredIdentity(identityFile, { ...stored, issuedGrants });
 }
 
 /** The trusted-gateway allowlist lives in one JSON file per identity directory, not per bridge slot: who may see and reach this user's agents from another machine is an operator decision about the machine, and every store on it, including each session the default cc-peer front handles, advertises itself under it. It sits beside the identity files rather than inside one, because the trusted set has no dependency on any slot's key material and GatewayTrust can be constructed before an identity is ever loaded. */
