@@ -26,6 +26,7 @@ const chatAreaDefaults = {
   onSendAction: () => {},
   onLeaveRoom: () => {},
   onConnectToMesh: () => {},
+  pairingNeeded: false,
 };
 
 describe("ChatArea interactions", () => {

@@ -232,6 +232,7 @@ function Root() {
       onCreateRoom={onCreateRoom}
       onJoinRoomInput={onJoinRoomInput}
       onConnectToMesh={onConnectToMesh}
+      pairingNeeded={meshClient.pairingNeeded()}
     />
   );
 }
