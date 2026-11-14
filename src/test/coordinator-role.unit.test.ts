@@ -385,7 +385,7 @@ test("a lower-id newcomer waiting to claim never takes the role from an incumben
   expect(holder.losses).toBe(0);
 });
 
-test("a claim naming a device this side has no session to is taken over at a raised term one claim wait later", async () => {
+test("a claim naming a device this side has no session to, sent by another peer, is set aside and never takes the role over", async () => {
   vi.useFakeTimers();
   const bus = new Bus();
   const self = bus.add(hexId("5"));
@@ -395,17 +395,14 @@ test("a claim naming a device this side has no session to is taken over at a rai
     { id: hexId("7") },
     claimFor(hexId("1"), absentTerm),
   );
-  expect(self.role.isHolder()).toBe(false);
   await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
 
-  expect(self.role.current()).toEqual({
-    term: absentTerm + 1,
-    holder: self.id,
-  });
-  expect(self.role.isHolder()).toBe(true);
+  expect(self.role.current()).toBeUndefined();
+  expect(self.role.isHolder()).toBe(false);
+  expect(self.gains).toBe(0);
 });
 
-test("a claim naming a holder that this side reaches within the claim wait is left standing", async () => {
+test("a claim naming a holder whose session this side then enrols within the claim wait is accepted and left standing", async () => {
   vi.useFakeTimers();
   const bus = new Bus();
   const self = bus.add(hexId("5"));
@@ -414,6 +411,7 @@ test("a claim naming a holder that this side reaches within the claim wait is le
 
   await self.role.handleClaim({ id: hexId("7") }, claimFor(holderId, term));
   bus.add(holderId);
+  await self.role.announceTo({ id: holderId });
   await vi.advanceTimersByTimeAsync(ROOM_REQUEST_TIMEOUT_MS);
 
   expect(self.role.current()).toEqual({ term, holder: holderId });
