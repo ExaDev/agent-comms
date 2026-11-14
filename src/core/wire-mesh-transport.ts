@@ -8,7 +8,7 @@
  * connect_request's accept/reject flow maps onto sendManageRequest's own request/response round trip directly, rather than a separate pair of connect_accepted/connect_rejected messages: manage-request-frame already tolerates arbitrary latency between a request and its response, so "waiting for a human to approve" is simply a manage-response that hasn't been sent yet, not a protocol gap needing its own mechanism. connect_request therefore holds its own IncomingManageRequest open (rather than responding immediately) until acceptConnection/rejectConnection is actually called.
  */
 
-import { reportRejection } from "./detached-work.js";
+import { consumeEach, reportRejection } from "./detached-work.js";
 import { createTlsTransport } from "wire-mesh-core/adapters/tls-transport";
 import {
   ROOM_JOIN_APPROVAL_TIMEOUT_MS,
@@ -45,8 +45,7 @@ import { RelayRole } from "./relay-role.js";
 import { ALL_INTERFACES_HOST } from "./relay-server.js";
 import {
   DEFAULT_PENDING_CONNECTION_TIMEOUT_MS,
-  expirePendingConnection,
-  type ConnectionDecision,
+  holdConnectRequest,
   type PendingConnection,
 } from "./pending-connection.js";
 import {
@@ -436,18 +435,20 @@ export class WireMeshTransport implements MeshTransport {
   ): void {
     // Watched from the start, so any claim this session gossips before it introduces itself is read and dropped rather than held back and replayed once it is trusted.
     this.electionSessions.watch(session, handle);
-    this.detach(async () => {
-      let approved = false;
-      for await (const request of session.incomingManageRequests) {
-        if (this.shutDown) break;
+    let approved = false;
+    // A request that cannot be handled is reported and the next is still read; the loop ends only where the session itself is being ended, and says so with "stop".
+    void consumeEach(
+      session.incomingManageRequests,
+      async (request) => {
+        if (this.shutDown) return "stop";
         if (approved) {
           await this.roomRouter.handleLocalRequest(request, handle);
-          continue;
+          return "continue";
         }
         const message = extractMessage(request.command);
         if (message === undefined) {
           await request.respond({ result: "ok" }).catch(() => undefined);
-          continue;
+          return "continue";
         }
         if (message.method === "introduce") {
           this.trackSession(handle.id, session);
@@ -459,48 +460,36 @@ export class WireMeshTransport implements MeshTransport {
           });
           await request.respond({ result: "ok" }).catch(() => undefined);
           approved = true;
-          continue;
+          return "continue";
         }
         if (message.method === "connect_request") {
-          // Held open deliberately (see this file's own header comment). Answered later by acceptConnection/rejectConnection, or by expirePendingConnection if neither happens within pendingConnectionTimeoutMs.
-          const decision = await new Promise<ConnectionDecision>((resolve) => {
-            this.pendingConnections.set(handle.id, {
-              respond: request.respond,
-              dataPort: message.dataPort,
-              name: message.name,
-              fingerprint: message.fingerprint,
-              policy: handle.policy,
-              session,
-              resolve,
-              // unref()'d so a stray pending connection (this timer failing to be cleared through some path not yet covered) can never by itself keep the process alive for up to pendingConnectionTimeoutMs after everything else is done -- confirmed necessary directly: shutdown() originally cleared every pendingConnections entry without clearing its timer, and the whole test process hung for the full default timeout before exiting.
-              timeoutHandle: setTimeout(() => {
-                expirePendingConnection(this.pendingConnections, handle.id);
-              }, this.pendingConnectionTimeoutMs).unref(),
-            });
-            this.events.onConnectionRequest(handle, {
-              peerId: handle.id,
-              dataPort: message.dataPort,
-              name: message.name,
-              fingerprint: message.fingerprint,
-            });
-          });
+          // Held open deliberately (see this file's own header comment).
+          const decision = await holdConnectRequest(
+            {
+              pendingConnections: this.pendingConnections,
+              timeoutMs: this.pendingConnectionTimeoutMs,
+              events: this.events,
+            },
+            { request, message, handle, session },
+          );
           if (decision === "reject") {
             // Rejection can arrive via rejectConnection (session still open) or via shutdown/disconnect (session already closing) -- catch rather than assume which.
             await session.close().catch(() => undefined);
-            return;
+            return "stop";
           }
           // acceptConnection has already called trackSession synchronously, before firing onIntroduction -- nothing left to do here beyond trusting subsequent requests on this same session.
           approved = true;
-          continue;
+          return "continue";
         }
         // Any other message before introduce/connect_request is a protocol violation from an unapproved peer -- refuse and terminate rather than route it.
         await request
           .respond({ result: "error", code: "not_approved" })
           .catch(() => undefined);
         await session.close().catch(() => undefined);
-        return;
-      }
-    });
+        return "stop";
+      },
+      () => this.events.onError,
+    );
   }
 
   /** Opens a mesh session over an already-established connection, wired to this transport's own frame dispatch and advertised addresses. Every session this transport owns is built exactly this way, whether the connection was accepted by a listener or dialled at a peer, at the coordinator, or at a remote gateway, so the wiring lives here rather than being restated at each call site. Resolves undefined, with the session closed, when shutdown() has begun by the time the session is open, whether it began before the connection arrived or while the session was opening: shutdown() closes only the sessions it can see, so one opened after it started would stay open, and its peer would never learn that this side had gone (agent-comms#372). */
@@ -529,25 +518,25 @@ export class WireMeshTransport implements MeshTransport {
   ): void {
     this.roomRouter.drainSession(session, handle);
     // Reads every revocation-entry this session's peer announces, for as long as the session lives, handing each one to MeshStore via onRevocationAnnounce, one call per entry, matching revocationAnnouncements' own per-entry flattening of a revocation-announce frame's entries array. A gossiped revocation is not a manage-request and has no verb for roomRouter to dispatch, so it has its own independent drain.
-    this.detach(async () => {
-      for await (const entry of session.revocationAnnouncements) {
+    // A revocation that cannot be handled is reported and the next one is still read: one bad entry must not end revocation intake on this session.
+    void consumeEach(
+      session.revocationAnnouncements,
+      (entry) => {
         this.events.onRevocationAnnounce(entry);
-      }
-    });
+        return "continue";
+      },
+      () => this.events.onError,
+    );
     this.electionSessions.watch(session, handle);
     if (machineLocal) this.electionSessions.enrol(session, handle);
   }
 
-  /** Runs work a peer's connection started and nothing awaits: a failure goes to the transport's error handler, or stderr, never left as an unhandled rejection that would end the process. */
-  private detach(work: () => Promise<unknown>): void {
-    reportRejection(work(), () => this.events.onError);
-  }
-
-  /** The callback a listener calls with each connection it accepts, handling it without awaiting it (see detach). */
+  /** The callback a listener calls with each connection it accepts, handling it without awaiting it: a failure goes to the transport's error handler, or stderr, and is never left as an unhandled rejection that would end the process. */
   private accepting(accept: Readonly<AcceptOptions>) {
     return (connection: Readonly<Connection>): void => {
-      this.detach(async () =>
+      reportRejection(
         this.handleAcceptedConnection(connection, accept),
+        () => this.events.onError,
       );
     };
   }
@@ -557,10 +546,12 @@ export class WireMeshTransport implements MeshTransport {
     handle: Readonly<ConnectionHandle>,
     deviceIdHex: string,
   ): void {
-    this.detach(async () => {
-      // The presence this session last reported. Every session event carries the whole directory, including events this side causes by sending a frame and the final closed event, so the peer's advert repeats long after the peer sent it. Only a change is news: re-reporting a stale advert would mark a departed peer's agent running again after the coordinator has set it offline, and nothing would ever correct that.
-      let reportedPresence: AgentStatus | undefined;
-      for await (const event of session.events) {
+    // The presence this session last reported. Every session event carries the whole directory, including events this side causes by sending a frame and the final closed event, so the peer's advert repeats long after the peer sent it. Only a change is news: re-reporting a stale advert would mark a departed peer's agent running again after the coordinator has set it offline, and nothing would ever correct that.
+    let reportedPresence: AgentStatus | undefined;
+    // A session event that cannot be handled is reported and the next is still read, so the closed event that ends this session's bookkeeping is never missed.
+    void consumeEach(
+      session.events,
+      (event) => {
         this.knownDevices.mergeLocal(event.directory);
         const presence = findPresenceAdvert(deviceIdHex, event.directory);
         if (presence !== undefined && presence !== reportedPresence) {
@@ -587,10 +578,12 @@ export class WireMeshTransport implements MeshTransport {
           if (wasTracked && !this.shutDown) {
             this.events.onPeerDisconnected(handle);
           }
-          return;
+          return "stop";
         }
-      }
-    });
+        return "continue";
+      },
+      () => this.events.onError,
+    );
   }
 
   // -----------------------------------------------------------------------

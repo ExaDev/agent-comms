@@ -11,7 +11,7 @@ import type {
   IncomingManageRequest,
   ManageOutcome,
 } from "wire-mesh-core/domain/mesh-session";
-import { reportRejection } from "./detached-work.js";
+import { consumeEach, type ConsumeStep } from "./detached-work.js";
 import { isMeshMessage } from "./wire-protocol.js";
 import type { MeshMessage } from "./wire-protocol.js";
 import type { ConnectionHandle, TransportEvents } from "./transport.js";
@@ -194,12 +194,12 @@ export function createRoomRouter(options: RoomRouterOptions): RoomRouter {
     handleLocalRequest,
     handleRelayedRequest,
     drainSession(session, handle) {
-      reportRejection(
-        (async () => {
-          for await (const request of session.incomingManageRequests) {
-            await handleLocalRequest(request, handle);
-          }
-        })(),
+      void consumeEach(
+        session.incomingManageRequests,
+        async (request): Promise<ConsumeStep> => {
+          await handleLocalRequest(request, handle);
+          return "continue";
+        },
         () => options.events.onError,
       );
     },

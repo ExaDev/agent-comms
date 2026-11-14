@@ -2,7 +2,7 @@
  * HubSession -- the relay-hub connection mode (agent-comms#151), split from wire-mesh-transport.ts under the max-lines cap the same way connection-approval.ts and its siblings were. A hub connection (wss://mesh.exadev.io/) is a RELAY, not a coordinator: no connect_request/introduce approval applies. The session's own self-advert is forwarded by the hub to every other connected agent and the hub answers with a catch-up of everyone already there, so peers discover each other purely through gossip. Messages ride relay-connect pairings -- sendManageRequest's own targetDevice routing, which the session layer wraps as relay-data to exactly that device.
  */
 
-import { consumeEach, reportRejection } from "./detached-work.js";
+import { consumeEach } from "./detached-work.js";
 import {
   acceptMeshSession,
   type AcceptedMeshSession,
@@ -206,62 +206,55 @@ export class HubSession {
     ownHex: string,
   ): Promise<void> {
     try {
-      for await (const event of session.events) {
-        if (this.deps.isShuttingDown()) break;
-        const remoteEntries = await this.deps.admitEntries(
-          event.directory.filter(
-            (entry) => deviceIdToHex(entry.device) !== ownHex,
-          ),
-        );
-        for (const entry of remoteEntries) {
-          this.hubPeersKnown.add(deviceIdToHex(entry.device));
-        }
-        if (remoteEntries.length > 0) this.deps.onDirectory(remoteEntries);
-        if (event.state.status === "closed") break;
-      }
+      // An event that cannot be handled (the directory filter rejecting, say) is reported and the next is still read: ending the loop here would clear a session that is still live.
+      await consumeEach(
+        session.events,
+        async (event) => {
+          if (this.deps.isShuttingDown()) return "stop";
+          const remoteEntries = await this.deps.admitEntries(
+            event.directory.filter(
+              (entry) => deviceIdToHex(entry.device) !== ownHex,
+            ),
+          );
+          for (const entry of remoteEntries) {
+            this.hubPeersKnown.add(deviceIdToHex(entry.device));
+          }
+          if (remoteEntries.length > 0) this.deps.onDirectory(remoteEntries);
+          return event.state.status === "closed" ? "stop" : "continue";
+        },
+        () => this.deps.events.onError,
+      );
     } finally {
       if (this.session === session) this.clearSession();
     }
   }
 
-  /** Consumes one hub session's inbound relayed manage-requests until it ends, dispatching each in arrival order to dispatchHubRequest, and reporting a request whose dispatch fails without ending the loop, so one request cannot stop every later one on the session -- see that function's own doc for the actual per-request trust decision. Split out purely so the decision itself is directly unit-testable against fake requests/deps (hub-session-dispatch.test.ts), the same reason hub-forwarding.ts's own routeRoomRequestViaHub is a standalone function rather than a private method. Passes this.url through as dispatchHubRequest's own hubAddress -- this side's own dialled address for the hub every request on this specific session arrived over (agent-comms#216), the answering-side equivalent of tracePath's own local.hubAddress above. */
+  /** Consumes one hub session's inbound relayed manage-requests until it ends, dispatching each in arrival order to dispatchHubRequest, and reporting a request whose dispatch fails without ending the loop, so one request cannot stop every later one on the session, see that function's own doc for the actual per-request trust decision. Split out purely so the decision itself is directly unit-testable against fake requests/deps (hub-session-dispatch.test.ts), the same reason hub-forwarding.ts's own routeRoomRequestViaHub is a standalone function rather than a private method. Passes this.url through as dispatchHubRequest's own hubAddress, this side's own dialled address for the hub every request on this specific session arrived over (agent-comms#216), the answering-side equivalent of tracePath's own local.hubAddress above. */
   private consume(session: AcceptedMeshSession): void {
-    void consumeEach(
-      session.incomingManageRequests,
-      async (request) => {
-        if (this.deps.isShuttingDown()) return;
-        await dispatchHubRequest({
-          request,
-          deps: this.deps,
-          onKnownPeer: (hex) => {
-            this.hubPeersKnown.add(hex);
-          },
-          hubAddress: this.url,
-        });
+    void drainHubRequests({
+      requests: session.incomingManageRequests,
+      deps: this.deps,
+      onKnownPeer: (hex) => {
+        this.hubPeersKnown.add(hex);
       },
-      () => this.deps.events.onError,
-    );
+      hubAddress: this.url,
+    });
   }
 
   /** Consumes one hub session's inbound core/data frames until it ends, handing each one that came through a relay pairing to onRelayedDataFrame in arrival order. A failure in the handler is reported and the loop carries on, since one bad frame must not stop every later one. */
   private consumeDataFrames(session: AcceptedMeshSession): void {
-    reportRejection(
-      (async () => {
-        for await (const incoming of session.incomingDataFrames) {
-          if (this.deps.isShuttingDown()) break;
-          if (incoming.fromDevice === undefined) continue;
-          await this.deps
-            .onRelayedDataFrame(
-              deviceIdToHex(incoming.fromDevice),
-              incoming.frame,
-            )
-            .catch((error: unknown) => {
-              this.deps.events.onError?.(
-                error instanceof Error ? error : new Error(String(error)),
-              );
-            });
+    void consumeEach(
+      session.incomingDataFrames,
+      async (incoming) => {
+        if (this.deps.isShuttingDown()) return "stop";
+        if (incoming.fromDevice !== undefined) {
+          await this.deps.onRelayedDataFrame(
+            deviceIdToHex(incoming.fromDevice),
+            incoming.frame,
+          );
         }
-      })(),
+        return "continue";
+      },
       () => this.deps.events.onError,
     );
   }
@@ -329,6 +322,29 @@ function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
     bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
   return bytes;
+}
+
+/**
+ * Dispatches each inbound relayed manage-request in arrival order until the stream ends. A request whose dispatch throws is reported through the transport's error handler and the next is still read, and a transport that is shutting down makes the loop skip the rest. Never rejects. Exported so the loop is tested without a live hub session.
+ */
+export async function drainHubRequests(options: {
+  requests: AsyncIterable<IncomingManageRequest>;
+  deps: Readonly<
+    HubRequestDispatchDeps & Pick<HubSessionDeps, "events" | "isShuttingDown">
+  >;
+  onKnownPeer: (deviceHex: string) => void;
+  hubAddress?: string | undefined;
+}): Promise<void> {
+  const { requests, deps, onKnownPeer, hubAddress } = options;
+  await consumeEach(
+    requests,
+    async (request) => {
+      if (deps.isShuttingDown()) return "stop";
+      await dispatchHubRequest({ request, deps, onKnownPeer, hubAddress });
+      return "continue";
+    },
+    () => deps.events.onError,
+  );
 }
 
 /** The slice of HubSessionDeps dispatchHubRequest actually needs. Named so its own tests, and consume()'s call site, don't repeat the same Pick inline. */
