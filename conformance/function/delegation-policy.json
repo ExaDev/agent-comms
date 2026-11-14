@@ -157,6 +157,69 @@
       "function": "delegation-policy.resolveDelegationsRemaining",
       "id": "empty-override-makes-everything-delegable",
       "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "nonDelegable": [
+            "room:member"
+          ]
+        },
+        "dm:send",
+        "alice-device-id",
+        {
+          "$number": "Infinity"
+        }
+      ],
+      "expect": {
+        "$number": "Infinity"
+      },
+      "from": "recorded: src/core/delegation-policy.ts (a delegable capability passes the requested number through unchanged)",
+      "function": "delegation-policy.resolveDelegationsRemaining",
+      "id": "delegable-capability-passes-infinity-through",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "nonDelegable": [
+            "room:member"
+          ]
+        },
+        "dm:send",
+        "alice-device-id",
+        {
+          "$number": "NaN"
+        }
+      ],
+      "expect": {
+        "$number": "NaN"
+      },
+      "from": "recorded: src/core/delegation-policy.ts (a delegable capability passes the requested number through unchanged)",
+      "function": "delegation-policy.resolveDelegationsRemaining",
+      "id": "delegable-capability-passes-nan-through",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "nonDelegable": [
+            "room:member"
+          ]
+        },
+        "dm:send",
+        "alice-device-id",
+        {
+          "$number": "-0"
+        }
+      ],
+      "expect": {
+        "$number": "-0"
+      },
+      "from": "recorded: src/core/delegation-policy.ts (a delegable capability passes the requested number through unchanged)",
+      "function": "delegation-policy.resolveDelegationsRemaining",
+      "id": "delegable-capability-passes-negative-zero-through",
+      "kind": "function"
     }
   ]
 }

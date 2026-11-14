@@ -907,7 +907,7 @@
       },
       "from": "web-access.unit.test.ts: authorise > accepts the Bearer scheme in any letter case and rejects other schemes",
       "function": "web-access.authorise",
-      "id": "bearer-scheme-spelling-0-allowed",
+      "id": "bearer-scheme-capitalised-allowed",
       "kind": "function"
     },
     {
@@ -933,7 +933,7 @@
       },
       "from": "web-access.unit.test.ts: authorise > accepts the Bearer scheme in any letter case and rejects other schemes",
       "function": "web-access.authorise",
-      "id": "bearer-scheme-spelling-1-allowed",
+      "id": "bearer-scheme-lower-case-allowed",
       "kind": "function"
     },
     {
@@ -959,7 +959,7 @@
       },
       "from": "web-access.unit.test.ts: authorise > accepts the Bearer scheme in any letter case and rejects other schemes",
       "function": "web-access.authorise",
-      "id": "bearer-scheme-spelling-2-allowed",
+      "id": "bearer-scheme-upper-case-allowed",
       "kind": "function"
     },
     {
@@ -1112,7 +1112,7 @@
       "expect": "::1",
       "from": "web-access.unit.test.ts: canonicalAddress > spells 0:0:0:0:0:0:0:1 as ::1",
       "function": "web-access.canonicalAddress",
-      "id": "canonical-address-1",
+      "id": "canonical-address-0-0-0-0-0-0-0-1",
       "kind": "function"
     },
     {
@@ -1122,7 +1122,7 @@
       "expect": "127.0.0.1",
       "from": "web-access.unit.test.ts: canonicalAddress > spells ::ffff:127.0.0.1 as 127.0.0.1",
       "function": "web-access.canonicalAddress",
-      "id": "canonical-address-2",
+      "id": "canonical-address-ffff-127-0-0-1",
       "kind": "function"
     },
     {
@@ -1132,7 +1132,7 @@
       "expect": "127.0.0.1",
       "from": "web-access.unit.test.ts: canonicalAddress > spells ::ffff:7f00:1 as 127.0.0.1",
       "function": "web-access.canonicalAddress",
-      "id": "canonical-address-3",
+      "id": "canonical-address-ffff-7f00-1",
       "kind": "function"
     },
     {
@@ -1142,7 +1142,7 @@
       "expect": "192.168.1.10",
       "from": "web-access.unit.test.ts: canonicalAddress > spells 192.168.1.10 as 192.168.1.10",
       "function": "web-access.canonicalAddress",
-      "id": "canonical-address-4",
+      "id": "canonical-address-192-168-1-10",
       "kind": "function"
     },
     {
@@ -1152,7 +1152,7 @@
       "expect": "fe80::1%en0",
       "from": "web-access.unit.test.ts: canonicalAddress > spells fe80::1%en0 as fe80::1%en0",
       "function": "web-access.canonicalAddress",
-      "id": "canonical-address-5",
+      "id": "canonical-address-fe80-1-en0",
       "kind": "function"
     },
     {
@@ -1162,7 +1162,7 @@
       "expect": true,
       "from": "web-access.unit.test.ts: isWildcardHost > 0.0.0.0 binds every interface",
       "function": "web-access.isWildcardHost",
-      "id": "wildcard-host-0",
+      "id": "wildcard-host-0-0-0-0",
       "kind": "function"
     },
     {
@@ -1172,7 +1172,7 @@
       "expect": true,
       "from": "web-access.unit.test.ts: isWildcardHost > :: binds every interface",
       "function": "web-access.isWildcardHost",
-      "id": "wildcard-host-1",
+      "id": "wildcard-host-double-colon",
       "kind": "function"
     },
     {
@@ -1182,7 +1182,7 @@
       "expect": true,
       "from": "web-access.unit.test.ts: isWildcardHost > ::0 binds every interface",
       "function": "web-access.isWildcardHost",
-      "id": "wildcard-host-2",
+      "id": "wildcard-host-0",
       "kind": "function"
     },
     {
@@ -1192,7 +1192,7 @@
       "expect": true,
       "from": "web-access.unit.test.ts: isWildcardHost > 0:0:0:0:0:0:0:0 binds every interface",
       "function": "web-access.isWildcardHost",
-      "id": "wildcard-host-3",
+      "id": "wildcard-host-0-0-0-0-0-0-0-0",
       "kind": "function"
     },
     {
@@ -1202,7 +1202,7 @@
       "expect": true,
       "from": "web-access.unit.test.ts: isWildcardHost > ::ffff:0.0.0.0 binds every interface",
       "function": "web-access.isWildcardHost",
-      "id": "wildcard-host-4",
+      "id": "wildcard-host-ffff-0-0-0-0",
       "kind": "function"
     },
     {
@@ -1212,7 +1212,7 @@
       "expect": false,
       "from": "web-access.unit.test.ts: isWildcardHost > 192.168.1.10 binds one interface",
       "function": "web-access.isWildcardHost",
-      "id": "specific-host-0",
+      "id": "specific-host-192-168-1-10",
       "kind": "function"
     },
     {
@@ -1222,7 +1222,7 @@
       "expect": false,
       "from": "web-access.unit.test.ts: isWildcardHost > 127.0.0.1 binds one interface",
       "function": "web-access.isWildcardHost",
-      "id": "specific-host-1",
+      "id": "specific-host-127-0-0-1",
       "kind": "function"
     },
     {
@@ -1232,7 +1232,7 @@
       "expect": false,
       "from": "web-access.unit.test.ts: isWildcardHost > ::1 binds one interface",
       "function": "web-access.isWildcardHost",
-      "id": "specific-host-2",
+      "id": "specific-host-1",
       "kind": "function"
     },
     {
@@ -1242,7 +1242,7 @@
       "expect": false,
       "from": "web-access.unit.test.ts: isWildcardHost > fe80::1%en0 binds one interface",
       "function": "web-access.isWildcardHost",
-      "id": "specific-host-3",
+      "id": "specific-host-fe80-1-en0",
       "kind": "function"
     },
     {
@@ -1296,7 +1296,7 @@
       "expect": false,
       "from": "web-access.unit.test.ts: requiresAccessToken > 127.0.0.1 needs no token",
       "function": "web-access.requiresAccessToken",
-      "id": "loopback-bind-needs-no-token-0",
+      "id": "loopback-bind-needs-no-token-127-0-0-1",
       "kind": "function"
     },
     {
@@ -1306,7 +1306,7 @@
       "expect": false,
       "from": "web-access.unit.test.ts: requiresAccessToken > 127.0.0.5 needs no token",
       "function": "web-access.requiresAccessToken",
-      "id": "loopback-bind-needs-no-token-1",
+      "id": "loopback-bind-needs-no-token-127-0-0-5",
       "kind": "function"
     },
     {
@@ -1316,7 +1316,7 @@
       "expect": false,
       "from": "web-access.unit.test.ts: requiresAccessToken > ::1 needs no token",
       "function": "web-access.requiresAccessToken",
-      "id": "loopback-bind-needs-no-token-2",
+      "id": "loopback-bind-needs-no-token-1",
       "kind": "function"
     },
     {
@@ -1326,7 +1326,7 @@
       "expect": true,
       "from": "web-access.unit.test.ts: requiresAccessToken > 0.0.0.0 needs a token",
       "function": "web-access.requiresAccessToken",
-      "id": "other-bind-needs-a-token-0",
+      "id": "other-bind-needs-a-token-0-0-0-0",
       "kind": "function"
     },
     {
@@ -1336,7 +1336,7 @@
       "expect": true,
       "from": "web-access.unit.test.ts: requiresAccessToken > :: needs a token",
       "function": "web-access.requiresAccessToken",
-      "id": "other-bind-needs-a-token-1",
+      "id": "other-bind-needs-a-token-double-colon",
       "kind": "function"
     },
     {
@@ -1346,7 +1346,7 @@
       "expect": true,
       "from": "web-access.unit.test.ts: requiresAccessToken > 192.168.1.10 needs a token",
       "function": "web-access.requiresAccessToken",
-      "id": "other-bind-needs-a-token-2",
+      "id": "other-bind-needs-a-token-192-168-1-10",
       "kind": "function"
     },
     {
@@ -1356,7 +1356,7 @@
       "expect": true,
       "from": "web-access.unit.test.ts: isLoopbackAddress > 127.0.0.1 is loopback",
       "function": "web-access.isLoopbackAddress",
-      "id": "loopback-address-0",
+      "id": "loopback-address-127-0-0-1",
       "kind": "function"
     },
     {
@@ -1376,7 +1376,7 @@
       "expect": true,
       "from": "web-access.unit.test.ts: isLoopbackAddress > ::ffff:127.0.0.1 is loopback",
       "function": "web-access.isLoopbackAddress",
-      "id": "loopback-address-2",
+      "id": "loopback-address-ffff-127-0-0-1",
       "kind": "function"
     },
     {
@@ -1386,7 +1386,7 @@
       "expect": false,
       "from": "web-access.unit.test.ts: isLoopbackAddress > 192.168.1.50 is not loopback",
       "function": "web-access.isLoopbackAddress",
-      "id": "non-loopback-address-0",
+      "id": "non-loopback-address-192-168-1-50",
       "kind": "function"
     },
     {
@@ -1396,7 +1396,7 @@
       "expect": false,
       "from": "web-access.unit.test.ts: isLoopbackAddress > ::ffff:192.168.1.50 is not loopback",
       "function": "web-access.isLoopbackAddress",
-      "id": "non-loopback-address-1",
+      "id": "non-loopback-address-ffff-192-168-1-50",
       "kind": "function"
     },
     {
@@ -1406,7 +1406,7 @@
       "expect": false,
       "from": "web-access.unit.test.ts: isLoopbackAddress > fe80::1 is not loopback",
       "function": "web-access.isLoopbackAddress",
-      "id": "non-loopback-address-2",
+      "id": "non-loopback-address-fe80-1",
       "kind": "function"
     },
     {

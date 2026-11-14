@@ -1,0 +1,261 @@
+{
+  "cases": [
+    {
+      "args": [
+        [
+          {
+            "description": "Project room for /home/user/app",
+            "id": "1111111111111111111111111111111111111111111111111111111111111111/pub",
+            "name": "pub",
+            "owner": "1111111111111111111111111111111111111111111111111111111111111111",
+            "type": "public"
+          },
+          {
+            "description": "d",
+            "id": "1111111111111111111111111111111111111111111111111111111111111111/prv",
+            "name": "prv",
+            "owner": "1111111111111111111111111111111111111111111111111111111111111111",
+            "type": "private"
+          },
+          {
+            "description": "",
+            "id": "1111111111111111111111111111111111111111111111111111111111111111/sec",
+            "name": "sec",
+            "owner": "1111111111111111111111111111111111111111111111111111111111111111",
+            "type": "secret"
+          },
+          {
+            "description": "",
+            "id": "2222222222222222222222222222222222222222222222222222222222222222/theirs",
+            "name": "theirs",
+            "owner": "2222222222222222222222222222222222222222222222222222222222222222",
+            "type": "public"
+          }
+        ],
+        "1111111111111111111111111111111111111111111111111111111111111111"
+      ],
+      "expect": [
+        {
+          "description": "Project room for /home/user/app",
+          "name": "pub",
+          "path": "1111111111111111111111111111111111111111111111111111111111111111/pub",
+          "type": "public"
+        },
+        {
+          "description": "d",
+          "name": "prv",
+          "path": "1111111111111111111111111111111111111111111111111111111111111111/prv",
+          "type": "private"
+        }
+      ],
+      "from": "recorded: src/core/gossip-extensions.ts (hostedRoomAdverts)",
+      "function": "gossip-extensions.hostedRoomAdverts",
+      "id": "hosted-adverts-list-own-public-and-private-rooms-in-order",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "description": "",
+            "id": "1111111111111111111111111111111111111111111111111111111111111111/sec",
+            "name": "sec",
+            "owner": "1111111111111111111111111111111111111111111111111111111111111111",
+            "type": "secret"
+          }
+        ],
+        "1111111111111111111111111111111111111111111111111111111111111111"
+      ],
+      "expect": [],
+      "from": "recorded: src/core/gossip-extensions.ts (hostedRoomAdverts)",
+      "function": "gossip-extensions.hostedRoomAdverts",
+      "id": "hosted-adverts-leave-out-secret-rooms",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "description": "",
+            "id": "2222222222222222222222222222222222222222222222222222222222222222/theirs",
+            "name": "theirs",
+            "owner": "2222222222222222222222222222222222222222222222222222222222222222",
+            "type": "public"
+          }
+        ],
+        "1111111111111111111111111111111111111111111111111111111111111111"
+      ],
+      "expect": [],
+      "from": "recorded: src/core/gossip-extensions.ts (hostedRoomAdverts)",
+      "function": "gossip-extensions.hostedRoomAdverts",
+      "id": "hosted-adverts-leave-out-rooms-owned-by-others",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [],
+        "1111111111111111111111111111111111111111111111111111111111111111"
+      ],
+      "expect": [],
+      "from": "recorded: src/core/gossip-extensions.ts (hostedRoomAdverts)",
+      "function": "gossip-extensions.hostedRoomAdverts",
+      "id": "hosted-adverts-of-no-rooms-are-none",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "description": "names a directory",
+            "name": "pub",
+            "path": "o/pub",
+            "type": "public"
+          },
+          {
+            "description": "d",
+            "name": "prv",
+            "path": "o/prv",
+            "type": "private"
+          }
+        ]
+      ],
+      "expect": [
+        {
+          "name": "pub",
+          "path": "o/pub",
+          "type": "public"
+        }
+      ],
+      "from": "recorded: src/core/gossip-extensions.ts (summariseHostedRooms)",
+      "function": "gossip-extensions.summariseHostedRooms",
+      "id": "hub-summary-keeps-public-rooms-without-their-description",
+      "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "description": "d",
+            "name": "prv",
+            "path": "o/prv",
+            "type": "private"
+          }
+        ]
+      ],
+      "expect": [],
+      "from": "recorded: src/core/gossip-extensions.ts (summariseHostedRooms)",
+      "function": "gossip-extensions.summariseHostedRooms",
+      "id": "hub-summary-of-private-rooms-only-is-none",
+      "kind": "function"
+    },
+    {
+      "args": [
+        []
+      ],
+      "expect": [],
+      "from": "recorded: src/core/gossip-extensions.ts (summariseHostedRooms)",
+      "function": "gossip-extensions.summariseHostedRooms",
+      "id": "hub-summary-of-no-rooms-is-none",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "cwd": "/work/app",
+          "harness": "pi",
+          "name": "n",
+          "pid": 7,
+          "startedAt": "2030-01-01T00:00:00Z",
+          "subscribedRooms": [
+            "r"
+          ],
+          "tags": [
+            "t"
+          ]
+        }
+      ],
+      "expect": {
+        "harness": "pi",
+        "name": "n"
+      },
+      "from": "recorded: src/core/gossip-extensions.ts (summariseAgentSelfAdvert)",
+      "function": "gossip-extensions.summariseAgentSelfAdvert",
+      "id": "agent-summary-keeps-name-and-harness-only",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "cwd": "/work/app",
+          "harness": "pi",
+          "machine": "mc",
+          "machineName": "mn",
+          "membership": "m",
+          "name": "n",
+          "pid": 7,
+          "principalName": "pn",
+          "startedAt": "2030-01-01T00:00:00Z",
+          "subscribedRooms": [
+            "r"
+          ],
+          "tags": [
+            "t"
+          ]
+        }
+      ],
+      "expect": {
+        "harness": "pi",
+        "machine": "mc",
+        "machineName": "mn",
+        "membership": "m",
+        "name": "n",
+        "principalName": "pn"
+      },
+      "from": "recorded: src/core/gossip-extensions.ts (summariseAgentSelfAdvert)",
+      "function": "gossip-extensions.summariseAgentSelfAdvert",
+      "id": "agent-summary-keeps-every-optional-field-it-has",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "cwd": "/work/app",
+          "harness": "pi",
+          "machineName": "日本",
+          "name": "café 😀",
+          "pid": 7,
+          "startedAt": "2030-01-01T00:00:00Z",
+          "subscribedRooms": [
+            "r"
+          ],
+          "tags": [
+            "t"
+          ]
+        }
+      ],
+      "expect": {
+        "harness": "pi",
+        "machineName": "日本",
+        "name": "café 😀"
+      },
+      "from": "recorded: src/core/gossip-extensions.ts (summariseAgentSelfAdvert)",
+      "function": "gossip-extensions.summariseAgentSelfAdvert",
+      "id": "agent-summary-keeps-a-non-ascii-name",
+      "kind": "function"
+    },
+    {
+      "args": [],
+      "expect": {
+        "agentSelfGossipKey": "agent/self",
+        "defaultPresenceStaleAfterMs": 60000,
+        "hostedRoomsGossipKey": "room/hosted",
+        "presenceGossipKey": "presence/status",
+        "presenceReadvertiseIntervalMs": 20000
+      },
+      "from": "recorded: src/core/gossip-extensions.ts (the keys and the cadence)",
+      "function": "gossip-extensions.constants",
+      "id": "gossip-keys-and-presence-cadence",
+      "kind": "function"
+    }
+  ]
+}

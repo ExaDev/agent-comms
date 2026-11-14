@@ -10,7 +10,7 @@
       "expect": true,
       "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats localhost:19877 over http: as served by a bridge",
       "function": "served-by-bridge.isServedByBridge",
-      "id": "served-by-bridge-0",
+      "id": "served-by-bridge-localhost-19877-http",
       "kind": "function"
     },
     {
@@ -23,7 +23,7 @@
       "expect": true,
       "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats 127.0.0.1:4000 over http: as served by a bridge",
       "function": "served-by-bridge.isServedByBridge",
-      "id": "served-by-bridge-1",
+      "id": "served-by-bridge-127-0-0-1-4000-http",
       "kind": "function"
     },
     {
@@ -36,7 +36,7 @@
       "expect": true,
       "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats 127.0.0.1:4000 over https: as served by a bridge",
       "function": "served-by-bridge.isServedByBridge",
-      "id": "served-by-bridge-2",
+      "id": "served-by-bridge-127-0-0-1-4000-https",
       "kind": "function"
     },
     {
@@ -49,7 +49,7 @@
       "expect": true,
       "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats 192.168.1.10:4000 over http: as served by a bridge",
       "function": "served-by-bridge.isServedByBridge",
-      "id": "served-by-bridge-3",
+      "id": "served-by-bridge-192-168-1-10-4000-http",
       "kind": "function"
     },
     {
@@ -62,7 +62,7 @@
       "expect": true,
       "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats studio.local:4000 over http: as served by a bridge",
       "function": "served-by-bridge.isServedByBridge",
-      "id": "served-by-bridge-4",
+      "id": "served-by-bridge-studio-local-4000-http",
       "kind": "function"
     },
     {
@@ -75,7 +75,7 @@
       "expect": false,
       "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats exadev.github.io over https: as a standalone deployment",
       "function": "served-by-bridge.isServedByBridge",
-      "id": "standalone-deployment-0",
+      "id": "standalone-deployment-exadev-github-io",
       "kind": "function"
     },
     {
@@ -88,7 +88,7 @@
       "expect": false,
       "from": "served-by-bridge.unit.test.ts: isServedByBridge > treats mesh.exadev.io over https: as a standalone deployment",
       "function": "served-by-bridge.isServedByBridge",
-      "id": "standalone-deployment-1",
+      "id": "standalone-deployment-mesh-exadev-io",
       "kind": "function"
     }
   ]

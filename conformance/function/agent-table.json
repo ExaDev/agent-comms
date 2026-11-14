@@ -32,6 +32,48 @@
       "function": "agent-table.agentTable",
       "id": "columns-line-up-under-header",
       "kind": "function"
+    },
+    {
+      "args": [
+        [
+          {
+            "cwd": "~/project",
+            "harness": "claude-code",
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "name": "café",
+            "status": "active",
+            "visibility": "visible"
+          },
+          {
+            "cwd": "~/project",
+            "harness": "claude-code",
+            "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "name": "😀😀",
+            "status": "active",
+            "visibility": "visible"
+          },
+          {
+            "cwd": "~/project",
+            "harness": "claude-code",
+            "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "name": "ab",
+            "status": "active",
+            "visibility": "visible"
+          }
+        ]
+      ],
+      "expect": {
+        "header": "ID                                                                Name  Harness      Status  Visibility  CWD",
+        "lines": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  café  claude-code  active  visible     ~/project",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  😀😀  claude-code  active  visible     ~/project",
+          "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  ab    claude-code  active  visible     ~/project"
+        ]
+      },
+      "from": "recorded: src/core/agent-table.ts (columns are as wide as their widest cell in UTF-16 code units)",
+      "function": "agent-table.agentTable",
+      "id": "columns-widen-by-code-units-for-non-ascii-names",
+      "kind": "function"
     }
   ]
 }

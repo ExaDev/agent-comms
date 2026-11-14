@@ -167,6 +167,50 @@
       "id": "slug-rejects-nothing-left",
       "kind": "function",
       "throws": {}
+    },
+    {
+      "args": [
+        "café"
+      ],
+      "expect": "caf",
+      "from": "recorded: src/core/room-path.ts (slugRoomName turns each run of characters outside the allowed set into one hyphen and trims hyphens from both ends)",
+      "function": "room-path.slugRoomName",
+      "id": "slug-drops-a-trailing-accented-letter",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "a😀b"
+      ],
+      "expect": "a-b",
+      "from": "recorded: src/core/room-path.ts (slugRoomName turns each run of characters outside the allowed set into one hyphen and trims hyphens from both ends)",
+      "function": "room-path.slugRoomName",
+      "id": "slug-turns-an-astral-character-into-one-hyphen",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "日本-room"
+      ],
+      "expect": "room",
+      "from": "recorded: src/core/room-path.ts (slugRoomName turns each run of characters outside the allowed set into one hyphen and trims hyphens from both ends)",
+      "function": "room-path.slugRoomName",
+      "id": "slug-drops-a-non-latin-prefix",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "日本"
+      ],
+      "from": "recorded: src/core/room-path.ts (slugRoomName turns each run of characters outside the allowed set into one hyphen and trims hyphens from both ends)",
+      "function": "room-path.slugRoomName",
+      "id": "slug-refuses-a-name-with-no-allowed-characters",
+      "kind": "function",
+      "throws": {
+        "message": [
+          "has no valid room-name characters"
+        ]
+      }
     }
   ]
 }

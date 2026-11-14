@@ -72,9 +72,7 @@
       "expect": {
         "issues": [
           {
-            "message": [
-              "Invalid option: expected one of \"register\"|\"update\"|\"whoami\"|\"web_url\"|\"create_room\"|\"list_rooms\"|\"join_room\"|\"leave_room\"|\"send\"|\"dm\"|\"list_agents\"|\"read_room\"|\"invite\"|\"decline_invite\"|\"kick\"|\"destroy_room\"|\"mesh_connect\"|\"mesh_accept\"|\"mesh_reject\"|\"mesh_pending\"|\"room_accept\"|\"room_reject\"|\"room_pending\"|\"capability_accept\"|\"capability_reject\"|\"capability_pending\"|\"mesh_discover\"|\"mesh_advertise\"|\"mesh_unadvertise\"|\"mesh_interfaces\"|\"lan_web_uis\"|\"mesh_listen\"|\"mesh_unlisten\"|\"mesh_listeners\"|\"mesh_set_visibility\"|\"mesh_get_visibility\"|\"gateway_trust\"|\"gateway_untrust\"|\"gateway_list_trusted\"|\"petname_set\"|\"petname_clear\"|\"petname_list\"|\"machine_name\"|\"principal_name\"|\"dm_admit\"|\"dm_use_grant\"|\"dm_revoke\"|\"gateway_generate_connection_code\"|\"gateway_redeem_connection_code\"|\"query_version\"|\"mesh_graph\"|\"mesh_trace\""
-            ],
+            "code": "invalid_value",
             "path": [
               "action"
             ]
@@ -94,9 +92,7 @@
       "expect": {
         "issues": [
           {
-            "message": [
-              "Invalid option: expected one of \"register\"|\"update\"|\"whoami\"|\"web_url\"|\"create_room\"|\"list_rooms\"|\"join_room\"|\"leave_room\"|\"send\"|\"dm\"|\"list_agents\"|\"read_room\"|\"invite\"|\"decline_invite\"|\"kick\"|\"destroy_room\"|\"mesh_connect\"|\"mesh_accept\"|\"mesh_reject\"|\"mesh_pending\"|\"room_accept\"|\"room_reject\"|\"room_pending\"|\"capability_accept\"|\"capability_reject\"|\"capability_pending\"|\"mesh_discover\"|\"mesh_advertise\"|\"mesh_unadvertise\"|\"mesh_interfaces\"|\"lan_web_uis\"|\"mesh_listen\"|\"mesh_unlisten\"|\"mesh_listeners\"|\"mesh_set_visibility\"|\"mesh_get_visibility\"|\"gateway_trust\"|\"gateway_untrust\"|\"gateway_list_trusted\"|\"petname_set\"|\"petname_clear\"|\"petname_list\"|\"machine_name\"|\"principal_name\"|\"dm_admit\"|\"dm_use_grant\"|\"dm_revoke\"|\"gateway_generate_connection_code\"|\"gateway_redeem_connection_code\"|\"query_version\"|\"mesh_graph\"|\"mesh_trace\""
-            ],
+            "code": "invalid_value",
             "path": [
               "action"
             ]
@@ -114,9 +110,7 @@
       "expect": {
         "issues": [
           {
-            "message": [
-              "Invalid input: expected number, received string"
-            ],
+            "code": "invalid_type",
             "path": [
               "port"
             ]
@@ -138,9 +132,7 @@
       "expect": {
         "issues": [
           {
-            "message": [
-              "Invalid option: expected one of \"visible\"|\"hidden\"|\"ghost\""
-            ],
+            "code": "invalid_value",
             "path": [
               "visibility"
             ]
@@ -162,9 +154,7 @@
       "expect": {
         "issues": [
           {
-            "message": [
-              "Invalid input: expected string, received number"
-            ],
+            "code": "invalid_type",
             "path": [
               "tags",
               0

@@ -87,11 +87,11 @@
     },
     {
       "args": [
-        "?cwd=%2Fusers%2Fjoe%2Fproject"
+        "?cwd=%2Fusers%2Fexample%2Fproject"
       ],
       "expect": {
         "kind": "cwd",
-        "path": "/users/joe/project"
+        "path": "/users/example/project"
       },
       "from": "url-sync.unit.test.ts: parseDeepLink > handles URL-encoded values",
       "function": "url-sync.parseDeepLink",
@@ -276,6 +276,19 @@
       "from": "url-sync.unit.test.ts: syncUrl > clears params when neither is provided",
       "function": "url-sync.syncedUrls",
       "id": "clears-parameters-when-neither-is-given",
+      "kind": "function"
+    },
+    {
+      "args": [
+        "?cwd=%C3%A9%F0%9F%98%80"
+      ],
+      "expect": {
+        "kind": "cwd",
+        "path": "é😀"
+      },
+      "from": "recorded: src/bridges/user/web/frontend/url-sync.ts (parseDeepLink decodes a percent-encoded value as UTF-8)",
+      "function": "url-sync.parseDeepLink",
+      "id": "parse-deep-link-decodes-non-ascii-percent-encoding",
       "kind": "function"
     }
   ]
