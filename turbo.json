@@ -6,7 +6,7 @@
     "_build": {
       "dependsOn": ["_build:frontend"],
       // Excludes _build:frontend's own output (nested under src/, since the Vite bundle lands in src/bridges/user/web/dist/) -- without this, restoring that output on a cache hit changes _build's own input hash and forces a spurious re-execution.
-      "inputs": ["src/**", "!src/bridges/user/web/dist/**", "scripts/copy-web-assets.ts", "tsconfig.json"],
+      "inputs": ["src/**", "!src/bridges/user/web/dist/**", "scripts/copy-web-assets.ts", "tsconfig.json", "tsconfig.build.json"],
       "outputs": ["dist/**"]
     },
     "_build:frontend": {

@@ -38,6 +38,8 @@ function spawnPeer(name: string, actions: string): PeerHandle {
   // The child makes its identity directories under os.tmpdir(). Pointing that at a directory this process owns lets the exit cleanup in scratch-directory.helper.ts remove them even when the child is killed on a timeout, which a cleanup inside the child could not survive.
   const childTmp = scratchDirectory("agent-comms-smoke-tmp-");
   const child = child_process.spawn("node", ["-e", script], {
+    // The child requires ./dist from its working directory: this checkout's, or the installed package's when AGENT_COMMS_PACKAGE_DIR names it (scripts/test-packed.ts).
+    cwd: process.env.AGENT_COMMS_PACKAGE_DIR ?? process.cwd(),
     stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env, TMPDIR: childTmp, TEMP: childTmp, TMP: childTmp },
   });

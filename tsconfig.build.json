@@ -1,0 +1,15 @@
+{
+  "compilerOptions": { "types": ["bun", "vite/client"] },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/test/**",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.helper.ts",
+    "src/**/*.runner.ts",
+    "src/**/*.setup.ts",
+    "src/bridges/user/web/e2e"
+  ],
+  "extends": "./tsconfig.json"
+}
