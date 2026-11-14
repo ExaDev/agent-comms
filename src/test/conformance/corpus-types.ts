@@ -5,8 +5,8 @@
 /** The case kinds the schema defines, and so the names of the corpus directories. */
 export const KINDS = ["function", "validate"] as const;
 
-/** The values of `only`: the implementation that skips a case, never the host it runs on. */
-export const ONLY_VALUES = ["ts", "rust"] as const;
+/** The values of `skip`: the implementation that skips a case, never the host it runs on. */
+export const SKIP_VALUES = ["ts", "rust"] as const;
 
 /** Any JSON value, in which a string may also be written as `{ "codeUnits": [...] }`. */
 export type CorpusValue =
@@ -23,7 +23,7 @@ export type Text = string | { readonly codeUnits: readonly number[] };
 interface CaseBase {
   readonly id: string;
   readonly from: string;
-  readonly only?: (typeof ONLY_VALUES)[number];
+  readonly skip?: (typeof SKIP_VALUES)[number];
   readonly reason?: string;
 }
 
@@ -62,6 +62,6 @@ export interface CorpusFile {
 
 export interface Manifest {
   readonly files: Readonly<
-    Record<string, { readonly cases: number; readonly only: readonly string[] }>
+    Record<string, { readonly cases: number; readonly skip: readonly string[] }>
   >;
 }

@@ -2,7 +2,7 @@
   "$id": "https://github.com/ExaDev/agent-comms/tree/main/conformance/manifest.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "What the corpus holds: per corpus file, how many cases it has and which of them are marked for one implementation only. Every runner checks the corpus against it, so a case cannot be dropped or hidden without a change to this file in the same commit.",
+  "description": "What the corpus holds: per corpus file, how many cases it has and which of them are carrying skip. Every runner checks the corpus against it, so a case cannot be dropped or hidden without a change to this file in the same commit.",
   "properties": {
     "files": {
       "additionalProperties": {
@@ -13,7 +13,7 @@
             "minimum": 1,
             "type": "integer"
           },
-          "only": {
+          "skip": {
             "description": "Ids in ascending order, which the schema cannot express and every loader checks.",
             "items": {
               "minLength": 1,
@@ -26,7 +26,7 @@
         },
         "required": [
           "cases",
-          "only"
+          "skip"
         ],
         "type": "object"
       },

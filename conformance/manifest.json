@@ -2,107 +2,107 @@
   "files": {
     "function/agent-table.json": {
       "cases": 1,
-      "only": []
+      "skip": []
     },
     "function/bind-retry.json": {
       "cases": 4,
-      "only": []
+      "skip": []
     },
     "function/boot-logic.json": {
       "cases": 9,
-      "only": []
+      "skip": []
     },
     "function/build-action.json": {
       "cases": 106,
-      "only": []
+      "skip": []
     },
     "function/claude-command.json": {
       "cases": 10,
-      "only": []
+      "skip": []
     },
     "function/dashboard-input.json": {
       "cases": 27,
-      "only": []
+      "skip": []
     },
     "function/default-command.json": {
       "cases": 10,
-      "only": []
+      "skip": []
     },
     "function/delegation-policy.json": {
       "cases": 8,
-      "only": []
+      "skip": []
     },
     "function/delivery-events.json": {
       "cases": 10,
-      "only": []
+      "skip": []
     },
     "function/display-name.json": {
       "cases": 17,
-      "only": []
+      "skip": []
     },
     "function/error-reporting.json": {
       "cases": 14,
-      "only": []
+      "skip": []
     },
     "function/machine-list-groups.json": {
       "cases": 5,
-      "only": []
+      "skip": []
     },
     "function/messages.json": {
       "cases": 15,
-      "only": []
+      "skip": []
     },
     "function/project-tree.json": {
       "cases": 13,
-      "only": []
+      "skip": []
     },
     "function/relay-selection.json": {
       "cases": 10,
-      "only": []
+      "skip": []
     },
     "function/request-timeouts.json": {
       "cases": 7,
-      "only": []
+      "skip": []
     },
     "function/room-discovery.json": {
       "cases": 6,
-      "only": []
+      "skip": []
     },
     "function/room-lookup.json": {
       "cases": 7,
-      "only": []
+      "skip": []
     },
     "function/room-path.json": {
       "cases": 15,
-      "only": []
+      "skip": []
     },
     "function/send-outcome.json": {
       "cases": 12,
-      "only": []
+      "skip": []
     },
     "function/served-by-bridge.json": {
       "cases": 7,
-      "only": []
+      "skip": []
     },
     "function/url-sync.json": {
       "cases": 18,
-      "only": []
+      "skip": []
     },
     "function/version-report-actions.json": {
       "cases": 6,
-      "only": []
+      "skip": []
     },
     "function/web-access.json": {
       "cases": 87,
-      "only": []
+      "skip": []
     },
     "validate/comms-action.json": {
       "cases": 6,
-      "only": []
+      "skip": []
     },
     "validate/tool-params.json": {
       "cases": 9,
-      "only": []
+      "skip": []
     }
   }
 }

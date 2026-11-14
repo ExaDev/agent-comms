@@ -26,8 +26,8 @@ function describeFiles(files: readonly LoadedFile[]): Record<string, string> {
       name,
       JSON.stringify({
         cases: file.cases.length,
-        only: file.cases
-          .filter((testCase) => testCase.only !== undefined)
+        skip: file.cases
+          .filter((testCase) => testCase.skip !== undefined)
           .map((testCase) => testCase.id)
           .sort(),
       }),
@@ -43,8 +43,8 @@ export function collect(files: readonly LoadedFile[]): {
   const cases = files.flatMap(({ file }) => file.cases);
 
   return {
-    registered: cases.filter(({ only }) => only !== "ts").map(({ id }) => id),
-    skipped: cases.filter(({ only }) => only === "ts").map(({ id }) => id),
+    registered: cases.filter(({ skip }) => skip !== "ts").map(({ id }) => id),
+    skipped: cases.filter(({ skip }) => skip === "ts").map(({ id }) => id),
   };
 }
 
@@ -122,7 +122,7 @@ export function checkCorpus(root: string): CheckedCorpus {
     const recorded = Object.fromEntries(
       Object.entries(manifest.value.files).map(([name, entry]) => [
         name,
-        JSON.stringify({ cases: entry.cases, only: entry.only }),
+        JSON.stringify({ cases: entry.cases, skip: entry.skip }),
       ]),
     );
     const actual = describeFiles(files);
@@ -134,7 +134,7 @@ export function checkCorpus(root: string): CheckedCorpus {
           0,
         ),
         new Set(
-          Object.values(manifest.value.files).flatMap((entry) => entry.only),
+          Object.values(manifest.value.files).flatMap((entry) => entry.skip),
         ),
         counts.registered,
         counts.skipped,
