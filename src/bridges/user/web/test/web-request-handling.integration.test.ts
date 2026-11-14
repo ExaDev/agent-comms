@@ -230,6 +230,20 @@ describe("a route whose work fails", () => {
     expect(JSON.parse(answer.body)).toEqual({ error: "no such target" });
   });
 
+  it("GET /api/mesh/graph answers a failure that is not a CommsError with a fixed message", async () => {
+    vi.spyOn(handle.controller.meshStore, "meshGraph").mockImplementation(
+      () => {
+        throw new Error("internal detail naming /a/private/path");
+      },
+    );
+
+    const answer = await request("GET", "/api/mesh/graph");
+
+    expect(answer.status).toBe(HTTP_INTERNAL_SERVER_ERROR);
+    expect(JSON.parse(answer.body)).toEqual({ error: "Internal server error" });
+    expect(answer.body).not.toContain("/a/private/path");
+  });
+
   it("GET /api/mesh/trace without a target is a 400", async () => {
     const answer = await request("GET", "/api/mesh/trace");
     expect(answer.status).toBe(HTTP_BAD_REQUEST);
@@ -359,7 +373,8 @@ describe("the maximum request size", () => {
       ws.on("error", () => undefined);
     });
 
-    expect(["open", "closed"]).toContain(outcome);
+    // A call the router cannot read is that call's failure, never the connection's.
+    expect(outcome).toBe("open");
     await stillServing();
   });
 });

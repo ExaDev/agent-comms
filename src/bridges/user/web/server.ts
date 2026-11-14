@@ -89,13 +89,13 @@ const frontendAssets = createFrontendAssetLoader(
   fileURLToPath(new URL("./dist", import.meta.url)),
 );
 
-/**
- * The frontend build output, or undefined after answering 503 because the build is absent. The server module is imported by every bridge, so a checkout without the build must still start; only the routes that serve the frontend are unavailable.
- */
 /** The body of the 503 for a frontend that was never built. */
 const FRONTEND_NOT_BUILT_BODY =
   "The web frontend is not built. A git checkout does not include the build output; install the npm package, or run `pnpm build:frontend` in a checkout with its development dependencies installed.";
 
+/**
+ * The frontend build output, or undefined after answering 503 because the build is absent. The server module is imported by every bridge, so a checkout without the build must still start; only the routes that serve the frontend are unavailable.
+ */
 function frontendOrUnavailable(
   res: http.ServerResponse,
 ): FrontendAssets | undefined {
@@ -257,6 +257,10 @@ export async function createWebServer(options?: {
   firstContactPort?: number | undefined;
   /** Overrides the hub a fresh controller's own coordinator role dials on takeover -- ChatController's own hubUrl, ignored when existingController is supplied since that controller already made its own choice. See ChatController's own hubUrl doc comment. */
   hubUrl?: string | undefined;
+  /** Overrides REQUEST_TIMEOUT_MS, the time a client has to send a whole request. A test sets it small to see the 408. */
+  requestTimeoutMs?: number | undefined;
+  /** Overrides how often Node checks connections against that timeout (its default is thirty seconds, so a timeout takes effect up to that much after it is due). A test sets it small. */
+  connectionsCheckingIntervalMs?: number | undefined;
 }): Promise<WebServerHandle> {
   const {
     port,
@@ -268,6 +272,8 @@ export async function createWebServer(options?: {
     coordinatorPort,
     firstContactPort,
     hubUrl,
+    requestTimeoutMs = REQUEST_TIMEOUT_MS,
+    connectionsCheckingIntervalMs,
   } = options ?? {};
   const controller =
     existingController ??
@@ -296,7 +302,13 @@ export async function createWebServer(options?: {
   };
 
   const server = http.createServer(
-    { requestTimeout: REQUEST_TIMEOUT_MS, headersTimeout: REQUEST_TIMEOUT_MS },
+    {
+      requestTimeout: requestTimeoutMs,
+      headersTimeout: requestTimeoutMs,
+      ...(connectionsCheckingIntervalMs !== undefined && {
+        connectionsCheckingInterval: connectionsCheckingIntervalMs,
+      }),
+    },
     (req, res) => {
       // Every response, the fixed routes and the operator's web-console files alike, forbids a browser to guess a type other than the one declared.
       res.setHeader("X-Content-Type-Options", "nosniff");
@@ -851,8 +863,6 @@ function jsonError(
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ error: message }));
 }
-
-/** Extracts a reportable message from whatever meshGraph()/meshTrace() threw -- a CommsError has a real message, anything else is reported generically rather than leaking an unexpected error shape to the client. */
 
 /** A transport that doesn't support mesh_graph/mesh_trace (CommsError code NOT_SUPPORTED, e.g. this bridge is running on FileStore rather than a real mesh) is a client-visible "this endpoint isn't available here" rather than a server fault. Any other error falls back to `otherwise` -- HTTP_BAD_REQUEST for mesh_trace, since its only other realistic failure is a malformed client-supplied target; HTTP_INTERNAL_SERVER_ERROR for mesh_graph, which takes no client input at all. */
 function meshErrorStatus(err: unknown, otherwise: number): number {
