@@ -9,6 +9,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createFileExclusive, writeFileAtomic } from "./atomic-file.js";
+import { CommsError } from "./store.js";
 import {
   generateIdentity,
   certifyKeyPair,
@@ -55,13 +56,42 @@ function isErrnoException(value: unknown): value is NodeJS.ErrnoException {
   return value instanceof Error && "code" in value;
 }
 
-/** Reads the file's raw contents, or undefined if it does not exist yet. Any other filesystem error (permissions, a directory in its place) is surfaced rather than treated as absent. */
+/** The `code` of the error thrown when an identity file exists but cannot be used. */
+export const IDENTITY_RECORD_UNUSABLE = "IDENTITY_RECORD_UNUSABLE";
+
+/** Thrown when an identity file exists but does not hold a record this build can use. The file is left exactly as it was: replacing it would mint a new key, which changes the identity's id for every peer that knows it and discards whatever the record held beside the key. */
+export class UnusableIdentityRecordError extends CommsError {
+  constructor(
+    /** The file that could not be used. */
+    public readonly file: string,
+    /** Why it could not be used, as a short clause. */
+    public readonly reason: string,
+    cause?: unknown,
+  ) {
+    super(
+      `${file} exists but does not hold a usable identity record (${reason}). It has been left as it was. Restore it from a backup, or move it aside to start a new identity, which changes this identity's id for every peer that knows it.`,
+      IDENTITY_RECORD_UNUSABLE,
+    );
+    this.name = "UnusableIdentityRecordError";
+    if (cause !== undefined) this.cause = cause;
+  }
+}
+
+function describeCause(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
+/** Reads the file's raw contents, or undefined if it does not exist yet. A file that exists but cannot be read (permissions, a directory in its place) is refused as unusable, never treated as absent. */
 function readRawFile(file: string): string | undefined {
   try {
     return fs.readFileSync(file, "utf-8");
   } catch (err) {
     if (isErrnoException(err) && err.code === "ENOENT") return undefined;
-    throw err;
+    throw new UnusableIdentityRecordError(
+      file,
+      `it cannot be read: ${describeCause(err)}`,
+      err,
+    );
   }
 }
 
@@ -83,18 +113,15 @@ function parseIssuerRecord<T>(
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    throw unusableRecord(file, err);
+    throw new UnusableIdentityRecordError(file, "it is not valid JSON", err);
   }
-  if (!guard(parsed)) throw unusableRecord(file);
+  if (!guard(parsed)) {
+    throw new UnusableIdentityRecordError(
+      file,
+      "a field is missing or is not in a form this version accepts",
+    );
+  }
   return parsed;
-}
-
-/** The error for an identity file that exists but holds no usable record. Moving it aside is the operator's decision, since the next load then mints a new key under a new id. */
-function unusableRecord(file: string, cause?: unknown): Error {
-  return new Error(
-    `${file} exists but does not hold a usable identity record; move it aside to mint a new key, which changes this identity's id for every peer that trusts it`,
-    { cause },
-  );
 }
 
 function serializeRecord(stored: Readonly<object>): string {
@@ -132,6 +159,22 @@ export function issuerKeyRecord(
   };
 }
 
+/** The identity a stored record describes, or UnusableIdentityRecordError when its key or certificate cannot be read. */
+function identityOfRecord(
+  file: string,
+  stored: Readonly<StoredIssuerKey>,
+): PeerIdentity {
+  try {
+    return issuerPeerIdentity(stored);
+  } catch (err) {
+    throw new UnusableIdentityRecordError(
+      file,
+      `its key or certificate cannot be read: ${describeCause(err)}`,
+      err,
+    );
+  }
+}
+
 /** Renews a stored identity nearing certificate expiry by re-certifying its existing key pair, so its device-id is unchanged (see identity.ts's certifyKeyPair for why a fresh key pair would be wrong). Every other field in the record is kept. Returns the identity unchanged when it is not yet near expiry. */
 function renewIfNeeded(
   file: string,
@@ -140,9 +183,18 @@ function renewIfNeeded(
   const expiresAt = Date.parse(stored.expiresAt);
   const needsRenewal =
     Number.isNaN(expiresAt) || Date.now() > expiresAt - RENEWAL_MARGIN_MS;
-  if (!needsRenewal) return issuerPeerIdentity(stored);
+  if (!needsRenewal) return identityOfRecord(file, stored);
 
-  const renewed = certifyKeyPair(stored.privateKey);
+  let renewed: PeerIdentity;
+  try {
+    renewed = certifyKeyPair(stored.privateKey);
+  } catch (err) {
+    throw new UnusableIdentityRecordError(
+      file,
+      `its key cannot be certified again: ${describeCause(err)}`,
+      err,
+    );
+  }
   writeIssuerRecord(file, { ...stored, ...issuerKeyRecord(renewed) });
   return renewed;
 }

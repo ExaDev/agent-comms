@@ -186,16 +186,6 @@ test("a near-expiry identity is renewed without rotating the device-id", () => {
   releaseIdentityLock(slot);
 });
 
-test("a corrupt identity file is regenerated", () => {
-  const { slot, dir } = tempSlot("user");
-  loadOrCreateIdentity(slot);
-  fs.writeFileSync(slotFile(dir, ".json"), "{not json");
-
-  const regenerated = loadOrCreateIdentity(slot);
-  expect(regenerated.fingerprint).toMatch(/^[0-9A-F]{2}(:[0-9A-F]{2})+$/);
-  releaseIdentityLock(slot);
-});
-
 test("probeSlotOwner reports undefined for a never-touched slot", () => {
   const { slot } = tempSlot("claude-code");
   expect(probeSlotOwner(slot)).toBeUndefined();
