@@ -89,7 +89,7 @@ export class GatewayTrust {
     this.load();
   }
 
-  /** Replaces the in-memory sets with whatever the file currently holds, recording the file's stamp. A no-op without a location. Verified members are left alone: they are in memory only and are dropped on their own when their principal stops being trusted. */
+  /** Replaces the in-memory sets with whatever the file currently holds, recording the file's stamp. Identifiers are kept in lower case whatever case the file holds them in, so every lookup and removal, which lower-cases its argument, finds them. A no-op without a location. Verified members are left alone: they are in memory only and are dropped on their own when their principal stops being trusted. */
   private load(): void {
     if (this.location === undefined) return;
     this.checkedAt = this.clock.now();
@@ -99,13 +99,13 @@ export class GatewayTrust {
     this.trustedIssuers.principal.clear();
     this.trustedIssuers.machine.clear();
     for (const deviceHex of loaded.devices) {
-      this.trusted.add(deviceHex);
+      this.trusted.add(deviceHex.toLowerCase());
     }
     for (const principalHex of loaded.principals) {
-      this.trustedIssuers.principal.add(principalHex);
+      this.trustedIssuers.principal.add(principalHex.toLowerCase());
     }
     for (const machineHex of loaded.machines) {
-      this.trustedIssuers.machine.add(machineHex);
+      this.trustedIssuers.machine.add(machineHex.toLowerCase());
     }
   }
 
