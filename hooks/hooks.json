@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/drain.sh",
             "timeout": 5,
             "type": "command"
           }
@@ -16,7 +16,7 @@
       {
         "hooks": [
           {
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/drain.sh",
             "timeout": 5,
             "type": "command"
           }
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "asyncRewake": true,
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/drain.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/drain.sh",
             "timeout": 5,
             "type": "command"
           }
