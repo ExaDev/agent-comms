@@ -11,6 +11,7 @@ function failure(params: Record<string, unknown>): unknown {
   return undefined;
 }
 
+// That a parameter set that validates builds its action is held by conformance/function/build-action.json.
 describe("buildAction refuses parameters that fail validation", () => {
   it("names an unknown action and where it is, instead of turning the call into whoami", () => {
     const error = failure({ action: "no_such_action" });
@@ -27,9 +28,5 @@ describe("buildAction refuses parameters that fail validation", () => {
     expect((error as InvalidToolParamsError).issues.map((i) => i.path)).toEqual(
       [["port"]],
     );
-  });
-
-  it("still builds parameters that validate", () => {
-    expect(buildAction({ action: "whoami" })).toEqual({ action: "whoami" });
   });
 });

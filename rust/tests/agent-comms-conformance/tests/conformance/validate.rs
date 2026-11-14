@@ -487,6 +487,11 @@ fn check_float_round_trip(failures: &mut Vec<String>) {
     }
 }
 
+/// The deepest nesting of objects and arrays a corpus file may have, which every loader enforces at this value: it is
+/// below the recursion limit of the JSON parsers the loaders read through, so a file past it is refused the same way by
+/// all of them.
+const MAX_DEPTH: usize = 64;
+
 /// One level of nesting while the text is scanned: an array, or an object with the last key it held, as UTF-16 code
 /// units, and whether the next string in it is a key.
 enum Frame {
@@ -565,11 +570,19 @@ pub fn key_order_problem(text: &str) -> Option<String> {
                 index = end;
                 continue;
             }
-            b'{' => stack.push(Frame::Object {
-                expect_key: true,
-                last: None,
-            }),
-            b'[' => stack.push(Frame::Array),
+            opening @ (b'{' | b'[') => {
+                stack.push(if opening == b'{' {
+                    Frame::Object {
+                        expect_key: true,
+                        last: None,
+                    }
+                } else {
+                    Frame::Array
+                });
+                if stack.len() > MAX_DEPTH {
+                    return Some(format!("nesting is deeper than the maximum of {MAX_DEPTH}"));
+                }
+            }
             b'}' | b']' => {
                 stack.pop();
             }
@@ -598,12 +611,20 @@ fn check_key_order(failures: &mut Vec<String>) {
         r#"{"\ue000":1,"\ud83d\ude00":2}"#,
         r#"{"\ud800":1}"#,
     ];
+    let too_deep = "[".repeat(MAX_DEPTH + 1);
+    let deepest = "[".repeat(MAX_DEPTH) + &"]".repeat(MAX_DEPTH);
     for text in accepted {
         if let Some(problem) = key_order_problem(text) {
             failures.push(format!(
                 "self-check: {text} must be in order, got {problem}"
             ));
         }
+    }
+    if key_order_problem(&deepest).is_some() {
+        failures.push("self-check: nesting at the maximum depth must be accepted".to_owned());
+    }
+    if key_order_problem(&too_deep).is_none() {
+        failures.push("self-check: nesting past the maximum depth must be refused".to_owned());
     }
     for text in refused {
         if key_order_problem(text).is_none() {
