@@ -1,3 +1,9 @@
+## [10.0.12](https://github.com/ExaDev/agent-comms/compare/v10.0.11...v10.0.12) (2026-11-15)
+
+### Tests
+
+* **core:** hold the release of a removed agent's connection bookkeeping by its behaviour ([4fe836f](https://github.com/ExaDev/agent-comms/commit/4fe836f73edd83d71dd69052ee6d1366ddaa9129))
+
 ## [10.0.11](https://github.com/ExaDev/agent-comms/compare/v10.0.10...v10.0.11) (2026-11-15)
 
 ### Bug Fixes
