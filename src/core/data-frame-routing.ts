@@ -271,6 +271,12 @@ export class DataFrameRouter {
   /** Every peer this side has ever received a frame from, keyed by device-id hex, tracking the raw wire-mesh-core Connection each frame arrived on: what sendDataFrame needs, since neither AcceptedMeshSession nor MeshSession exposes a generic "send an arbitrary frame" method the way the raw Connection itself does. Registered eagerly on the very first frame from a connection (including one still in quarantine, e.g. before connect_request approval) so a later sendDataFrame call can reach it; routeDataFrame's own trust gate (peerSessions.has) is what actually decides whether to act on anything received this way, not this map. */
   private readonly connectionsByPeer = new Map<string, Connection>();
 
+  /** The raw connection each live session runs over, so ending a session releases exactly the connection it held in connectionsByPeer and not a newer one a later session of the same peer has put there. */
+  private readonly connectionsBySession = new WeakMap<object, Connection>();
+
+  /** The live sessions of each peer, so ending one hands the peer's entry to another that is still open. */
+  private readonly sessionsByPeer = new Map<string, Set<object>>();
+
   private announceInterval: ReturnType<typeof setInterval> | undefined;
 
   /** What each peer says the account's writer logs reach, and the rounds this side has stayed behind it. Undefined for a transport with no account ledger. */
@@ -338,6 +344,43 @@ export class DataFrameRouter {
   /** The account ledger's logs this side has stayed behind for several rounds, for whoami. Empty when there is no account ledger. */
   stalledLogs(): StalledLedgerLog[] {
     return this.gaps?.stalled() ?? [];
+  }
+
+  /** Records the connection a session runs over, for release. A peer can have several live sessions (one dialled, one accepted), so each peer's sessions are kept in the order they began. */
+  bind(session: object, connection: Connection): void {
+    this.connectionsBySession.set(session, connection);
+    const peerId = connection.peerDeviceId;
+    if (peerId === undefined) return;
+    const hex = deviceIdToHex(peerId);
+    const sessions = this.sessionsByPeer.get(hex) ?? new Set<object>();
+    sessions.add(session);
+    this.sessionsByPeer.set(hex, sessions);
+  }
+
+  /** Releases what a session that has ended held. The peer's entry in connectionsByPeer is dropped when it was this session's connection and the peer has no other live session, and handed to the peer's latest remaining session when it has one, so the ledger can still be offered over a connection that is open. An entry that already names a newer connection is left alone. Without it every peer this side ever heard from stays in the map, with its closed socket and buffers, for the life of the process. */
+  release(session: object, peerDeviceHex: string): void {
+    const connection = this.connectionsBySession.get(session);
+    this.connectionsBySession.delete(session);
+    const sessions = this.sessionsByPeer.get(peerDeviceHex);
+    sessions?.delete(session);
+    if (sessions?.size === 0) this.sessionsByPeer.delete(peerDeviceHex);
+    if (
+      connection === undefined ||
+      this.connectionsByPeer.get(peerDeviceHex) !== connection
+    ) {
+      return;
+    }
+    const remaining = sessions === undefined ? [] : [...sessions];
+    const latest = remaining.at(-1);
+    const next =
+      latest === undefined ? undefined : this.connectionsBySession.get(latest);
+    if (next === undefined) this.connectionsByPeer.delete(peerDeviceHex);
+    else this.connectionsByPeer.set(peerDeviceHex, next);
+  }
+
+  /** How many peers have a connection held for sending ledger frames on. */
+  get heldConnections(): number {
+    return this.connectionsByPeer.size;
   }
 
   /** See routeDataFrame. */

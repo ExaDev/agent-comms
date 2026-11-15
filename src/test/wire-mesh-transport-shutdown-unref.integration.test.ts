@@ -39,8 +39,8 @@ async function peerId(identity: { deviceId: Uint8Array }): Promise<string> {
   return deviceIdToHex(Uint8Array.from(identity.deviceId));
 }
 
-// pendingConnections, peerSessions, coordinatorListeners -- the three Maps shutdown() clears.
-const SHUTDOWN_MAP_CLEAR_COUNT = 3;
+// dataDials, pendingConnections, peerSessions, coordinatorListeners: the four Maps shutdown() clears.
+const SHUTDOWN_MAP_CLEAR_COUNT = 4;
 
 describe("WireMeshTransport shutdown -- direct mechanism assertions", () => {
   test("shutdown clears every internal bookkeeping collection, even when all of them are already empty", async () => {
@@ -50,8 +50,8 @@ describe("WireMeshTransport shutdown -- direct mechanism assertions", () => {
     const setClearSpy = vi.spyOn(Set.prototype, "clear");
     try {
       await transport.shutdown();
-      // dataDials, allSessions (Sets) + pendingConnections, peerSessions, coordinatorListeners (Maps) -- five distinct collections shutdown() is documented to clear, regardless of whether any of them held anything.
-      expect(setClearSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+      // allSessions (a Set) + dataDials, pendingConnections, peerSessions, coordinatorListeners (Maps): five distinct collections shutdown() is documented to clear, regardless of whether any of them held anything.
+      expect(setClearSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
       expect(mapClearSpy.mock.calls.length).toBeGreaterThanOrEqual(
         SHUTDOWN_MAP_CLEAR_COUNT,
       );

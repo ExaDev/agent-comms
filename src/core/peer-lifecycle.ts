@@ -257,6 +257,13 @@ export class PeerLifecycle {
     this.detach(this.handlePeerDeparture(handle.id));
   }
 
+  /** Forgets a peer that could not be reached, if the entry still names the one that was dialled: a slow failed dial to an old address must not remove an entry refreshed in the meantime. The peer was never connected, so there is no agent to retire and no session to close: only the entry that would have it dialled again and offered to every new peer. */
+  handlePeerUnreachable(peer: Readonly<PeerInfo>): void {
+    if (this.deps.peerInfo.get(peer.id) === peer) {
+      this.deps.peerInfo.delete(peer.id);
+    }
+  }
+
   /** The awaitable form of handlePeerDisconnected, which TransportEvents forces to be synchronous. A departing peer leaves the peer list. When it held the elected coordinator role, the role is recovered first (the lowest surviving device-id claims at a raised term), so the new holder is already in place by the time the departed peer's agent record is retired; when it held the well-known port this side dialled, the vacated port is contested too. */
   async handlePeerDeparture(peerId: string): Promise<void> {
     this.deps.peerInfo.delete(peerId);

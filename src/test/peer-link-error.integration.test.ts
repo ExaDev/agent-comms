@@ -12,8 +12,12 @@ import { noopTransportEvents, waitFor } from "./test-transport.js";
 describe("WireMeshTransport dial failures", () => {
   test("a refused dial is reported as a PeerLinkError carrying ECONNREFUSED", async () => {
     const errors: Error[] = [];
+    const unreachable: string[] = [];
     const transport = new WireMeshTransport(
-      noopTransportEvents({ onError: (e) => void errors.push(e) }),
+      noopTransportEvents({
+        onError: (e) => void errors.push(e),
+        onPeerUnreachable: (peer) => void unreachable.push(peer.id),
+      }),
       generateIdentity(),
     );
     try {
@@ -34,6 +38,8 @@ describe("WireMeshTransport dial failures", () => {
       const [error] = errors;
       expect(error).toBeInstanceOf(PeerLinkError);
       expect(errnoCode(error)).toBe("ECONNREFUSED");
+      // The peer is reported as unreachable too, so the store can forget it.
+      expect(unreachable).toEqual(["unreachable-peer"]);
       expect(
         error === undefined ? undefined : describeMeshError(error)?.message,
       ).toContain("stale address");

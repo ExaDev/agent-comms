@@ -112,6 +112,42 @@ describe("PeerLifecycle — handlePeerList", () => {
   });
 });
 
+describe("PeerLifecycle — handlePeerUnreachable", () => {
+  it("forgets a peer that could not be reached, and no other", () => {
+    const h = makeHarness();
+    const gone = peerInfo("gone");
+    h.lifecycle.handlePeerList([gone, peerInfo("alive")]);
+
+    h.lifecycle.handlePeerUnreachable(gone);
+
+    expect(h.deps.peerInfo.has("gone")).toBe(false);
+    expect(h.deps.peerInfo.has("alive")).toBe(true);
+  });
+
+  it("keeps an entry that was refreshed after the failed dial was started", () => {
+    const h = makeHarness();
+    const dialled = peerInfo("moved", { port: 1 });
+    h.lifecycle.handlePeerList([dialled]);
+    const refreshed = peerInfo("moved", { port: 2 });
+    h.lifecycle.handlePeerList([refreshed]);
+
+    h.lifecycle.handlePeerUnreachable(dialled);
+
+    expect(h.deps.peerInfo.get("moved")).toBe(refreshed);
+  });
+
+  it("does not retire an agent or touch the coordinator role: the peer was never connected", () => {
+    const h = makeHarness();
+    const gone = peerInfo("gone");
+    h.lifecycle.handlePeerList([gone]);
+
+    h.lifecycle.handlePeerUnreachable(gone);
+
+    expect(h.coordinatorRole.handleDeparture).not.toHaveBeenCalled();
+    expect(h.transport.becomeCoordinator).not.toHaveBeenCalled();
+  });
+});
+
 describe("PeerLifecycle — handlePeerJoined", () => {
   it("records the joining peer and dials it when it isn't this store's own id", () => {
     const h = makeHarness();
