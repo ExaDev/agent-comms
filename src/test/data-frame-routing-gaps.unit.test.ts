@@ -42,6 +42,16 @@ function account(options: Readonly<{ owns: boolean; peer: boolean }>) {
   return value;
 }
 
+/** Routes a frame of a connection whose session is open, which is the only kind whose frames the router records. */
+async function admittedRoute(
+  router: DataFrameRouter,
+  connection: Connection,
+  frame: Parameters<DataFrameRouter["route"]>[1],
+): Promise<void> {
+  router.bind({}, connection);
+  await router.route(connection, frame);
+}
+
 describe("a direct data-have", () => {
   const connection = {
     peerDeviceId: SENDER_BYTES,
@@ -52,6 +62,7 @@ describe("a direct data-have", () => {
     acct: Readonly<AccountReplication>,
   ) => ({
     connectionsByPeer: new Map<string, Connection>(),
+    isAdmitted: () => true,
     dataStorage: undefined,
     account: acct,
     peerSessions: new Map([[SENDER_HEX, true]]),
@@ -219,7 +230,7 @@ describe("the router's replication rounds", () => {
       errors,
     );
     try {
-      await router.route(connection, have());
+      await admittedRoute(router, connection, have());
       await runRounds(ROUNDS_TO_RUN);
 
       expect(stallReports(errors)).toHaveLength(1);
@@ -242,7 +253,8 @@ describe("the router's replication rounds", () => {
       errors,
     );
     try {
-      await router.route(
+      await admittedRoute(
+        router,
         {
           peerDeviceId: SENDER_BYTES,
           send: async () => undefined,
@@ -274,7 +286,7 @@ describe("the router's replication rounds", () => {
       errors,
     );
     try {
-      await router.route(connection, have());
+      await admittedRoute(router, connection, have());
       await runRounds(ROUNDS_TO_RUN);
       expect(errors.some((e) => e.message === "the connection dropped")).toBe(
         true,
@@ -314,21 +326,25 @@ describe("the router's replication rounds", () => {
       send: () => Promise<void>,
     ): Connection => ({ peerDeviceId: id, send }) as unknown as Connection;
     try {
-      await router.route(
+      await admittedRoute(
+        router,
         connectionOf(SENDER_BYTES, async () => undefined),
         have(),
       );
-      await router.route(
+      await admittedRoute(
+        router,
         connectionOf(silent, async () => undefined),
         have(),
       );
-      await router.route(
+      await admittedRoute(
+        router,
         connectionOf(refusing, async () => {
           throw new Error("refused");
         }),
         have(),
       );
-      await router.route(
+      await admittedRoute(
+        router,
         connectionOf(dropping, async () => undefined),
         have(),
       );
@@ -386,8 +402,8 @@ describe("the router's replication rounds", () => {
         send: async () => undefined,
       }) as unknown as Connection;
     try {
-      await router.route(connectionOf(SENDER_BYTES), have());
-      await router.route(connectionOf(broken), have());
+      await admittedRoute(router, connectionOf(SENDER_BYTES), have());
+      await admittedRoute(router, connectionOf(broken), have());
       await runRounds(ROUNDS_TO_RUN);
 
       expect(errors.map((e) => e.message)).toContain("membership unreadable");
@@ -409,7 +425,8 @@ describe("the router's replication rounds", () => {
       () => accountPeer,
     );
     try {
-      await router.route(
+      await admittedRoute(
+        router,
         {
           peerDeviceId: SENDER_BYTES,
           send: async () => undefined,
@@ -438,7 +455,8 @@ describe("the router's replication rounds", () => {
       errors,
     );
     try {
-      await router.route(
+      await admittedRoute(
+        router,
         {
           peerDeviceId: SENDER_BYTES,
           send: async () => undefined,
@@ -465,7 +483,8 @@ describe("the router's replication rounds", () => {
       errors,
     );
     try {
-      await router.route(
+      await admittedRoute(
+        router,
         {
           peerDeviceId: SENDER_BYTES,
           send: async () => undefined,

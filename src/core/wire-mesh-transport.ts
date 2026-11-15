@@ -500,13 +500,16 @@ export class WireMeshTransport implements MeshTransport {
     connection: Readonly<Connection>,
   ): Promise<AcceptedMeshSession | undefined> {
     const identity = await this.identityReady;
-    const session = await acceptMeshSession(connection, identity, [DOMAIN], {
-      onFrame: async (conn, frame) => {
-        await this.handleDataFrame(conn, frame);
-      },
-      addresses: this.advertisedAddresses,
-    });
+    const session = await this.dataFrames.admitting(connection, async () =>
+      acceptMeshSession(connection, identity, [DOMAIN], {
+        onFrame: async (conn, frame) => {
+          await this.handleDataFrame(conn, frame);
+        },
+        addresses: this.advertisedAddresses,
+      }),
+    );
     if (this.isShuttingDown()) {
+      this.dataFrames.forget(connection);
       await session.close();
       return undefined;
     }
@@ -828,25 +831,25 @@ export class WireMeshTransport implements MeshTransport {
     if (session === undefined) {
       throw new Error("connectToRemote: the transport has shut down");
     }
-    const outcome = await session.sendManageRequest(
-      buildCommand({
-        method: "connect_request",
-        peerId,
-        dataPort,
-        name,
-        fingerprint,
-      }),
-      FRAME_SCOPE,
-    );
-    if (outcome.result === "error") {
-      await session.close();
-      if (connection.peerDeviceId !== undefined) {
-        this.dataFrames.release(
-          session,
-          deviceIdToHex(connection.peerDeviceId),
-        );
+    // A request that fails, or is refused, leaves a session nothing watches: it is closed and what it bound is released.
+    try {
+      const outcome = await session.sendManageRequest(
+        buildCommand({
+          method: "connect_request",
+          peerId,
+          dataPort,
+          name,
+          fingerprint,
+        }),
+        FRAME_SCOPE,
+      );
+      if (outcome.result === "error") {
+        throw new Error(outcome.message ?? outcome.code);
       }
-      throw new Error(outcome.message ?? outcome.code);
+    } catch (error) {
+      await session.close().catch(() => undefined);
+      this.dataFrames.releaseOf(session, connection);
+      throw error;
     }
     const coordinatorDeviceId = connection.peerDeviceId;
     if (coordinatorDeviceId !== undefined) {

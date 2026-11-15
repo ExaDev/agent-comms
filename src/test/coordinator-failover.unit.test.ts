@@ -186,6 +186,7 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
     coordinatorPort: COORDINATOR_PORT,
     getPeerId: () => selfId,
     getCoordinatorPeerId: () => transport.coordinatorPeerId,
+    isElectedHolder: () => false,
     requireTransport: () => transport,
     serialise: () => ({
       agents: {},
