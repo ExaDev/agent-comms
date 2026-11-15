@@ -1,3 +1,9 @@
+## [10.0.13](https://github.com/ExaDev/agent-comms/compare/v10.0.12...v10.0.13) (2026-11-15)
+
+### Build
+
+* **deps:** bump wire-mesh-core to 4.2.10 ([c20d79f](https://github.com/ExaDev/agent-comms/commit/c20d79f7cd7389595bdbae36cbfff1d41c698aa0))
+
 ## [10.0.12](https://github.com/ExaDev/agent-comms/compare/v10.0.11...v10.0.12) (2026-11-15)
 
 ### Tests
