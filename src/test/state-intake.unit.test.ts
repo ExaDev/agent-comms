@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AgentSlots,
-  MAX_AGENTS_PER_ORIGIN,
+  MAX_AGENTS_PER_SOURCE,
   MAX_KNOWN_AGENTS,
   MAX_SNAPSHOT_ENTRIES,
   admitPatch,
@@ -76,10 +76,10 @@ function state(agents: readonly AgentIdentity[]): SerialisedState {
 const peer = { id: SENDER, isCoordinator: false };
 const coordinator = { id: SENDER, isCoordinator: true };
 
-/** A store holding `held`, which went offline in the order given, with the claims one message from `origin` makes on it; `forgotten` lists what was evicted. */
+/** A store holding `held`, which went offline in the order given, with the claims one message from `source` makes on it; `forgotten` lists what was evicted. */
 function storeHolding(
   held: readonly AgentIdentity[],
-  origin = "host:a",
+  source = "conn-a",
 ): {
   agents: KnownAgents;
   slots: AgentSlots;
@@ -97,7 +97,7 @@ function storeHolding(
     },
     ownId: () => SELF,
   });
-  return { agents, slots, forgotten, claims: slots.open(origin) };
+  return { agents, slots, forgotten, claims: slots.open(source) };
 }
 
 /** Claims a record for `id` and, as the store does once a claim is admitted, holds it. */
@@ -303,6 +303,33 @@ describe("a store that holds the most agents it keeps", () => {
     expect(held.forgotten).toEqual(["steady"]);
   });
 
+  it("takes an agent that comes back, with its record stored again, out of the records to evict, and one that goes offline in that way into them", () => {
+    const held = storeHolding(
+      fullStore([offline("comes-back"), agent("goes-offline")]),
+    );
+    const back = held.agents.get("comes-back");
+    const out = held.agents.get("goes-offline");
+    if (back === undefined || out === undefined) throw new Error("missing");
+    back.status = "active";
+    held.agents.set("comes-back", back);
+    out.status = "offline";
+    held.agents.set("goes-offline", out);
+
+    take(held, "new-1");
+
+    expect(held.forgotten).toEqual(["goes-offline"]);
+  });
+
+  it("never evicts a record whose status changed without being stored again, whatever the offline order says", () => {
+    const held = storeHolding(fullStore([offline("stale-order")]));
+    const stale = held.agents.get("stale-order");
+    if (stale === undefined) throw new Error("missing");
+    stale.status = "active";
+
+    expect(take(held, "new-1")).toBe(false);
+    expect(held.forgotten).toEqual([]);
+  });
+
   it("keeps the time a record went offline while it is set offline again", () => {
     const held = storeHolding(fullStore([offline("first"), offline("second")]));
     held.agents.set("first", offline("first"));
@@ -347,42 +374,68 @@ describe("a store that holds the most agents it keeps", () => {
   });
 });
 
-describe("what one origin introduces", () => {
-  it("is bounded by the agents of it that the store holds, whatever keys they use, and another origin is not affected", () => {
+describe("what one connection introduces", () => {
+  it("is bounded by the agents of it that the store holds, and another connection is not affected", () => {
     const held = storeHolding([]);
-    for (let n = 0; n < MAX_AGENTS_PER_ORIGIN; n++) {
+    for (let n = 0; n < MAX_AGENTS_PER_SOURCE; n++) {
       expect(take(held, `a-${String(n)}`)).toBe(true);
     }
     expect(take(held, "one-too-many")).toBe(false);
 
-    held.claims = held.slots.open("host:b");
-    expect(take(held, "another-origin")).toBe(true);
+    held.claims = held.slots.open("conn-b");
+    expect(take(held, "another-connection")).toBe(true);
   });
 
-  it("takes the place of the origin's own offline record at its bound, and never another origin's", () => {
+  it("takes the place of the connection's own offline record at its bound, and never another connection's", () => {
     const held = storeHolding([]);
-    held.claims = held.slots.open("host:b");
+    held.claims = held.slots.open("conn-b");
     take(held, "b-offline", "offline");
-    held.claims = held.slots.open("host:a");
+    held.claims = held.slots.open("conn-a");
     take(held, "a-offline", "offline");
-    for (let n = 1; n < MAX_AGENTS_PER_ORIGIN; n++) {
+    for (let n = 1; n < MAX_AGENTS_PER_SOURCE; n++) {
       take(held, `a-${String(n)}`);
     }
 
-    held.claims = held.slots.open("host:a");
+    held.claims = held.slots.open("conn-a");
     expect(take(held, "a-new")).toBe(true);
 
     expect(held.forgotten).toEqual(["a-offline"]);
     expect(held.agents.has("b-offline")).toBe(true);
   });
 
+  it("forgets the connection of an agent the store evicts or removes without waiting for that connection to be checked again", () => {
+    const tracked = (slots: AgentSlots): number => {
+      const bySource: unknown = Reflect.get(slots, "bySource");
+      const sourceOf: unknown = Reflect.get(slots, "sourceOf");
+      if (!(bySource instanceof Map) || !(sourceOf instanceof Map)) {
+        throw new Error("the slots keep their bookkeeping elsewhere");
+      }
+      return bySource.size + sourceOf.size;
+    };
+    const deleted = storeHolding([]);
+    take(deleted, "gone");
+    expect(tracked(deleted.slots)).toBeGreaterThan(0);
+    deleted.agents.delete("gone");
+    expect(tracked(deleted.slots)).toBe(0);
+
+    const cleared = storeHolding([]);
+    take(cleared, "gone");
+    cleared.agents.clear();
+    expect(tracked(cleared.slots)).toBe(0);
+
+    const evicted = storeHolding(fullStore([offline("old")]));
+    take(evicted, "new-1");
+    const sourceOf: unknown = Reflect.get(evicted.slots, "sourceOf");
+    expect(sourceOf instanceof Map && sourceOf.has("old")).toBe(false);
+  });
+
   it("stops counting an agent the store no longer holds", () => {
     const held = storeHolding([]);
-    for (let n = 0; n < MAX_AGENTS_PER_ORIGIN; n++)
+    for (let n = 0; n < MAX_AGENTS_PER_SOURCE; n++)
       take(held, `a-${String(n)}`);
     held.agents.delete("a-0");
 
-    held.claims = held.slots.open("host:a");
+    held.claims = held.slots.open("conn-a");
     expect(take(held, "a-new")).toBe(true);
   });
 });

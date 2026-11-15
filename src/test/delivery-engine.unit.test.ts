@@ -3,6 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadRoomTokens } from "../core/identity-store.js";
+import { KnownAgents } from "../core/known-agents.js";
 import { randomId } from "../core/random-id.js";
 import {
   DeliveryEngine,
@@ -146,7 +147,7 @@ function makeHarness() {
   const sendRoomRequestToMember = vi.fn().mockResolvedValue(undefined);
   const revocationRecord = vi.fn().mockResolvedValue(undefined);
   const deps: DeliveryEngineDeps = {
-    agents: new Map<string, AgentIdentity>(),
+    agents: new KnownAgents(),
     rooms: new Map<string, Room>(),
     messages: new Map<string, RoomMessage[]>(),
     dms: new Map<string, DmMessage[]>(),
@@ -220,6 +221,33 @@ describe("DeliveryEngine — handlePresenceAdvert", () => {
     const updated = h.deps.agents.get(OTHER_ID);
     expect(updated?.status).toBe("busy");
     expect(updated?.version).toBe(2);
+  });
+});
+
+describe("DeliveryEngine — handlePresenceAdvert and the order of offline records", () => {
+  function offlineOrder(h: ReturnType<typeof makeHarness>): string[] {
+    const agents = h.deps.agents;
+    if (!(agents instanceof KnownAgents)) throw new Error("not KnownAgents");
+    return [...agents.offlineOldestFirst()];
+  }
+
+  it("takes a record that presence brings back out of the offline order, so it is not the first to be evicted", () => {
+    const h = makeHarness();
+    h.deps.agents.set(OTHER_ID, agent({ status: "offline", version: 1 }));
+    expect(offlineOrder(h)).toEqual([OTHER_ID]);
+
+    h.engine.handlePresenceAdvert(OTHER_ID, "active");
+
+    expect(offlineOrder(h)).toEqual([]);
+  });
+
+  it("puts a record that presence takes offline into the offline order", () => {
+    const h = makeHarness();
+    h.deps.agents.set(OTHER_ID, agent({ status: "active", version: 1 }));
+
+    h.engine.handlePresenceAdvert(OTHER_ID, "offline");
+
+    expect(offlineOrder(h)).toEqual([OTHER_ID]);
   });
 });
 
