@@ -1,3 +1,10 @@
+## [10.0.9](https://github.com/ExaDev/agent-comms/compare/v10.0.8...v10.0.9) (2026-11-15)
+
+### Bug Fixes
+
+* **core:** keep the intake rules quiet on a healthy mesh and from locking a store out ([810eb2a](https://github.com/ExaDev/agent-comms/commit/810eb2a20e2eaca77d68340b6ca686807f531cc3))
+* **core:** take an agent's record only from its own store or the coordinator, and bound intake ([e75f7db](https://github.com/ExaDev/agent-comms/commit/e75f7dbd6d1424d3a03af764e29156d56a46cfa2))
+
 ## [10.0.8](https://github.com/ExaDev/agent-comms/compare/v10.0.7...v10.0.8) (2026-11-15)
 
 ### Bug Fixes
