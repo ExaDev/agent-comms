@@ -3,8 +3,10 @@
  */
 
 import * as net from "node:net";
+import { cdeEncodeOptions, encode } from "cbor2";
 import { afterEach, expect, it } from "vitest";
 import WS from "ws";
+import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
 import { RelayServer } from "../core/relay-server.js";
 
 const LOOPBACK = "127.0.0.1";
@@ -121,4 +123,71 @@ it("closes a WebSocket that has not gossiped an admitted device in time, and not
   await closed;
 
   expect(socket.readyState).toBe(WS.CLOSED);
+});
+
+const JUNK_DEVICE_BYTE = 7;
+const DEVICE_ID_BYTES = 32;
+const JUNK_KEY_BYTES = 65;
+const JUNK_SIGNATURE_BYTES = 64;
+const ES256 = -7;
+const FORGED_WAIT_MS = 5000;
+
+it("closes a WebSocket whose gossip names an admitted device with a key and signature that do not verify", async () => {
+  const device = new Uint8Array(DEVICE_ID_BYTES).fill(JUNK_DEVICE_BYTE);
+  const server = new RelayServer({
+    host: LOOPBACK,
+    // The id is admitted, as every id an admitted peer gossips is.
+    isAdmitted: (hex) => hex === deviceIdToHex(device),
+    onError: () => undefined,
+    requestTimeoutMs: REQUEST_TIMEOUT_MS,
+    admissionTimeoutMs: ADMISSION_TIMEOUT_MS,
+    connectionsCheckingIntervalMs: CHECK_INTERVAL_MS,
+  });
+  servers.push(server);
+  await server.start();
+  const [url] = server.addresses();
+  if (url === undefined) throw new Error("the relay offers no address");
+  const socket = new WS(url);
+  sockets.push({
+    destroy: () => {
+      socket.terminate();
+    },
+  });
+  socket.on("error", () => undefined);
+  const closed = new Promise<boolean>((resolve) => {
+    socket.once("close", () => {
+      resolve(true);
+    });
+    setTimeout(() => {
+      resolve(false);
+    }, FORGED_WAIT_MS).unref();
+  });
+  await new Promise<void>((resolve) => {
+    socket.once("open", () => {
+      resolve();
+    });
+  });
+
+  socket.send(
+    encode(
+      {
+        type: "gossip",
+        peers: [
+          {
+            device,
+            addresses: [],
+            "snapshot-seconds": 1,
+            "identity-key": {
+              alg: ES256,
+              "public-key": new Uint8Array(JUNK_KEY_BYTES).fill(1),
+            },
+            signature: new Uint8Array(JUNK_SIGNATURE_BYTES).fill(2),
+          },
+        ],
+      },
+      cdeEncodeOptions,
+    ),
+  );
+
+  expect(await closed).toBe(true);
 });
