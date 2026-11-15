@@ -139,6 +139,11 @@ export interface TransportEvents {
   onElectionSessionEnrolled: (handle: Readonly<ConnectionHandle>) => void;
 
   /**
+   * A peer this side learned of from a peer list, a beacon or an introduction could not be reached and has no live session with this side: the dial failed, or reached something that does not hold the key the peer's id names. The peer is the entry that was dialled, so a store can tell it from one refreshed since. MeshStore forgets it, so a peer that died before it was ever dialled does not stay in the peer list for ever and is not offered to every new peer, which would try the same dead address again. A peer that is in fact alive is learned of again the next time any peer lists it.
+   */
+  onPeerUnreachable?: (peer: Readonly<PeerInfo>) => void;
+
+  /**
    * A device this side can now route a request to became reachable: the relay hub admitted its directory entry into this side's own view, or an operator trusted it outright. Fires for a route that appears through the hub as well as a direct peer connection, since onPeerConnected only ever covers the latter and a device fronted by a remote gateway has no local session of its own to connect. MeshStore retries anything queued for that device on this.
    */
   onDeviceReachable: (deviceHex: string) => void;

@@ -70,6 +70,9 @@ export function createTransportEvents(
     onPresenceAdvert: (handle, status) => {
       store.deliveryEngine.handlePresenceAdvert(handle.id, status);
     },
+    onPeerUnreachable: (peer) => {
+      store.peerLifecycle.handlePeerUnreachable(peer);
+    },
     onDeviceReachable: (deviceHex) => {
       detach(store.roomProtocol.flushPendingRoomRequests(deviceHex));
     },

@@ -92,7 +92,7 @@ import type {
 } from "./transport.js";
 import type { PeerIdentity } from "./identity.js";
 import { toIdentityPort } from "./wire-mesh-identity.js";
-import { PeerLinkError } from "./peer-link-error.js";
+import { PeerLinkError, dialPeer } from "./peer-link-error.js";
 import {
   DATA_SERVER_ACCEPT,
   DEFAULT_LISTENER_ACCEPT,
@@ -106,6 +106,9 @@ import {
   extractMessage,
   type RoomRouter,
 } from "./room-router.js";
+
+/** What a dial to a peer holds: nothing while it is in flight, then the session it produced. */
+type DialState = AcceptedMeshSession | undefined;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -216,7 +219,7 @@ export class WireMeshTransport implements MeshTransport {
   }
 
   // -- Peers this side has dialled via connectToPeer specifically (in flight or established) -- deliberately separate from peerSessions, which also holds sessions this side reached the SAME peer through for an unrelated reason (most concretely, the coordinator-client session connectToCoordinator opens to the coordinator's own device-id). Mesh formation deliberately establishes a second, independent connection in each direction so each side's own acceptor can push its own state (see mesh-store.ts's own handlePeerConnected), so connectToPeer's "don't dial twice" guard must not be satisfied by an unrelated session that merely happens to share the same peer ID.
-  private readonly dataDials = new Set<string>();
+  private readonly dataDials = new Map<string, DialState>();
 
   // -- connect_request frames awaiting a human accept/reject decision, keyed by the requester's device-id hex --
   private readonly pendingConnections = new Map<string, PendingConnection>();
@@ -507,6 +510,7 @@ export class WireMeshTransport implements MeshTransport {
       await session.close();
       return undefined;
     }
+    this.dataFrames.bind(session, connection);
     return session;
   }
 
@@ -562,6 +566,7 @@ export class WireMeshTransport implements MeshTransport {
           const wasTracked = this.peerSessions.get(deviceIdHex) === session;
           if (wasTracked) this.peerSessions.delete(deviceIdHex);
           this.allSessions.delete(session);
+          this.dataFrames.release(session, deviceIdHex);
           this.electionSessions.delete(session);
           // Dropping the closed coordinator session is what makes hasCoordinatorConnection answer honestly once the coordinator process is gone; coordinatorDeviceHex deliberately survives, so the onPeerDisconnected fired just below can still be recognised as the coordinator's own departure rather than an ordinary peer's.
           if (this.coordinatorSession === session)
@@ -573,8 +578,10 @@ export class WireMeshTransport implements MeshTransport {
             pending.resolve("reject");
             this.pendingConnections.delete(deviceIdHex);
           }
-          // A no-op when this session was never a connectToPeer dial (e.g. the coordinator-client or an accepted connection) -- Set.delete on an absent key is always safe.
-          this.dataDials.delete(deviceIdHex);
+          // Only the session a dial produced ends that dial's claim on the peer: an accepted session of the same peer closing must not let a second dial open beside one that is still live.
+          if (this.dataDials.get(deviceIdHex) === session) {
+            this.dataDials.delete(deviceIdHex);
+          }
           if (wasTracked && !this.shutDown) {
             this.events.onPeerDisconnected(handle);
           }
@@ -657,49 +664,44 @@ export class WireMeshTransport implements MeshTransport {
   // MeshTransport -- Peer-to-peer data connections
   // -----------------------------------------------------------------------
 
+  /** Reports a peer a dial could not reach, unless this side already has a live session with it (accepted, introduced or the coordinator's): such a peer is connected, and a failed dial to a stale or wrong address says nothing about it. */
+  private reportUnreachable(peer: Readonly<PeerInfo>): void {
+    if (!this.peerSessions.has(peer.id)) this.events.onPeerUnreachable?.(peer);
+  }
+
   async connectToPeer(
     peer: Readonly<PeerInfo>,
     _ownPeerId: string,
   ): Promise<void> {
     if (this.shutDown || this.dataDials.has(peer.id)) return;
-    this.dataDials.add(peer.id);
+    this.dataDials.set(peer.id, undefined);
     const host = peer.host ?? COORDINATOR_HOST;
-    const connection = await this.wireTransport
-      .connect(`${host}:${String(peer.port)}`)
-      .catch((error: unknown) => {
-        this.events.onError?.(
-          new PeerLinkError("dial", peer.id, peer.port, error),
-        );
-        return undefined;
-      });
-    if (connection === undefined) {
+    const dialled = await dialPeer(
+      this.wireTransport,
+      host,
+      peer,
+      this.events.onError,
+    );
+    if (dialled === undefined) {
       this.dataDials.delete(peer.id);
+      this.reportUnreachable(peer);
       return;
     }
-    const peerDeviceId = connection.peerDeviceId;
-    if (peerDeviceId === undefined) {
-      this.dataDials.delete(peer.id);
-      await connection.close();
-      return;
-    }
-    const deviceIdHex = deviceIdToHex(peerDeviceId);
-    if (deviceIdHex !== peer.id) {
-      // The peer we reached does not hold the key peer.id claims to name -- refuse exactly like a mismatched fingerprint would have under the previous transport.
-      this.events.onError?.(
-        new Error(
-          `connectToPeer: peer at port ${String(peer.port)} authenticated as ${deviceIdHex}, expected ${peer.id}`,
-        ),
-      );
-      this.dataDials.delete(peer.id);
-      await connection.close();
-      return;
-    }
-    const session = await this.openSession(connection);
+    const { connection, deviceIdHex } = dialled;
+    const session = await this.openSession(connection).catch(
+      async (error: unknown) => {
+        // The claim must not outlive a dial that produced no session, or no later dial to this peer could ever start.
+        this.dataDials.delete(peer.id);
+        await connection.close().catch(() => undefined);
+        throw error;
+      },
+    );
     if (session === undefined) {
       this.dataDials.delete(peer.id);
       return;
     }
     this.trackSession(deviceIdHex, session);
+    this.dataDials.set(peer.id, session);
     const handle: ConnectionHandle = { id: deviceIdHex };
     // Machine-local only when the address dialled was a loopback one. A peer list or a first-contact beacon heard over LAN broadcast can name any host, and a device there can serve a session under the very device-id it announced, so authenticating the far side proves who it is, never that it is on this machine.
     this.consumeIncoming(session, handle, isLoopbackAddress(host));
@@ -838,6 +840,12 @@ export class WireMeshTransport implements MeshTransport {
     );
     if (outcome.result === "error") {
       await session.close();
+      if (connection.peerDeviceId !== undefined) {
+        this.dataFrames.release(
+          session,
+          deviceIdToHex(connection.peerDeviceId),
+        );
+      }
       throw new Error(outcome.message ?? outcome.code);
     }
     const coordinatorDeviceId = connection.peerDeviceId;
