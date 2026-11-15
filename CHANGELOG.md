@@ -1,3 +1,32 @@
+## [9.1.2](https://github.com/ExaDev/agent-comms/compare/v9.1.1...v9.1.2) (2026-11-15)
+
+### Bug Fixes
+
+* **bridge:** answer a malformed, failing or oversized web request instead of ending the process ([02a09ce](https://github.com/ExaDev/agent-comms/commit/02a09ce8e95e7d470a2a8ada8b8dde1472b26bd4))
+* **bridge:** answer a web request with fixed text, in bounded time, without reaching object members ([1afea21](https://github.com/ExaDev/agent-comms/commit/1afea21a1741d6efcfc4ad3e4f786ff1f7a96e2a))
+* **bridge:** report work a peer started and nothing awaits instead of leaving it unhandled ([3822a64](https://github.com/ExaDev/agent-comms/commit/3822a6445c515823dc010f223c32106b9b84f70d))
+* **bridge:** serve a web-console file only when it resolves inside the served directory ([d1b08bf](https://github.com/ExaDev/agent-comms/commit/d1b08bfacf4352ff5e2ecdfc0d17c784edccdb09))
+* **core:** bound one WebSocket message to the relay ([f405577](https://github.com/ExaDev/agent-comms/commit/f40557792e629798f18ce6a85a2c435bf611f5c3))
+* **core:** give every unauthenticated connection to the relay a deadline ([bb803c9](https://github.com/ExaDev/agent-comms/commit/bb803c9ab0bdd917b664a8bf42928cc75e283baf))
+* **core:** keep serving a peer's stream past one item that cannot be handled ([ce43494](https://github.com/ExaDev/agent-comms/commit/ce43494d29cdcfafd469a02c232d9e799ef5bc67))
+* **core:** keep the relay's admission deadline until an advert of the connection verifies ([b302680](https://github.com/ExaDev/agent-comms/commit/b302680194b301d3be2657be3ada26a95507ba4c))
+* **core:** read every stream a peer feeds with one loop that reports a failing item and goes on ([2046f77](https://github.com/ExaDev/agent-comms/commit/2046f77b62f2dca87bf7e986105a98aa3793c516))
+* **tool:** refuse message content over the shared size before sending ([24e3499](https://github.com/ExaDev/agent-comms/commit/24e3499f7d44b72c2ce278fa68b17afc3d565e9d))
+
+### Documentation
+
+* state the web bridge's request limits and the relay's message limit ([11f3061](https://github.com/ExaDev/agent-comms/commit/11f3061c99374d67275ac380e2b27d2032317f98))
+
+### Tests
+
+* **bridge:** exercise the request timeout and a failing mesh graph through the real server ([2055288](https://github.com/ExaDev/agent-comms/commit/20552887c7ad0423226adfe0a56a3e8594df4bc7))
+* **bridge:** hold the refusal of a request target that names no URL in the conformance corpus ([ea61063](https://github.com/ExaDev/agent-comms/commit/ea61063e29718cb89cfafb89300e083d24de090a))
+* **bridge:** pin the web-console route through the real server ([377fa87](https://github.com/ExaDev/agent-comms/commit/377fa87b6e1415513e7105158c10560dd79a1ce8))
+* **core:** drive each consumeEach site with fake sessions and hold the frame limit to its cause ([fce0ea0](https://github.com/ExaDev/agent-comms/commit/fce0ea01e87cc5c9c3ab79b96aa9022760bad872))
+* **core:** drive the hub session event loop with a fake session ([c9e1554](https://github.com/ExaDev/agent-comms/commit/c9e15542d55d271c9b229fca5847e668a2f2204e))
+* **core:** hold that a verified advert lifts the relay admission deadline ([fe096fa](https://github.com/ExaDev/agent-comms/commit/fe096fa13ba64a6735bc66ff95380d7f1e8bc453))
+* **core:** type the relay frame limit test's error collector as mutable ([485e001](https://github.com/ExaDev/agent-comms/commit/485e001ce764b241e741ad02ec32451258876eac))
+
 ## [9.1.1](https://github.com/ExaDev/agent-comms/compare/v9.1.0...v9.1.1) (2026-11-15)
 
 ### Bug Fixes
