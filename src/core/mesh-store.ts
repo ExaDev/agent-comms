@@ -470,12 +470,12 @@ export class MeshStore implements CommsStore {
       },
       getPeerId: () => this.peerId,
       getCoordinatorPeerId: () => this.requireTransport().coordinatorPeerId,
-      isElectedHolder: (id) => this.coordinatorRole.current()?.holder === id,
       requireTransport: () => this.requireTransport(),
       serialise: () => this.serialise(),
       roomProtocol: this.roomProtocol,
       deliveryEngine: this.deliveryEngine,
       coordinatorRole: this.coordinatorRole,
+      staleAgentChecker: this.staleAgentChecker,
       onError: this.reportError,
     });
   }

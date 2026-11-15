@@ -529,3 +529,21 @@ test("in a mesh where the incumbent is unreachable to some roles, takeovers back
     MUTUALLY_UNREACHABLE_ROLES * (BACKOFF_DOUBLINGS + 1),
   );
 });
+
+test("the holder of each claim a store accepts is announced to its listener, and a claim it refuses is not", async () => {
+  const bus = new Bus();
+  const listener = bus.add(hexId("9"));
+  const accepted: string[] = [];
+  listener.role.onHolderAccepted = (holder) => {
+    accepted.push(holder);
+  };
+  const lower = bus.add(hexId("3"));
+  const higher = bus.add(hexId("7"));
+  await lower.role.claimIfVacant();
+  await bus.settle();
+  expect(accepted).toEqual([hexId("3")]);
+
+  await higher.role.claimIfVacant();
+  await bus.settle();
+  expect(accepted).toEqual([hexId("3")]);
+});

@@ -361,7 +361,7 @@ export class DataFrameRouter {
     try {
       return await open();
     } catch (error) {
-      this.admitted.delete(connection);
+      this.forget(connection);
       throw error;
     }
   }
@@ -369,6 +369,10 @@ export class DataFrameRouter {
   /** Stops recording frames of a connection whose session was opened and is not kept. */
   forget(connection: Connection): void {
     this.admitted.delete(connection);
+    // What a frame recorded while the session was opening goes too, since no release will come for a session that never bound.
+    for (const [peer, held] of this.connectionsByPeer) {
+      if (held === connection) this.connectionsByPeer.delete(peer);
+    }
   }
 
   /** Releases what `session` held, for a session whose connection names a device. */

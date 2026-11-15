@@ -365,3 +365,33 @@ test("a request to a gateway that fails leaves nothing held for the session it o
   expect(closed).toBe(1);
   expect(transport.dataFrames.heldConnections).toBe(0);
 });
+
+test("a connection whose session never opens is not left recorded by a frame that arrived while it was opening", async () => {
+  const router = new DataFrameRouter({
+    dataStorage: undefined,
+    account: undefined,
+    peerSessions: new Map([[PEER_HEX, {}]]),
+    onError: undefined,
+    hub: undefined,
+    announceIntervalMs: SHORT_INTERVAL_MS,
+  });
+  const connection: Connection = {
+    peerDeviceId: new Uint8Array(DEVICE_ID_BYTES).fill(PEER_BYTE),
+    send: async () => Promise.resolve(),
+    receive: async function* () {
+      yield* [];
+    },
+    close: async () => Promise.resolve(),
+  };
+
+  await expect(
+    router.admitting(connection, async () => {
+      await router.route(connection, PING);
+      expect(router.heldConnections).toBe(1);
+      throw new Error("the handshake failed");
+    }),
+  ).rejects.toThrow("the handshake failed");
+
+  expect(router.heldConnections).toBe(0);
+  router.stop();
+});

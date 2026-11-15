@@ -13,6 +13,7 @@ const OWNER_ID = "owner-device";
 const COORDINATOR_ID = "coordinator-device";
 const COORDINATOR_PORT = 19876;
 const FIRST_CONTACT_PORT = 19877;
+const REPEATS = 3;
 
 function peerInfo(
   id: string,
@@ -44,6 +45,8 @@ interface Harness {
     claimIfVacantAfterWait: ReturnType<typeof vi.fn>;
     handleDeparture: ReturnType<typeof vi.fn>;
     isHolder: ReturnType<typeof vi.fn>;
+    current: ReturnType<typeof vi.fn>;
+    onHolderAccepted: ((holderId: string) => void) | undefined;
   };
 }
 
@@ -66,14 +69,24 @@ function makeHarness(): Harness {
     claimIfVacantAfterWait: vi.fn(),
     handleDeparture: vi.fn().mockResolvedValue(undefined),
     isHolder: vi.fn().mockReturnValue(false),
+    onHolderAccepted: undefined as ((holderId: string) => void) | undefined,
+    current: vi.fn((): { term: number; holder: string } | undefined => ({
+      term: 1,
+      holder: COORDINATOR_ID,
+    })),
   };
+  const agents = new Map<string, AgentIdentity>();
   const deps: PeerLifecycleDeps = {
     peerInfo: new Map(),
-    agents: new Map(),
+    agents,
     coordinatorPort: COORDINATOR_PORT,
     getPeerId: () => OWNER_ID,
     getCoordinatorPeerId: () => undefined,
-    isElectedHolder: (peerId) => peerId === COORDINATOR_ID,
+    staleAgentChecker: {
+      forget: (agentId) => {
+        agents.delete(agentId);
+      },
+    },
     requireTransport: () => transport as never,
     serialise: () => emptyState(),
     roomProtocol: { flushPendingRoomRequests },
@@ -180,6 +193,47 @@ describe("PeerLifecycle — handlePeerConnected", () => {
     expect(h.transport.send).toHaveBeenCalledWith(
       { id: "conn-1" },
       { method: "state_sync", state: emptyState() },
+    );
+  });
+
+  it("gives a connected peer only its own agent when it is not the coordinator, and the whole state when it is", async () => {
+    const h = makeHarness();
+    const own = { id: OWNER_ID, name: "me", version: 1 } as AgentIdentity;
+    const other = { id: "other", name: "them", version: 1 } as AgentIdentity;
+    h.deps.agents.set(OWNER_ID, own);
+    h.deps.serialise = () => ({
+      ...emptyState(),
+      agents: { [OWNER_ID]: own, other },
+    });
+
+    await h.lifecycle.handlePeerConnected({ id: "conn-1" }, peerInfo("x"));
+    expect(h.transport.send).toHaveBeenCalledWith(
+      { id: "conn-1" },
+      expect.objectContaining({
+        method: "state_sync",
+        state: expect.objectContaining({ agents: { [OWNER_ID]: own } }),
+      }),
+    );
+
+    h.transport.send.mockClear();
+    h.transport.isCoordinator = true;
+    await h.lifecycle.handlePeerConnected({ id: "conn-2" }, peerInfo("y"));
+    expect(h.transport.send).toHaveBeenCalledWith(
+      { id: "conn-2" },
+      expect.objectContaining({
+        state: expect.objectContaining({ agents: { [OWNER_ID]: own, other } }),
+      }),
+    );
+
+    h.transport.send.mockClear();
+    h.transport.isCoordinator = false;
+    h.coordinatorRole.isHolder.mockReturnValue(true);
+    await h.lifecycle.handlePeerConnected({ id: "conn-3" }, peerInfo("z"));
+    expect(h.transport.send).toHaveBeenCalledWith(
+      { id: "conn-3" },
+      expect.objectContaining({
+        state: expect.objectContaining({ agents: { [OWNER_ID]: own, other } }),
+      }),
     );
   });
 
@@ -343,6 +397,110 @@ describe("PeerLifecycle — handleDataMessage", () => {
       },
     );
     expect(h.applyPatch).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports a refusal once for a peer, however many it sends", async () => {
+    const h = makeHarness();
+    const errors: Error[] = [];
+    h.deps.onError = (error) => {
+      errors.push(error);
+    };
+    for (let n = 0; n < REPEATS; n++) {
+      await h.lifecycle.handleDataMessage(
+        { id: "peer-a" },
+        { method: "state_sync", state: stateOf(named(`other-${String(n)}`)) },
+      );
+    }
+    await h.lifecycle.handleDataMessage(
+      { id: "peer-c" },
+      { method: "state_sync", state: stateOf(named("other-x")) },
+    );
+    expect(errors).toHaveLength(2);
+  });
+
+  it("applies an offline report about this store's own agent from any peer, so the store can contradict it", async () => {
+    const h = makeHarness();
+    await h.lifecycle.handleDataMessage(
+      { id: "peer-a" },
+      {
+        method: "state_update",
+        patch: { type: "agent_offline", agentId: OWNER_ID },
+      },
+    );
+    expect(h.applyPatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes an offline record of this store's own agent in a snapshot from any peer, and not a running one", async () => {
+    const h = makeHarness();
+    h.deps.agents.set(OWNER_ID, named(OWNER_ID));
+    await h.lifecycle.handleDataMessage(
+      { id: "peer-a" },
+      {
+        method: "state_sync",
+        state: stateOf({ ...named(OWNER_ID), status: "offline" }),
+      },
+    );
+    expect(h.applyStateSync).toHaveBeenLastCalledWith(
+      stateOf({ ...named(OWNER_ID), status: "offline" }),
+    );
+    await h.lifecycle.handleDataMessage(
+      { id: "peer-a" },
+      { method: "state_sync", state: stateOf(named(OWNER_ID)) },
+    );
+    expect(h.applyStateSync).toHaveBeenLastCalledWith(emptyState());
+  });
+
+  it("applies a departure its sender announced before its claim was accepted, once the claim is", async () => {
+    const h = makeHarness();
+    const departure = {
+      method: "state_update",
+      patch: { type: "agent_offline", agentId: "gone" },
+    } as const;
+
+    await h.lifecycle.handleDataMessage({ id: "successor" }, departure);
+    expect(h.applyPatch).not.toHaveBeenCalled();
+
+    h.lifecycle.handleHolderAccepted("someone-else");
+    expect(h.applyPatch).not.toHaveBeenCalled();
+
+    h.lifecycle.handleHolderAccepted("successor");
+    await vi.waitFor(() => {
+      expect(h.applyPatch).toHaveBeenCalledWith(departure.patch);
+    });
+
+    h.lifecycle.handleHolderAccepted("successor");
+    expect(h.applyPatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes the announcement of a holder through the hook it gives the coordinator role", async () => {
+    const h = makeHarness();
+    await h.lifecycle.handleDataMessage(
+      { id: "successor" },
+      {
+        method: "state_update",
+        patch: { type: "agent_offline", agentId: "gone" },
+      },
+    );
+
+    h.coordinatorRole.onHolderAccepted?.("successor");
+
+    await vi.waitFor(() => {
+      expect(h.applyPatch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("forgets a departure still waiting when its sender leaves", async () => {
+    const h = makeHarness();
+    await h.lifecycle.handleDataMessage(
+      { id: "successor" },
+      {
+        method: "state_update",
+        patch: { type: "agent_offline", agentId: "gone" },
+      },
+    );
+    await h.lifecycle.handlePeerDeparture("successor");
+    h.lifecycle.handleHolderAccepted("successor");
+    expect(h.applyPatch).not.toHaveBeenCalled();
   });
 
   it("applies neither for a message method it doesn't dispatch on", async () => {
