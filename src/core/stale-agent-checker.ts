@@ -50,15 +50,8 @@ export class StaleAgentChecker {
   }
 
   private async probeStaleAgents(): Promise<void> {
-    const {
-      agents,
-      deliveryQueues,
-      identityCache,
-      peerInfo,
-      notifyRoomsOfStatus,
-      broadcastPatch,
-      bump,
-    } = this.deps;
+    const { agents, peerInfo, notifyRoomsOfStatus, broadcastPatch, bump } =
+      this.deps;
     const deadIds: string[] = [];
 
     for (const [id, agent] of agents) {
@@ -91,12 +84,15 @@ export class StaleAgentChecker {
         purgeIds.push(id);
       }
     }
-    for (const id of purgeIds) {
-      agents.delete(id);
-      peerInfo.delete(id);
-      identityCache.delete(id);
-      deliveryQueues.delete(id);
-    }
+    for (const id of purgeIds) this.forget(id);
+  }
+
+  /** Forgets everything the store holds for an agent: its record, its peer entry, its cached identity and its queued deliveries. */
+  forget(agentId: string): void {
+    this.deps.agents.delete(agentId);
+    this.deps.peerInfo.delete(agentId);
+    this.deps.identityCache.delete(agentId);
+    this.deps.deliveryQueues.delete(agentId);
   }
 
   private isProcessAlive(pid: number): boolean {

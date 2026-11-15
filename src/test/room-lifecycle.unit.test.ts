@@ -683,7 +683,7 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
     );
   });
 
-  it("updates subscribedRooms, bumps the agent's version, and broadcasts agent_upsert only for a known agent not already subscribed", async () => {
+  it("updates subscribedRooms, bumps the agent's version, and subscribes only a known agent not already subscribed", async () => {
     const h = await makeHarness();
     h.deps.rooms.set(
       "room-1",
@@ -697,7 +697,25 @@ describe("RoomLifecycle — joinRoom / joinRemoteRoom", () => {
     const updated = h.deps.agents.get(h.ids.memberId);
     expect(updated?.subscribedRooms).toContain("room-1");
     expect(updated?.version).toBe(2);
-    expect(h.broadcastPatch).toHaveBeenCalledWith(
+  });
+
+  it("broadcasts no agent_upsert for another agent that joined, which only its own store describes", async () => {
+    const foreign = await makeHarness();
+    foreign.deps.rooms.set(
+      "room-1",
+      room({
+        id: "room-1",
+        type: "public",
+        owner: foreign.ids.ownerId,
+        members: [],
+      }),
+    );
+    foreign.deps.agents.set(
+      foreign.ids.memberId,
+      agent({ id: foreign.ids.memberId, subscribedRooms: [] }),
+    );
+    await foreign.lifecycle.joinRoom("room-1", foreign.ids.memberId);
+    expect(foreign.broadcastPatch).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "agent_upsert" }),
     );
   });

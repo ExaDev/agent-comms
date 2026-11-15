@@ -92,6 +92,9 @@ export class CoordinatorRole {
   /** The claims set aside, by the device-id of the session that sent each, best first in the election's own order. */
   private readonly pending = new Map<string, PendingClaim[]>();
 
+  /** Called with the holder of each claim this side accepts, so state a holder sent before its claim was accepted can be taken now. */
+  onHolderAccepted: ((holderId: string) => void) | undefined;
+
   constructor(private readonly deps: Readonly<CoordinatorRoleDeps>) {}
 
   private get election(): CoordinatorElection {
@@ -164,6 +167,7 @@ export class CoordinatorRole {
       this.cancelClaimWait();
       // The holder of an accepted claim is here, so there is no incumbent to wait out.
       this.takeoverStreak = 0;
+      this.onHolderAccepted?.(deviceIdToHex(frame.coordinator));
       await this.deps.requireTransport().broadcastCoordinatorClaim(frame);
     } else if (
       result.outcome === "retained" &&

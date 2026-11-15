@@ -420,10 +420,13 @@ export class RoomLifecycle {
       agent.subscribedRooms.push(roomId);
       this.deps.deliveryEngine.bump(agent);
       this.deps.agents.set(agentId, agent);
-      await this.deps.deliveryEngine.broadcastPatch({
-        type: "agent_upsert",
-        agent,
-      });
+      // An agent is described to the mesh by its own store, so the record of another agent is not broadcast: its store takes the membership from the room.
+      if (agentId === this.deps.getPeerId()) {
+        await this.deps.deliveryEngine.broadcastPatch({
+          type: "agent_upsert",
+          agent,
+        });
+      }
     }
 
     await this.deps.deliveryEngine.broadcastPatch({
@@ -488,10 +491,12 @@ export class RoomLifecycle {
         (id) => id !== roomId,
       );
       this.deps.agents.set(agentId, agent);
-      await this.deps.deliveryEngine.broadcastPatch({
-        type: "agent_upsert",
-        agent,
-      });
+      if (agentId === this.deps.getPeerId()) {
+        await this.deps.deliveryEngine.broadcastPatch({
+          type: "agent_upsert",
+          agent,
+        });
+      }
     }
 
     await this.deps.deliveryEngine.broadcastPatch({
@@ -709,10 +714,12 @@ export class RoomLifecycle {
           (id) => id !== roomId,
         );
         this.deps.agents.set(memberId, member);
-        await this.deps.deliveryEngine.broadcastPatch({
-          type: "agent_upsert",
-          agent: member,
-        });
+        if (memberId === this.deps.getPeerId()) {
+          await this.deps.deliveryEngine.broadcastPatch({
+            type: "agent_upsert",
+            agent: member,
+          });
+        }
       }
     }
 

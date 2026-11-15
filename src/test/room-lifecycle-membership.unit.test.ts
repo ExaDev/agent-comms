@@ -537,7 +537,7 @@ describe("RoomLifecycle — destroyRoom", () => {
     expect(loadIssuedRoomGrant(slot, "room-1", h.ids.memberId)).toBeUndefined();
   });
 
-  it("updates subscribedRooms and broadcasts agent_upsert only for members with a local agent record", async () => {
+  it("updates subscribedRooms of members with a local agent record, and broadcasts no agent_upsert for another store's agent", async () => {
     const h = await makeHarness();
     h.deps.rooms.set(
       "room-1",
@@ -555,6 +555,22 @@ describe("RoomLifecycle — destroyRoom", () => {
     expect(h.deps.agents.get(h.ids.memberId)?.subscribedRooms).toEqual([
       "other-room",
     ]);
+    expect(h.broadcastPatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "agent_upsert" }),
+    );
+  });
+
+  it("broadcasts the agent_upsert of this store's own agent when the room is destroyed", async () => {
+    const h = await makeHarness();
+    h.deps.rooms.set(
+      "room-1",
+      room({ id: "room-1", owner: h.ids.ownerId, members: [h.ids.ownerId] }),
+    );
+    h.deps.agents.set(
+      h.ids.ownerId,
+      agent({ id: h.ids.ownerId, subscribedRooms: ["room-1"] }),
+    );
+    await h.lifecycle.destroyRoom("room-1", h.ids.ownerId);
     expect(h.broadcastPatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: "agent_upsert" }),
     );
@@ -651,7 +667,7 @@ describe("RoomLifecycle — leaveRoom / leaveRemoteRoom", () => {
     expect(h.deps.rooms.get("room-1")?.members).not.toContain(h.ids.memberId);
   });
 
-  it("updates subscribedRooms and broadcasts agent_upsert only for a known agent", async () => {
+  it("updates subscribedRooms of a known agent, and broadcasts no agent_upsert for another store's agent", async () => {
     const h = await makeHarness();
     h.deps.rooms.set(
       "room-1",
@@ -673,6 +689,27 @@ describe("RoomLifecycle — leaveRoom / leaveRemoteRoom", () => {
     expect(h.deps.agents.get(h.ids.memberId)?.subscribedRooms).toEqual([
       "other-room",
     ]);
+    expect(h.broadcastPatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "agent_upsert" }),
+    );
+  });
+
+  it("broadcasts the agent_upsert of this store's own agent that left", async () => {
+    const h = await makeHarness();
+    h.deps.rooms.set(
+      "room-1",
+      room({
+        id: "room-1",
+        owner: h.ids.ownerId,
+        members: [h.ids.ownerId, h.ids.memberId],
+        memberJoins: { [h.ids.ownerId]: 1, [h.ids.memberId]: 1 },
+      }),
+    );
+    h.deps.agents.set(
+      h.ids.ownerId,
+      agent({ id: h.ids.ownerId, subscribedRooms: ["room-1"] }),
+    );
+    await h.lifecycle.leaveRoom("room-1", h.ids.ownerId);
     expect(h.broadcastPatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: "agent_upsert" }),
     );

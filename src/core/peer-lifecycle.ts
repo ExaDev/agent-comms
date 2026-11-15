@@ -5,7 +5,12 @@
  */
 
 import { reportRejection } from "./detached-work.js";
-import { admitPatch, admitSnapshot } from "./state-intake.js";
+import {
+  AgentSlots,
+  admitPatch,
+  admitSnapshot,
+  type StateSender,
+} from "./state-intake.js";
 import { normaliseWireState } from "./wire-protocol.js";
 import { parseIsoTimestampMs } from "./iso-timestamp.js";
 import type {
@@ -23,6 +28,7 @@ import { ROOM_REQUEST_TIMEOUT_MS } from "./request-timeouts.js";
 import { COORDINATOR_HOST } from "./mesh-store-shared.js";
 import { startFirstContact, type FirstContact } from "./first-contact.js";
 import type { DeliveryEngine } from "./delivery-engine.js";
+import type { StaleAgentChecker } from "./stale-agent-checker.js";
 import type { RoomProtocol } from "./room-protocol.js";
 import type { CoordinatorRole } from "./coordinator-role.js";
 import type { ConnectionHandle, MeshTransport } from "./transport.js";
@@ -42,8 +48,8 @@ export interface PeerLifecycleDeps {
   getPeerId: () => string;
   /** The peer ID of the coordinator this side currently answers to, as the transport reports it -- undefined when this side is the coordinator itself or has never reached one. Supplied as its own dep rather than read off requireTransport() so the crash-race decision below is expressible against a plain value in tests. */
   getCoordinatorPeerId: () => string | undefined;
-  /** Whether `peerId` holds the elected coordinator role this side has accepted. Together with the coordinator this side dialled, it is the only kind of peer that may describe agents other than its own. */
-  isElectedHolder: (peerId: string) => boolean;
+  /** Forgets everything the store holds for an agent whose record it evicts to make room. */
+  staleAgentChecker: Pick<StaleAgentChecker, "forget">;
   requireTransport: () => MeshTransport;
   serialise: () => SerialisedState;
   roomProtocol: Pick<RoomProtocol, "flushPendingRoomRequests">;
@@ -58,11 +64,22 @@ export interface PeerLifecycleDeps {
   /** The elected coordinator role: claimed when this side takes the port listener, or finds it held by something that never answers, with no incumbent known; recovered when its holder departs; and the authority retireDepartedAgent checks. Announcing it to each new session is the transport's onElectionSessionEnrolled, not a PeerLifecycle concern. */
   coordinatorRole: Pick<
     CoordinatorRole,
-    "claimIfVacant" | "claimIfVacantAfterWait" | "handleDeparture" | "isHolder"
+    | "claimIfVacant"
+    | "claimIfVacantAfterWait"
+    | "handleDeparture"
+    | "isHolder"
+    | "current"
+    | "onHolderAccepted"
   >;
   /** Reports a failed takeover or rejoin. The crash-race path runs detached from any caller that could handle a rejection, so this is the only signal that a coordinator loss was noticed but not recovered from. */
   onError?: ((error: Error) => void) | undefined;
 }
+
+/** How many peers a refusal has been reported for, at most, before the record starts again: a report is made once per peer, so a flood of peers cannot flood the error channel or this set. */
+const MAX_REPORTED_PEERS = 1024;
+
+/** How many departure announcements wait for their sender to be accepted as the holder. */
+const MAX_DEFERRED_DEPARTURES = 64;
 
 /** How much of a peer's id a report names: enough to tell peers apart in a log. */
 const SHORT_ID_LENGTH = 12;
@@ -83,13 +100,34 @@ type RejoinOutcome =
   { outcome: "joined" } | { outcome: "unsettled"; cause?: Error };
 
 export class PeerLifecycle {
+  private readonly slots: AgentSlots;
+
+  /** The peers a refusal has been reported for. */
+  private readonly reportedPeers = new Set<string>();
+
+  /** Offline reports refused because their sender was not yet known to be the holder, by sender, replayed when it is. */
+  private readonly deferredDepartures = new Map<string, Set<string>>();
+
   /** Guards against a second contest running while the first is still binding or rejoining -- a coordinator whose process dies can close more than one session to this side, and each close arrives as its own disconnect. */
   private contestingCoordinatorRole = false;
 
   /** The first-contact presence, when one was configured and started; owned here because discovering a peer and dialling it is peer-lifecycle bookkeeping (handlePeerList), the same path a coordinator's peer_list takes. */
   private firstContact: FirstContact | undefined;
 
-  constructor(private readonly deps: PeerLifecycleDeps) {}
+  constructor(private readonly deps: PeerLifecycleDeps) {
+    deps.coordinatorRole.onHolderAccepted = (holderId) => {
+      this.handleHolderAccepted(holderId);
+    };
+    this.slots = new AgentSlots({
+      agents: deps.agents,
+      forget: (agentId) => {
+        deps.staleAgentChecker.forget(agentId);
+      },
+      hasPeer: (agentId) => deps.peerInfo.has(agentId),
+      ownId: () => deps.getPeerId(),
+      now: Date.now,
+    });
+  }
 
   /** Starts the coordinator-free presence (agent-comms#341) when a firstContactPort was configured: each discovered peer (carrying the host its beacon came from) is fed through handlePeerList, whose dial-out plus the peer_list every established connection shares (handlePeerConnected) forms the mesh transitively with no coordinator's handout. A no-op with no port, and on a second call. */
   startFirstContact(): void {
@@ -204,13 +242,26 @@ export class PeerLifecycle {
       .connectToPeer(newPeer, this.deps.getPeerId());
   }
 
+  /** The snapshot this side gives a peer that connected. An agent is described by its own store or the coordinator, so a side that is neither the coordinator nor holding its role gives only its own agent: whatever else it holds, the peer is refused it, and the owners give theirs themselves. */
+  private stateToShare(): SerialisedState {
+    const state = this.deps.serialise();
+    if (
+      this.deps.requireTransport().isCoordinator ||
+      this.deps.coordinatorRole.isHolder()
+    ) {
+      return state;
+    }
+    const own = state.agents[this.deps.getPeerId()];
+    return { ...state, agents: own === undefined ? {} : { [own.id]: own } };
+  }
+
   async handlePeerConnected(
     handle: Readonly<ConnectionHandle>,
     _info: Readonly<PeerInfo>,
   ): Promise<void> {
     // If we have state and the peer doesn't, send state sync
     if (this.deps.agents.size > 0) {
-      const state: SerialisedState = this.deps.serialise();
+      const state = this.stateToShare();
       await this.deps.requireTransport().send(handle, {
         method: "state_sync",
         state,
@@ -229,22 +280,29 @@ export class PeerLifecycle {
     handle: Readonly<ConnectionHandle>,
     msg: MeshMessage,
   ): Promise<void> {
-    const sender = {
+    const sender: StateSender = {
       id: handle.id,
       isCoordinator:
         handle.id === this.deps.getCoordinatorPeerId() ||
-        this.deps.isElectedHolder(handle.id),
+        this.deps.coordinatorRole.current()?.holder === handle.id,
     };
+    const ownId = this.deps.getPeerId();
+    const claims = this.slots.open(handle.id);
     if (msg.method === "state_sync") {
       const { value, refused } = admitSnapshot(
         normaliseWireState(msg.state),
         sender,
-        this.deps.agents,
+        ownId,
+        claims,
       );
       this.reportRefused(handle.id, refused);
       this.deps.deliveryEngine.applyStateSync(value);
     } else if (msg.method === "state_update") {
-      if (!admitPatch(msg.patch, sender, this.deps.agents)) {
+      if (!admitPatch(msg.patch, sender, ownId, claims)) {
+        // A departure announced by a successor can arrive before the claim that makes it the holder does, over another session of the same pair: it waits for that claim instead of being lost.
+        if (msg.patch.type === "agent_offline") {
+          this.deferDeparture(handle.id, msg.patch.agentId);
+        }
         this.reportRefused(handle.id, 1);
         return;
       }
@@ -252,9 +310,46 @@ export class PeerLifecycle {
     }
   }
 
-  /** Reports records of a peer's state that were refused, by count: what a peer sent is not repeated, since it is the peer's to choose. */
+  private deferDeparture(senderId: string, agentId: string): void {
+    let total = 0;
+    for (const waiting of this.deferredDepartures.values())
+      total += waiting.size;
+    if (total >= MAX_DEFERRED_DEPARTURES) return;
+    const waiting = this.deferredDepartures.get(senderId) ?? new Set<string>();
+    waiting.add(agentId);
+    this.deferredDepartures.set(senderId, waiting);
+  }
+
+  /** Applies the departures that `holderId` announced before it was accepted as the holder, now that it is. Detached: it runs from the election's acceptance of a claim. */
+  handleHolderAccepted(holderId: string): void {
+    const waiting = this.deferredDepartures.get(holderId);
+    if (waiting === undefined) return;
+    this.deferredDepartures.delete(holderId);
+    this.detach(
+      Promise.all(
+        [...waiting].map(async (agentId) =>
+          this.deps.deliveryEngine.applyPatch({
+            type: "agent_offline",
+            agentId,
+          }),
+        ),
+      ),
+    );
+  }
+
+  /** Forgets what is kept for a connection that ended. */
+  private forgetSource(peerId: string): void {
+    this.slots.release(peerId);
+    this.deferredDepartures.delete(peerId);
+    this.reportedPeers.delete(peerId);
+  }
+
+  /** Reports records of a peer's state that were refused, by count and once per peer: what a peer sent is not repeated, since it is the peer's to choose, and a peer that keeps sending them cannot flood the error channel. */
   private reportRefused(peerId: string, refused: number): void {
-    if (refused === 0) return;
+    if (refused === 0 || this.reportedPeers.has(peerId)) return;
+    if (this.reportedPeers.size >= MAX_REPORTED_PEERS)
+      this.reportedPeers.clear();
+    this.reportedPeers.add(peerId);
     this.deps.onError?.(
       new Error(
         `PeerLifecycle: refused ${String(refused)} record(s) of state from peer ${peerId.slice(0, SHORT_ID_LENGTH)}: an agent is described by its own store or the coordinator, and a snapshot is bounded`,
@@ -299,6 +394,7 @@ export class PeerLifecycle {
   /** The awaitable form of handlePeerDisconnected, which TransportEvents forces to be synchronous. A departing peer leaves the peer list. When it held the elected coordinator role, the role is recovered first (the lowest surviving device-id claims at a raised term), so the new holder is already in place by the time the departed peer's agent record is retired; when it held the well-known port this side dialled, the vacated port is contested too. */
   async handlePeerDeparture(peerId: string): Promise<void> {
     this.deps.peerInfo.delete(peerId);
+    this.forgetSource(peerId);
     await this.deps.coordinatorRole.handleDeparture(peerId, async () =>
       this.retireDepartedAgent(peerId),
     );
