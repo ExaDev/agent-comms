@@ -202,12 +202,12 @@ export class RelayServer {
     });
   }
 
-  /** Drives one connection: filters its gossip to admitted devices, registers it with the hub on its first admitted advert (calling `onRegistered`), and hands the hub every frame from then on. A frame that cannot be handled is reported and the next is still read, so one bad frame never ends a connection's service; the loop ends when the connection's own stream does. */
+  /** Drives one connection: filters its gossip to admitted devices, registers it with the hub on its first admitted advert and calls `onVerified` once the hub has accepted an advert of it, and hands the hub every frame from then on. A frame that cannot be handled is reported and the next is still read, so one bad frame never ends a connection's service; the loop ends when the connection's own stream does. */
   private async serve(
     connection: Readonly<Connection>,
-    onRegistered: () => void,
+    onVerified: () => void,
   ): Promise<void> {
-    const state = { registered: false };
+    const state = { registered: false, verified: false };
     const devices = new Set<string>();
     this.clientDevices.set(connection, devices);
     try {
@@ -225,9 +225,16 @@ export class RelayServer {
             if (admitted.type !== "gossip") return "continue";
             this.hub.registerConnection(connection);
             state.registered = true;
-            onRegistered();
           }
           await this.hub.onFrame(connection, admitted);
+          // The hub verifies an advert after the connection is registered on the device id it names: the key must hash to that device and the signature must verify, or the advert is dropped. Only a connection the hub has accepted something from has proved anything, so only then is its admission deadline lifted.
+          if (
+            !state.verified &&
+            this.hub.exportConnection(connection) !== undefined
+          ) {
+            state.verified = true;
+            onVerified();
+          }
           return "continue";
         },
         () => this.options.onError,
