@@ -133,19 +133,33 @@ describe("DeliveryEngine — applyStateSync own agent", () => {
     });
   });
 
-  it("accepts a snapshot's offline copy of this store's own agent once it has itself set it offline", () => {
+  it("ignores a snapshot's copy of this store's own agent once it has itself set it offline, rather than taking the copy whole", () => {
     const h = makeHarness();
-    h.deps.agents.set(PEER_ID, agent({ status: "offline" }));
-
-    h.engine.applyStateSync(
-      snapshotWith(agent({ status: "offline", version: SNAPSHOT_REVISION })),
+    h.deps.agents.set(
+      PEER_ID,
+      agent({ status: "offline", name: "own", tags: ["own"] }),
     );
 
-    expect(h.deps.agents.get(PEER_ID)?.version).toBe(SNAPSHOT_REVISION);
+    h.engine.applyStateSync(
+      snapshotWith(
+        agent({
+          status: "offline",
+          version: SNAPSHOT_REVISION,
+          name: "theirs",
+          tags: ["theirs"],
+        }),
+      ),
+    );
+
+    const own = h.deps.agents.get(PEER_ID);
+    expect(own?.version).toBe(LOCAL_REVISION);
+    expect(own?.name).toBe("own");
+    expect(own?.tags).toEqual(["own"]);
+    expect(own?.status).toBe("offline");
     expect(h.transport.broadcast).not.toHaveBeenCalled();
   });
 
-  it("applies a snapshot's copy of this store's own agent as usual when it is not offline", () => {
+  it("does not apply a snapshot's copy of this store's own agent, as it is the authority on it, and takes the copy of an agent it holds none of", () => {
     const h = makeHarness();
     h.deps.agents.set(PEER_ID, agent({ name: "before" }));
 
@@ -155,8 +169,12 @@ describe("DeliveryEngine — applyStateSync own agent", () => {
       ),
     );
 
-    expect(h.deps.agents.get(PEER_ID)?.name).toBe("after");
+    expect(h.deps.agents.get(PEER_ID)?.name).toBe("before");
     expect(h.transport.broadcast).not.toHaveBeenCalled();
+
+    const fresh = makeHarness();
+    fresh.engine.applyStateSync(snapshotWith(agent({ name: "restored" })));
+    expect(fresh.deps.agents.get(PEER_ID)?.name).toBe("restored");
   });
 
   it("leaves a snapshot's offline copy of another agent alone", () => {

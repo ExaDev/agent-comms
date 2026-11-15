@@ -10,7 +10,6 @@ import type { MeshStatePatch, PeerInfo } from "./wire-protocol.js";
 export interface StaleAgentCheckerDeps {
   agents: Map<string, AgentIdentity>;
   deliveryQueues: Map<string, DeliveryEvent[]>;
-  identityCache: Map<string, { id: string }>;
   peerInfo: Map<string, PeerInfo>;
   notifyRoomsOfStatus: (agentId: string, status: AgentStatus) => Promise<void>;
   broadcastPatch: (patch: MeshStatePatch) => Promise<void>;
@@ -87,11 +86,10 @@ export class StaleAgentChecker {
     for (const id of purgeIds) this.forget(id);
   }
 
-  /** Forgets everything the store holds for an agent: its record, its peer entry, its cached identity and its queued deliveries. */
+  /** Forgets everything the store holds for an agent: its record, its peer entry and its queued deliveries. */
   forget(agentId: string): void {
     this.deps.agents.delete(agentId);
     this.deps.peerInfo.delete(agentId);
-    this.deps.identityCache.delete(agentId);
     this.deps.deliveryQueues.delete(agentId);
   }
 

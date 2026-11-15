@@ -213,13 +213,11 @@ export class DeliveryEngine {
         continue;
       }
       const own = this.deps.agents.get(id);
-      if (
-        own !== undefined &&
-        this.isOwnRunningAgent(id, own) &&
-        agent.status === "offline"
-      ) {
-        // The same authority rule as an agent_offline patch: a snapshot from a peer that still holds this store's agent as offline (the previous coordinator retired it) must not overwrite a running agent, or the store would gossip itself offline for good.
-        void this.reassertOwnAgent(own, agent.version);
+      if (own !== undefined && id === this.deps.getPeerId()) {
+        // This store is the authority on its own agent, so a snapshot's record of it is never applied. One that says offline while the agent runs (the previous coordinator retired it) is contradicted, or the store would gossip itself offline for good; any other is ignored, and an agent that this store has itself set offline stays as it set it.
+        if (this.isOwnRunningAgent(id, own) && agent.status === "offline") {
+          void this.reassertOwnAgent(own, agent.version);
+        }
         continue;
       }
       if (existingVersion === agent.version) {

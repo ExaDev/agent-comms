@@ -2,6 +2,7 @@
  * PeerLifecycle's failover decisions, exercised against fakes with a real CoordinatorRole: which disconnects contest the vacated well-known port (agent-comms#285), what a peer that loses the bind race does instead, how the elected coordinator role is recovered when its holder departs (agent-comms#341), and who retires a departed peer's own agent record. The real-socket counterparts live in coordinator-failover.integration.test.ts and coordinator-election.integration.test.ts.
  */
 
+import { KnownAgents } from "../core/known-agents.js";
 import { afterEach, test, expect, vi } from "vitest";
 import { deviceIdFromHex } from "wire-mesh-core/domain/device-id";
 import type { CoordinatorFrame } from "wire-mesh-core/generated/protocol";
@@ -101,7 +102,7 @@ function makeHarness(options: Readonly<HarnessOptions> = {}): Harness {
     claims: [],
   };
   const peerInfo = new Map<string, PeerInfo>();
-  const agents = new Map<string, AgentIdentity>();
+  const agents = new KnownAgents();
   const roomStatusNotifications: Harness["roomStatusNotifications"] = [];
   const errors: Error[] = [];
   const notEnrolled = new Set(options.notEnrolled);

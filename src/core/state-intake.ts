@@ -3,7 +3,7 @@
  */
 
 import { parseDisplayName } from "./display-name.js";
-import { parseIsoTimestampMs } from "./iso-timestamp.js";
+import type { KnownAgents } from "./known-agents.js";
 import type { AgentIdentity } from "./types.js";
 import type { MeshStatePatch, SerialisedState } from "./wire-protocol.js";
 
@@ -15,8 +15,8 @@ export const MAX_SNAPSHOT_ENTRIES = 4096;
 /** The most agents a store keeps. Past it, a new agent takes the place of an offline record, and is refused only when no record is offline; one already known is still updated. At least the largest snapshot, so a full snapshot of a full mesh fits. */
 export const MAX_KNOWN_AGENTS = 4096;
 
-/** The most agents one connection may introduce over its life. A conforming peer introduces its own agent, or as coordinator relays the mesh, so far fewer. */
-export const MAX_NEW_AGENTS_PER_SOURCE = 256;
+/** The most agents one origin may have introduced that a store still holds: the host a peer was reached at, or this machine for a peer reached on it, so a host that presents many device keys is still one origin. At this number an origin's new agent takes the place of that origin's own offline record, and is refused only when it has none. */
+export const MAX_AGENTS_PER_ORIGIN = 512;
 
 /** Who sent state, and whether this side takes that peer to be the coordinator. */
 export interface StateSender {
@@ -30,13 +30,18 @@ export interface Admitted<T> {
   readonly refused: number;
 }
 
+/** What the intake did with a snapshot, and which refused agent records were refused only for want of the sender's authority, which a later claim can give it. */
+export interface AdmittedSnapshot extends Admitted<SerialisedState> {
+  readonly awaitingAuthority: readonly AgentIdentity[];
+}
+
 /** Whether `sender` may speak for the agent `agentId`: it is that agent's own store, or the coordinator. */
 function mayDescribeAgent(sender: StateSender, agentId: string): boolean {
   return sender.id === agentId || sender.isCoordinator;
 }
 
 /** Whether a record is one a conforming peer sends: it sits under its own id and its name is one a registration would have kept as it is. */
-function isWellFormedAgent(
+export function isWellFormedAgent(
   key: string,
   agent: Readonly<AgentIdentity>,
 ): boolean {
@@ -48,23 +53,13 @@ function isWellFormedAgent(
   );
 }
 
-/**
- * The order records are evicted in: a start time that does not parse, or lies in the future, first (no conforming record has one), then the oldest start. No time of going offline is recorded, so the start time stands in for it.
- */
-function evictionRank(agent: Readonly<AgentIdentity>, now: number): number {
-  const startedAt = parseIsoTimestampMs(agent.startedAt);
-  return startedAt === undefined || startedAt > now
-    ? Number.NEGATIVE_INFINITY
-    : startedAt;
-}
-
 /** What a claim needs of the store's agent slots. */
 interface ClaimSlots {
   has: (agentId: string) => boolean;
   size: number;
-  introducedBy: (sourceId: string) => number;
-  noteIntroduced: (sourceId: string) => void;
-  evictOne: (keep: ReadonlySet<string>) => boolean;
+  heldFrom: (origin: string, keep: ReadonlySet<string>) => number;
+  tag: (agentId: string, origin: string) => void;
+  evictOne: (keep: ReadonlySet<string>, origin?: string) => boolean;
 }
 
 /** The claims on agent slots that the records of one message make. */
@@ -73,17 +68,20 @@ export class AgentClaims {
 
   constructor(
     private readonly slots: Readonly<ClaimSlots>,
-    private readonly sourceId: string,
+    private readonly origin: string,
   ) {}
 
   has(agentId: string): boolean {
     return this.slots.has(agentId);
   }
 
-  /** Whether the store takes a record for `agentId`: it already holds one, or it can hold a new one. A new one counts against the connection that introduced it, and past the store's bound takes the place of an offline record. */
+  /** Whether the store takes a record for `agentId`: it already holds one, or it can hold a new one. A new one counts against the origin that introduced it, and past the bound of the origin or of the store takes the place of an offline record. */
   claim(agentId: string): boolean {
     if (this.slots.has(agentId) || this.claimed.has(agentId)) return true;
-    if (this.slots.introducedBy(this.sourceId) >= MAX_NEW_AGENTS_PER_SOURCE) {
+    if (
+      this.slots.heldFrom(this.origin, this.claimed) >= MAX_AGENTS_PER_ORIGIN &&
+      !this.slots.evictOne(this.claimed, this.origin)
+    ) {
       return false;
     }
     if (
@@ -93,38 +91,37 @@ export class AgentClaims {
       return false;
     }
     this.claimed.add(agentId);
-    this.slots.noteIntroduced(this.sourceId);
+    this.slots.tag(agentId, this.origin);
     return true;
   }
 }
 
 /** What an AgentSlots reads of, and does to, the store. */
 export interface AgentSlotsStore {
-  readonly agents: ReadonlyMap<string, AgentIdentity>;
+  readonly agents: KnownAgents;
   /** Forgets everything the store holds for an agent it evicts. */
   forget: (agentId: string) => void;
-  /** Whether the store still has a peer entry for the agent: an offline record without one is evicted before one with one. */
-  hasPeer: (agentId: string) => boolean;
   /** The id of the store's own agent, which is never evicted. */
   ownId: () => string;
-  /** The current time, in milliseconds since the epoch. */
-  now: () => number;
 }
 
-/** The places a store can hold agents, and how many new ones each connection has introduced. */
+/** The places a store can hold agents, and which origin introduced each. */
 export class AgentSlots implements ClaimSlots {
-  private readonly introduced = new Map<string, number>();
+  /** The agents each origin introduced and the store still holds, or has just claimed. */
+  private readonly byOrigin = new Map<string, Set<string>>();
+
+  private readonly originOf = new Map<string, string>();
 
   constructor(private readonly store: AgentSlotsStore) {}
 
-  /** Starts the claims of one message from `sourceId`. */
-  open(sourceId: string): AgentClaims {
-    return new AgentClaims(this, sourceId);
+  /** Starts the claims of one message from `origin`. */
+  open(origin: string): AgentClaims {
+    return new AgentClaims(this, origin);
   }
 
-  /** Forgets what a connection introduced, once it has ended. */
-  release(sourceId: string): void {
-    this.introduced.delete(sourceId);
+  /** Forgets what an origin introduced, once nothing of it is held. */
+  release(origin: string): void {
+    this.heldFrom(origin, new Set());
   }
 
   has(agentId: string): boolean {
@@ -135,42 +132,39 @@ export class AgentSlots implements ClaimSlots {
     return this.store.agents.size;
   }
 
-  introducedBy(sourceId: string): number {
-    return this.introduced.get(sourceId) ?? 0;
-  }
-
-  noteIntroduced(sourceId: string): void {
-    this.introduced.set(sourceId, this.introducedBy(sourceId) + 1);
-  }
-
-  /** Evicts the record that is least worth keeping and returns whether there was one. Only an offline record is evictable, and never one in `keep` or the store's own. */
-  evictOne(keep: ReadonlySet<string>): boolean {
-    const now = this.store.now();
-    let victim: { id: string; unconnected: boolean; rank: number } | undefined;
-    for (const [id, agent] of this.store.agents) {
-      if (
-        agent.status !== "offline" ||
-        keep.has(id) ||
-        id === this.store.ownId()
-      ) {
-        continue;
-      }
-      const candidate = {
-        id,
-        unconnected: !this.store.hasPeer(id),
-        rank: evictionRank(agent, now),
-      };
-      if (
-        victim === undefined ||
-        (candidate.unconnected && !victim.unconnected) ||
-        (candidate.unconnected === victim.unconnected &&
-          candidate.rank < victim.rank)
-      ) {
-        victim = candidate;
+  /** How many agents `origin` introduced that the store still holds, besides those in `keep`, which a message has claimed and not yet stored. */
+  heldFrom(origin: string, keep: ReadonlySet<string>): number {
+    const ids = this.byOrigin.get(origin);
+    if (ids === undefined) return 0;
+    for (const id of ids) {
+      if (!this.store.agents.has(id) && !keep.has(id)) {
+        ids.delete(id);
+        this.originOf.delete(id);
       }
     }
+    if (ids.size === 0) this.byOrigin.delete(origin);
+    return ids.size;
+  }
+
+  tag(agentId: string, origin: string): void {
+    this.originOf.set(agentId, origin);
+    const ids = this.byOrigin.get(origin) ?? new Set<string>();
+    ids.add(agentId);
+    this.byOrigin.set(origin, ids);
+  }
+
+  /** Evicts the record that has been offline longest and returns whether there was one, among those `origin` introduced when it is given. Only an offline record is evictable, and never one in `keep` or the store's own. */
+  evictOne(keep: ReadonlySet<string>, origin?: string): boolean {
+    const ownId = this.store.ownId();
+    let victim: string | undefined;
+    for (const id of this.store.agents.offlineOldestFirst()) {
+      if (keep.has(id) || id === ownId) continue;
+      if (origin !== undefined && this.originOf.get(id) !== origin) continue;
+      victim = id;
+      break;
+    }
     if (victim === undefined) return false;
-    this.store.forget(victim.id);
+    this.store.forget(victim);
     return true;
   }
 }
@@ -195,18 +189,18 @@ export function admitSnapshot(
   sender: Readonly<StateSender>,
   ownId: string,
   claims: AgentClaims,
-): Admitted<SerialisedState> {
+): AdmittedSnapshot {
   let refused = 0;
   const agents: Record<string, AgentIdentity> = {};
+  const awaitingAuthority: AgentIdentity[] = [];
   for (const [key, agent] of Object.entries(state.agents)) {
     const contradictable =
       key === ownId && agent.status === "offline" && claims.has(key);
-    if (
-      !isWellFormedAgent(key, agent) ||
-      !(mayDescribeAgent(sender, key) || contradictable) ||
-      !claims.claim(key)
-    ) {
+    const wellFormed = isWellFormedAgent(key, agent);
+    const authorised = mayDescribeAgent(sender, key) || contradictable;
+    if (!wellFormed || !authorised || !claims.claim(key)) {
       refused += 1;
+      if (wellFormed && !authorised) awaitingAuthority.push(agent);
       continue;
     }
     agents[key] = agent;
@@ -231,6 +225,7 @@ export function admitSnapshot(
       deliveryQueues: queues.kept,
     },
     refused,
+    awaitingAuthority,
   };
 }
 
@@ -255,4 +250,20 @@ export function admitPatch(
     return patch.agentId === ownId || mayDescribeAgent(sender, patch.agentId);
   }
   return true;
+}
+
+/** Whether a patch was refused only because its sender is not known to be the coordinator, which a later claim can make it. */
+export function isAwaitingAuthority(
+  patch: Readonly<MeshStatePatch>,
+  sender: Readonly<StateSender>,
+): boolean {
+  if (patch.type === "agent_upsert") {
+    return (
+      isWellFormedAgent(patch.agent.id, patch.agent) &&
+      !mayDescribeAgent(sender, patch.agent.id)
+    );
+  }
+  return (
+    patch.type === "agent_offline" && !mayDescribeAgent(sender, patch.agentId)
+  );
 }

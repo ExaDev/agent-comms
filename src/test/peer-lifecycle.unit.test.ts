@@ -6,6 +6,9 @@ import {
   PeerLifecycle,
   type PeerLifecycleDeps,
 } from "../core/peer-lifecycle.js";
+import { KnownAgents } from "../core/known-agents.js";
+import { MAX_AGENTS_PER_ORIGIN } from "../core/state-intake.js";
+import { ROOM_REQUEST_TIMEOUT_MS } from "../core/request-timeouts.js";
 import type { AgentIdentity, DeliveryEvent } from "../core/types.js";
 import type { PeerInfo, SerialisedState } from "../core/wire-protocol.js";
 
@@ -28,6 +31,10 @@ function emptyState(): SerialisedState {
 }
 
 interface Harness {
+  /** The time the lifecycle reads, in milliseconds. */
+  clock: { now: number };
+  /** The peer this side dialled as its coordinator. */
+  dialled: { coordinator: string | undefined };
   deps: PeerLifecycleDeps;
   lifecycle: PeerLifecycle;
   transport: {
@@ -75,13 +82,18 @@ function makeHarness(): Harness {
       holder: COORDINATOR_ID,
     })),
   };
-  const agents = new Map<string, AgentIdentity>();
+  const agents = new KnownAgents();
+  const clock = { now: 0 };
+  const dialled: { coordinator: string | undefined } = {
+    coordinator: undefined,
+  };
   const deps: PeerLifecycleDeps = {
     peerInfo: new Map(),
     agents,
     coordinatorPort: COORDINATOR_PORT,
     getPeerId: () => OWNER_ID,
-    getCoordinatorPeerId: () => undefined,
+    getCoordinatorPeerId: () => dialled.coordinator,
+    now: () => clock.now,
     staleAgentChecker: {
       forget: (agentId) => {
         agents.delete(agentId);
@@ -104,6 +116,8 @@ function makeHarness(): Harness {
   };
   return {
     deps,
+    clock,
+    dialled,
     lifecycle: new PeerLifecycle(deps),
     transport,
     flushPendingRoomRequests,
@@ -450,57 +464,204 @@ describe("PeerLifecycle — handleDataMessage", () => {
     expect(h.applyStateSync).toHaveBeenLastCalledWith(emptyState());
   });
 
-  it("applies a departure its sender announced before its claim was accepted, once the claim is", async () => {
+  it("takes foreign agent records from the coordinator this side dialled, and from no other peer", async () => {
     const h = makeHarness();
+    h.dialled.coordinator = "dialled";
+    await h.lifecycle.handleDataMessage(
+      { id: "dialled" },
+      { method: "state_sync", state: stateOf(named("peer-b")) },
+    );
+    expect(h.applyStateSync).toHaveBeenLastCalledWith(stateOf(named("peer-b")));
+
+    await h.lifecycle.handleDataMessage(
+      { id: "not-dialled" },
+      { method: "state_sync", state: stateOf(named("peer-c")) },
+    );
+    expect(h.applyStateSync).toHaveBeenLastCalledWith(emptyState());
+  });
+
+  it("counts the agents of peers reached at one host together, however many device keys they use, and those of peers at another host apart", async () => {
+    const h = makeHarness();
+    const introduce = async (id: string, host: string): Promise<void> => {
+      h.deps.peerInfo.set(id, { ...peerInfo(id), host });
+      await h.lifecycle.handleDataMessage(
+        { id },
+        { method: "state_sync", state: stateOf(named(id)) },
+      );
+    };
+    for (let n = 0; n < MAX_AGENTS_PER_ORIGIN; n++) {
+      await introduce(`key-${String(n)}`, "10.0.0.9");
+      h.deps.agents.set(`key-${String(n)}`, named(`key-${String(n)}`));
+    }
+
+    await introduce("one-key-too-many", "10.0.0.9");
+    expect(h.applyStateSync).toHaveBeenLastCalledWith(emptyState());
+
+    await introduce("elsewhere", "10.0.0.10");
+    expect(h.applyStateSync).toHaveBeenLastCalledWith(
+      stateOf(named("elsewhere")),
+    );
+  });
+
+  describe("what a sender gives before its claim is accepted", () => {
     const departure = {
       method: "state_update",
       patch: { type: "agent_offline", agentId: "gone" },
     } as const;
 
-    await h.lifecycle.handleDataMessage({ id: "successor" }, departure);
-    expect(h.applyPatch).not.toHaveBeenCalled();
+    it("applies a departure once the claim is accepted, and once", async () => {
+      const h = makeHarness();
+      await h.lifecycle.handleDataMessage({ id: "successor" }, departure);
+      expect(h.applyPatch).not.toHaveBeenCalled();
 
-    h.lifecycle.handleHolderAccepted("someone-else");
-    expect(h.applyPatch).not.toHaveBeenCalled();
+      h.lifecycle.handleHolderAccepted("successor");
+      await vi.waitFor(() => {
+        expect(h.applyPatch).toHaveBeenCalledWith(departure.patch);
+      });
 
-    h.lifecycle.handleHolderAccepted("successor");
-    await vi.waitFor(() => {
-      expect(h.applyPatch).toHaveBeenCalledWith(departure.patch);
-    });
-
-    h.lifecycle.handleHolderAccepted("successor");
-    expect(h.applyPatch).toHaveBeenCalledTimes(1);
-  });
-
-  it("takes the announcement of a holder through the hook it gives the coordinator role", async () => {
-    const h = makeHarness();
-    await h.lifecycle.handleDataMessage(
-      { id: "successor" },
-      {
-        method: "state_update",
-        patch: { type: "agent_offline", agentId: "gone" },
-      },
-    );
-
-    h.coordinatorRole.onHolderAccepted?.("successor");
-
-    await vi.waitFor(() => {
+      h.lifecycle.handleHolderAccepted("successor");
       expect(h.applyPatch).toHaveBeenCalledTimes(1);
     });
-  });
 
-  it("forgets a departure still waiting when its sender leaves", async () => {
-    const h = makeHarness();
-    await h.lifecycle.handleDataMessage(
-      { id: "successor" },
-      {
-        method: "state_update",
-        patch: { type: "agent_offline", agentId: "gone" },
-      },
-    );
-    await h.lifecycle.handlePeerDeparture("successor");
-    h.lifecycle.handleHolderAccepted("successor");
-    expect(h.applyPatch).not.toHaveBeenCalled();
+    it("applies the foreign agent records of a snapshot once the claim is accepted, which the joiner would otherwise lose", async () => {
+      const h = makeHarness();
+      await h.lifecycle.handleDataMessage(
+        { id: "successor" },
+        {
+          method: "state_sync",
+          state: stateOf(named("peer-b"), named("peer-c")),
+        },
+      );
+      expect(h.applyStateSync).toHaveBeenLastCalledWith(emptyState());
+
+      h.lifecycle.handleHolderAccepted("successor");
+
+      expect(h.applyStateSync).toHaveBeenLastCalledWith(
+        stateOf(named("peer-b"), named("peer-c")),
+      );
+    });
+
+    it("applies an agent update once the claim is accepted", async () => {
+      const h = makeHarness();
+      await h.lifecycle.handleDataMessage(
+        { id: "successor" },
+        {
+          method: "state_update",
+          patch: { type: "agent_upsert", agent: named("peer-b") },
+        },
+      );
+      expect(h.applyPatch).not.toHaveBeenCalled();
+
+      h.lifecycle.handleHolderAccepted("successor");
+
+      expect(h.applyStateSync).toHaveBeenLastCalledWith(
+        stateOf(named("peer-b")),
+      );
+    });
+
+    it("holds no record that is malformed, since no claim makes it acceptable", async () => {
+      const h = makeHarness();
+      await h.lifecycle.handleDataMessage(
+        { id: "successor" },
+        {
+          method: "state_sync",
+          state: stateOf(named("peer-b", "bad\u001b[2J")),
+        },
+      );
+
+      h.lifecycle.handleHolderAccepted("successor");
+
+      expect(h.applyStateSync).toHaveBeenCalledTimes(1);
+    });
+
+    it("drops what it holds when a claim naming another peer is accepted first", async () => {
+      const h = makeHarness();
+      await h.lifecycle.handleDataMessage({ id: "successor" }, departure);
+      await h.lifecycle.handleDataMessage(
+        { id: "successor" },
+        { method: "state_sync", state: stateOf(named("peer-b")) },
+      );
+
+      h.lifecycle.handleHolderAccepted("someone-else");
+      h.lifecycle.handleHolderAccepted("successor");
+
+      expect(h.applyPatch).not.toHaveBeenCalled();
+      expect(h.applyStateSync).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not apply a departure about an agent whose record changed since it was held", async () => {
+      const h = makeHarness();
+      h.deps.agents.set("gone", { ...named("gone"), version: 1 });
+      await h.lifecycle.handleDataMessage({ id: "successor" }, departure);
+      h.deps.agents.set("gone", { ...named("gone"), version: 2 });
+
+      h.lifecycle.handleHolderAccepted("successor");
+
+      expect(h.applyPatch).not.toHaveBeenCalled();
+    });
+
+    it("does not apply what it held for longer than one claim wait", async () => {
+      const h = makeHarness();
+      await h.lifecycle.handleDataMessage({ id: "successor" }, departure);
+      await h.lifecycle.handleDataMessage(
+        { id: "successor" },
+        { method: "state_sync", state: stateOf(named("peer-b")) },
+      );
+      h.clock.now += ROOM_REQUEST_TIMEOUT_MS + 1;
+
+      h.lifecycle.handleHolderAccepted("successor");
+
+      expect(h.applyPatch).not.toHaveBeenCalled();
+      expect(h.applyStateSync).toHaveBeenCalledTimes(1);
+    });
+
+    it("holds afresh what arrives after an earlier hold expired, and applies it", async () => {
+      const h = makeHarness();
+      await h.lifecycle.handleDataMessage({ id: "successor" }, departure);
+      h.clock.now += ROOM_REQUEST_TIMEOUT_MS + 1;
+      await h.lifecycle.handleDataMessage(
+        { id: "successor" },
+        { method: "state_sync", state: stateOf(named("peer-b")) },
+      );
+
+      h.lifecycle.handleHolderAccepted("successor");
+
+      expect(h.applyPatch).not.toHaveBeenCalled();
+      expect(h.applyStateSync).toHaveBeenLastCalledWith(
+        stateOf(named("peer-b")),
+      );
+    });
+
+    it("applies what it held within one claim wait", async () => {
+      const h = makeHarness();
+      await h.lifecycle.handleDataMessage({ id: "successor" }, departure);
+      h.clock.now += ROOM_REQUEST_TIMEOUT_MS;
+
+      h.lifecycle.handleHolderAccepted("successor");
+
+      await vi.waitFor(() => {
+        expect(h.applyPatch).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("takes the announcement of a holder through the hook it gives the coordinator role", async () => {
+      const h = makeHarness();
+      await h.lifecycle.handleDataMessage({ id: "successor" }, departure);
+
+      h.coordinatorRole.onHolderAccepted?.("successor");
+
+      await vi.waitFor(() => {
+        expect(h.applyPatch).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("forgets what it holds when the sender leaves", async () => {
+      const h = makeHarness();
+      await h.lifecycle.handleDataMessage({ id: "successor" }, departure);
+      await h.lifecycle.handlePeerDeparture("successor");
+      h.lifecycle.handleHolderAccepted("successor");
+      expect(h.applyPatch).not.toHaveBeenCalled();
+    });
   });
 
   it("applies neither for a message method it doesn't dispatch on", async () => {
