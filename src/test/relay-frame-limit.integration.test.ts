@@ -98,14 +98,18 @@ it("closes a connection that sends a message one byte over the limit with the to
 });
 
 it("does not refuse a message of exactly the limit for its size", async () => {
-  const { onError } = collector();
+  const { errors, onError } = collector();
   const { url } = await startRelay(onError);
   const socket = await connect(url);
 
   const code = await closeCodeAfterSending(socket, MAX_RELAY_FRAME_BYTES);
 
-  // The bytes are not a frame, so the connection is closed for that, as a protocol error, and never for their size.
+  // The bytes are not a frame, so the connection is closed for that, as a protocol error. A close for the size would also report the size error, which is the one thing this must not see.
   expect(code).toBe(WS_PROTOCOL_ERROR);
+  expect(errors.map((error) => error.message)).not.toContain(
+    "Max payload size exceeded",
+  );
+  expect(errors).toHaveLength(1);
 });
 
 it("states the limit as sixteen mebibytes", () => {
