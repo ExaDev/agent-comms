@@ -1,3 +1,9 @@
+## [10.0.8](https://github.com/ExaDev/agent-comms/compare/v10.0.7...v10.0.8) (2026-11-15)
+
+### Bug Fixes
+
+* **core:** release what a transport keeps per peer when the peer's session ends ([4ccad34](https://github.com/ExaDev/agent-comms/commit/4ccad349043df4022b6fc83407bfd79a7a6a3eae))
+
 ## [10.0.7](https://github.com/ExaDev/agent-comms/compare/v10.0.6...v10.0.7) (2026-11-15)
 
 ### Build
