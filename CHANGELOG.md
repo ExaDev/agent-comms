@@ -1,3 +1,16 @@
+## [9.1.1](https://github.com/ExaDev/agent-comms/compare/v9.1.0...v9.1.1) (2026-11-15)
+
+### Bug Fixes
+
+* **core:** evaluate a claim held for an absent holder only while its sender is still here ([e81d3d7](https://github.com/ExaDev/agent-comms/commit/e81d3d7ed9302a602c0347e56ca5dc764f8e208f))
+* **core:** evaluate a coordinator claim only when its holder is here ([8abcf2c](https://github.com/ExaDev/agent-comms/commit/8abcf2c70f709247ddae387cb10cbe8a450f5c9b))
+* **core:** hold the claims waiting for a holder per sender, in the election's order ([520d4e4](https://github.com/ExaDev/agent-comms/commit/520d4e4fbce8f9fe8febc528b911831f8aec27fa))
+* **core:** rank waiting coordinator claims as the election does and end them with their sender ([b9703a5](https://github.com/ExaDev/agent-comms/commit/b9703a55b5b76c19b0a07e2eb5bacc1b35b8a5dd))
+
+### Tests
+
+* **core:** observe the evaluation of a held claim whose sender has gone ([2ea8679](https://github.com/ExaDev/agent-comms/commit/2ea8679ded62ee46dcdd4c980944472a1a1c0190))
+
 ## [9.1.0](https://github.com/ExaDev/agent-comms/compare/v9.0.15...v9.1.0) (2026-11-14)
 
 ### Features
