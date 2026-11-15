@@ -403,30 +403,60 @@ describe("what one connection introduces", () => {
     expect(held.agents.has("b-offline")).toBe(true);
   });
 
-  it("forgets the connection of an agent the store evicts or removes without waiting for that connection to be checked again", () => {
-    const tracked = (slots: AgentSlots): number => {
-      const bySource: unknown = Reflect.get(slots, "bySource");
-      const sourceOf: unknown = Reflect.get(slots, "sourceOf");
-      if (!(bySource instanceof Map) || !(sourceOf instanceof Map)) {
-        throw new Error("the slots keep their bookkeeping elsewhere");
+  describe("an agent the store removed is no longer attributed to the connection that introduced it", () => {
+    /** A connection at its bound whose first agent is offline; `remove` takes that agent out of the store, which then holds the same id again, offline, without any connection having introduced it. */
+    function scenario(
+      remove: (held: ReturnType<typeof storeHolding>) => void,
+    ): ReturnType<typeof storeHolding> {
+      const held = storeHolding([]);
+      take(held, "returned", "offline");
+      for (let n = 1; n < MAX_AGENTS_PER_SOURCE; n++) {
+        take(held, `a-${String(n)}`);
       }
-      return bySource.size + sourceOf.size;
-    };
-    const deleted = storeHolding([]);
-    take(deleted, "gone");
-    expect(tracked(deleted.slots)).toBeGreaterThan(0);
-    deleted.agents.delete("gone");
-    expect(tracked(deleted.slots)).toBe(0);
+      remove(held);
+      held.agents.set("returned", offline("returned"));
+      held.claims = held.slots.open("conn-a");
+      return held;
+    }
 
-    const cleared = storeHolding([]);
-    take(cleared, "gone");
-    cleared.agents.clear();
-    expect(tracked(cleared.slots)).toBe(0);
+    it("when it is deleted", () => {
+      const held = scenario((h) => {
+        h.agents.delete("returned");
+      });
+      expect(held.slots.heldFrom("conn-a", new Set())).toBe(
+        MAX_AGENTS_PER_SOURCE - 1,
+      );
 
-    const evicted = storeHolding(fullStore([offline("old")]));
-    take(evicted, "new-1");
-    const sourceOf: unknown = Reflect.get(evicted.slots, "sourceOf");
-    expect(sourceOf instanceof Map && sourceOf.has("old")).toBe(false);
+      expect(take(held, "a-new")).toBe(true);
+      expect(held.forgotten).toEqual([]);
+      expect(held.agents.has("returned")).toBe(true);
+    });
+
+    it("when the store is cleared", () => {
+      const held = scenario((h) => {
+        h.agents.clear();
+        h.agents.set("returned", offline("returned"));
+        h.claims = h.slots.open("conn-a");
+        for (let n = 1; n < MAX_AGENTS_PER_SOURCE; n++) {
+          take(h, `a-${String(n)}`);
+        }
+      });
+
+      expect(take(held, "a-new")).toBe(true);
+      expect(held.forgotten).toEqual([]);
+      expect(held.agents.has("returned")).toBe(true);
+    });
+
+    it("when the connection itself evicted it", () => {
+      const held = scenario((h) => {
+        h.claims = h.slots.open("conn-a");
+        expect(take(h, "extra")).toBe(true);
+        expect(h.forgotten).toEqual(["returned"]);
+      });
+
+      expect(take(held, "a-new")).toBe(false);
+      expect(held.forgotten).toEqual(["returned"]);
+    });
   });
 
   it("stops counting an agent the store no longer holds", () => {
