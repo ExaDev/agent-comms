@@ -7,6 +7,9 @@ import { cdeEncodeOptions, encode } from "cbor2";
 import { afterEach, expect, it } from "vitest";
 import WS from "ws";
 import { deviceIdToHex } from "wire-mesh-core/domain/device-id";
+import { signPeerAdvert } from "wire-mesh-core/domain/peer-advert";
+import { generateIdentity } from "../core/identity.js";
+import { toIdentityPort } from "../core/wire-mesh-identity.js";
 import { RelayServer } from "../core/relay-server.js";
 
 const LOOPBACK = "127.0.0.1";
@@ -131,6 +134,7 @@ const JUNK_KEY_BYTES = 65;
 const JUNK_SIGNATURE_BYTES = 64;
 const ES256 = -7;
 const FORGED_WAIT_MS = 5000;
+const TWICE = 2;
 
 it("closes a WebSocket whose gossip names an admitted device with a key and signature that do not verify", async () => {
   const device = new Uint8Array(DEVICE_ID_BYTES).fill(JUNK_DEVICE_BYTE);
@@ -190,4 +194,45 @@ it("closes a WebSocket whose gossip names an admitted device with a key and sign
   );
 
   expect(await closed).toBe(true);
+});
+
+it("keeps a WebSocket open past the admission deadline once it has gossiped a genuinely signed advert of an admitted device", async () => {
+  const port = await toIdentityPort(generateIdentity());
+  const advert = await signPeerAdvert(port, {
+    device: port.deviceId,
+    addresses: [],
+    "snapshot-seconds": 1,
+    "identity-key": port.identityKey,
+  });
+  const server = new RelayServer({
+    host: LOOPBACK,
+    isAdmitted: (hex) => hex === deviceIdToHex(port.deviceId),
+    onError: () => undefined,
+    requestTimeoutMs: REQUEST_TIMEOUT_MS,
+    admissionTimeoutMs: ADMISSION_TIMEOUT_MS,
+    connectionsCheckingIntervalMs: CHECK_INTERVAL_MS,
+  });
+  servers.push(server);
+  await server.start();
+  const [url] = server.addresses();
+  if (url === undefined) throw new Error("the relay offers no address");
+  const socket = new WS(url);
+  sockets.push({
+    destroy: () => {
+      socket.terminate();
+    },
+  });
+  socket.on("error", () => undefined);
+  await new Promise<void>((resolve) => {
+    socket.once("open", () => {
+      resolve();
+    });
+  });
+
+  socket.send(encode({ type: "gossip", peers: [advert] }, cdeEncodeOptions));
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, ADMISSION_TIMEOUT_MS * TWICE);
+  });
+
+  expect(socket.readyState).toBe(WS.OPEN);
 });
