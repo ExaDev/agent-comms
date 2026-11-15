@@ -1,3 +1,37 @@
+## [10.0.0](https://github.com/ExaDev/agent-comms/compare/v9.1.3...v10.0.0) (2026-11-15)
+
+### ⚠ BREAKING CHANGES
+
+* **bridge:** a browser that used the hosted dashboard with a bridge must pair once, by opening
+  the address the bridge prints with /pair on the end and pressing Pair this browser.
+  A dashboard released before this change cannot connect to a bridge that has it.
+* **bridge:** a hosted dashboard from before this change cannot connect to a bridge with it,
+  and a bridge from before it cannot be reached by the hosted dashboard with it. Update both.
+
+### Features
+
+* **bridge:** admit the hosted dashboard only with a per-install pairing secret ([97c55b1](https://github.com/ExaDev/agent-comms/commit/97c55b19dc70172337bf27d0f4bf43709f4c5aca))
+* **bridge:** let the hosted dashboard keep and offer a pairing secret ([5a230d8](https://github.com/ExaDev/agent-comms/commit/5a230d883fdf76ebcf54a67208d4ac9257d33059))
+* **bridge:** prove the bridge and the dashboard to each other, and end sockets on rotation ([8cc281e](https://github.com/ExaDev/agent-comms/commit/8cc281e1c298ff4499130e0bc38021ab48160b66))
+
+### Bug Fixes
+
+* **bridge:** create the pairing secret before watching its directory ([9bcf2ad](https://github.com/ExaDev/agent-comms/commit/9bcf2ad235ca242642de9b319dd5b4318e26d49a))
+* **bridge:** end hosted sockets the moment the pairing secret is replaced ([a266744](https://github.com/ExaDev/agent-comms/commit/a26674401f7825cfe8d948bc691fff2f946cb6c9))
+* **bridge:** import the hosted dashboard origin the pairing page check compares against ([9567166](https://github.com/ExaDev/agent-comms/commit/95671668d3c02625d09d5262d2126b9cd8ed359a))
+* **bridge:** keep a secret another bridge created while this one was reading ([0a9ad9a](https://github.com/ExaDev/agent-comms/commit/0a9ad9a981e3bb677f33110d25b73a154eacf0cf))
+* **bridge:** take the hosted dashboard address from its one definition and test the exchange socket ([bef131b](https://github.com/ExaDev/agent-comms/commit/bef131b1050a6fc50858c79a24ddebb53e7184f1))
+* **bridge:** tell a person whose bridge predates pairing to update it ([f6529a0](https://github.com/ExaDev/agent-comms/commit/f6529a0f66cb1185c373aa4fb6985283584d29c4))
+* **cli:** restore the executable bit of the command entry point ([288bebf](https://github.com/ExaDev/agent-comms/commit/288bebf50dad9fb40a3436573772b4bd49bc04f6))
+
+### Refactoring
+
+* **bridge:** move the listening-socket binding of the web server to its own module ([5f0b899](https://github.com/ExaDev/agent-comms/commit/5f0b8990ea0e3a8f6b007baba736ab053871d487))
+
+### Documentation
+
+* **bridge:** state that rotation ends hosted sockets when the file is reported replaced ([5c4ba6a](https://github.com/ExaDev/agent-comms/commit/5c4ba6ab32ac336354653f1a40c11ab70018019e))
+
 ## [9.1.3](https://github.com/ExaDev/agent-comms/compare/v9.1.2...v9.1.3) (2026-11-15)
 
 ### Build
