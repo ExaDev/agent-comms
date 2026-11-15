@@ -15,8 +15,8 @@ export const MAX_SNAPSHOT_ENTRIES = 4096;
 /** The most agents a store keeps. Past it, a new agent takes the place of an offline record, and is refused only when no record is offline; one already known is still updated. At least the largest snapshot, so a full snapshot of a full mesh fits. */
 export const MAX_KNOWN_AGENTS = 4096;
 
-/** The most agents one origin may have introduced that a store still holds: the host a peer was reached at, or this machine for a peer reached on it, so a host that presents many device keys is still one origin. At this number an origin's new agent takes the place of that origin's own offline record, and is refused only when it has none. */
-export const MAX_AGENTS_PER_ORIGIN = 512;
+/** The most agents one connection may have introduced that a store still holds. It bounds a single connection, not a host or a machine: one that presents many device keys has a bound for each, and only MAX_KNOWN_AGENTS bounds them together. At this number a connection's new agent takes the place of that connection's own offline record, and is refused only when it has none. */
+export const MAX_AGENTS_PER_SOURCE = 512;
 
 /** Who sent state, and whether this side takes that peer to be the coordinator. */
 export interface StateSender {
@@ -57,9 +57,9 @@ export function isWellFormedAgent(
 interface ClaimSlots {
   has: (agentId: string) => boolean;
   size: number;
-  heldFrom: (origin: string, keep: ReadonlySet<string>) => number;
-  tag: (agentId: string, origin: string) => void;
-  evictOne: (keep: ReadonlySet<string>, origin?: string) => boolean;
+  heldFrom: (source: string, keep: ReadonlySet<string>) => number;
+  tag: (agentId: string, source: string) => void;
+  evictOne: (keep: ReadonlySet<string>, source?: string) => boolean;
 }
 
 /** The claims on agent slots that the records of one message make. */
@@ -68,19 +68,19 @@ export class AgentClaims {
 
   constructor(
     private readonly slots: Readonly<ClaimSlots>,
-    private readonly origin: string,
+    private readonly source: string,
   ) {}
 
   has(agentId: string): boolean {
     return this.slots.has(agentId);
   }
 
-  /** Whether the store takes a record for `agentId`: it already holds one, or it can hold a new one. A new one counts against the origin that introduced it, and past the bound of the origin or of the store takes the place of an offline record. */
+  /** Whether the store takes a record for `agentId`: it already holds one, or it can hold a new one. A new one counts against the connection that introduced it, and past the bound of the connection or of the store takes the place of an offline record. */
   claim(agentId: string): boolean {
     if (this.slots.has(agentId) || this.claimed.has(agentId)) return true;
     if (
-      this.slots.heldFrom(this.origin, this.claimed) >= MAX_AGENTS_PER_ORIGIN &&
-      !this.slots.evictOne(this.claimed, this.origin)
+      this.slots.heldFrom(this.source, this.claimed) >= MAX_AGENTS_PER_SOURCE &&
+      !this.slots.evictOne(this.claimed, this.source)
     ) {
       return false;
     }
@@ -91,7 +91,7 @@ export class AgentClaims {
       return false;
     }
     this.claimed.add(agentId);
-    this.slots.tag(agentId, this.origin);
+    this.slots.tag(agentId, this.source);
     return true;
   }
 }
@@ -105,23 +105,32 @@ export interface AgentSlotsStore {
   ownId: () => string;
 }
 
-/** The places a store can hold agents, and which origin introduced each. */
+/** The places a store can hold agents, and which connection introduced each. */
 export class AgentSlots implements ClaimSlots {
-  /** The agents each origin introduced and the store still holds, or has just claimed. */
-  private readonly byOrigin = new Map<string, Set<string>>();
+  /** The agents each connection introduced and the store still holds, or has just claimed. */
+  private readonly bySource = new Map<string, Set<string>>();
 
-  private readonly originOf = new Map<string, string>();
+  private readonly sourceOf = new Map<string, string>();
 
-  constructor(private readonly store: AgentSlotsStore) {}
-
-  /** Starts the claims of one message from `origin`. */
-  open(origin: string): AgentClaims {
-    return new AgentClaims(this, origin);
+  constructor(private readonly store: AgentSlotsStore) {
+    store.agents.onDeleted((agentId) => {
+      const source = this.sourceOf.get(agentId);
+      if (source === undefined) return;
+      this.sourceOf.delete(agentId);
+      const ids = this.bySource.get(source);
+      ids?.delete(agentId);
+      if (ids?.size === 0) this.bySource.delete(source);
+    });
   }
 
-  /** Forgets what an origin introduced, once nothing of it is held. */
-  release(origin: string): void {
-    this.heldFrom(origin, new Set());
+  /** Starts the claims of one message from `source`. */
+  open(source: string): AgentClaims {
+    return new AgentClaims(this, source);
+  }
+
+  /** Forgets what a connection introduced that the store no longer holds, once the connection has ended. */
+  release(source: string): void {
+    this.heldFrom(source, new Set());
   }
 
   has(agentId: string): boolean {
@@ -132,34 +141,36 @@ export class AgentSlots implements ClaimSlots {
     return this.store.agents.size;
   }
 
-  /** How many agents `origin` introduced that the store still holds, besides those in `keep`, which a message has claimed and not yet stored. */
-  heldFrom(origin: string, keep: ReadonlySet<string>): number {
-    const ids = this.byOrigin.get(origin);
+  /** How many agents `source` introduced that the store still holds, besides those in `keep`, which a message has claimed and not yet stored. */
+  heldFrom(source: string, keep: ReadonlySet<string>): number {
+    const ids = this.bySource.get(source);
     if (ids === undefined) return 0;
     for (const id of ids) {
       if (!this.store.agents.has(id) && !keep.has(id)) {
         ids.delete(id);
-        this.originOf.delete(id);
+        this.sourceOf.delete(id);
       }
     }
-    if (ids.size === 0) this.byOrigin.delete(origin);
+    if (ids.size === 0) this.bySource.delete(source);
     return ids.size;
   }
 
-  tag(agentId: string, origin: string): void {
-    this.originOf.set(agentId, origin);
-    const ids = this.byOrigin.get(origin) ?? new Set<string>();
+  tag(agentId: string, source: string): void {
+    this.sourceOf.set(agentId, source);
+    const ids = this.bySource.get(source) ?? new Set<string>();
     ids.add(agentId);
-    this.byOrigin.set(origin, ids);
+    this.bySource.set(source, ids);
   }
 
-  /** Evicts the record that has been offline longest and returns whether there was one, among those `origin` introduced when it is given. Only an offline record is evictable, and never one in `keep` or the store's own. */
-  evictOne(keep: ReadonlySet<string>, origin?: string): boolean {
+  /** Evicts the record that has been offline longest and returns whether there was one, among those `source` introduced when it is given. Only an offline record is evictable, and never one in `keep` or the store's own. */
+  evictOne(keep: ReadonlySet<string>, source?: string): boolean {
     const ownId = this.store.ownId();
     let victim: string | undefined;
     for (const id of this.store.agents.offlineOldestFirst()) {
       if (keep.has(id) || id === ownId) continue;
-      if (origin !== undefined && this.originOf.get(id) !== origin) continue;
+      // The order is kept by `set`, so a record whose status changed without being stored again is not taken for an offline one.
+      if (this.store.agents.get(id)?.status !== "offline") continue;
+      if (source !== undefined && this.sourceOf.get(id) !== source) continue;
       victim = id;
       break;
     }

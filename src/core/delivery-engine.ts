@@ -73,6 +73,8 @@ export class DeliveryEngine {
     if (agent === undefined || agent.status === status) return;
     agent.status = status;
     this.bump(agent);
+    // Stored again, since the agents map follows a record's status only through its own mutations.
+    this.deps.agents.set(agentId, agent);
     void this.notifyRoomsOfStatus(agentId, status);
   }
 

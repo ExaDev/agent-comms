@@ -291,7 +291,7 @@ export class PeerLifecycle {
         this.deps.coordinatorRole.current()?.holder === handle.id,
     };
     const ownId = this.deps.getPeerId();
-    const claims = this.slots.open(this.originOf(handle.id));
+    const claims = this.slots.open(handle.id);
     if (msg.method === "state_sync") {
       const { value, refused, awaitingAuthority } = admitSnapshot(
         normaliseWireState(msg.state),
@@ -321,13 +321,6 @@ export class PeerLifecycle {
     }
   }
 
-  /** Where a peer's agents are counted from: the host it was reached at, this machine for a peer reached on it, and the peer itself when this side has no entry for it. A host that presents many device keys is one origin. */
-  private originOf(peerId: string): string {
-    const info = this.deps.peerInfo.get(peerId);
-    if (info === undefined) return `peer:${peerId}`;
-    return info.host === undefined ? "machine" : `host:${info.host}`;
-  }
-
   /** Applies what `holderId` gave before it was accepted as the holder, now that it is. Detached: it runs from the election's acceptance of a claim. */
   handleHolderAccepted(holderId: string): void {
     const released = this.deferred.release(holderId);
@@ -345,7 +338,7 @@ export class PeerLifecycle {
       },
       sender,
       this.deps.getPeerId(),
-      this.slots.open(this.originOf(holderId)),
+      this.slots.open(holderId),
     );
     this.deps.deliveryEngine.applyStateSync(records.value);
     this.detach(
@@ -362,7 +355,7 @@ export class PeerLifecycle {
 
   /** Forgets what is kept for a connection that ended. */
   private forgetSource(peerId: string): void {
-    this.slots.release(this.originOf(peerId));
+    this.slots.release(peerId);
     this.deferred.drop(peerId);
     this.reportedPeers.delete(peerId);
   }

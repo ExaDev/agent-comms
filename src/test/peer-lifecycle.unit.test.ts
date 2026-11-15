@@ -7,7 +7,7 @@ import {
   type PeerLifecycleDeps,
 } from "../core/peer-lifecycle.js";
 import { KnownAgents } from "../core/known-agents.js";
-import { MAX_AGENTS_PER_ORIGIN } from "../core/state-intake.js";
+import { MAX_AGENTS_PER_SOURCE } from "../core/state-intake.js";
 import { ROOM_REQUEST_TIMEOUT_MS } from "../core/request-timeouts.js";
 import type { AgentIdentity, DeliveryEvent } from "../core/types.js";
 import type { PeerInfo, SerialisedState } from "../core/wire-protocol.js";
@@ -480,27 +480,34 @@ describe("PeerLifecycle — handleDataMessage", () => {
     expect(h.applyStateSync).toHaveBeenLastCalledWith(emptyState());
   });
 
-  it("counts the agents of peers reached at one host together, however many device keys they use, and those of peers at another host apart", async () => {
+  it("counts the agents a connection introduced against that connection, whatever host the peer list names for it, so a rewritten peer entry moves nothing", async () => {
     const h = makeHarness();
-    const introduce = async (id: string, host: string): Promise<void> => {
-      h.deps.peerInfo.set(id, { ...peerInfo(id), host });
+    const relay = async (
+      from: string,
+      ...agents: readonly AgentIdentity[]
+    ): Promise<void> => {
       await h.lifecycle.handleDataMessage(
-        { id },
-        { method: "state_sync", state: stateOf(named(id)) },
+        { id: from },
+        { method: "state_sync", state: stateOf(...agents) },
       );
     };
-    for (let n = 0; n < MAX_AGENTS_PER_ORIGIN; n++) {
-      await introduce(`key-${String(n)}`, "10.0.0.9");
-      h.deps.agents.set(`key-${String(n)}`, named(`key-${String(n)}`));
+    h.dialled.coordinator = "relayer";
+    h.deps.peerInfo.set("victim", { ...peerInfo("victim"), host: "10.0.0.9" });
+    for (let n = 0; n < MAX_AGENTS_PER_SOURCE; n++) {
+      await relay("relayer", named(`fake-${String(n)}`));
+      h.deps.agents.set(`fake-${String(n)}`, named(`fake-${String(n)}`));
     }
 
-    await introduce("one-key-too-many", "10.0.0.9");
+    // The relayer now has its own peer entry rewritten to the victim's host, and the victim's entry is rewritten to the relayer's.
+    h.deps.peerInfo.set("relayer", {
+      ...peerInfo("relayer"),
+      host: "10.0.0.9",
+    });
+    await relay("relayer", named("one-too-many"));
     expect(h.applyStateSync).toHaveBeenLastCalledWith(emptyState());
 
-    await introduce("elsewhere", "10.0.0.10");
-    expect(h.applyStateSync).toHaveBeenLastCalledWith(
-      stateOf(named("elsewhere")),
-    );
+    await relay("victim", named("victim"));
+    expect(h.applyStateSync).toHaveBeenLastCalledWith(stateOf(named("victim")));
   });
 
   describe("what a sender gives before its claim is accepted", () => {
