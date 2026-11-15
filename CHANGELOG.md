@@ -1,3 +1,10 @@
+## [10.0.11](https://github.com/ExaDev/agent-comms/compare/v10.0.10...v10.0.11) (2026-11-15)
+
+### Bug Fixes
+
+* **core:** hold a coordinator's state until its claim is accepted, and evict by time offline ([6a6dce2](https://github.com/ExaDev/agent-comms/commit/6a6dce2d8d250cf5e88700ec4c554ff860f78403))
+* **core:** keep the offline order true to presence, and count new agents per connection ([94a4995](https://github.com/ExaDev/agent-comms/commit/94a49954fe67b6a8a80ec8a032dc9739f71de689))
+
 ## [10.0.10](https://github.com/ExaDev/agent-comms/compare/v10.0.9...v10.0.10) (2026-11-15)
 
 ### Build
