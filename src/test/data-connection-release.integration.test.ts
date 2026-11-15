@@ -271,3 +271,97 @@ test("ending the session that last carried a frame hands the peer's connection t
   expect(router.heldConnections).toBe(0);
   router.stop();
 });
+
+test("a frame that was in flight when its session ended does not put the connection back", async () => {
+  const router = new DataFrameRouter({
+    dataStorage: undefined,
+    account: undefined,
+    peerSessions: new Map([[PEER_HEX, {}]]),
+    onError: undefined,
+    hub: undefined,
+    announceIntervalMs: SHORT_INTERVAL_MS,
+  });
+  const connection: Connection = {
+    peerDeviceId: new Uint8Array(DEVICE_ID_BYTES).fill(PEER_BYTE),
+    send: async () => Promise.resolve(),
+    receive: async function* () {
+      yield* [];
+    },
+    close: async () => Promise.resolve(),
+  };
+  const session = {};
+  router.bind(session, connection);
+  await router.route(connection, PING);
+  expect(router.heldConnections).toBe(1);
+
+  router.release(session, PEER_HEX);
+  await router.route(connection, PING);
+
+  expect(router.heldConnections).toBe(0);
+  router.stop();
+});
+
+test("a connection that was never admitted is not recorded", async () => {
+  const router = new DataFrameRouter({
+    dataStorage: undefined,
+    account: undefined,
+    peerSessions: new Map([[PEER_HEX, {}]]),
+    onError: undefined,
+    hub: undefined,
+    announceIntervalMs: SHORT_INTERVAL_MS,
+  });
+  const connection: Connection = {
+    peerDeviceId: new Uint8Array(DEVICE_ID_BYTES).fill(PEER_BYTE),
+    send: async () => Promise.resolve(),
+    receive: async function* () {
+      yield* [];
+    },
+    close: async () => Promise.resolve(),
+  };
+
+  await router.route(connection, PING);
+
+  expect(router.heldConnections).toBe(0);
+  router.stop();
+});
+
+test("a request to a gateway that fails leaves nothing held for the session it opened", async () => {
+  const { transport } = await transportWithId();
+  const connection: Connection = {
+    peerDeviceId: new Uint8Array(DEVICE_ID_BYTES).fill(PEER_BYTE),
+    send: async () => Promise.resolve(),
+    receive: async function* () {
+      yield* [];
+    },
+    close: async () => Promise.resolve(),
+  };
+  let closed = 0;
+  const session = {
+    sendManageRequest: async () => Promise.reject(new Error("no answer")),
+    close: async () => {
+      closed += 1;
+    },
+  };
+  Reflect.set(transport, "wireTransport", {
+    connect: async () => Promise.resolve(connection),
+  });
+  Reflect.set(transport, "openSession", async () => {
+    transport.dataFrames.bind(session, connection);
+    await transport.dataFrames.route(connection, PING);
+    return session;
+  });
+
+  await expect(
+    transport.connectToRemote({
+      host: "127.0.0.1",
+      port: 1,
+      peerId: "p",
+      dataPort: 1,
+      name: "n",
+      fingerprint: "f",
+    }),
+  ).rejects.toThrow("no answer");
+
+  expect(closed).toBe(1);
+  expect(transport.dataFrames.heldConnections).toBe(0);
+});

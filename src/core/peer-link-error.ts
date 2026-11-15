@@ -50,6 +50,11 @@ export async function dialPeer(
   if (connection === undefined) return undefined;
   const peerDeviceId = connection.peerDeviceId;
   if (peerDeviceId === undefined) {
+    onError?.(
+      new Error(
+        `connectToPeer: peer at port ${String(peer.port)} presented no device id, expected ${peer.id}`,
+      ),
+    );
     await connection.close();
     return undefined;
   }

@@ -10,6 +10,7 @@ import type { AgentIdentity, DeliveryEvent } from "../core/types.js";
 import type { PeerInfo, SerialisedState } from "../core/wire-protocol.js";
 
 const OWNER_ID = "owner-device";
+const COORDINATOR_ID = "coordinator-device";
 const COORDINATOR_PORT = 19876;
 const FIRST_CONTACT_PORT = 19877;
 
@@ -72,6 +73,7 @@ function makeHarness(): Harness {
     coordinatorPort: COORDINATOR_PORT,
     getPeerId: () => OWNER_ID,
     getCoordinatorPeerId: () => undefined,
+    isElectedHolder: (peerId) => peerId === COORDINATOR_ID,
     requireTransport: () => transport as never,
     serialise: () => emptyState(),
     roomProtocol: { flushPendingRoomRequests },
@@ -246,6 +248,101 @@ describe("PeerLifecycle — handleDataMessage", () => {
       agentId: "a",
       event,
     });
+  });
+
+  function named(id: string, name = "worker"): AgentIdentity {
+    return { id, name, version: 1 } as AgentIdentity;
+  }
+
+  function stateOf(...agents: readonly AgentIdentity[]): SerialisedState {
+    return {
+      ...emptyState(),
+      agents: Object.fromEntries(agents.map((a) => [a.id, a])),
+    };
+  }
+
+  it("keeps from a peer's snapshot the agent of its own store and not an agent it names for another, so a forged record is never held or sent on", async () => {
+    const h = makeHarness();
+    await h.lifecycle.handleDataMessage(
+      { id: "peer-a" },
+      {
+        method: "state_sync",
+        state: stateOf(named("peer-a"), named("peer-b")),
+      },
+    );
+    expect(h.applyStateSync).toHaveBeenCalledWith(stateOf(named("peer-a")));
+  });
+
+  it("keeps the agents of other stores from the coordinator, which relays them", async () => {
+    const h = makeHarness();
+    await h.lifecycle.handleDataMessage(
+      { id: COORDINATOR_ID },
+      {
+        method: "state_sync",
+        state: stateOf(named(COORDINATOR_ID), named("peer-b")),
+      },
+    );
+    expect(h.applyStateSync).toHaveBeenCalledWith(
+      stateOf(named(COORDINATOR_ID), named("peer-b")),
+    );
+  });
+
+  it("reports by count that records were refused, and names no record", async () => {
+    const h = makeHarness();
+    const errors: Error[] = [];
+    h.deps.onError = (error) => {
+      errors.push(error);
+    };
+    await h.lifecycle.handleDataMessage(
+      { id: "peer-a" },
+      { method: "state_sync", state: stateOf(named("peer-b")) },
+    );
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toContain("refused 1 record");
+    expect(errors[0]?.message).not.toContain("peer-b");
+  });
+
+  it("does not apply an agent update about another store from a peer that is not the coordinator", async () => {
+    const h = makeHarness();
+    await h.lifecycle.handleDataMessage(
+      { id: "peer-a" },
+      {
+        method: "state_update",
+        patch: { type: "agent_upsert", agent: named("peer-b") },
+      },
+    );
+    expect(h.applyPatch).not.toHaveBeenCalled();
+  });
+
+  it("does not apply an offline report about another store from a peer that is not the coordinator", async () => {
+    const h = makeHarness();
+    await h.lifecycle.handleDataMessage(
+      { id: "peer-a" },
+      {
+        method: "state_update",
+        patch: { type: "agent_offline", agentId: "peer-b" },
+      },
+    );
+    expect(h.applyPatch).not.toHaveBeenCalled();
+  });
+
+  it("applies an agent update from the agent's own store and from the coordinator", async () => {
+    const h = makeHarness();
+    await h.lifecycle.handleDataMessage(
+      { id: "peer-a" },
+      {
+        method: "state_update",
+        patch: { type: "agent_upsert", agent: named("peer-a") },
+      },
+    );
+    await h.lifecycle.handleDataMessage(
+      { id: COORDINATOR_ID },
+      {
+        method: "state_update",
+        patch: { type: "agent_upsert", agent: named("peer-b") },
+      },
+    );
+    expect(h.applyPatch).toHaveBeenCalledTimes(2);
   });
 
   it("applies neither for a message method it doesn't dispatch on", async () => {

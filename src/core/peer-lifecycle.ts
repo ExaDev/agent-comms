@@ -5,6 +5,7 @@
  */
 
 import { reportRejection } from "./detached-work.js";
+import { admitPatch, admitSnapshot } from "./state-intake.js";
 import { normaliseWireState } from "./wire-protocol.js";
 import { parseIsoTimestampMs } from "./iso-timestamp.js";
 import type {
@@ -41,6 +42,8 @@ export interface PeerLifecycleDeps {
   getPeerId: () => string;
   /** The peer ID of the coordinator this side currently answers to, as the transport reports it -- undefined when this side is the coordinator itself or has never reached one. Supplied as its own dep rather than read off requireTransport() so the crash-race decision below is expressible against a plain value in tests. */
   getCoordinatorPeerId: () => string | undefined;
+  /** Whether `peerId` holds the elected coordinator role this side has accepted. Together with the coordinator this side dialled, it is the only kind of peer that may describe agents other than its own. */
+  isElectedHolder: (peerId: string) => boolean;
   requireTransport: () => MeshTransport;
   serialise: () => SerialisedState;
   roomProtocol: Pick<RoomProtocol, "flushPendingRoomRequests">;
@@ -60,6 +63,9 @@ export interface PeerLifecycleDeps {
   /** Reports a failed takeover or rejoin. The crash-race path runs detached from any caller that could handle a rejection, so this is the only signal that a coordinator loss was noticed but not recovered from. */
   onError?: ((error: Error) => void) | undefined;
 }
+
+/** How much of a peer's id a report names: enough to tell peers apart in a log. */
+const SHORT_ID_LENGTH = 12;
 
 /** The message an unknown thrown value is reported as, so a takeover or rejoin failure reads the same whether the transport rejected with an Error or something else. */
 function describe(error: unknown): string {
@@ -223,11 +229,37 @@ export class PeerLifecycle {
     handle: Readonly<ConnectionHandle>,
     msg: MeshMessage,
   ): Promise<void> {
+    const sender = {
+      id: handle.id,
+      isCoordinator:
+        handle.id === this.deps.getCoordinatorPeerId() ||
+        this.deps.isElectedHolder(handle.id),
+    };
     if (msg.method === "state_sync") {
-      this.deps.deliveryEngine.applyStateSync(normaliseWireState(msg.state));
+      const { value, refused } = admitSnapshot(
+        normaliseWireState(msg.state),
+        sender,
+        this.deps.agents,
+      );
+      this.reportRefused(handle.id, refused);
+      this.deps.deliveryEngine.applyStateSync(value);
     } else if (msg.method === "state_update") {
+      if (!admitPatch(msg.patch, sender, this.deps.agents)) {
+        this.reportRefused(handle.id, 1);
+        return;
+      }
       await this.deps.deliveryEngine.applyPatch(msg.patch);
     }
+  }
+
+  /** Reports records of a peer's state that were refused, by count: what a peer sent is not repeated, since it is the peer's to choose. */
+  private reportRefused(peerId: string, refused: number): void {
+    if (refused === 0) return;
+    this.deps.onError?.(
+      new Error(
+        `PeerLifecycle: refused ${String(refused)} record(s) of state from peer ${peerId.slice(0, SHORT_ID_LENGTH)}: an agent is described by its own store or the coordinator, and a snapshot is bounded`,
+      ),
+    );
   }
 
   /** Takes over the well-known port listener (a fresh bind in init, a graceful handover, or winning the crash race) and dials the peers named. Holding the port no longer carries the coordinator duties; the one link left is that a port holder which knows of no elected incumbent claims the role, since it is then the first on its machine as far as it can tell. */

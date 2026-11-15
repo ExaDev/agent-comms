@@ -84,6 +84,8 @@ export function accountReplicationFrom(
 export async function routeDataFrame(
   deps: Readonly<{
     connectionsByPeer: Map<string, Readonly<Connection>>;
+    /** Whether a connection belongs to a session that has not ended: a frame that was already in flight when its session ended must not put the connection back. */
+    isAdmitted: (connection: Readonly<Connection>) => boolean;
     dataStorage: KeyValueStorage | undefined;
     account: Readonly<AccountReplication> | undefined;
     peerSessions: ReadonlyMap<string, unknown>;
@@ -96,6 +98,7 @@ export async function routeDataFrame(
   const peerDeviceId = connection.peerDeviceId;
   if (peerDeviceId === undefined) return;
   const deviceIdHex = deviceIdToHex(peerDeviceId);
+  if (!deps.isAdmitted(connection)) return;
   deps.connectionsByPeer.set(deviceIdHex, connection);
   if (!deps.peerSessions.has(deviceIdHex)) return;
   try {
@@ -274,6 +277,9 @@ export class DataFrameRouter {
   /** The raw connection each live session runs over, so ending a session releases exactly the connection it held in connectionsByPeer and not a newer one a later session of the same peer has put there. */
   private readonly connectionsBySession = new WeakMap<object, Connection>();
 
+  /** The connections whose sessions are open or opening, which are the only ones a frame may record in connectionsByPeer. */
+  private readonly admitted = new WeakSet<Connection>();
+
   /** The live sessions of each peer, so ending one hands the peer's entry to another that is still open. */
   private readonly sessionsByPeer = new Map<string, Set<object>>();
 
@@ -346,9 +352,35 @@ export class DataFrameRouter {
     return this.gaps?.stalled() ?? [];
   }
 
+  /** Runs `open`, which makes the session of `connection`, with the connection admitted from the start since the peer's first frames can arrive while the session is being opened, and forgets it again when the session never opens. */
+  async admitting<T>(
+    connection: Connection,
+    open: () => Promise<T>,
+  ): Promise<T> {
+    this.admitted.add(connection);
+    try {
+      return await open();
+    } catch (error) {
+      this.admitted.delete(connection);
+      throw error;
+    }
+  }
+
+  /** Stops recording frames of a connection whose session was opened and is not kept. */
+  forget(connection: Connection): void {
+    this.admitted.delete(connection);
+  }
+
+  /** Releases what `session` held, for a session whose connection names a device. */
+  releaseOf(session: object, connection: Connection): void {
+    if (connection.peerDeviceId === undefined) return;
+    this.release(session, deviceIdToHex(connection.peerDeviceId));
+  }
+
   /** Records the connection a session runs over, for release. A peer can have several live sessions (one dialled, one accepted), so each peer's sessions are kept in the order they began. */
   bind(session: object, connection: Connection): void {
     this.connectionsBySession.set(session, connection);
+    this.admitted.add(connection);
     const peerId = connection.peerDeviceId;
     if (peerId === undefined) return;
     const hex = deviceIdToHex(peerId);
@@ -361,6 +393,7 @@ export class DataFrameRouter {
   release(session: object, peerDeviceHex: string): void {
     const connection = this.connectionsBySession.get(session);
     this.connectionsBySession.delete(session);
+    if (connection !== undefined) this.admitted.delete(connection);
     const sessions = this.sessionsByPeer.get(peerDeviceHex);
     sessions?.delete(session);
     if (sessions?.size === 0) this.sessionsByPeer.delete(peerDeviceHex);
@@ -388,6 +421,7 @@ export class DataFrameRouter {
     await routeDataFrame(
       {
         connectionsByPeer: this.connectionsByPeer,
+        isAdmitted: (candidate) => this.admitted.has(candidate),
         dataStorage: this.dataStorage,
         account: this.deps.account,
         peerSessions: this.deps.peerSessions,
