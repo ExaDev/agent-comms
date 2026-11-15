@@ -10,6 +10,7 @@ import type {
 } from "wire-mesh-core/domain/mesh-session";
 import type { Connection } from "wire-mesh-core/ports/transport";
 import { generateIdentity } from "../core/identity.js";
+import { HubSession, type HubSessionDeps } from "../core/hub-session.js";
 import { RelayServer } from "../core/relay-server.js";
 import type { ConnectionHandle, TransportEvents } from "../core/transport.js";
 import { FRAME_VERB, WireMeshTransport } from "../core/wire-mesh-transport.js";
@@ -66,7 +67,7 @@ function transportWith(overrides: Readonly<Partial<TransportEvents>>): {
 
 /** Calls a private method of the transport by name: the sites under test have no public entry point of their own. */
 function callPrivate(
-  transport: WireMeshTransport,
+  transport: object,
   name: string,
   ...args: readonly unknown[]
 ): unknown {
@@ -264,6 +265,56 @@ describe("the requests of a session that is not yet trusted", () => {
     expect(afterFailure.responses).toEqual([
       { result: "error", code: "not_approved" },
     ]);
+  });
+});
+
+describe("the events of a hub session", () => {
+  const ENTRY = { device: new Uint8Array(DEVICE_ID_BYTES).fill(1) };
+
+  function hubWith(admit: HubSessionDeps["admitEntries"]): {
+    hub: HubSession;
+    merged: number[];
+    errors: Error[];
+  } {
+    const merged: number[] = [];
+    const errors: Error[] = [];
+    const deps = {
+      events: eventsWith({
+        onError: (error) => {
+          errors.push(error);
+        },
+      }),
+      isShuttingDown: () => false,
+      admitEntries: admit,
+      onDirectory: (entries: readonly unknown[]) => {
+        merged.push(entries.length);
+      },
+    } as unknown as HubSessionDeps;
+    return { hub: new HubSession(deps), merged, errors };
+  }
+
+  async function consume(hub: HubSession, events: readonly unknown[]) {
+    const { session: fake } = session({ events });
+    await (callPrivate(hub, "consumeEvents", fake, "00") as Promise<void>);
+  }
+
+  it("reports an event whose directory cannot be admitted and still merges the next, ending on the closed event and reading nothing after it", async () => {
+    let calls = 0;
+    const { hub, merged, errors } = hubWith(async (entries) => {
+      calls += 1;
+      if (calls === 1) throw new Error("admit failed");
+      return Promise.resolve([...entries]);
+    });
+
+    await consume(hub, [
+      { directory: [ENTRY], state: { status: "open" } },
+      { directory: [ENTRY], state: { status: "closed" } },
+      { directory: [ENTRY], state: { status: "open" } },
+    ]);
+
+    expect(errors.map((e) => e.message)).toEqual(["admit failed"]);
+    expect(merged).toEqual([1]);
+    expect(calls).toBe(SECOND);
   });
 });
 
