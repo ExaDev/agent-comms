@@ -5,10 +5,13 @@
  */
 
 import { reportRejection } from "./detached-work.js";
+import { DeferredIntake } from "./deferred-intake.js";
+import type { KnownAgents } from "./known-agents.js";
 import {
   AgentSlots,
   admitPatch,
   admitSnapshot,
+  isAwaitingAuthority,
   type StateSender,
 } from "./state-intake.js";
 import { normaliseWireState } from "./wire-protocol.js";
@@ -32,12 +35,11 @@ import type { StaleAgentChecker } from "./stale-agent-checker.js";
 import type { RoomProtocol } from "./room-protocol.js";
 import type { CoordinatorRole } from "./coordinator-role.js";
 import type { ConnectionHandle, MeshTransport } from "./transport.js";
-import type { AgentIdentity } from "./types.js";
 
 /** The state and collaborators PeerLifecycle needs from MeshStore. peerInfo/agents are direct references into MeshStore's own fields; coordinatorPort is a readonly value copied once; serialise is MeshStore's own retained method (constraint: it must stay directly on MeshStore.prototype, so PeerLifecycle calls it through this closure rather than owning it); roomProtocol/deliveryEngine/staleAgentChecker are the already-constructed instances (construction order: ... -\> roomProtocol -\> ... -\> staleAgentChecker -\> peerLifecycle), narrowed to what peer-lifecycle bookkeeping ever needs. */
 export interface PeerLifecycleDeps {
   peerInfo: Map<string, PeerInfo>;
-  agents: Map<string, AgentIdentity>;
+  agents: KnownAgents;
   coordinatorPort: number;
   /** The UDP port the coordinator-free first-contact presence binds (agent-comms#341). Undefined means no presence at all: only the bridge entry points set it (bridge-mesh.ts), so a store built by anything else, a test included, never cross-discovers another store. */
   firstContactPort?: number | undefined;
@@ -71,15 +73,14 @@ export interface PeerLifecycleDeps {
     | "current"
     | "onHolderAccepted"
   >;
+  /** The current time in milliseconds; absent means the system clock. */
+  now?: (() => number) | undefined;
   /** Reports a failed takeover or rejoin. The crash-race path runs detached from any caller that could handle a rejection, so this is the only signal that a coordinator loss was noticed but not recovered from. */
   onError?: ((error: Error) => void) | undefined;
 }
 
 /** How many peers a refusal has been reported for, at most, before the record starts again: a report is made once per peer, so a flood of peers cannot flood the error channel or this set. */
 const MAX_REPORTED_PEERS = 1024;
-
-/** How many departure announcements wait for their sender to be accepted as the holder. */
-const MAX_DEFERRED_DEPARTURES = 64;
 
 /** How much of a peer's id a report names: enough to tell peers apart in a log. */
 const SHORT_ID_LENGTH = 12;
@@ -105,8 +106,8 @@ export class PeerLifecycle {
   /** The peers a refusal has been reported for. */
   private readonly reportedPeers = new Set<string>();
 
-  /** Offline reports refused because their sender was not yet known to be the holder, by sender, replayed when it is. */
-  private readonly deferredDepartures = new Map<string, Set<string>>();
+  /** What a sender gave before the claim that makes it the coordinator was accepted, applied when that claim is. */
+  private readonly deferred: DeferredIntake;
 
   /** Guards against a second contest running while the first is still binding or rejoining -- a coordinator whose process dies can close more than one session to this side, and each close arrives as its own disconnect. */
   private contestingCoordinatorRole = false;
@@ -123,10 +124,13 @@ export class PeerLifecycle {
       forget: (agentId) => {
         deps.staleAgentChecker.forget(agentId);
       },
-      hasPeer: (agentId) => deps.peerInfo.has(agentId),
       ownId: () => deps.getPeerId(),
-      now: Date.now,
     });
+    this.deferred = new DeferredIntake(
+      deps.now ?? Date.now,
+      ROOM_REQUEST_TIMEOUT_MS,
+      (agentId) => deps.agents.get(agentId)?.version,
+    );
   }
 
   /** Starts the coordinator-free presence (agent-comms#341) when a firstContactPort was configured: each discovered peer (carrying the host its beacon came from) is fed through handlePeerList, whose dial-out plus the peer_list every established connection shares (handlePeerConnected) forms the mesh transitively with no coordinator's handout. A no-op with no port, and on a second call. */
@@ -287,21 +291,28 @@ export class PeerLifecycle {
         this.deps.coordinatorRole.current()?.holder === handle.id,
     };
     const ownId = this.deps.getPeerId();
-    const claims = this.slots.open(handle.id);
+    const claims = this.slots.open(this.originOf(handle.id));
     if (msg.method === "state_sync") {
-      const { value, refused } = admitSnapshot(
+      const { value, refused, awaitingAuthority } = admitSnapshot(
         normaliseWireState(msg.state),
         sender,
         ownId,
         claims,
       );
+      for (const agent of awaitingAuthority) {
+        this.deferred.holdAgent(handle.id, agent);
+      }
       this.reportRefused(handle.id, refused);
       this.deps.deliveryEngine.applyStateSync(value);
     } else if (msg.method === "state_update") {
       if (!admitPatch(msg.patch, sender, ownId, claims)) {
-        // A departure announced by a successor can arrive before the claim that makes it the holder does, over another session of the same pair: it waits for that claim instead of being lost.
-        if (msg.patch.type === "agent_offline") {
-          this.deferDeparture(handle.id, msg.patch.agentId);
+        // What the coordinator sends can be read before the claim that names it is accepted, over another queue of the same session: what is refused only for want of that authority waits for the claim instead of being lost.
+        if (isAwaitingAuthority(msg.patch, sender)) {
+          if (msg.patch.type === "agent_upsert") {
+            this.deferred.holdAgent(handle.id, msg.patch.agent);
+          } else if (msg.patch.type === "agent_offline") {
+            this.deferred.holdDeparture(handle.id, msg.patch.agentId);
+          }
         }
         this.reportRefused(handle.id, 1);
         return;
@@ -310,24 +321,36 @@ export class PeerLifecycle {
     }
   }
 
-  private deferDeparture(senderId: string, agentId: string): void {
-    let total = 0;
-    for (const waiting of this.deferredDepartures.values())
-      total += waiting.size;
-    if (total >= MAX_DEFERRED_DEPARTURES) return;
-    const waiting = this.deferredDepartures.get(senderId) ?? new Set<string>();
-    waiting.add(agentId);
-    this.deferredDepartures.set(senderId, waiting);
+  /** Where a peer's agents are counted from: the host it was reached at, this machine for a peer reached on it, and the peer itself when this side has no entry for it. A host that presents many device keys is one origin. */
+  private originOf(peerId: string): string {
+    const info = this.deps.peerInfo.get(peerId);
+    if (info === undefined) return `peer:${peerId}`;
+    return info.host === undefined ? "machine" : `host:${info.host}`;
   }
 
-  /** Applies the departures that `holderId` announced before it was accepted as the holder, now that it is. Detached: it runs from the election's acceptance of a claim. */
+  /** Applies what `holderId` gave before it was accepted as the holder, now that it is. Detached: it runs from the election's acceptance of a claim. */
   handleHolderAccepted(holderId: string): void {
-    const waiting = this.deferredDepartures.get(holderId);
-    if (waiting === undefined) return;
-    this.deferredDepartures.delete(holderId);
+    const released = this.deferred.release(holderId);
+    if (released.agents.length === 0 && released.departures.length === 0) {
+      return;
+    }
+    const sender: StateSender = { id: holderId, isCoordinator: true };
+    const records = admitSnapshot(
+      {
+        agents: Object.fromEntries(released.agents.map((a) => [a.id, a])),
+        rooms: {},
+        messages: {},
+        dms: {},
+        deliveryQueues: {},
+      },
+      sender,
+      this.deps.getPeerId(),
+      this.slots.open(this.originOf(holderId)),
+    );
+    this.deps.deliveryEngine.applyStateSync(records.value);
     this.detach(
       Promise.all(
-        [...waiting].map(async (agentId) =>
+        released.departures.map(async (agentId) =>
           this.deps.deliveryEngine.applyPatch({
             type: "agent_offline",
             agentId,
@@ -339,8 +362,8 @@ export class PeerLifecycle {
 
   /** Forgets what is kept for a connection that ended. */
   private forgetSource(peerId: string): void {
-    this.slots.release(peerId);
-    this.deferredDepartures.delete(peerId);
+    this.slots.release(this.originOf(peerId));
+    this.deferred.drop(peerId);
     this.reportedPeers.delete(peerId);
   }
 
@@ -393,8 +416,8 @@ export class PeerLifecycle {
 
   /** The awaitable form of handlePeerDisconnected, which TransportEvents forces to be synchronous. A departing peer leaves the peer list. When it held the elected coordinator role, the role is recovered first (the lowest surviving device-id claims at a raised term), so the new holder is already in place by the time the departed peer's agent record is retired; when it held the well-known port this side dialled, the vacated port is contested too. */
   async handlePeerDeparture(peerId: string): Promise<void> {
-    this.deps.peerInfo.delete(peerId);
     this.forgetSource(peerId);
+    this.deps.peerInfo.delete(peerId);
     await this.deps.coordinatorRole.handleDeparture(peerId, async () =>
       this.retireDepartedAgent(peerId),
     );

@@ -63,11 +63,9 @@ interface Harness {
 function harness(agents: readonly AgentIdentity[]): Harness {
   const agentsMap = new Map(agents.map((a) => [a.id, a]));
   const deliveryQueues = new Map<string, never[]>();
-  const identityCache = new Map<string, { id: string }>();
   const peerInfo = new Map<string, PeerInfo>();
   for (const a of agents) {
     deliveryQueues.set(a.id, []);
-    identityCache.set(a.id, { id: a.id });
     peerInfo.set(a.id, { id: a.id, port: 1, startedAt: a.startedAt });
   }
   const notifyRoomsOfStatus = vi.fn(async (): Promise<void> =>
@@ -77,7 +75,6 @@ function harness(agents: readonly AgentIdentity[]): Harness {
   const deps: StaleAgentCheckerDeps = {
     agents: agentsMap,
     deliveryQueues: deliveryQueues,
-    identityCache,
     peerInfo,
     notifyRoomsOfStatus,
     broadcastPatch: broadcastPatch,
@@ -257,11 +254,9 @@ describe("StaleAgentChecker", () => {
 
       expect(deps.agents.has("a1")).toBe(false);
       expect(deps.peerInfo.has("a1")).toBe(false);
-      expect(deps.identityCache.has("a1")).toBe(false);
       expect(deps.deliveryQueues.has("a1")).toBe(false);
       expect(deps.agents.size).toBe(0);
       expect(deps.peerInfo.size).toBe(0);
-      expect(deps.identityCache.size).toBe(0);
       expect(deps.deliveryQueues.size).toBe(0);
     });
 

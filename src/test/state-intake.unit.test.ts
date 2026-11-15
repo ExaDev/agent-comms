@@ -5,12 +5,13 @@
 import { describe, expect, it } from "vitest";
 import {
   AgentSlots,
+  MAX_AGENTS_PER_ORIGIN,
   MAX_KNOWN_AGENTS,
-  MAX_NEW_AGENTS_PER_SOURCE,
   MAX_SNAPSHOT_ENTRIES,
   admitPatch,
   admitSnapshot,
 } from "../core/state-intake.js";
+import { KnownAgents } from "../core/known-agents.js";
 import type { AgentIdentity, Room } from "../core/types.js";
 import type { SerialisedState } from "../core/wire-protocol.js";
 
@@ -18,9 +19,9 @@ const DEVICE_ID_HEX_LENGTH = 64;
 const SENDER = "a".repeat(DEVICE_ID_HEX_LENGTH);
 const OTHER = "b".repeat(DEVICE_ID_HEX_LENGTH);
 const SELF = "d".repeat(DEVICE_ID_HEX_LENGTH);
-const NOW = Date.parse("2026-06-01T00:00:00.000Z");
 const OVER_CAP = 3;
-const EVICTABLE = 5;
+const EVICTABLE = 3;
+const EVICTION_ORDER = 3;
 const OVERSIZE_COLLECTIONS = 4;
 const COLLECTIONS_OVER_CAP = OVERSIZE_COLLECTIONS * OVER_CAP;
 
@@ -75,18 +76,18 @@ function state(agents: readonly AgentIdentity[]): SerialisedState {
 const peer = { id: SENDER, isCoordinator: false };
 const coordinator = { id: SENDER, isCoordinator: true };
 
-/** A store holding `held`, with the claims one message from `sourceId` makes on it; `forgotten` lists what was evicted. */
+/** A store holding `held`, which went offline in the order given, with the claims one message from `origin` makes on it; `forgotten` lists what was evicted. */
 function storeHolding(
   held: readonly AgentIdentity[],
-  options: { sourceId?: string; connected?: readonly string[] } = {},
+  origin = "host:a",
 ): {
-  agents: Map<string, AgentIdentity>;
+  agents: KnownAgents;
   slots: AgentSlots;
   forgotten: string[];
   claims: ReturnType<AgentSlots["open"]>;
 } {
-  const { sourceId = SENDER, connected = [] } = options;
-  const agents = new Map(held.map((a) => [a.id, a]));
+  const agents = new KnownAgents();
+  for (const a of held) agents.set(a.id, a);
   const forgotten: string[] = [];
   const slots = new AgentSlots({
     agents,
@@ -94,14 +95,26 @@ function storeHolding(
       forgotten.push(id);
       agents.delete(id);
     },
-    hasPeer: (id) => connected.includes(id),
     ownId: () => SELF,
-    now: () => NOW,
   });
-  return { agents, slots, forgotten, claims: slots.open(sourceId) };
+  return { agents, slots, forgotten, claims: slots.open(origin) };
 }
 
-function offline(id: string, startedAt: string): AgentIdentity {
+/** Claims a record for `id` and, as the store does once a claim is admitted, holds it. */
+function take(
+  held: ReturnType<typeof storeHolding>,
+  id: string,
+  status: AgentIdentity["status"] = "active",
+): boolean {
+  const taken = held.claims.claim(id);
+  if (taken) held.agents.set(id, agent(id, { status }));
+  return taken;
+}
+
+function offline(
+  id: string,
+  startedAt = "2026-01-01T00:00:00.000Z",
+): AgentIdentity {
   return agent(id, { status: "offline", startedAt });
 }
 
@@ -227,7 +240,7 @@ describe("a snapshot", () => {
 
 describe("a store that holds the most agents it keeps", () => {
   it("evicts an offline record to take a new agent, and still updates one it knows", () => {
-    const held = fullStore([offline("old", "2020-01-01T00:00:00.000Z")]);
+    const held = fullStore([offline("old")]);
     const { claims, forgotten, agents } = storeHolding(held);
 
     const { value, refused } = admitSnapshot(
@@ -260,61 +273,117 @@ describe("a store that holds the most agents it keeps", () => {
     expect(forgotten).toEqual([]);
   });
 
-  it("evicts a record with no peer before one with a peer, a start that is in the future or unreadable before an old one, then the oldest", () => {
-    const held = fullStore([
-      offline("connected-oldest", "2000-01-01T00:00:00.000Z"),
-      offline("unconnected-recent", "2026-05-01T00:00:00.000Z"),
-      offline("unconnected-oldest", "2001-01-01T00:00:00.000Z"),
-      offline("unconnected-future", "2099-01-01T00:00:00.000Z"),
-      offline("unconnected-unreadable", "not a time"),
-    ]);
-    const { slots, forgotten } = storeHolding(held, {
-      connected: ["connected-oldest"],
-    });
-    const claims = slots.open(SENDER);
+  it("evicts the record that went offline longest ago, whatever its start time: a long-running agent that just went offline outlasts a short one that went offline long ago", () => {
+    const held = storeHolding(
+      fullStore([
+        offline("went-offline-first", "2026-05-01T00:00:00.000Z"),
+        offline("went-offline-second", "2001-01-01T00:00:00.000Z"),
+        offline("went-offline-third", "2099-01-01T00:00:00.000Z"),
+      ]),
+    );
 
-    for (let n = 0; n < EVICTABLE; n++) {
-      claims.claim(`new-${String(n)}`);
-    }
+    for (let n = 0; n < EVICTABLE; n++) take(held, `new-${String(n)}`);
 
-    expect(forgotten.slice(0, 2).sort()).toEqual([
-      "unconnected-future",
-      "unconnected-unreadable",
-    ]);
-    expect(forgotten.slice(2)).toEqual([
-      "unconnected-oldest",
-      "unconnected-recent",
-      "connected-oldest",
+    expect(held.forgotten.slice(0, EVICTION_ORDER)).toEqual([
+      "went-offline-first",
+      "went-offline-second",
+      "went-offline-third",
     ]);
   });
 
+  it("counts the time a record went offline from the status change, and again from the next one after it came back", () => {
+    const held = storeHolding(
+      fullStore([offline("flapping"), offline("steady")]),
+    );
+    held.agents.set("flapping", agent("flapping"));
+    held.agents.set("flapping", offline("flapping"));
+
+    take(held, "new-1");
+
+    expect(held.forgotten).toEqual(["steady"]);
+  });
+
+  it("keeps the time a record went offline while it is set offline again", () => {
+    const held = storeHolding(fullStore([offline("first"), offline("second")]));
+    held.agents.set("first", offline("first"));
+
+    take(held, "new-1");
+
+    expect(held.forgotten).toEqual(["first"]);
+  });
+
   it("never evicts the store's own agent, or a record the same message just claimed", () => {
-    const held = fullStore([offline(SELF, "2000-01-01T00:00:00.000Z")]);
+    const held = fullStore([offline(SELF)]);
     const { claims, forgotten } = storeHolding(held);
 
     expect(claims.claim("new-1")).toBe(false);
     expect(forgotten).toEqual([]);
 
-    const room = storeHolding([
-      ...fullStore().slice(1),
-      offline("old", "2000-01-01T00:00:00.000Z"),
-    ]);
+    const room = storeHolding([...fullStore().slice(1), offline("old")]);
     expect(room.claims.claim("first")).toBe(true);
     expect(room.claims.claim("second")).toBe(false);
   });
+
+  it("finds the record to evict without looking at every record held", () => {
+    const held = storeHolding(fullStore([offline("old")]));
+    const reads: string[] = [];
+    const real = held.agents.offlineOldestFirst.bind(held.agents);
+    held.agents.offlineOldestFirst = () => {
+      const keys = real();
+      return {
+        [Symbol.iterator]() {
+          return this;
+        },
+        next() {
+          const step = keys.next();
+          if (step.done !== true) reads.push(step.value);
+          return step;
+        },
+      };
+    };
+
+    expect(take(held, "new-1")).toBe(true);
+    expect(reads).toEqual(["old"]);
+  });
 });
 
-describe("what one connection introduces", () => {
-  it("is bounded over its life, and starts again when the connection has ended", () => {
-    const { slots } = storeHolding([]);
-    for (let n = 0; n < MAX_NEW_AGENTS_PER_SOURCE; n++) {
-      expect(slots.open(SENDER).claim(`a-${String(n)}`)).toBe(true);
+describe("what one origin introduces", () => {
+  it("is bounded by the agents of it that the store holds, whatever keys they use, and another origin is not affected", () => {
+    const held = storeHolding([]);
+    for (let n = 0; n < MAX_AGENTS_PER_ORIGIN; n++) {
+      expect(take(held, `a-${String(n)}`)).toBe(true);
     }
-    expect(slots.open(SENDER).claim("one-too-many")).toBe(false);
-    expect(slots.open(OTHER).claim("another-source")).toBe(true);
+    expect(take(held, "one-too-many")).toBe(false);
 
-    slots.release(SENDER);
-    expect(slots.open(SENDER).claim("again")).toBe(true);
+    held.claims = held.slots.open("host:b");
+    expect(take(held, "another-origin")).toBe(true);
+  });
+
+  it("takes the place of the origin's own offline record at its bound, and never another origin's", () => {
+    const held = storeHolding([]);
+    held.claims = held.slots.open("host:b");
+    take(held, "b-offline", "offline");
+    held.claims = held.slots.open("host:a");
+    take(held, "a-offline", "offline");
+    for (let n = 1; n < MAX_AGENTS_PER_ORIGIN; n++) {
+      take(held, `a-${String(n)}`);
+    }
+
+    held.claims = held.slots.open("host:a");
+    expect(take(held, "a-new")).toBe(true);
+
+    expect(held.forgotten).toEqual(["a-offline"]);
+    expect(held.agents.has("b-offline")).toBe(true);
+  });
+
+  it("stops counting an agent the store no longer holds", () => {
+    const held = storeHolding([]);
+    for (let n = 0; n < MAX_AGENTS_PER_ORIGIN; n++)
+      take(held, `a-${String(n)}`);
+    held.agents.delete("a-0");
+
+    held.claims = held.slots.open("host:a");
+    expect(take(held, "a-new")).toBe(true);
   });
 });
 
@@ -323,17 +392,17 @@ describe("a patch", () => {
 
   it("takes an agent update from the agent's own store and from the coordinator, and from no one else", () => {
     const update = { type: "agent_upsert", agent: agent(OTHER) } as const;
-    const take = (
+    const taken = (
       sender: Readonly<{ id: string; isCoordinator: boolean }>,
     ): boolean => admitPatch(update, sender, SELF, storeHolding([]).claims);
 
-    expect(take({ id: OTHER, isCoordinator: false })).toBe(true);
-    expect(take(coordinator)).toBe(true);
-    expect(take(peer)).toBe(false);
+    expect(taken({ id: OTHER, isCoordinator: false })).toBe(true);
+    expect(taken(coordinator)).toBe(true);
+    expect(taken(peer)).toBe(false);
   });
 
   it("takes an offline report under the same rule, and one about the receiver's own agent from anyone", () => {
-    const take = (
+    const taken = (
       agentId: string,
       sender: Readonly<{ id: string; isCoordinator: boolean }>,
     ): boolean =>
@@ -344,10 +413,10 @@ describe("a patch", () => {
         storeHolding([]).claims,
       );
 
-    expect(take(OTHER, peer)).toBe(false);
-    expect(take(OTHER, coordinator)).toBe(true);
-    expect(take(OTHER, { id: OTHER, isCoordinator: false })).toBe(true);
-    expect(take(SELF, peer)).toBe(true);
+    expect(taken(OTHER, peer)).toBe(false);
+    expect(taken(OTHER, coordinator)).toBe(true);
+    expect(taken(OTHER, { id: OTHER, isCoordinator: false })).toBe(true);
+    expect(taken(SELF, peer)).toBe(true);
   });
 
   it("refuses an update about the receiver's own agent from anyone but the coordinator", () => {

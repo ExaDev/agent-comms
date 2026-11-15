@@ -43,6 +43,7 @@ import {
   type LedgerGaps,
 } from "./account-ledger.js";
 import { StaleAgentChecker } from "./stale-agent-checker.js";
+import { KnownAgents } from "./known-agents.js";
 import { PeerLifecycle } from "./peer-lifecycle.js";
 import {
   CoordinatorRole,
@@ -133,7 +134,7 @@ export class MeshStore implements CommsStore {
     onError: this.reportError,
   });
 
-  private readonly agents = new Map<string, AgentIdentity>();
+  private readonly agents = new KnownAgents();
   private readonly rooms = new Map<string, Room>();
   private readonly messages = new Map<string, RoomMessage[]>();
   private readonly dms = new Map<string, DmMessage[]>();
@@ -432,7 +433,6 @@ export class MeshStore implements CommsStore {
     this.staleAgentChecker = new StaleAgentChecker({
       agents: this.agents,
       deliveryQueues: this.deliveryQueues,
-      identityCache: this.identityCache,
       peerInfo: this.peerInfo,
       notifyRoomsOfStatus: async (agentId, status) =>
         this.deliveryEngine.notifyRoomsOfStatus(agentId, status),
