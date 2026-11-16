@@ -228,8 +228,8 @@ importers:
         specifier: 1.1.4
         version: 1.1.4(@mantine/core@9.6.1(@mantine/hooks@9.6.1(react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       wire-mesh-core:
-        specifier: 4.2.12
-        version: 4.2.12
+        specifier: 4.2.13
+        version: 4.2.13
       ws:
         specifier: 8.21.1
         version: 8.21.1
@@ -6487,8 +6487,8 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
-  wire-mesh-core@4.2.12:
-    resolution: {integrity: sha512-ARAgdvCL47Sn7ITGHGd08vx7zQqPjsIuAoa31SnEWM/U6xoWOsSZ6Lswewz9+TFkkzeztS3tUXXE09thuUhnTw==}
+  wire-mesh-core@4.2.13:
+    resolution: {integrity: sha512-BDigdTVHSMLUSa4ZPJFEo0jq17AT3bytP+AvoghpwpGvVd+NmecdMzocLkpIuTG+AHN5/c87337SGXE+8PK1hw==}
 
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
@@ -13523,7 +13523,7 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
-  wire-mesh-core@4.2.12:
+  wire-mesh-core@4.2.13:
     dependencies:
       cbor2: 2.3.0
       cddl.js: 2.0.0(zod@4.6.6)
