@@ -12,7 +12,11 @@ import type { ElectionSessions } from "./election-sessions.js";
 import type { GatewayTrustReader } from "./gateway-trust.js";
 import type { TransportEvents } from "./transport.js";
 import { RelayServer } from "./relay-server.js";
-import { selectRelay, type RelayOffer } from "./relay-selection.js";
+import {
+  localNetworkCidrs,
+  selectRelay,
+  type RelayOffer,
+} from "./relay-selection.js";
 
 export interface RelayRoleDeps {
   /** The interface a served relay listens on (RelayServerOptions.host). */
@@ -106,6 +110,7 @@ export class RelayRole {
       isTrusted: (deviceHex) => this.deps.gatewayTrust.isReachable(deviceHex),
       ownDeviceHex: this.deps.ownDeviceHex,
       publicHubUrl,
+      localNetworks: localNetworkCidrs(),
     }).url;
   }
 
