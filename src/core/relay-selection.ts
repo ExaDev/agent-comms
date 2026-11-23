@@ -7,6 +7,7 @@
  */
 
 import { BlockList, isIPv4, isIPv6 } from "node:net";
+import * as os from "node:os";
 import { compareCodeUnits } from "./ordering.js";
 
 /** A relay offer this store has heard, with what it knows about the device making it. */
@@ -36,6 +37,53 @@ export interface RelaySelectionInput {
   ownDeviceHex: string;
   /** The configured public hub, the fallback when no offer qualifies. */
   publicHubUrl: string;
+  /** The CIDRs of this host's own network interfaces (localNetworkCidrs). When given, a private or link-local address outside every one of them is skipped in every tier: it belongs to a network this host is not on, so dialling it can only time out (a device offering its home-LAN address to a peer on another network over a tailnet). When absent, every private address counts as local, as before. */
+  localNetworks?: readonly string[] | undefined;
+}
+
+/** The CIDRs of this host's non-internal interfaces, as os.networkInterfaces reports them: the input selectRelay's localNetworks expects. */
+export function localNetworkCidrs(
+  interfaces: NodeJS.Dict<os.NetworkInterfaceInfo[]> = os.networkInterfaces(),
+): string[] {
+  const result: string[] = [];
+  for (const addresses of Object.values(interfaces)) {
+    for (const address of addresses ?? []) {
+      if (!address.internal && address.cidr !== null) result.push(address.cidr);
+    }
+  }
+  return result;
+}
+
+/** A BlockList of the given CIDRs, or undefined when none were given (selection then treats every private address as local). Malformed entries are ignored. */
+function localNetworkList(
+  cidrs: readonly string[] | undefined,
+): BlockList | undefined {
+  if (cidrs === undefined) return undefined;
+  const list = new BlockList();
+  for (const cidr of cidrs) {
+    const [address, prefix] = cidr.split("/");
+    if (address === undefined || prefix === undefined) continue;
+    const family = isIPv4(address)
+      ? "ipv4"
+      : isIPv6(address)
+        ? "ipv6"
+        : undefined;
+    if (family === undefined) continue;
+    try {
+      list.addSubnet(address, Number(prefix), family);
+    } catch {
+      // An out-of-range prefix: not a network this host can be judged to be on.
+    }
+  }
+  return list;
+}
+
+/** Whether a private host sits on a network this host is on, judged against localNetworks; true when localNetworks was not given. */
+function onLocalNetwork(host: string, local: BlockList | undefined): boolean {
+  if (local === undefined) return true;
+  if (isIPv4(host)) return local.check(host, "ipv4");
+  if (isIPv6(host)) return local.check(host, "ipv6");
+  return true;
 }
 
 /** The private (RFC 1918), IPv4 link-local (RFC 3927), IPv6 unique-local (RFC 4193) and IPv6 link-local ranges: addresses reachable on the local network and nowhere else. */
@@ -82,10 +130,12 @@ function relayHost(address: string): string | undefined {
 function addressFor(
   offer: Readonly<RelayOffer>,
   tier: RelayTier,
+  local: BlockList | undefined,
 ): string | undefined {
   for (const address of offer.addresses) {
     const host = relayHost(address);
     if (host === undefined) continue;
+    if (isPrivateHost(host) && !onLocalNetwork(host, local)) continue;
     if (tier === "machine" && isLoopbackHost(host)) return address;
     if (tier === "lan" && isPrivateHost(host)) return address;
     if (tier === "trusted" && !isLoopbackHost(host)) return address;
@@ -106,6 +156,7 @@ export function selectRelay(
   const eligible = input.offers
     .filter((offer) => offer.deviceHex !== input.ownDeviceHex)
     .toSorted((a, b) => compareCodeUnits(a.deviceHex, b.deviceHex));
+  const local = localNetworkList(input.localNetworks);
   for (const tier of OFFER_TIERS) {
     for (const offer of eligible) {
       const admitted =
@@ -113,7 +164,7 @@ export function selectRelay(
           ? offer.machineLocal
           : input.isTrusted(offer.deviceHex);
       if (!admitted) continue;
-      const url = addressFor(offer, tier);
+      const url = addressFor(offer, tier, local);
       if (url !== undefined) return { url, tier, deviceHex: offer.deviceHex };
     }
   }

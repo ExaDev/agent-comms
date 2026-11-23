@@ -271,6 +271,10 @@ function relaySelection(value: unknown): unknown {
     isTrusted: (hex) => trusted.includes(hex),
     ownDeviceHex: str(input.own),
     publicHubUrl: str(input.publicHub),
+    localNetworks:
+      input.localNetworks === undefined
+        ? undefined
+        : strings(input.localNetworks),
   });
 }
 

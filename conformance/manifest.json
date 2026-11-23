@@ -65,7 +65,7 @@
       "skip": []
     },
     "function/relay-selection.json": {
-      "cases": 10,
+      "cases": 12,
       "skip": []
     },
     "function/request-timeouts.json": {

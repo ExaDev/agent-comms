@@ -326,6 +326,76 @@
       "function": "relay-selection.selectRelay",
       "id": "breaks-a-tie-by-lowest-device-id",
       "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "localNetworks": [
+            "10.34.16.48/23",
+            "100.88.132.111/32",
+            "fe80::1/64"
+          ],
+          "offers": [
+            {
+              "addresses": [
+                "ws://192.168.1.39:36937/",
+                "ws://172.18.0.1:36937/",
+                "ws://100.123.240.67:36937/"
+              ],
+              "deviceHex": "1111111111111111111111111111111111111111111111111111111111111111",
+              "machineLocal": false
+            }
+          ],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "1111111111111111111111111111111111111111111111111111111111111111"
+          ]
+        }
+      ],
+      "expect": {
+        "deviceHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "tier": "trusted",
+        "url": "ws://100.123.240.67:36937/"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > skips private addresses on networks this host is not on",
+      "function": "relay-selection.selectRelay",
+      "id": "skips-private-addresses-off-local-networks",
+      "kind": "function"
+    },
+    {
+      "args": [
+        {
+          "localNetworks": [
+            "192.168.1.20/24"
+          ],
+          "offers": [
+            {
+              "addresses": [
+                "ws://192.168.1.39:36937/",
+                "ws://172.18.0.1:36937/",
+                "ws://100.123.240.67:36937/"
+              ],
+              "deviceHex": "1111111111111111111111111111111111111111111111111111111111111111",
+              "machineLocal": false
+            }
+          ],
+          "own": "0000000000000000000000000000000000000000000000000000000000000000",
+          "publicHub": "wss://mesh.example.com/",
+          "trusted": [
+            "1111111111111111111111111111111111111111111111111111111111111111"
+          ]
+        }
+      ],
+      "expect": {
+        "deviceHex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "tier": "lan",
+        "url": "ws://192.168.1.39:36937/"
+      },
+      "from": "relay-selection.unit.test.ts: selectRelay > still prefers a private address on a network this host is on",
+      "function": "relay-selection.selectRelay",
+      "id": "prefers-private-address-on-local-network",
+      "kind": "function"
     }
   ]
 }
